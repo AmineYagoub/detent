@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Source of truth | `foreman-prd-v2.md` (2.0-draft.4) — no redesign, no simplification, no additions |
-| Plan version | 1.1 — mechanical corrections against draft.4 (§7) |
+| Source of truth | `foreman-prd-v2.md` (2.0-draft.5) — no redesign, no simplification, no additions |
+| Plan version | 1.2 — synced to draft.5 after PRDR-041…047 (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -34,7 +34,7 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 | R-9 | Where `maxPossibleSessions` runs | In the config module's load path — config parse → compute → assert → return; the CLI never sees an invalid config object. |
 | R-10 | Live-session CI | Jobs needing real SDK sessions (T-051, T-070, doctor smoke) are gated on `ANTHROPIC_API_KEY` presence + a spend cap env; contributors without keys still get a fully green mock suite. |
 | R-11 | Package identity pre-M4 | `package.json` name `foreman-cli-placeholder`, `"private": true` until OQ-1/OQ-2 resolve at T-083. |
-| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,fixtures,sec,live,docs}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. |
+| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,fixtures,sec,live,docs,perf}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. `tests/perf/` is fixed by draft.5's N-4, which names `tests/perf/transition-overhead.bench.ts` normatively. |
 
 ## 2. Execution Topology
 
@@ -98,8 +98,8 @@ AC: every (state,event) outside TABLE throws; table exported as data (no logic i
 Surface: `src/kernel/budgets.ts`
 Implements → X-1 (**both** rows: the three unit slots *and* the config-driven ceilings), D-12.
 Oracle: ladder-budget tests via counter mapping (fix_sessions{0,1,2} ⇔ (blind,informed){(0,0),(1,0),(1,1)}).
-Per P6 every ceiling routes to a human, so this module owns all of them as data — `blind_fix_attempts`, `informed_fix_attempts`, `review_fix_attempts`, `research_sessions`, `hypotheses`, `sessions`, plus the config row: `wall_clock_ms`, `spend`, `turns_per_stage`, `failure_research_tool_calls` (≤8), `planning_research_tool_calls` (16, C-3a), `flake_reruns` (1). Enforcement sites are named per ceiling and asserted in their own tickets: wall-clock + sessions → T-041, spend → T-048, turns-per-stage → T-046, failure-research tool calls → T-045, planning-research tool calls → T-063, flake reruns → T-022.
-AC: per-slot at-most-once property test over all reachable counter states; review_fix_attempts independent of ladder slots (D-6 review-loop test ports); **every ceiling in the X-1 table has a named enforcement site and emits BUDGET_BREACH → NEEDS_HUMAN** (coverage test: enumerate the exported ceiling keys, assert each is referenced by ≥1 enforcement call site — a new ceiling with no enforcer fails CI).
+This module owns all twelve X-1 keys as data, with the scope draft.5 assigns each: `blind_fix_attempts`, `informed_fix_attempts`, `review_fix_attempts`, `research_sessions`, `hypotheses`, `sessions`, `ticket_wall_clock_ms` (ticket/generation); `turns_per_stage` (session); `failure_research_tool_calls` (research session); `planning_research_tool_calls` (init); `flake_reruns` (red gate); `run_spend_usd` (**run**, cumulative — the only run-scoped ceiling, and the one with no default, so config load refuses a config that omits it). Enforcement sites: ticket wall-clock + sessions → T-041, run spend → T-048, turns-per-stage → T-046, failure-research tool calls → T-045, planning-research tool calls → T-063, flake reruns → T-022.
+AC: per-slot at-most-once property test over all reachable counter states; review_fix_attempts independent of ladder slots (D-6 review-loop test ports); **every key in X-1's table has a named enforcement site emitting the breach target its row declares** — most are BUDGET_BREACH, but `failure_research_tool_calls` emits RESEARCH_DRY, `planning_research_tool_calls` defers to the AWAIT_INFO batch, and `flake_reruns` enters the ladder — asserted by a coverage test that enumerates the exported ceiling keys and fails CI on any key with no enforcer; config load rejects a budgets object missing `run_spend_usd`.
 
 **T-013 · Ladder resolver + closed caller set [M0 · M] — deps: T-012**
 Surface: `src/kernel/resolver.ts`, `tests/arch/resolver-callers.test.ts`
@@ -153,7 +153,7 @@ AC: oracle flake tests port (zero fix budget consumed; quarantine ticket linked 
 **T-023 · `.foreman/` layout + commit split [M1 · M] — deps: T-010**
 Surface: `src/fs/layout.ts`
 Implements → F-1, F-2 boundary lint, F-3 stamping.
-AC: fresh init produces exact split; Foreman-written `.foreman/.gitignore` enforces local set; boundary lint fixture (a project-config file appearing under `.foreman/`) fails CI; git status shows only committed set.
+AC: fresh init produces exact split; Foreman-written `.foreman/.gitignore` enforces local set; boundary lint fixture (a project-config file appearing under `.foreman/`) fails CI; git status shows only committed set; draft.5's per-ticket vs per-run ownership split is encoded — F-1's single-writer AC for `ledger.jsonl` and `transitions.jsonl` is discharged at T-041, since no writer exists until the run loop does.
 
 **T-024 · Content-addressed checkpoints [M1 · L] — deps: T-023**
 Surface: `src/fs/checkpoints.ts`
@@ -199,10 +199,10 @@ Implements → ARCH-1 seam, oracle mock semantics (per `ticket:role:n` scripting
 AC: interface is the only symbol `src/kernel` may import from sessions (R-5 zone test); mock replays oracle e2e scripts; un-scripted role defaults to success (oracle parity).
 
 **T-041 · Kernel run loop [M2 · XL] — deps: T-013, T-014, T-017, T-022, T-024, T-040**
-Surface: `src/kernel/run.ts`, `src/cli/run.ts`
-Implements → C-9 (claim + resumable pool), C-11 exit codes, B-5 journal (crashed session never relaunches — budget consumed, gate judges tree as-is), budget-at-launch, **N-4**, X-1 `wall_clock_ms` + `sessions` enforcement, ledger hooks.
+Surface: `src/kernel/run.ts`, `src/cli/run.ts`, `tests/perf/transition-overhead.bench.ts`
+Implements → C-9 (claim + resumable pool), C-11 exit codes, B-5 journal (crashed session never relaunches — budget consumed, gate judges tree as-is), budget-at-launch, **N-4**, X-1 `ticket_wall_clock_ms` + `sessions` enforcement, F-1 run-level single-writer, ledger hooks.
 Oracle: the 11 `test_kernel_e2e` tests flip from `todo` to green here (R-2) — hook, review, research and risk tests close later at T-046/T-044/T-045/T-049, not here.
-AC: oracle happy path / full ladder / crash-resume / falsified-premise / hypothesis-thrash / review-loop all green; exit codes 0/10/2/1 integration-tested; resumable pool picks up every non-terminal in-flight state; **N-4 benchmark — kernel overhead per transition <100ms at p95 across a 500-transition synthetic run with gates stubbed** (measures the kernel, not the gates); `wall_clock_ms` and net `sessions` ceilings each trip BUDGET_BREACH → NEEDS_HUMAN in their own fixture; exactly one writer per run-level JSONL file asserted (R-8).
+AC: oracle happy path / full ladder / crash-resume / falsified-premise / hypothesis-thrash / review-loop all green; exit codes 0/10/2/1 integration-tested; resumable pool picks up every non-terminal in-flight state; **N-4 benchmark in `tests/perf/transition-overhead.bench.ts` — p95 < 100 ms and max < 500 ms over ≥500 synthetic transitions traversing every X-3 row, gates stubbed to constant-time green**, with the per-component split (validate / apply / append / checkpoint) printed so a regression names its cause; CI fails on either bound; `ticket_wall_clock_ms` and net `sessions` ceilings each trip BUDGET_BREACH → NEEDS_HUMAN in their own fixture; exactly one writer per run-level JSONL file asserted, discharging F-1's single-writer AC on behalf of T-023 (R-8).
 
 **T-042 · Run branch + worktree mode + base guard [M2 · L] — deps: T-041**
 Surface: `src/kernel/git.ts`
@@ -233,7 +233,7 @@ AC: guard denies protected + out-of-surface with reason (oracle hook-test semant
 **T-047 · Vendored role prompts + curation + attribution [M2 · M] — deps: none (content work)**
 Surface: `prompts/*.md`, `ATTRIBUTIONS.md`, `scripts/hash-prompts.ts`
 Implements → S-7, D-9.
-AC: packaging test verifies prompt hashes + ATTRIBUTIONS.md presence (upstream sources + licenses); assignments referencing unknown role@hash fail closed; prompts encode X-4/X-6a/A-5 protocols (prompt-lint checklist test); **the vendored set covers exactly S-1's eight roles** (planner, diagnose, implement, fix, informed_fix, review_fix, research, review) — a missing role fails at packaging, not at runtime.
+AC: packaging test verifies prompt hashes + ATTRIBUTIONS.md presence (upstream sources + licenses); assignments referencing unknown role@hash fail closed; prompts encode X-4/X-6a/A-5 protocols (prompt-lint checklist test); **the vendored set covers exactly S-1's eight roles** (`planner`, `diagnose`, `implement`, `blind_fix`, `informed_fix`, `review_fix`, `research`, `review` — note `blind_fix`, renamed from `fix` in draft.5) — a missing role fails at packaging, not at runtime; role ids are a committed wire format, so renaming one is an F-3 schema event, asserted by a test that pins the eight strings.
 
 **T-048 · Ledger + cross-generation spend backstop [M2 · M] — deps: T-041, T-015**
 Surface: `src/kernel/ledger.ts`
@@ -274,8 +274,9 @@ AC: every `machine.apply` call site's event provably derives from a validator re
 Surface: `src/cli/approve.ts`, `src/cli/requeue.ts`
 Implements → C-12 (the two plumbing verbs T-027/T-050/T-053 do not cover), X-3 `HUMAN_APPROVED` / `HUMAN_REQUEUE` rows reached out-of-band, X-8 (requeue opens a generation).
 Rationale: C-12 names six plumbing commands; `status`/`report` land in T-053, `verify sync` in T-027, `doctor` in T-050. `approve <id>` and `requeue <id>` had no ticket, and the oracle's `test_validate_report_approve_requeue` — which drives both as CLI verbs and asserts the resulting states — had no destination, breaching T-018's zero-unmapped exit.
+Also implements → C-12 claim discipline (draft.5), the rule this ticket's absence exposed.
 Non-goal: any new interrupt or porcelain surface (C-14) — these are scriptable plumbing only, never on the golden path.
-AC: `approve <id>` on a NEEDS_HUMAN ticket re-enters APPROVED and the kernel re-verifies before finalize (never a direct DONE); `requeue <id>` opens generation N+1 with zeroed counters and generation N frozen (T-015 semantics, *not* the oracle's `attempts = {}` reset — the M0 divergence); both are refused with exit 2 from any state where the X-3 row is illegal; oracle `test_validate_report_approve_requeue` ports green with requeue asserting generation semantics; README golden path still contains exactly two commands (T-069 unaffected).
+AC: `approve <id>` on a NEEDS_HUMAN ticket re-enters APPROVED and the kernel re-verifies before finalize (never a direct DONE); `requeue <id>` opens generation N+1 with zeroed counters and generation N frozen (T-015 semantics, *not* the oracle's `attempts = {}` reset — the M0 divergence); both are refused with exit 2 from any state where the X-3 row is illegal, naming the current state; **claim discipline** — against a live claim both refuse exit 2 naming the claiming pid and the claim's age, and against a stale claim (owner not alive) both may break it, recording the break in `transitions.jsonl` as an operator action with the broken pid; oracle `test_validate_report_approve_requeue` ports green with requeue asserting generation semantics; README golden path still contains exactly two commands (T-069 unaffected).
 
 ### M3 — `init` Pipeline
 
@@ -307,7 +308,7 @@ AC: lone-vitest fixture: zero binding interrupts; two-candidate fixture: exactly
 **T-065 · Setup-consent engine + allowlist [M3 · M] — deps: T-060, T-064**
 Surface: `src/init/consent.ts`, `src/init/allowlist.ts`
 Implements → C-6 three-way rule, C-6a/D-15 (closed template data module; off-list never executed even with consent — printed with rationale, resume-after), C-1/B-3 `git init` + initial-commit template.
-Depends on T-064 because draft.4 places AWAIT_SETUP_CONSENT *after* DETERMINE_VERIFICATION: C-3b's zero-candidate branch is what raises it, so the consent engine consumes T-064's candidate result.
+Depends on T-064 because the PRD places AWAIT_SETUP_CONSENT *after* DETERMINE_VERIFICATION: C-3b's zero-candidate branch is what raises it, so the consent engine consumes T-064's candidate result.
 AC: off-list fixture (piped-shell installer) spawns no child process; direct-edit of existing config refused with proposal printed; allowlist module has its own tests; git-init template creates base branch, P7 red-team from that commit onward; zero-candidate slot from T-064 raises AWAIT_SETUP_CONSENT and no other interrupt class (C-5).
 
 **T-066 · PLAN generation + bootstrap lifecycle [M3 · XL] — deps: T-062, T-063, T-064, T-047**
@@ -451,7 +452,7 @@ One row per requirement — parseable, so T-018's generator can diff it against 
 | §14 metrics | T-052, T-053 |
 | M0–M4 exits | T-018, T-030, T-051, T-070, T-080, T-081, T-082, T-083, T-084 |
 
-Every C/F/V/X/S/B/A/SEC/N/ARCH/D identifier in draft.4 appears above. OQ-1/OQ-2 surface only in T-083, the sole human-blocked ticket — and it is on the critical path (§2), so it gates publish rather than merely accompanying it. D-1…D-4 and D-8 are framing decisions with no discrete ticket; they are realized across T-001 (D-1 language), T-083 (D-2 distribution), T-026 (D-4 binding), T-042 (D-8 branch mode).
+Every C/F/V/X/S/B/A/SEC/N/ARCH/D identifier in draft.5 appears above. OQ-1/OQ-2 surface only in T-083, the sole human-blocked ticket — and it is on the critical path (§2), so it gates publish rather than merely accompanying it. D-1…D-4 and D-8 are framing decisions with no discrete ticket; they are realized across T-001 (D-1 language), T-083 (D-2 distribution), T-026 (D-4 binding), T-042 (D-8 branch mode).
 
 ## 5. Risk Register (delta to PRD §15 — execution risks only)
 
@@ -472,6 +473,20 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 ---
 
 ## 7. Changelog
+
+**1.2** — synced to PRD 2.0-draft.5, which applied PRDR-041…047. The plan led the PRD on several points in 1.1 (inventing a p95 definition, budget key names, claim semantics); draft.5 ratified those decisions, sometimes with different names, and this release adopts the ratified forms. No ticket added, removed, or rescoped.
+
+| Plan | 1.1 | draft.5 / 1.2 |
+|---|---|---|
+| T-012 | `wall_clock_ms`, `spend` | `ticket_wall_clock_ms`, `run_spend_usd`; all twelve keys carry their PRD scope; config load refuses a budgets object omitting `run_spend_usd` |
+| T-012 | "every ceiling emits BUDGET_BREACH → NEEDS_HUMAN" | each key emits **its own row's** breach target — `failure_research_tool_calls` → RESEARCH_DRY, `planning_research_tool_calls` → AWAIT_INFO batch, `flake_reruns` → ladder entry |
+| T-041 | p95 < 100 ms, 500 transitions | + `max < 500 ms`, harness pinned at `tests/perf/transition-overhead.bench.ts`, per-component split printed, every X-3 row traversed |
+| T-023 / T-041 | single-writer assertion on T-041 only | F-1's AC now names it; T-023 records that it is discharged at T-041, since no writer exists before the run loop |
+| T-047 | role `fix` | role `blind_fix`; the eight ids are a committed wire format, pinned by test |
+| T-055 | approve/requeue state semantics | + claim discipline: exit 2 against a live claim naming pid and age; stale-claim break recorded in `transitions.jsonl` |
+| R-12 | no `tests/perf/` | added — N-4 names that path normatively |
+
+One correction went the other way: 1.1's uniform "every ceiling emits BUDGET_BREACH" was carried into draft.5's X-1 AC and is wrong for three of the twelve keys. The PRD's AC was amended in the same commit as this sync.
 
 **1.1** — mechanical corrections only; no PRD semantics changed, no ticket removed or rescoped.
 
@@ -494,4 +509,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.1 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.2 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
