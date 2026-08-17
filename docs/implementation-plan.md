@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `foreman-prd-v2.md` (2.0-draft.5) — no redesign, no simplification, no additions |
-| Plan version | 1.2 — synced to draft.5 after PRDR-041…047 (§7) |
+| Plan version | 1.3 — upstream-verified against the Agent SDK docs and current release data (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -23,7 +23,7 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 
 | # | Question | Resolution |
 |---|---|---|
-| R-1 | N-3 "minimal pinned deps" scope | Governs **runtime** deps (`@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch`). Dev tooling (vitest, eslint, tsx, typescript) is unrestricted-but-lean and never ships. |
+| R-1 | N-3 "minimal pinned deps" scope | Governs **direct runtime** deps (`@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch`). Dev tooling (vitest, eslint, tsx, typescript) is unrestricted-but-lean and never ships. Two corrections from the upstream check: **zod 4** is the target (~7× faster array parsing, and TS type instantiations drop from >25k to ~175 — a compile-time win for a project whose backbone is `src/schemas/**` under a strict tsconfig; migration cost is `z.string().email()` → `z.email()`, `.merge()` → `.extend()`, the unified error param, and changed optional + `.catch()`/`.default()` semantics). And the agent SDK ships **platform-specific optional dependencies** (`-darwin-arm64`, `-linux-x64`, `-linux-x64-musl`, `-win32-x64`), so "three deps" means three *direct* deps — a transitive count will not be three. |
 | R-2 | Test runner | vitest (named in M0). All 52 oracle tests are translated against interfaces at M0 (PRD M0: "against interfaces only"); those needing a later layer land as `test.todo`. The parity report (T-018) records per test `status ∈ {green, pending-M1, pending-M2}` **plus the ticket that closes it**, so each milestone exit asserts its own threshold instead of one global one. Expected distribution at M0 exit: 22 green, 4 pending-M1 (gate execution + flake filter), 26 pending-M2. |
 | R-3 | Atomic claim | `fs.openSync(path, "wx")` — POSIX O_CREAT\|O_EXCL, same semantics as the oracle. Claim-race test forks real processes via `node:child_process`. |
 | R-4 | Resolver caller-set test (X-2 AC) | Source-scan unit test (fs + regex over `src/`): `resolveRed(` may appear only in the four allowed call sites + its own module + tests. No AST dependency. |
@@ -67,8 +67,8 @@ Format: `T-### · Title [Milestone · Size S/M/L/XL] — Deps` · Surface · Imp
 **T-001 · Repository scaffold + CI skeleton [P0 · M] — deps: none**
 Surface: `/`, `.github/workflows/ci.yml`, `package.json`, `tsconfig.json`
 Implements → N-3, N-6 (partial), R-1, R-11, R-12.
-Node ≥20, ESM, strict tsconfig, vitest wired, runtime deps exactly {agent-sdk, zod, picomatch} pinned exact. CI runs lint+typecheck+test on PR.
-AC: fresh clone `npm ci && npm test` green; CI blocks on any of the three; `npm ls --prod` shows exactly three deps.
+**Node ≥22 LTS, developed against Active LTS (24)** — Node 20 reached EOL 2026-04-30 and is not a supported target (PRDR-055). ESM, strict tsconfig, vitest wired, direct runtime deps exactly {agent-sdk, zod@4, picomatch} pinned exact. CI runs lint+typecheck+test on PR.
+AC: fresh clone `npm ci && npm test` green; CI blocks on any of the three; **`package.json#dependencies` has exactly three keys** — asserted against the manifest, *not* `npm ls --prod`, which surfaces the SDK's platform-specific optional packages and would fail (R-1); `engines.node` excludes every EOL release line; CI's runtime matrix contains no EOL line.
 
 **T-002 · Foreman's own verification gates [P0 · S] — deps: T-001**
 Surface: `eslint.config.js`, `vitest.config.ts`, `package.json#scripts`
@@ -226,9 +226,10 @@ AC: oracle cache-hit ports (zero research calls, same env); changed-lockfile fix
 
 **T-046 · Agent SDK backend [M2 · XL] — deps: T-040, T-047**
 Surface: `src/sessions/sdk.ts`, `src/sessions/guard.ts`
-Implements → S-1 (plan mode for read-only roles), S-2 (canUseTool path/surface guard + surface-expansion request lever + continuation-based end-of-turn gating), S-3 (per-role allowlists, `WebFetch(domain:…)` from config), S-4 (typed telemetry → ledger; absent fields = breaker), S-6 (stable prefix; per-role hash equality).
+Implements → S-1 (plan mode for read-only roles), S-2 (**`PreToolUse` hook** path/surface guard + surface-expansion request lever + continuation-based end-of-turn gating), S-3 (per-role allowlists + deny-on-unmatched mode), S-4 (telemetry → ledger), S-6 (stable prefix; per-role hash equality; reachable cache).
+**The guard is a hook, not `canUseTool`** (PRDR-050). The SDK evaluates hooks → deny → ask → permission mode → allow → `canUseTool`, and a tool auto-approved by an allow rule **never reaches `canUseTool`** — which is every writing tool S-3's allowlists grant. The SDK emits `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` for exactly this shape. The Python oracle already guarded at the hook layer; this keeps it there rather than relocating it.
 Non-goal: retry/backoff logic beyond gate-red continuation.
-AC: guard denies protected + out-of-surface with reason (oracle hook-test semantics reproduced in-process — all 7 `test_hooks` tests close here, not at T-041); disabled-guard fixture still cannot fake green (kernel re-runs gates — P2 test); telemetry-absent fixture → NEEDS_HUMAN breaker; prefix hash identical per role per run; `turns_per_stage` ceiling enforced — continuation stops at the ceiling and emits BUDGET_BREACH rather than looping (X-1 config row); per-role session config asserted for all eight S-1 roles.
+AC: guard denies protected + out-of-surface with reason (all 7 `test_hooks` tests close here, not at T-041) **and is asserted to run on a tool that `allowedTools` auto-approves** — the regression test for the shadowing failure; **`settingSources: []`** asserted, and a fixture repo committing a permissive backend settings file changes the session's effective permission set by zero (PRDR-051); no `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` warning is emitted during the suite; disabled-guard fixture still cannot fake green (kernel re-runs gates — P2 test); prefix hash identical per role per run **and a second same-role session after a >5-min gate run reports non-zero cache-read tokens** (PRDR-054 — requires the extended-cache-TTL env var on SEC-4's allowlist); `turns_per_stage` ceiling enforced — continuation stops at the ceiling and emits BUDGET_BREACH rather than looping (X-1 config row); per-role session config asserted for all eight S-1 roles; the `WebFetch` domain-scoping rule form is verified against the pinned backend rather than assumed (PRDR-050).
 
 **T-047 · Vendored role prompts + curation + attribution [M2 · M] — deps: none (content work)**
 Surface: `prompts/*.md`, `ATTRIBUTIONS.md`, `scripts/hash-prompts.ts`
@@ -238,7 +239,8 @@ AC: packaging test verifies prompt hashes + ATTRIBUTIONS.md presence (upstream s
 **T-048 · Ledger + cross-generation spend backstop [M2 · M] — deps: T-041, T-015**
 Surface: `src/kernel/ledger.ts`
 Implements → S-4 ledger, X-8 cumulative ceiling, F-1 ledger.jsonl.
-AC: spend accumulates across generations and trips the run ceiling regardless of generation count; ledger rows schema-valid; per-session cost/turn/token recorded.
+Field discipline (PRDR-052/053), since the SDK's result fields are not interchangeable: read cost and tokens from the **per-model breakdown**, never the cumulative `usage` field, which excludes nested-agent tokens; read output tokens from the **result message**, never summed from per-step assistant messages where the count is a placeholder; deduplicate per-step input/cache counts by message id, since parallel tool calls repeat one id. Record cost as `cost_estimate_usd` — the SDK computes it client-side from a bundled price table and its docs say not to drive financial decisions from it.
+AC: spend accumulates across generations and trips the run ceiling regardless of generation count; ledger rows schema-valid; per-session cost/turn/token recorded from the named fields; **crash fixture** — a session whose result carries *zeroed* (not absent) telemetry is recorded as a flagged lower bound, never as zero, and does **not** trip S-4's absent-fields breaker (PRDR-053); budget-exceeded fixture reads the per-model breakdown, which includes the response that crossed the ceiling; a nested-agent fixture pins the `usage`-vs-breakdown divergence so a future roster cannot silently undercount.
 
 **T-049 · Escalation UX + dossier + risk gate [M2 · L] — deps: T-041, T-042**
 Surface: `src/kernel/dossier.ts`, `src/cli/escalate.ts`
@@ -474,6 +476,18 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.3** — verified against the live Agent SDK documentation and current release data; six findings filed as PRDR-050…055. The three plan-level ones are applied here; the PRD-level three (guard layer, setting sources, telemetry fields) are pre-applied to the tickets they implement so T-046/T-048 do not encode a design the PRD is about to amend.
+
+| Plan | 1.2 | 1.3 |
+|---|---|---|
+| T-046 | guard in `canUseTool` | guard in a **`PreToolUse` hook** — `canUseTool` is skipped for any tool an allow rule approves, i.e. every writing tool S-3 grants; regression test asserts the guard fires on an auto-approved tool, and that no `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` warning is emitted |
+| T-046 | — | **`settingSources: []`** asserted — the SDK's default enables project scope, which resolves against the repo under work, so a committed settings file could add allow rules |
+| T-046 | prefix-hash equality only | + cache-read tokens observed across a >5-min gate gap; the extended-TTL env var goes on SEC-4's allowlist |
+| T-048 | "per-session cost/turn/token" | reads the per-model breakdown (the cumulative `usage` field excludes nested-agent tokens); output tokens from the result message (per-step is a placeholder); cost recorded as `cost_estimate_usd`; crash fixture asserts zeroed ≠ absent |
+| T-001 | `Node ≥20` | **Node ≥22 LTS**, developed against Active LTS 24 — Node 20 hit EOL 2026-04-30; `engines.node` and the CI matrix exclude EOL lines |
+| T-001 | `npm ls --prod` shows exactly three | asserts three keys in `package.json#dependencies` — `npm ls --prod` surfaces the SDK's platform-specific optional packages and **would have failed** |
+| R-1 | `zod` unpinned | **zod 4** named, with the migration delta recorded; "three deps" clarified as three *direct* deps |
+
 **1.2** — synced to PRD 2.0-draft.5, which applied PRDR-041…047. The plan led the PRD on several points in 1.1 (inventing a p95 definition, budget key names, claim semantics); draft.5 ratified those decisions, sometimes with different names, and this release adopts the ratified forms. No ticket added, removed, or rescoped.
 
 | Plan | 1.1 | draft.5 / 1.2 |
@@ -509,4 +523,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.2 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.3 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
