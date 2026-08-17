@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | Source of truth | `foreman-prd-v2.md` (2.0-draft.4) — no redesign, no simplification, no additions |
-| Plan version | 1.0 |
+| Plan version | 1.1 — mechanical corrections against draft.4 (§7) |
 | Date | 2026-08-17 |
-| Shape | 55 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
+| Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
 ---
 
@@ -24,34 +24,43 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 | # | Question | Resolution |
 |---|---|---|
 | R-1 | N-3 "minimal pinned deps" scope | Governs **runtime** deps (`@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch`). Dev tooling (vitest, eslint, tsx, typescript) is unrestricted-but-lean and never ships. |
-| R-2 | Test runner | vitest (named in M0). Oracle e2e tests that need the run loop are ported as `test.todo` until T-041; the parity report (T-018) tracks `green` vs `pending-M2` per test. |
+| R-2 | Test runner | vitest (named in M0). All 52 oracle tests are translated against interfaces at M0 (PRD M0: "against interfaces only"); those needing a later layer land as `test.todo`. The parity report (T-018) records per test `status ∈ {green, pending-M1, pending-M2}` **plus the ticket that closes it**, so each milestone exit asserts its own threshold instead of one global one. Expected distribution at M0 exit: 22 green, 4 pending-M1 (gate execution + flake filter), 26 pending-M2. |
 | R-3 | Atomic claim | `fs.openSync(path, "wx")` — POSIX O_CREAT\|O_EXCL, same semantics as the oracle. Claim-race test forks real processes via `node:child_process`. |
 | R-4 | Resolver caller-set test (X-2 AC) | Source-scan unit test (fs + regex over `src/`): `resolveRed(` may appear only in the four allowed call sites + its own module + tests. No AST dependency. |
-| R-5 | ARCH-1 dependency lint | eslint `no-restricted-imports` zones: `src/kernel/**` bans `@anthropic-ai/*` and `src/sessions/**` (except `src/sessions/backend.ts` interface); `src/sessions/**` bans `src/kernel/machine`, `src/kernel/tickets` mutators. dependency-cruiser avoided (R-1 leanness). |
+| R-5 | ARCH-1 dependency lint | eslint `no-restricted-imports` zones: `src/kernel/**` bans `@anthropic-ai/*` and `src/sessions/**` (except `src/sessions/backend.ts` interface); `src/sessions/**` bans `src/kernel/machine` and `src/kernel/tickets/mutations`. ARCH-1's "no kernel state mutators" is only expressible to `no-restricted-imports` if mutators are their own module, so T-017 lands `src/kernel/tickets/` as a directory splitting `mutations.ts` from `readers.ts`. dependency-cruiser avoided (R-1 leanness). |
 | R-6 | Hashing / globs / prompts | `node:crypto` sha256 everywhere; `picomatch` for all glob matching (one matcher, one semantics); TTY prompts via `node:readline/promises`; TTY detection `process.stdout.isTTY`. |
 | R-7 | Lockfile hash inputs (D-18) | node: `package-lock.json`\|`pnpm-lock.yaml`\|`yarn.lock`\|`bun.lockb`; python: `uv.lock`\|`poetry.lock`\|`requirements*.txt`; go: `go.sum`; rust: `Cargo.lock`. Missing lockfile ⇒ hash of manifest + recorded `lockfile: none`. |
-| R-8 | JSONL writers | `fs.appendFileSync`; single-writer-per-ticket is guaranteed by the claim, so no file locking beyond claims. |
+| R-8 | JSONL writers | `fs.appendFileSync`. Per-ticket files are single-writer by claim. `ledger.jsonl` and `transitions.jsonl` are **run-level**: they are single-writer because v1 is single-worker (NG4), *not* because of claims, and `appendFileSync` is only atomic below `PIPE_BUF` (4096B) — ledger rows carrying telemetry can exceed it. Lifting NG4 requires a real append protocol, not more claims. T-041 asserts exactly one writer per run-level file. |
 | R-9 | Where `maxPossibleSessions` runs | In the config module's load path — config parse → compute → assert → return; the CLI never sees an invalid config object. |
 | R-10 | Live-session CI | Jobs needing real SDK sessions (T-051, T-070, doctor smoke) are gated on `ANTHROPIC_API_KEY` presence + a spend cap env; contributors without keys still get a fully green mock suite. |
 | R-11 | Package identity pre-M4 | `package.json` name `foreman-cli-placeholder`, `"private": true` until OQ-1/OQ-2 resolve at T-083. |
-| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs}` + `prompts/` + `tests/{oracle,fixtures}` — directory names are what R-5's lint zones bind to. |
+| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,fixtures,sec,live,docs}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. |
 
 ## 2. Execution Topology
 
-**Critical path:** T-001 → T-010 → T-011 → T-013 → T-017 → T-040 → T-041 → T-042 → T-046 → T-051 → T-060 → T-066 → T-068 → T-070 → T-084.
+**Critical path** — the longest chain in the dependency graph below, 17 tickets; every arrow is a real `deps:` edge:
 
-**Parallel lanes after T-010** (team-of-3 mapping; solo dev runs the critical path and pulls lane work between blocks):
-- **Lane K (kernel):** T-011…T-018
-- **Lane A (adapter/fs):** T-020…T-030
-- **Lane S (sessions/prompts):** T-040, T-046, T-047 (T-047 has zero code deps — start anytime)
+```
+T-001 → T-010 → T-011 → T-012 → T-015 → T-017 → T-022 → T-041 → T-045
+      → T-063 → T-066 → T-067 → T-070 → T-071 → T-080 → T-083 → T-084
+```
 
-Milestone exit reviews are hard gates (§6). Nothing in M(n+1) merges before M(n)'s exit ticket is green.
+Two notes on the tail. `T-067` and `T-068` tie at depth 12; ties break by ascending ticket id, so T-067 is canonical here and the choice carries no scheduling meaning. And **T-083 is human-blocked on OQ-1/OQ-2** — it sits two hops from the terminal T-084, so the schedule-critical path runs through a decision no engineer can unblock. Resolve OQ-1/OQ-2 before M4 opens, not at it.
+
+The critical path is derived, not authored: T-018 regenerates it from the `deps:` fields and CI diffs the result, so an edited dependency that reshapes the graph fails the build rather than silently rotting this diagram.
+
+**Parallel lanes** (team-of-3 mapping; solo dev runs the critical path and pulls lane work between blocks). Lanes fork at their own entry deps, not at a single point:
+- **Lane K (kernel):** enters at T-011 (deps T-010). T-016 forks separately off T-010. Runs T-011 → T-012 → {T-013, T-014, T-015} → T-017 → T-018.
+- **Lane A (adapter/fs):** T-021, T-023, T-025 enter off T-010, but **T-020 is gated on Lane K's T-016** and T-022 additionally on T-017 — Lane A is not independent of Lane K, it joins it.
+- **Lane S (sessions/prompts):** T-047 has zero deps (start anytime); T-040 enters off T-010; T-046 needs both.
+
+Milestone exit reviews are hard gates (§6): nothing in M(n+1) **merges** before M(n)'s exit ticket is green. Lanes may develop across a milestone boundary — several M1 tickets are genuine deps of T-041 — but they land in milestone order.
 
 ---
 
 ## 3. Tickets
 
-Format: `T-### · Title [Milestone · Size S/M/L] — Deps` · Surface · Implements → PRD IDs. All ACs are test assertions.
+Format: `T-### · Title [Milestone · Size S/M/L/XL] — Deps` · Surface · Implements → PRD IDs. All ACs are test assertions.
 
 ### Phase P0 — Foundation
 
@@ -87,9 +96,10 @@ AC: every (state,event) outside TABLE throws; table exported as data (no logic i
 
 **T-012 · Unit budgets + counters [M0 · M] — deps: T-011**
 Surface: `src/kernel/budgets.ts`
-Implements → X-1, D-12.
+Implements → X-1 (**both** rows: the three unit slots *and* the config-driven ceilings), D-12.
 Oracle: ladder-budget tests via counter mapping (fix_sessions{0,1,2} ⇔ (blind,informed){(0,0),(1,0),(1,1)}).
-AC: per-slot at-most-once property test over all reachable counter states; review_fix_attempts independent of ladder slots (D-6 review-loop test ports).
+Per P6 every ceiling routes to a human, so this module owns all of them as data — `blind_fix_attempts`, `informed_fix_attempts`, `review_fix_attempts`, `research_sessions`, `hypotheses`, `sessions`, plus the config row: `wall_clock_ms`, `spend`, `turns_per_stage`, `failure_research_tool_calls` (≤8), `planning_research_tool_calls` (16, C-3a), `flake_reruns` (1). Enforcement sites are named per ceiling and asserted in their own tickets: wall-clock + sessions → T-041, spend → T-048, turns-per-stage → T-046, failure-research tool calls → T-045, planning-research tool calls → T-063, flake reruns → T-022.
+AC: per-slot at-most-once property test over all reachable counter states; review_fix_attempts independent of ladder slots (D-6 review-loop test ports); **every ceiling in the X-1 table has a named enforcement site and emits BUDGET_BREACH → NEEDS_HUMAN** (coverage test: enumerate the exported ceiling keys, assert each is referenced by ≥1 enforcement call site — a new ceiling with no enforcer fails CI).
 
 **T-013 · Ladder resolver + closed caller set [M0 · M] — deps: T-012**
 Surface: `src/kernel/resolver.ts`, `tests/arch/resolver-callers.test.ts`
@@ -118,10 +128,10 @@ Implements → A-1 persistence, atomic claims (R-3), ready() w/ blockers, discov
 Oracle: full tickets suite incl. 8-process claim race (exactly one winner).
 AC: oracle parity; generations persist round-trip; bootstrap blocking (deps on ticket #1) honored by ready().
 
-**T-018 · Oracle parity report [M0 · S — exit ticket] — deps: T-011…T-017**
-Surface: `tests/oracle/PARITY.md`, generator script
-Implements → M0 exit.
-AC: checked-in table mapping all 52 oracle tests → TS test id + status ∈ {green, pending-M2 (R-2)}; zero `unmapped`; CI regenerates and diffs.
+**T-018 · Oracle parity report + derived critical path [M0 · S — exit ticket] — deps: T-011…T-017**
+Surface: `tests/oracle/PARITY.md`, `docs/critical-path.md`, generator script
+Implements → M0 exit, §2 (derived topology).
+AC: checked-in table mapping all 52 oracle tests → TS test id + `status ∈ {green, pending-M1, pending-M2}` + **closing ticket id** (R-2); zero `unmapped` — every oracle test names a destination ticket, which is what forced T-055 into existence; per-milestone thresholds asserted at each exit rather than one global count (M0: ≥22 green; M1: pending-M1 == 0; M2: pending-M2 == 0); the same generator emits the §2 critical path from the ticket `deps:` graph; CI regenerates both and diffs.
 
 ### M1 — Verification Adapter + Filesystem
 
@@ -138,7 +148,7 @@ AC: per-ecosystem lockfile detection tests; missing-lockfile fallback recorded a
 **T-022 · Flake filter [M1 · M] — deps: T-016, T-017, T-020**
 Surface: `src/kernel/flake.ts`
 Implements → X-5, D-14, D-7.
-AC: oracle flake tests port (zero fix budget consumed; quarantine ticket linked discovered_from); **adversarial fixture**: real regression whose output matches a flake pattern → rerun red → enters ladder; green-rerun is the only path to quarantine (code path assertion).
+AC: oracle flake tests port (zero fix budget consumed; quarantine ticket linked discovered_from); **adversarial fixture**: real regression whose output matches a flake pattern → rerun red → enters ladder; green-rerun is the only path to quarantine (code path assertion); `flake_reruns` ceiling of 1 enforced — a second rerun of the same signature is unreachable (property test), never a retry loop.
 
 **T-023 · `.foreman/` layout + commit split [M1 · M] — deps: T-010**
 Surface: `src/fs/layout.ts`
@@ -190,9 +200,9 @@ AC: interface is the only symbol `src/kernel` may import from sessions (R-5 zone
 
 **T-041 · Kernel run loop [M2 · XL] — deps: T-013, T-014, T-017, T-022, T-024, T-040**
 Surface: `src/kernel/run.ts`, `src/cli/run.ts`
-Implements → C-9 (claim + resumable pool), C-11 exit codes, B-5 journal (crashed session never relaunches — budget consumed, gate judges tree as-is), budget-at-launch, ledger hooks.
-Oracle: kernel e2e suite flips from `todo` to green here (R-2).
-AC: oracle happy path / full ladder / crash-resume / falsified-premise / hypothesis-thrash / review-loop all green; exit codes 0/10/2/1 integration-tested; resumable pool picks up every non-terminal in-flight state.
+Implements → C-9 (claim + resumable pool), C-11 exit codes, B-5 journal (crashed session never relaunches — budget consumed, gate judges tree as-is), budget-at-launch, **N-4**, X-1 `wall_clock_ms` + `sessions` enforcement, ledger hooks.
+Oracle: the 11 `test_kernel_e2e` tests flip from `todo` to green here (R-2) — hook, review, research and risk tests close later at T-046/T-044/T-045/T-049, not here.
+AC: oracle happy path / full ladder / crash-resume / falsified-premise / hypothesis-thrash / review-loop all green; exit codes 0/10/2/1 integration-tested; resumable pool picks up every non-terminal in-flight state; **N-4 benchmark — kernel overhead per transition <100ms at p95 across a 500-transition synthetic run with gates stubbed** (measures the kernel, not the gates); `wall_clock_ms` and net `sessions` ceilings each trip BUDGET_BREACH → NEEDS_HUMAN in their own fixture; exactly one writer per run-level JSONL file asserted (R-8).
 
 **T-042 · Run branch + worktree mode + base guard [M2 · L] — deps: T-041**
 Surface: `src/kernel/git.ts`
@@ -212,18 +222,18 @@ AC: reviewer sees only diff+criteria+rules+hypothesis (input-set assertion); REV
 **T-045 · Failure research + env-keyed cache [M2 · L] — deps: T-021, T-041**
 Surface: `src/kernel/stages/research.ts`
 Implements → X-6, X-6a validator (URL ⇒ non-empty local_search), D-18 composite key + version_facts validation-on-hit, upstream_bug → BLOCKED + linked ticket.
-AC: oracle cache-hit ports (zero research calls, same env); changed-lockfile fixture misses; contradiction between brief version_facts and current env = miss; tier distribution lands in run report (T-053).
+AC: oracle cache-hit ports (zero research calls, same env); changed-lockfile fixture misses; contradiction between brief version_facts and current env = miss; tier distribution lands in run report (T-053); `failure_research_tool_calls` ceiling of 8 enforced — the 9th call is refused and the session ends RESEARCH_DRY rather than running unbounded (X-1 config row).
 
 **T-046 · Agent SDK backend [M2 · XL] — deps: T-040, T-047**
 Surface: `src/sessions/sdk.ts`, `src/sessions/guard.ts`
 Implements → S-1 (plan mode for read-only roles), S-2 (canUseTool path/surface guard + surface-expansion request lever + continuation-based end-of-turn gating), S-3 (per-role allowlists, `WebFetch(domain:…)` from config), S-4 (typed telemetry → ledger; absent fields = breaker), S-6 (stable prefix; per-role hash equality).
 Non-goal: retry/backoff logic beyond gate-red continuation.
-AC: guard denies protected + out-of-surface with reason (oracle hook-test semantics reproduced in-process); disabled-guard fixture still cannot fake green (kernel re-runs gates — P2 test); telemetry-absent fixture → NEEDS_HUMAN breaker; prefix hash identical per role per run.
+AC: guard denies protected + out-of-surface with reason (oracle hook-test semantics reproduced in-process — all 7 `test_hooks` tests close here, not at T-041); disabled-guard fixture still cannot fake green (kernel re-runs gates — P2 test); telemetry-absent fixture → NEEDS_HUMAN breaker; prefix hash identical per role per run; `turns_per_stage` ceiling enforced — continuation stops at the ceiling and emits BUDGET_BREACH rather than looping (X-1 config row); per-role session config asserted for all eight S-1 roles.
 
 **T-047 · Vendored role prompts + curation + attribution [M2 · M] — deps: none (content work)**
 Surface: `prompts/*.md`, `ATTRIBUTIONS.md`, `scripts/hash-prompts.ts`
 Implements → S-7, D-9.
-AC: packaging test verifies prompt hashes + ATTRIBUTIONS.md presence (upstream sources + licenses); assignments referencing unknown role@hash fail closed; prompts encode X-4/X-6a/A-5 protocols (prompt-lint checklist test).
+AC: packaging test verifies prompt hashes + ATTRIBUTIONS.md presence (upstream sources + licenses); assignments referencing unknown role@hash fail closed; prompts encode X-4/X-6a/A-5 protocols (prompt-lint checklist test); **the vendored set covers exactly S-1's eight roles** (planner, diagnose, implement, fix, informed_fix, review_fix, research, review) — a missing role fails at packaging, not at runtime.
 
 **T-048 · Ledger + cross-generation spend backstop [M2 · M] — deps: T-041, T-015**
 Surface: `src/kernel/ledger.ts`
@@ -247,18 +257,25 @@ AC: budgeted live run (R-10) completes a 3-ticket plan on the ts-service fixture
 
 **T-052 · SEC red-team pack + env allowlist + scrubbing [M2 · L] — deps: T-042, T-046**
 Surface: `tests/sec/**`, `src/sessions/env.ts`, `src/kernel/scrub.ts`
-Implements → SEC-1…SEC-5 ACs, SEC-4 (allowlisted env, pattern scrub before write).
-AC: 10 evasion tickets — 0 protected writes, 0 base-branch writes, 0 unlogged consents; secret-shaped strings never reach ledger/logs (fixture).
+Implements → SEC-1…SEC-5 ACs, SEC-4 (allowlisted env, pattern scrub before write), §14 scope-canary corpus.
+AC: 10 evasion tickets — 0 protected writes, 0 base-branch writes, 0 unlogged consents; secret-shaped strings never reach ledger/logs (fixture); **scope canaries are a named, separately-counted subset** — tickets whose `surface[]` excludes a file the work plainly needs, so a correct run is blocked rather than expanded — feeding T-053's 100%-blocked metric.
 
 **T-053 · status/report + metrics counters [M2 · M] — deps: T-041, T-048**
 Surface: `src/cli/status.ts`, `src/cli/report.ts`
-Implements → C-12 plumbing, §14 counters (autonomous-completion rate, sessions/ticket, cache hit rate, tier distribution), C-13 five-label vocabulary + resume announcements.
-AC: terminal snapshot contains no internal state names; resume announces ticket + stage; report emits every §14 metric from artifacts alone.
+Implements → C-12 (`status`, `report`), C-13 five-label vocabulary + resume announcements, and **all seven §14 metrics** — autonomous-completion rate (≥70%), median sessions/completed ticket (≤2.5), scope-canary block rate (100%, corpus from T-052), base-branch writes (0), research cache hit rate, resume correctness (100% of injected crashes recover with no duplicate blind fix), N-7 gate status — plus the X-6a tier distribution.
+AC: terminal snapshot contains no internal state names; resume announces ticket + stage; report emits every §14 metric from artifacts alone; **enumeration test — the metric key set equals §14's, so a metric added to the PRD without a reporter fails CI** (the check that would have caught scope-canary going unreported).
 
 **T-054 · ARCH-1 apply-site audit [M2 · S] — deps: T-041**
 Surface: `tests/arch/apply-audit.test.ts`
 Implements → ARCH-1 (audit half).
 AC: every `machine.apply` call site's event provably derives from a validator result or gate result (source-scan + type-level: event constructors only exported from validator/gate modules).
+
+**T-055 · `approve` / `requeue` plumbing commands [M2 · S] — deps: T-015, T-041, T-049**
+Surface: `src/cli/approve.ts`, `src/cli/requeue.ts`
+Implements → C-12 (the two plumbing verbs T-027/T-050/T-053 do not cover), X-3 `HUMAN_APPROVED` / `HUMAN_REQUEUE` rows reached out-of-band, X-8 (requeue opens a generation).
+Rationale: C-12 names six plumbing commands; `status`/`report` land in T-053, `verify sync` in T-027, `doctor` in T-050. `approve <id>` and `requeue <id>` had no ticket, and the oracle's `test_validate_report_approve_requeue` — which drives both as CLI verbs and asserts the resulting states — had no destination, breaching T-018's zero-unmapped exit.
+Non-goal: any new interrupt or porcelain surface (C-14) — these are scriptable plumbing only, never on the golden path.
+AC: `approve <id>` on a NEEDS_HUMAN ticket re-enters APPROVED and the kernel re-verifies before finalize (never a direct DONE); `requeue <id>` opens generation N+1 with zeroed counters and generation N frozen (T-015 semantics, *not* the oracle's `attempts = {}` reset — the M0 divergence); both are refused with exit 2 from any state where the X-3 row is illegal; oracle `test_validate_report_approve_requeue` ports green with requeue asserting generation semantics; README golden path still contains exactly two commands (T-069 unaffected).
 
 ### M3 — `init` Pipeline
 
@@ -279,18 +296,19 @@ AC: missing-info fixture yields one interruption with ≥2 questions; greenfield
 
 **T-063 · Planning research [M3 · M] — deps: T-062, T-045**
 Surface: `src/init/plan-research.ts`
-Implements → C-3a, D-11 (question-hash cache, budget, exhaustion → joins AWAIT_INFO batch), shared X-6a validator.
-AC: unfamiliar-API fixture yields plan citing official docs; re-init cache hit = zero web calls; budget exhaustion adds question to the single AWAIT_INFO batch (no new interrupt).
+Implements → C-3a, D-11 (question-hash cache, `planning_research_tool_calls` budget, exhaustion → joins AWAIT_INFO batch), shared X-6a validator.
+AC: unfamiliar-API fixture yields plan citing official docs; re-init cache hit = zero web calls; `planning_research_tool_calls` ceiling of 16 per init enforced (distinct from T-045's failure-research 8 — two counters, two budgets); budget exhaustion adds the question to the single AWAIT_INFO batch (no new interrupt, C-5 unchanged).
 
 **T-064 · DETERMINE_VERIFICATION + auto-binding [M3 · M] — deps: T-026, T-062**
 Surface: `src/init/bind.ts`
 Implements → C-3b, D-10 (auto-accept sole candidate, `approved_by:"auto"`, interrupt only on ambiguity/zero/failed-sole), PRESENT binding table surfacing.
 AC: lone-vitest fixture: zero binding interrupts; two-candidate fixture: exactly one; PRESENT snapshot lists provenance per slot; auto bindings overridable at PRESENT.
 
-**T-065 · Setup-consent engine + allowlist [M3 · M] — deps: T-060**
+**T-065 · Setup-consent engine + allowlist [M3 · M] — deps: T-060, T-064**
 Surface: `src/init/consent.ts`, `src/init/allowlist.ts`
 Implements → C-6 three-way rule, C-6a/D-15 (closed template data module; off-list never executed even with consent — printed with rationale, resume-after), C-1/B-3 `git init` + initial-commit template.
-AC: off-list fixture (piped-shell installer) spawns no child process; direct-edit of existing config refused with proposal printed; allowlist module has its own tests; git-init template creates base branch, P7 red-team from that commit onward.
+Depends on T-064 because draft.4 places AWAIT_SETUP_CONSENT *after* DETERMINE_VERIFICATION: C-3b's zero-candidate branch is what raises it, so the consent engine consumes T-064's candidate result.
+AC: off-list fixture (piped-shell installer) spawns no child process; direct-edit of existing config refused with proposal printed; allowlist module has its own tests; git-init template creates base branch, P7 red-team from that commit onward; zero-candidate slot from T-064 raises AWAIT_SETUP_CONSENT and no other interrupt class (C-5).
 
 **T-066 · PLAN generation + bootstrap lifecycle [M3 · XL] — deps: T-062, T-063, T-064, T-047**
 Surface: `src/init/plan.ts`
@@ -344,37 +362,136 @@ AC: publish job hard-requires N-7 green; upgrade PR without fixture link blocked
 
 ## 4. Traceability Matrix (requirement → tickets)
 
+One row per requirement — parseable, so T-018's generator can diff it against the `Implements →` lines and fail CI on an orphaned requirement or a stale ticket reference.
+
 | PRD | Tickets |
 |---|---|
-| ARCH-1 / D-19 | T-003, T-040, T-054 |
-| C-1 | T-060, T-065 · C-2 | T-025, T-061 · C-3 | T-062 · C-3a | T-063 · C-3b/D-10 | T-064 |
-| C-4 | T-066 · C-5 | T-060 · C-6/C-6a/D-15 | T-065 · C-7 | T-068 · C-8 | T-060, T-024 |
-| C-9 | T-041 · C-10 | T-049 · C-11 | T-041 · C-12 | T-027, T-050, T-053 · C-13 | T-053 · C-14 | T-069 |
-| F-1 | T-023 · F-2 | T-023, T-028, T-065 · F-3 | T-010, T-023, T-080 · F-4/P9 | T-024 |
-| V-1 | T-025, T-026 · V-2 | T-010, T-026 · V-3/SEC-5 | T-027 · V-4 | T-020, T-028 · V-5/D-5 | T-029 |
-| X-1/D-12 | T-012, T-014 · X-2/D-13 | T-013, T-044 · X-3 | T-011, T-043, T-044 · X-4/D-7 | T-043 |
-| X-5/D-14 | T-016, T-022 · X-6/D-18 | T-045, T-021 · X-6a | T-045, T-063 · X-7 | T-016 · X-8/D-17 | T-015, T-048, T-049 |
-| S-1…S-4, S-6 | T-046 · S-5 | T-050, T-084 · S-7/D-9 | T-047, T-067, T-083 |
-| B-1…B-3 | T-042, T-065 · B-4 | T-049 · B-5 | T-041, T-042 |
-| A-1…A-8 | T-010 (+ consumers T-043/T-044/T-045/T-049/T-066) |
-| SEC-1…SEC-4 | T-052, T-065 · N-1 | T-030 · N-2 | T-025 · N-3 | T-001 · N-4 | T-041 AC budget · N-5 | T-051, T-053 · N-6 | T-069, T-082 · N-7/D-16 | T-070, T-071, T-084 |
-| M0–M4 exits | T-018, T-030, T-051, T-070, T-083/T-084 |
+| ARCH-1 | T-003, T-040, T-054 |
+| C-1 | T-060, T-065 |
+| C-2 | T-025, T-061 |
+| C-3 | T-062 |
+| C-3a | T-063 |
+| C-3b | T-064 |
+| C-4 | T-066 |
+| C-5 | T-060, T-069 |
+| C-6 | T-065 |
+| C-6a | T-065 |
+| C-7 | T-068 |
+| C-8 | T-024, T-060 |
+| C-9 | T-041 |
+| C-10 | T-049 |
+| C-11 | T-041 |
+| C-12 | T-027, T-050, T-053, T-055 |
+| C-13 | T-053 |
+| C-14 | T-069 |
+| F-1 | T-023 |
+| F-2 | T-023, T-028, T-065 |
+| F-3 | T-010, T-023, T-080 |
+| F-4 | T-024 |
+| V-1 | T-025, T-026 |
+| V-2 | T-010, T-026 |
+| V-3 | T-027 |
+| V-4 | T-020, T-028 |
+| V-5 | T-029 |
+| X-1 | T-012, T-014, T-022, T-041, T-045, T-046, T-048, T-063 |
+| X-2 | T-013 |
+| X-3 | T-011, T-043, T-044, T-055 |
+| X-4 | T-043 |
+| X-5 | T-016, T-022 |
+| X-6 | T-021, T-045 |
+| X-6a | T-045, T-063 |
+| X-7 | T-016 |
+| X-8 | T-015, T-048, T-049, T-055 |
+| S-1 | T-046, T-047, T-062 |
+| S-2 | T-046 |
+| S-3 | T-046 |
+| S-4 | T-046, T-048 |
+| S-5 | T-050, T-084 |
+| S-6 | T-046 |
+| S-7 | T-047, T-067, T-083 |
+| B-1 | T-042 |
+| B-2 | T-042 |
+| B-3 | T-042, T-065 |
+| B-4 | T-049 |
+| B-5 | T-041, T-042 |
+| A-1 | T-010, T-015, T-017 |
+| A-2 | T-010, T-066, T-068 |
+| A-3 | T-010, T-043 |
+| A-4 | T-010, T-045, T-063 |
+| A-5 | T-010, T-044 |
+| A-6 | T-010, T-026 |
+| A-7 | T-010, T-024 |
+| A-8 | T-010, T-049 |
+| SEC-1 | T-052, T-065 |
+| SEC-2 | T-047, T-067 |
+| SEC-3 | T-046, T-052 |
+| SEC-4 | T-052 |
+| SEC-5 | T-027, T-052 |
+| N-1 | T-030 |
+| N-2 | T-013, T-016, T-025 |
+| N-3 | T-001 |
+| N-4 | T-041 |
+| N-5 | T-051, T-053 |
+| N-6 | T-069, T-082 |
+| N-7 | T-002, T-070, T-071, T-084 |
+| D-5 | T-029 |
+| D-6 | T-012, T-044 |
+| D-7 | T-022, T-043 |
+| D-9 | T-047 |
+| D-10 | T-062, T-064 |
+| D-11 | T-045, T-063 |
+| D-12 | T-012, T-013 |
+| D-13 | T-013 |
+| D-14 | T-016, T-022 |
+| D-15 | T-065 |
+| D-16 | T-070, T-084 |
+| D-17 | T-015, T-048 |
+| D-18 | T-021, T-045 |
+| D-19 | T-003, T-054 |
+| §14 metrics | T-052, T-053 |
+| M0–M4 exits | T-018, T-030, T-051, T-070, T-080, T-081, T-082, T-083, T-084 |
 
-Every C/F/V/X/S/B/A/SEC/N/ARCH identifier in draft.4 appears above; OQ-1/OQ-2 surface only in T-083 as the sole human-blocked ticket before publish.
+Every C/F/V/X/S/B/A/SEC/N/ARCH/D identifier in draft.4 appears above. OQ-1/OQ-2 surface only in T-083, the sole human-blocked ticket — and it is on the critical path (§2), so it gates publish rather than merely accompanying it. D-1…D-4 and D-8 are framing decisions with no discrete ticket; they are realized across T-001 (D-1 language), T-083 (D-2 distribution), T-026 (D-4 binding), T-042 (D-8 branch mode).
 
 ## 5. Risk Register (delta to PRD §15 — execution risks only)
 
 | Risk | Ticket-level mitigation |
 |---|---|
-| Oracle e2e tests stall as `todo` and rot | T-018 parity report diffs in CI; `pending-M2` count must reach 0 at T-041 merge |
+| Oracle e2e tests stall as `todo` and rot | T-018 parity report diffs in CI, each test carrying its closing ticket (R-2); thresholds are per-milestone — `pending-M1` reaches 0 at the M1 exit (T-030), `pending-M2` at the M2 exit (T-051), **not** at T-041, which closes only the 11 `test_kernel_e2e` tests |
 | SDK integration surprises (T-046) | T-050 doctor smoke lands with it; continuation-gating has a mock-level twin so only transport is live-risk |
 | Self-build (T-070) too flaky as a gate | budgets + R-10 caps; skeleton/full split (T-071) keeps PR CI deterministic |
-| Solo-dev context loss across 55 tickets | trailers (Agreement 5) + this plan as `.foreman/plan/` seed — Foreman's own resume model, applied manually until M3 |
+| Solo-dev context loss across 56 tickets | trailers (Agreement 5) + this plan as `.foreman/plan/` seed — Foreman's own resume model, applied manually until M3 |
+| OQ-1/OQ-2 stall the critical path at T-083 | they are the only human-blocked node and sit two hops from the terminal ticket (§2); resolve before M4 opens, not at it |
 
 ## 6. Milestone Exit Reviews
 
-M0: parity report zero-unmapped → M1: three ecosystems, kernel-diff empty → M2: live 3-ticket run reconstructable from artifacts → M3: self-build green once → M4: N-7 wired as permanent gate, identity resolved, publish.
+M0 (T-018): parity report zero-unmapped, every test carrying its closing ticket, ≥22 green → M1 (T-030): three ecosystems, kernel-diff empty, `pending-M1` == 0 → M2 (T-051): live 3-ticket run reconstructable from artifacts, `pending-M2` == 0 → M3 (T-070): self-build green once → M4 (T-080…T-084): schema frozen, security review signed, N-7 wired as permanent gate, identity resolved, publish.
+
+Each exit asserts its own parity threshold rather than deferring to a single global count — the correction that made T-018's zero-unmapped criterion satisfiable (§7.2, §7.3).
 
 ---
 
-*Plan 1.0 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+## 7. Changelog
+
+**1.1** — mechanical corrections only; no PRD semantics changed, no ticket removed or rescoped.
+
+| # | Change | Was |
+|---|---|---|
+| 1 | Critical path recomputed from the `deps:` graph (§2); T-018 now generates it and CI diffs it | Authored spine containing four non-edges (`T-013→T-017`, `T-017→T-040`, `T-042→T-046`, `T-070→T-084`), eliding T-083 |
+| 2 | Parity status split to `{green, pending-M1, pending-M2}` + closing ticket per test; per-milestone thresholds (R-2, T-018, §5) | Binary `{green, pending-M2}`; risk register claimed `pending-M2 → 0 at T-041`, unachievable since 15 of 26 close later |
+| 3 | **T-055 added** — `approve <id>` / `requeue <id>` (C-12) | No ticket; oracle `test_validate_report_approve_requeue` was unmappable, breaching T-018's own zero-unmapped exit |
+| 4 | X-1's config row given owners and ACs: wall-clock + sessions (T-041), spend (T-048), turns-per-stage (T-046), failure-research ≤8 (T-045), planning-research 16 (T-063), flake reruns 1 (T-022); T-012 holds them as data with a coverage test | Recorded but unenforced — four ceilings routed nowhere, against P6 |
+| 5 | Traceability matrix rewritten one-row-per-requirement; D-* rows added | Multiple mappings per cell, unparseable by the CI check it exists to feed |
+| 6 | N-4 given a real assertion (T-041 p95 benchmark, gates stubbed) | Matrix claimed `T-041 AC budget`; no latency assertion existed |
+| 7 | §14 fully enumerated in T-053 + key-set enumeration test; scope-canary corpus defined in T-052 | Four of seven metrics named; scope-canary had no fixture and no reporter |
+| 8 | R-8 rationale corrected; T-041 asserts one writer per run-level JSONL | Claimed claims guarantee single-writer — false for run-level `ledger.jsonl` / `transitions.jsonl` |
+| 9 | Lane entry deps stated (§2); T-065 deps T-064; R-5 mutator module split; R-12 lists `init`, `scripts/`, all `tests/` subdirs; size vocabulary admits XL | Lanes "after T-010" though T-020 deps T-016; consent decoupled from C-3b's zero-candidate branch; R-12 omitted directories ticket surfaces name |
+| 10 | T-047 asserts coverage of S-1's eight roles | Hashes verified, coverage not — a missing role failed at runtime, not packaging |
+
+Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, the X-2/X-3 caller set, and T-014's treatment of 12 as a regression pin — were checked against draft.4 and left as written; the plan was already correct on all four.
+
+**1.0** — initial 55-ticket plan.
+
+---
+
+*Plan 1.1 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
