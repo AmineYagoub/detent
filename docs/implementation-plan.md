@@ -68,7 +68,8 @@ Format: `T-### · Title [Milestone · Size S/M/L/XL] — Deps` · Surface · Imp
 Surface: `/`, `.github/workflows/ci.yml`, `package.json`, `tsconfig.json`
 Implements → N-3, N-6 (partial), R-1, R-11, R-12.
 **Node ≥22 LTS, developed against Active LTS (24)** — Node 20 reached EOL 2026-04-30 and is not a supported target (PRDR-055). ESM, strict tsconfig, vitest wired, direct runtime deps exactly {agent-sdk, zod@4, picomatch} pinned exact. CI runs lint+typecheck+test on PR.
-AC: fresh clone `npm ci && npm test` green; CI blocks on any of the three; **`package.json#dependencies` has exactly three keys** — asserted against the manifest, *not* `npm ls --prod`, which surfaces the SDK's platform-specific optional packages and would fail (R-1); `engines.node` excludes every EOL release line; CI's runtime matrix contains no EOL line.
+AC: fresh clone `npm ci && npm test` green; CI blocks on any of the three; **`package.json#dependencies` has exactly three keys** *and* `npm ls --prod` is clean — the manifest assertion is the primary one because it is hermetic (independent of install state and of npm's default `ls` depth, which has changed across npm majors); `engines.node` excludes every EOL release line; CI's runtime matrix contains no EOL line.
+Verified at implementation: the SDK declares 8 platform-specific `optionalDependencies`, but they nest under it rather than hoisting, so `npm ls --prod` does report exactly three. The transitive install is 251 packages — R-1's "three deps" has always meant three *direct* deps.
 
 **T-002 · Detent's own verification gates [P0 · S] — deps: T-001**
 Surface: `eslint.config.js`, `vitest.config.ts`, `package.json#scripts`
