@@ -5,7 +5,7 @@ state: READY
 severity: minor
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["S-6", "SEC-4", "X-1", "§14", "N-4"]
 acceptance_criteria: ["S-6 states that a stable prefix alone does not produce cache hits across sessions, and names the mechanism that extends cache lifetime past the gap between them.", "Any environment variable the backend needs for this is reconciled with SEC-4's allowlisted-env rule, so the mechanism is not silently stripped.", "The PRD gives S-6 a measurable AC — cache-read tokens observed across consecutive same-role sessions — rather than only asserting prefix-hash equality.", "The cost tradeoff is stated: longer-lived cache writes are billed at a higher rate than the default."]
 non_goals: ["Does not change S-6's prefix construction (role prompt + rules + bindings preamble) or its byte-identity requirement.", "Does not require Foreman to manage cache breakpoints; the backend handles caching automatically.", "Does not make cache hit rate a gated metric — reporting it is sufficient."]

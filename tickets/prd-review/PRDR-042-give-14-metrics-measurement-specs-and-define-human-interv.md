@@ -5,7 +5,7 @@ state: DONE
 severity: major
 category: testability
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["§14", "X-8", "C-10", "B-4", "SEC-3", "A-1", "N-7"]
 acceptance_criteria: ["§14 is a table with columns `Metric | Target | Source artifact | Denominator | Window & population`, every cell non-empty, checkable by a markdown table lint.", "The PRD defines \"human intervention\" in one place, naming which of C-10's four outcomes and B-4's risk approval count and which do not, and §14's ≥70% row is consistent with that definition.", "\"Scope canary\" is defined as a normative term with enough precision to build the corpus — naming the ticket property that makes one a canary and the observable that counts as blocked — and the definition states whether the SEC-* evasion pack and the canary corpus are the same set.", "The sessions-per-ticket row states whether it is per-generation or cumulative across generations, and X-8's cumulative-reporting sentence and §14's row cannot be read as contradicting each other.", "Every §14 row names a source artifact that F-1 already requires, so no row implies a new persisted artifact."]
 non_goals: ["Does not change any numeric target — 70%, 2.5, 100%, 0 stay as written.", "Does not add a pilot milestone or change §13; v1 measures on the fixture matrix as §14 already states.", "Does not require the kernel to compute these metrics inline — an out-of-band script over F-1 artifacts satisfies every row."]

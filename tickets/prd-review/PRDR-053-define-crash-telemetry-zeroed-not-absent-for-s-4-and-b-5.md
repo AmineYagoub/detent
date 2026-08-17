@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["S-4", "B-5", "X-1", "X-8", "N-5", "C-9"]
 acceptance_criteria: ["S-4 distinguishes absent telemetry from zeroed telemetry and states the outcome for each, so a crashed session cannot be recorded as free work.", "B-5's \"budget was consumed\" is reconcilable with what the ledger actually records for a crashed session.", "The PRD names a recovery path for a crashed session's spend, or states explicitly that the spend is unrecoverable and how the ledger marks it.", "The budget-exceeded result is covered: the PRD says which field the ledger reads when the two disagree about the response that crossed the ceiling.", "N-5's reconstruction guarantee holds for a run containing a crashed session — the ledger row is present and marked, not missing or silently zero."]
 non_goals: ["Does not change B-5's rule that a crashed session may not relaunch, nor its tree-reset semantics.", "Does not require exact spend recovery where the backend cannot provide it; an explicit lower-bound marking is acceptable.", "Does not add a retry or resume path for the crashed session itself."]

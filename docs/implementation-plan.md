@@ -1,9 +1,9 @@
-# Foreman — Implementation Plan
+# Detent — Implementation Plan
 
 | | |
 |---|---|
-| Source of truth | `foreman-prd-v2.md` (2.0-draft.5) — no redesign, no simplification, no additions |
-| Plan version | 1.3 — upstream-verified against the Agent SDK docs and current release data (§7) |
+| Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
+| Plan version | 1.4 — renamed to Detent (PRDR-056 / D-20) (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -15,7 +15,7 @@
 2. **No-deviation rule** (N-6): an implementer who wants a "better" design files a `prd-review` ticket and stops. The PRD amends first; code follows.
 3. **ARCH-1 is law from day one**: the dependency lint (T-003) merges before any kernel code exists, so violations are impossible rather than cleaned up.
 4. **Every AC below is machine-checkable.** "Done" = its tests exist and pass in CI, plus the global DoD: typecheck clean, lint clean, no new runtime dependency beyond N-3's set, schema_version on any new committed artifact type.
-5. **Ticket IDs are stable**; commits carry `Foreman-Ticket: T-###` trailers from T-001 onward — we adopt B-1's convention for building Foreman itself.
+5. **Ticket IDs are stable**; commits carry `Detent-Ticket: T-###` trailers from T-001 onward — we adopt B-1's convention for building Detent itself.
 
 ## 1. Resolved Implementation Details
 
@@ -33,7 +33,7 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 | R-8 | JSONL writers | `fs.appendFileSync`. Per-ticket files are single-writer by claim. `ledger.jsonl` and `transitions.jsonl` are **run-level**: they are single-writer because v1 is single-worker (NG4), *not* because of claims, and `appendFileSync` is only atomic below `PIPE_BUF` (4096B) — ledger rows carrying telemetry can exceed it. Lifting NG4 requires a real append protocol, not more claims. T-041 asserts exactly one writer per run-level file. |
 | R-9 | Where `maxPossibleSessions` runs | In the config module's load path — config parse → compute → assert → return; the CLI never sees an invalid config object. |
 | R-10 | Live-session CI | Jobs needing real SDK sessions (T-051, T-070, doctor smoke) are gated on `ANTHROPIC_API_KEY` presence + a spend cap env; contributors without keys still get a fully green mock suite. |
-| R-11 | Package identity pre-M4 | `package.json` name `foreman-cli-placeholder`, `"private": true` until OQ-1/OQ-2 resolve at T-083. |
+| R-11 | Package identity pre-M4 | `package.json` name `detent-cli-placeholder`, `"private": true` until OQ-1/OQ-2 resolve at T-083. |
 | R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,fixtures,sec,live,docs,perf}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. `tests/perf/` is fixed by draft.5's N-4, which names `tests/perf/transition-overhead.bench.ts` normatively. |
 
 ## 2. Execution Topology
@@ -70,9 +70,9 @@ Implements → N-3, N-6 (partial), R-1, R-11, R-12.
 **Node ≥22 LTS, developed against Active LTS (24)** — Node 20 reached EOL 2026-04-30 and is not a supported target (PRDR-055). ESM, strict tsconfig, vitest wired, direct runtime deps exactly {agent-sdk, zod@4, picomatch} pinned exact. CI runs lint+typecheck+test on PR.
 AC: fresh clone `npm ci && npm test` green; CI blocks on any of the three; **`package.json#dependencies` has exactly three keys** — asserted against the manifest, *not* `npm ls --prod`, which surfaces the SDK's platform-specific optional packages and would fail (R-1); `engines.node` excludes every EOL release line; CI's runtime matrix contains no EOL line.
 
-**T-002 · Foreman's own verification gates [P0 · S] — deps: T-001**
+**T-002 · Detent's own verification gates [P0 · S] — deps: T-001**
 Surface: `eslint.config.js`, `vitest.config.ts`, `package.json#scripts`
-Implements → dogfooding prerequisite for N-7 (Foreman must later bind these very scripts).
+Implements → dogfooding prerequisite for N-7 (Detent must later bind these very scripts).
 AC: `npm run test|lint|typecheck` each exit 0 on empty skeleton; scripts are the future binding targets (no watch-mode defaults — `vitest run`).
 
 **T-003 · ARCH-1 dependency-direction lint [P0 · S] — deps: T-001**
@@ -150,10 +150,10 @@ Surface: `src/kernel/flake.ts`
 Implements → X-5, D-14, D-7.
 AC: oracle flake tests port (zero fix budget consumed; quarantine ticket linked discovered_from); **adversarial fixture**: real regression whose output matches a flake pattern → rerun red → enters ladder; green-rerun is the only path to quarantine (code path assertion); `flake_reruns` ceiling of 1 enforced — a second rerun of the same signature is unreachable (property test), never a retry loop.
 
-**T-023 · `.foreman/` layout + commit split [M1 · M] — deps: T-010**
+**T-023 · `.detent/` layout + commit split [M1 · M] — deps: T-010**
 Surface: `src/fs/layout.ts`
 Implements → F-1, F-2 boundary lint, F-3 stamping.
-AC: fresh init produces exact split; Foreman-written `.foreman/.gitignore` enforces local set; boundary lint fixture (a project-config file appearing under `.foreman/`) fails CI; git status shows only committed set; draft.5's per-ticket vs per-run ownership split is encoded — F-1's single-writer AC for `ledger.jsonl` and `transitions.jsonl` is discharged at T-041, since no writer exists until the run loop does.
+AC: fresh init produces exact split; Detent-written `.detent/.gitignore` enforces local set; boundary lint fixture (a project-config file appearing under `.detent/`) fails CI; git status shows only committed set; draft.5's per-ticket vs per-run ownership split is encoded — F-1's single-writer AC for `ledger.jsonl` and `transitions.jsonl` is discharged at T-041, since no writer exists until the run loop does.
 
 **T-024 · Content-addressed checkpoints [M1 · L] — deps: T-023**
 Surface: `src/fs/checkpoints.ts`
@@ -331,12 +331,12 @@ AC: declined approval → READY-unapproved, exit 2; `run` on unapproved presents
 **T-069 · Porcelain freeze + golden-path docs test [M3 · S] — deps: T-053**
 Surface: `tests/docs/golden-path.test.ts`, `README.md`
 Implements → C-14, N-6 (README two-command snapshot).
-AC: README golden path contains exactly `foreman init` and `foreman run`; interrupt enum length == 5 asserted; release checklist includes the freeze item.
+AC: README golden path contains exactly `detent init` and `detent run`; interrupt enum length == 5 asserted; release checklist includes the freeze item.
 
 **T-070 · Self-build first green [M3 · XL — exit ticket] — deps: T-060…T-068, T-051**
 Surface: `tests/live/self-build.test.ts`
 Implements → M3 exit, N-7/D-16 first green.
-AC: folder containing only `foreman-prd-v2.md` → `foreman init && foreman run` (R-10-gated, budgeted) reads the PRD, generates tickets, selects agents, builds, tests, reviews to DONE on the walking skeleton; base branch untouched; run reconstructable from artifacts.
+AC: folder containing only `detent-prd-v2.md` → `detent init && detent run` (R-10-gated, budgeted) reads the PRD, generates tickets, selects agents, builds, tests, reviews to DONE on the walking skeleton; base branch untouched; run reconstructable from artifacts.
 
 **T-071 · CI split: skeleton vs full self-build [M3 · S] — deps: T-070**
 Surface: `.github/workflows/{ci,release}.yml`
@@ -463,7 +463,7 @@ Every C/F/V/X/S/B/A/SEC/N/ARCH/D identifier in draft.5 appears above. OQ-1/OQ-2 
 | Oracle e2e tests stall as `todo` and rot | T-018 parity report diffs in CI, each test carrying its closing ticket (R-2); thresholds are per-milestone — `pending-M1` reaches 0 at the M1 exit (T-030), `pending-M2` at the M2 exit (T-051), **not** at T-041, which closes only the 11 `test_kernel_e2e` tests |
 | SDK integration surprises (T-046) | T-050 doctor smoke lands with it; continuation-gating has a mock-level twin so only transport is live-risk |
 | Self-build (T-070) too flaky as a gate | budgets + R-10 caps; skeleton/full split (T-071) keeps PR CI deterministic |
-| Solo-dev context loss across 56 tickets | trailers (Agreement 5) + this plan as `.foreman/plan/` seed — Foreman's own resume model, applied manually until M3 |
+| Solo-dev context loss across 56 tickets | trailers (Agreement 5) + this plan as `.detent/plan/` seed — Detent's own resume model, applied manually until M3 |
 | OQ-1/OQ-2 stall the critical path at T-083 | they are the only human-blocked node and sit two hops from the terminal ticket (§2); resolve before M4 opens, not at it |
 
 ## 6. Milestone Exit Reviews
@@ -475,6 +475,8 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 ---
 
 ## 7. Changelog
+
+**1.4** — product renamed **Foreman → Detent** per PRDR-056 / D-20, applied to PRD 2.0-draft.6 first. Identifier rename only; no ticket added, removed, or rescoped, and no AC's meaning changed. Case-preserving throughout: product name, `.detent/`, `Detent-Ticket:` trailer, `detent/run-<id>` branch prefix, the `detent init` / `detent run` porcelain, `detent-prd-v2.md`, and R-11's placeholder package name. Three consequences are carried, not invented here: T-023 gains the `.foreman/` → `.detent/` relocation as part of F-3's v0→v1 migration; T-042 must parse both trailer forms while writing only the current one, since history is immutable; and T-070's self-build seed is the renamed PRD file. The Python oracle keeps its own name — it is a historical artifact, and `prd-review` evidence filed before the rename is preserved verbatim per N-6.
 
 **1.3** — verified against the live Agent SDK documentation and current release data; six findings filed as PRDR-050…055. The three plan-level ones are applied here; the PRD-level three (guard layer, setting sources, telemetry fields) are pre-applied to the tickets they implement so T-046/T-048 do not encode a design the PRD is about to amend.
 
@@ -523,4 +525,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.3 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.4 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*

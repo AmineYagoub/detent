@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: security
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["V-3", "SEC-5", "ARCH-1", "X-3", "C-9", "C-11", "F-1", "NG4"]
 acceptance_criteria: ["A drift halt is representable in the X-3 machine — either an event exists for it or V-3 states explicitly that the halt is outside the machine and why that does not violate ARCH-1.", "V-3 names what happens to the in-flight ticket's persisted state and its claim, so `run` re-invocation after a halt has one defined behaviour rather than two.", "The halt's blast radius is stated: whether it stops the current ticket only or the whole run, and the answer is consistent with SEC-5's tampering posture.", "A drift halt is distinguishable in `transitions.jsonl` from a crash, satisfying N-5's reconstruction guarantee for a halt that is a security event.", "NG4's lifting conditions name cross-worker halt propagation, since SEC-5's tampering posture cannot be satisfied by letting sibling workers finish."]
 non_goals: ["Does not weaken V-3's halting posture or make drift a warning; the halt stays mandatory and stays a security control per SEC-5.", "Does not change `verify sync` as the re-baselining path (C-12), nor the provisional-binding exemption of C-4.", "Does not lift NG4 or design the cross-worker propagation mechanism; naming it as a lifting condition is sufficient."]

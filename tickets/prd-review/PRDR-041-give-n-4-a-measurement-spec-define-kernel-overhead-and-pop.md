@@ -5,7 +5,7 @@ state: DONE
 severity: minor
 category: testability
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["N-4", "N-2", "X-3", "F-4", "§14"]
 acceptance_criteria: ["N-4's text names which operations count as kernel overhead and which are excluded, such that a reader can classify checkpoint fsync, JSONL append, and zod validation from that sentence alone.", "N-4 states a percentile and a sample population (transition count and whether gates are stubbed), and its AC is decidable from a single benchmark run's output without human judgement.", "The reading guide's claim that every requirement carries a machine-checkable AC holds for N-4 — it has an AC line of its own, in the same form as N-1 and N-3.", "A benchmark harness location is named, and the AC states whether a regression fails CI or is reported only."]
 non_goals: ["Does not change the 100ms target itself, nor add any performance requirement to the verification adapter or session layer — gates dominating wall time (N-4's own second clause) stays the design intent.", "Does not require the benchmark to run on every PR; a nightly or release-gated occasion satisfies this ticket as long as the occasion is named.", "Does not introduce a §14 metrics row for kernel latency."]

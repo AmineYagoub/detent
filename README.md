@@ -1,14 +1,14 @@
-# Foreman
+# Detent
 
 ## Overview
 
-_TODO: describe what Foreman does._
+_TODO: describe what Detent does._
 
 ## Getting started
 
 ```bash
 git clone <repo-url>
-cd Foreman
+cd Detent
 ```
 
 ## Development

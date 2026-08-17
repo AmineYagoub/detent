@@ -5,7 +5,7 @@ state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["B-2", "NG4", "F-1", "N-5", "C-9", "S-4"]
 acceptance_criteria: ["F-1 states which artifacts are per-ticket and which are per-run, and names the writer of each run-level artifact.", "B-2's \"parallel-ready\" claim either names what remains unsolved for parallelism or is removed; a reader cannot conclude from B-2 alone that enabling `--worktree` with two workers is safe.", "The PRD states that atomic claims (C-9) do not serialize writes to run-level artifacts, so the protection boundary of the claim mechanism is explicit.", "Lifting NG4 is stated to require a defined append protocol for run-level artifacts, so the v2 work item exists in the document rather than being discovered later.", "N-5's reconstruction guarantee is qualified by, or made consistent with, the single-writer statement."]
 non_goals: ["Does not lift NG4, remove the `--worktree` flag, or change B-2's merge semantics.", "Does not choose an append protocol for v2 — per-worker shards, an exclusive lock, or a serializing writer process all remain open.", "Does not add a requirement that v1 detect or prevent a second concurrent run; documenting the constraint is sufficient."]

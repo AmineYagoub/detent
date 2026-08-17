@@ -5,7 +5,7 @@ state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["X-1", "X-8", "C-3a", "F-1", "P6", "S-4"]
 acceptance_criteria: ["Every ceiling in X-1's config row appears as a named config key with a unit and a v1 default, in the same form C-3a already uses for `planning_research_tool_calls` (default 16 per init).", "Each ceiling states its scope — per ticket per generation, per ticket cumulative, or per run — and X-1's header and X-8's spend sentence agree on which scope the spend ceiling has.", "X-1's config-load AC is satisfiable: a reader can determine, from the PRD alone, the complete set of keys `config.json`'s budgets object must validate, without consulting an implementation.", "`planning_research_tool_calls` appears in X-1's budget table rather than only in C-3a's prose, so all budgets are enumerable from one place.", "P6's \"every counter has a ceiling; every ceiling routes to a human\" holds constructively: each named key states its breach target."]
 non_goals: ["Does not change any ceiling's numeric value, including the ≤8 and 1 already stated inline, nor the net sessions figure of 14.", "Does not add new ceilings beyond those X-1 and C-3a already name.", "Does not specify config-file syntax or a JSON Schema; naming keys, units, defaults, and scopes is sufficient."]

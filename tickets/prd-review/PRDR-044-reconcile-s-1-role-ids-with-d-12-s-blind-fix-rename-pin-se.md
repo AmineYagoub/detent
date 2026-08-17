@@ -5,7 +5,7 @@ state: DONE
 severity: minor
 category: clarity
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["S-1", "S-7", "D-12", "X-3", "§7", "F-1"]
 acceptance_criteria: ["S-1's role list and §7's state list are reconcilable from the PRD alone: either the role is renamed to match the state, or a role↔state mapping is stated for every role whose identifier differs from its namesake state.", "The PRD states that the role identifier set is a persisted wire format (referenced by `agents/assignments.json` as role@hash) and that changing an identifier is a schema-version event under F-3.", "A reader can answer \"what are the exact eight role identifiers?\" from one location, and the answer is stable enough to hash-pin against.", "No role identifier in S-1 names a state that no longer exists in §7."]
 non_goals: ["Does not change the number of roles or merge any two roles.", "Does not require role identifiers to equal lowercased state names — `implement`/`IN_PROGRESS` and `review`/`IN_REVIEW` may stay divergent as long as the mapping is stated.", "Does not alter S-7's vendoring or hash-pinning mechanism."]

@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["N-3", "S-5", "M4", "SEC-2", "NG5"]
 acceptance_criteria: ["N-3's Node floor names a release line that is still receiving security updates on the date the PRD is dated.", "The PRD states how the floor is re-evaluated as release lines age, so the same defect does not recur silently at the next end-of-life.", "The dependency floor and the pinned-backend discipline of S-5 are consistent — both are versions with an owner and a review trigger, not constants set once.", "M4's release gate cannot publish a package whose declared engine range includes an end-of-life runtime."]
 non_goals: ["Does not change the runtime dependency set — `@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch` — or N-3's minimal-and-pinned posture.", "Does not adopt a specific CI matrix; naming the supported range is sufficient.", "Does not change NG5's POSIX-first / WSL-supported stance."]

@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: security
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["S-2", "S-3", "SEC-3", "P5", "ARCH-1", "M0"]
 acceptance_criteria: ["S-2 names an enforcement mechanism that the SDK guarantees runs on every tool call, and the PRD states why that mechanism was chosen over `canUseTool`.", "S-2 and S-3 are consistent: a reader can determine that per-role tool allowlists do not disable the surface/protected-glob guard.", "SEC-3's protected-glob denial names the same layer as S-2, so there is one enforcement point rather than two named layers that disagree.", "The PRD records that the oracle's hook-layer semantics are preserved rather than relocated, so the M0 hook tests remain a valid conformance target against the real backend.", "S-3's `WebFetch(domain:…)` allowlist form is either confirmed against the backend's documented rule syntax or replaced with a form that is."]
 non_goals: ["Does not change what the guard denies — ticket `surface[]`, protected globs, and the surface-expansion request lever are unchanged.", "Does not remove per-role tool allowlists; S-3's deny-by-default posture stands, only the layer that enforces containment moves.", "Does not adopt `bypassPermissions` or weaken any existing denial."]

@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["S-4", "X-1", "X-8", "N-5", "§14", "P6"]
 acceptance_criteria: ["S-4 names the specific result fields the ledger reads for cost and for tokens, rather than \"typed usage/cost/turn fields\".", "The PRD states that backend-reported cost is a client-side estimate, names at least one condition under which it drifts, and says what the authoritative source is.", "X-1's `run_spend_usd` row or note acknowledges that the ceiling is enforced against an estimate, so the guarantee is stated as approximate rather than exact.", "The PRD distinguishes the field that excludes nested-agent tokens from the fields that include them, so an implementation cannot silently undercount.", "The PRD records that per-step output-token counts are not authoritative and names where the real count is read from."]
 non_goals: ["Does not change `run_spend_usd`'s role as the cross-generation backstop (X-8) or its scope (PRDR-043).", "Does not require Foreman to call an external billing API at runtime; naming it as the reconciliation source is sufficient.", "Does not add per-model routing or change model selection."]

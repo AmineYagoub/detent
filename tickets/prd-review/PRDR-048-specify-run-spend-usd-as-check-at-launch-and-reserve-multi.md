@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["X-1", "X-8", "S-4", "P6", "NG4", "F-1", "C-11"]
 acceptance_criteria: ["X-1 states when `run_spend_usd` is evaluated relative to session launch, so a reader can determine whether a session may start while the ceiling is already reached without consulting an implementation.", "The PRD states the bounded overshoot the chosen policy admits, in units (at most one in-flight session's spend for single-worker), rather than implying the ceiling is never exceeded.", "The breach path names a state outcome for the ticket whose session triggered it, and that outcome is an X-3 row.", "NG4's lifting conditions name a reservation or lease protocol for run-scoped ceilings alongside the append protocol already listed, so the multi-worker generalization is recorded rather than discovered.", "P6's \"every ceiling routes to a human\" holds for `run_spend_usd` under the stated evaluation policy, not only in the limit."]
 non_goals: ["Does not set a default value for `run_spend_usd` — X-1's no-default decision and `init`'s refusal to write a config without one stand.", "Does not lift NG4 or design the multi-worker reservation protocol; naming it as a lifting condition is sufficient.", "Does not change how spend is measured or add a per-ticket spend ceiling; the counter stays run-scoped and cumulative per X-8."]

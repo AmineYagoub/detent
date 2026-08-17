@@ -1,12 +1,14 @@
-# Foreman — Product Requirements Document
+# Detent — Product Requirements Document
 | | |
 |---|---|
-| Product | Foreman: state-driven autonomous engineering CLI |
-| Version | 2.0-draft.5 |
+| Product | Detent: state-driven autonomous engineering CLI |
+| Version | 2.0-draft.6 |
 | Date | 2026-08-17 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
 | Supersedes | PRD v0.10 (Python reference, remains the porting oracle) |
+> **Amendments in draft.6.** One `prd-review` ticket applied: PRDR-056 resolves OQ-1 by renaming the product to **Detent** (D-20). The rename covers the persisted surfaces as well as prose — the state directory (`.detent/`, migrated under F-3), the commit trailer and run-branch prefix (new writes only; existing history keeps the old form), both porcelain verbs (recorded against C-14's major-version rule), and this document's filename, which N-7's self-build gate names. OQ-2 (license) is now the sole M4 blocker. No requirement's semantics changed.
+
 > **Amendments in draft.5.** Seven `prd-review` tickets applied, none changing a design decision — all seven closed gaps where the document left a normative choice to the implementation, which N-6's no-deviation rule forbids. PRDR-041 (N-4 measurement spec) · PRDR-042 (§14 measurement table; *human intervention* and *scope canary* defined; sessions-per-ticket declared cumulative) · PRDR-043 (X-1 config ceilings named, defaulted and scoped; `run_spend_usd` resolved as run-level) · PRDR-044 (role `fix` → `blind_fix`; role↔state mapping; role ids pinned as a wire format) · PRDR-045 (C-12 claim discipline) · PRDR-046 (run-level artifacts declared single-writer; B-2's "parallel-ready" qualified) · PRDR-047 (N-2 given an AC). Two pairs collided and were reconciled rather than applied in sequence: PRDR-042 and PRDR-043 both rewrote X-1's header — the scope column subsumes both — and PRDR-045 and PRDR-046 both amended NG4, now merged into one statement. No numeric target changed anywhere.
 
 > **Reading guide.** Requirements are uniquely identified (`C-*` command contract, `F-*` filesystem, `V-*` verification adapter, `X-*` execution machine, `S-*` sessions/SDK, `B-*` branching, `A-*` artifacts, `SEC-*` security, `N-*` non-functional). Every requirement has a machine-checkable acceptance criterion (*AC*). The Python reference implementation **v0.1.3 and its 52-test suite are the porting oracle**: where this document and the oracle agree, tests translate before code (see M0).
@@ -17,11 +19,11 @@
 | D-1 | TypeScript rewrite; Python v0.1.3 stays as reference + test oracle | Team language; Agent SDK is TS-native and upgrades the three weakest seams (telemetry, hooks, pinning) |
 | D-2 | Public open source, npm-distributed | Stated product goal |
 | D-3 | Two-command porcelain (`init`, `run`); everything else is plumbing | Porcelain/plumbing split; 20+ internal states never become 20+ user interactions |
-| D-4 | Verification commands live in the project's native tooling; Foreman binds, never owns | Repository agnosticism; `.foreman/` boundary (see F-2) |
+| D-4 | Verification commands live in the project's native tooling; Detent binds, never owns | Repository agnosticism; `.detent/` boundary (see F-2) |
 | D-5 | Monorepos: root-only in v1; workspace scoping is a named v2 migration | Simplicity now; `schema_version` carries the upgrade |
 | D-6 | Review-requested changes → `REVIEW_FIX` with its **own unit budget (`review_fix_attempts`)**; the ladder's research stage triggers only on failing tests — review findings never route to research | User decision 2026-08-17; tests answer "does it work?", review answers "is it the right thing, built right?" — only the first is a researchable question |
 | D-7 | Keep both resilience mechanisms: bug-diagnosis gate and flake filter | User decision 2026-08-17; one flaky test must not burn the ladder; bugs must reproduce-as-predicted before code |
-| D-8 | Direct commits on a run branch by default; `--worktree` flag for per-ticket isolation | User decision 2026-08-17; run branch is the deliverable PR; Foreman never touches the base branch |
+| D-8 | Direct commits on a run branch by default; `--worktree` flag for per-ticket isolation | User decision 2026-08-17; run branch is the deliverable PR; Detent never touches the base branch |
 | D-9 | Role definitions are curated from the VoltAgent catalog at development time, vetted per release, then vendored + hash-pinned; runtime never fetches | PRD review 2026-08-17; production must not depend on GitHub availability; attribution per S-7 |
 | D-10 | init order: DISCOVER → ANALYZE → DETERMINE_VERIFICATION → PLAN; unambiguous bindings auto-accept (C-3b) and surface at PRESENT | PRD review 2026-08-17; in greenfield the stack is an ANALYZE output, so verification cannot precede analysis; a lone `"test": "vitest"` is not a question |
 | D-11 | Research is two capabilities: planning research (optional, need-driven, during init) and failure research (mandatory ladder stage); both follow hierarchy X-6a | PRD review 2026-08-17; restores the broader research role without weakening D-6 |
@@ -32,18 +34,19 @@
 | D-16 | Self-build is a permanent release gate, not a one-time milestone | PRD review 2026-08-17 (pass 2); the strongest demonstration the architecture works |
 | D-17 | HUMAN_REQUEUE opens a new **attempt generation**: per-generation budgets, immutable history, cumulative reporting; the run spend ceiling is the cross-generation backstop | PRD review 2026-08-17 (pass 3); requeue must neither erase the record nor unbound total work invisibly |
 | D-18 | Failure-research cache key = `sha256(signature \| lockfile_hash \| runtime_version)` plus `version_facts` validation on hit | PRD review 2026-08-17 (pass 3); same error ≠ same cause across environments |
-| D-19 | The layer boundary is a normative requirement (ARCH-1) with a CI dependency lint, not a stylistic preference | PRD review 2026-08-17 (pass 3); the single most important property of Foreman |
+| D-19 | The layer boundary is a normative requirement (ARCH-1) with a CI dependency lint, not a stylistic preference | PRD review 2026-08-17 (pass 3); the single most important property of Detent |
+| D-20 | Product name is **Detent** (resolves OQ-1) | PRD review 2026-08-17 (pass 4); `foreman` is unavailable on npm and RubyGems and collides on PATH with two established tools, and theforeman.org holds the name in adjacent territory. A scoped package name would not have resolved the binary collision, which is where users meet it. *Detent* — the click-stop holding a mechanism in one defined position — names X-3's invariant rather than a session's role |
 ---
 ## 1. Summary
-Foreman turns planning documents into merged, reviewed, test-gated code using fresh, single-purpose Claude Code sessions driven by a deterministic kernel. The public experience is two verbs: `foreman init` prepares a project (discovers docs and verification entrypoints, generates an implementation plan as tickets, obtains approval); `foreman run` executes the approved plan through a budgeted implement → test → review loop with a research-gated escalation ladder and explicit human gates. All intermediate state persists in `.foreman/`; both commands resume from checkpoints when re-run.
+Detent turns planning documents into merged, reviewed, test-gated code using fresh, single-purpose Claude Code sessions driven by a deterministic kernel. The public experience is two verbs: `detent init` prepares a project (discovers docs and verification entrypoints, generates an implementation plan as tickets, obtains approval); `detent run` executes the approved plan through a budgeted implement → test → review loop with a research-gated escalation ladder and explicit human gates. All intermediate state persists in `.detent/`; both commands resume from checkpoints when re-run.
 ## 2. Product Principles
 P1 **Two verbs, twenty states.** The internal machine may be arbitrarily rich; the public workflow is `init` → approve → `run` → done. Interruptions resume by re-running the same verb.
 P2 **The kernel trusts artifacts and exit codes, never prose.** No state transition occurs on an unverified model claim.
-P3 **Project owns its tooling; Foreman owns only bindings.** `.foreman/` never contains project configuration (F-2).
+P3 **Project owns its tooling; Detent owns only bindings.** `.detent/` never contains project configuration (F-2).
 P4 **An unexecuted anything is a guess.** Bindings, backends, and plans are exercised before they are relied on.
 P5 **Deny by default; consent is explicit, per-action, and logged.**
 P6 **Budgets are hard.** Every loop has a counter; every counter has a ceiling; every ceiling routes to a human.
-P7 **Foreman never writes to the user's base branch.** In any mode.
+P7 **Detent never writes to the user's base branch.** In any mode.
 P8 **Knowledge compounds.** Failure signatures, research briefs, and quarantine tickets persist and are shared via the repo.
 P9 **Stale state is unconsumable.** Every checkpoint is content-addressed to its inputs.
 ## 3. Scope and Non-Goals
@@ -53,7 +56,7 @@ P9 **Stale state is unconsumable.** Every checkpoint is content-addressed to its
 ## 3a. Architecture (Normative)
 ```
 ┌─────────────────────────────┐
-│         Foreman CLI         │   init / run / plumbing
+│         Detent CLI         │   init / run / plumbing
 └──────────────┬──────────────┘
 ┌──────────────▼──────────────┐
 │     Deterministic Kernel    │   state machine · budgets · transitions
@@ -72,36 +75,36 @@ P9 **Stale state is unconsumable.** Every checkpoint is content-addressed to its
   *AC:* dependency-direction lint in CI — `kernel/**` imports no SDK types and no `sessions/**` internals beyond the backend interface; `sessions/**` imports no kernel state mutators; an audit test asserts every `machine.apply` call site's event derives from a validator or gate result.
 ---
 ## 4. Command Contract (C)
-### 4.1 `foreman init`
+### 4.1 `detent init`
 Pipeline (each phase checkpoints per F-4; **analysis precedes verification determination** — in greenfield the stack itself is an ANALYZE output — and PLAN always sees the final or provisional bindings; bracketed interrupts fire only under C-3b/C-5/C-6 conditions):
 ```
 INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO]
         → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT]
         → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_APPROVAL] → READY
 ```
-- **C-1** `init` runs only at the git root; elsewhere it errors with the root path hinted. A non-repo directory containing planning docs offers `git init` under setup-consent rules (C-6). Repository initialization — consented `git init` plus the initial commit of pre-existing user files and `.foreman/`'s committed set — is not a base-branch write; P7 binds from the moment the base branch exists (B-3).
-  *AC:* subdirectory invocation exits 2 with hint; no `.foreman/` created.
+- **C-1** `init` runs only at the git root; elsewhere it errors with the root path hinted. A non-repo directory containing planning docs offers `git init` under setup-consent rules (C-6). Repository initialization — consented `git init` plus the initial commit of pre-existing user files and `.detent/`'s committed set — is not a base-branch write; P7 binds from the moment the base branch exists (B-3).
+  *AC:* subdirectory invocation exits 2 with hint; no `.detent/` created.
 - **C-2** DISCOVER is deterministic and token-free: planning docs (`PRD*`, `SRS*`, `README*`, `docs/**` heuristics, current folder scope per user flow) and stack facts (manifests, lockfiles, workspace markers). No docs → AWAIT_DOCS with an exact list of what was looked for.
   *AC:* discovery of the fixture matrix produces byte-identical `discovery.json` across runs.
 - **C-3** ANALYZE (planning agent, read-only) consumes docs **plus** stack facts; un-implementable specs yield a **batched** question set (single interruption), not a drip. In greenfield, ANALYZE's outputs include the chosen stack, which feeds DETERMINE_VERIFICATION.
   *AC:* missing-info fixture produces one AWAIT_INFO containing ≥2 questions in one prompt.
-- **C-3a Planning research** (D-11): ANALYZE and PLAN may invoke research when docs reference unfamiliar technology, library/API behavior, or leave architecture questions open — read-only + web per S-3, following hierarchy X-6a, citations required, advice-not-authority. Budget: `planning_research_tool_calls` (default 16 per init); exhausting it without an answer adds the open question to the AWAIT_INFO batch (no new interrupt class). Briefs cache at `.foreman/research/planning/<question-hash>.json`.
+- **C-3a Planning research** (D-11): ANALYZE and PLAN may invoke research when docs reference unfamiliar technology, library/API behavior, or leave architecture questions open — read-only + web per S-3, following hierarchy X-6a, citations required, advice-not-authority. Budget: `planning_research_tool_calls` (default 16 per init); exhausting it without an answer adds the open question to the AWAIT_INFO batch (no new interrupt class). Briefs cache at `.detent/research/planning/<question-hash>.json`.
   *AC:* unfamiliar-API fixture yields a plan citing official docs; re-running init hits the cache with zero web calls.
 - **C-3b Verification auto-binding** (D-10): DETERMINE_VERIFICATION auto-accepts a binding when exactly one plausible candidate exists — the candidate is still executed per V-1, with provenance `approved_by: "auto"`. Interrupts fire only for: multiple plausible candidates; zero candidates requiring a setup action (C-6); or execution failure of the sole candidate. All bindings, auto or user, appear in the PRESENT summary and are overridable there.
   *AC:* lone `"test": "vitest"` fixture completes init with zero binding interrupts; two-candidate fixture interrupts exactly once; PRESENT snapshot lists provenance per slot.
-- **C-4** PLAN generates tickets with dependencies, per-ticket agent assignments, and — in greenfield — a **bootstrap ticket #1**: create the project scaffolding, establish the project's **native** verification tooling (in project files, never `.foreman/` — F-2), and prove every bound slot executes green. Greenfield bindings are recorded `provisional` at init and finalized — drift baseline set — when ticket #1's gates pass; every other ticket is blocked on #1. Creating configuration in an empty project is ticket work product reviewed as code; C-6 consent governs changes to *existing* configuration only.
+- **C-4** PLAN generates tickets with dependencies, per-ticket agent assignments, and — in greenfield — a **bootstrap ticket #1**: create the project scaffolding, establish the project's **native** verification tooling (in project files, never `.detent/` — F-2), and prove every bound slot executes green. Greenfield bindings are recorded `provisional` at init and finalized — drift baseline set — when ticket #1's gates pass; every other ticket is blocked on #1. Creating configuration in an empty project is ticket work product reviewed as code; C-6 consent governs changes to *existing* configuration only.
   *AC:* greenfield fixture: init completes with provisional bindings; ticket #1 DONE flips them to `approved` with baseline hashes; ticket #2 is unclaimable before that.
 - **C-5** The interrupt set is **closed**: AWAIT_DOCS, AWAIT_BINDING_CHOICE, AWAIT_SETUP_CONSENT, AWAIT_INFO, AWAIT_APPROVAL. Adding an interrupt is a spec change. Interrupts batch at phase boundaries.
   *AC:* code-level enum; lint forbids prompting outside it.
-- **C-6** Setup-command consent: Foreman may propose commands to establish missing verification capability; it runs one only after per-command confirmation showing the exact command, and logs it to history as a user action. Configuration mutation follows a three-way rule: (1) **existing configuration files are never modified by Foreman** — proposed edits are printed, never applied; (2) **missing configuration** may be *created* — in greenfield via bootstrap ticket #1 (reviewed as code, C-4), in brownfield as new standard test/lint files shown in full (C-6a); (3) **dependency manifests** change only through allowlisted package-manager commands (C-6a) — mediation by the ecosystem's own tool — never by direct file edit.
+- **C-6** Setup-command consent: Detent may propose commands to establish missing verification capability; it runs one only after per-command confirmation showing the exact command, and logs it to history as a user action. Configuration mutation follows a three-way rule: (1) **existing configuration files are never modified by Detent** — proposed edits are printed, never applied; (2) **missing configuration** may be *created* — in greenfield via bootstrap ticket #1 (reviewed as code, C-4), in brownfield as new standard test/lint files shown in full (C-6a); (3) **dependency manifests** change only through allowlisted package-manager commands (C-6a) — mediation by the ecosystem's own tool — never by direct file edit.
   *AC:* consent fixture shows command verbatim pre-execution; history records actor=user; direct-edit fixture on an existing config file is refused with the proposal printed.
-- **C-6a Setup-command allowlist (v1, D-15).** Foreman may **execute** only commands matching this closed, versioned template set (code-as-data; extending it is a spec PR): `git init`; dependency installs for chosen verification tooling — `npm install` / `npm ci`, `pnpm install`, `yarn install`, `pip install`, `go mod download`, `cargo fetch`; and creation — never modification — of standard test/lint config files (shown in full before write). Anything outside the set is **never executed by Foreman, even with consent** — it is printed with rationale for the user to run in their own shell, after which re-running `init` resumes from checkpoint. In greenfield, setup preferentially routes into bootstrap ticket #1, where it is reviewed as code (C-4).
+- **C-6a Setup-command allowlist (v1, D-15).** Detent may **execute** only commands matching this closed, versioned template set (code-as-data; extending it is a spec PR): `git init`; dependency installs for chosen verification tooling — `npm install` / `npm ci`, `pnpm install`, `yarn install`, `pip install`, `go mod download`, `cargo fetch`; and creation — never modification — of standard test/lint config files (shown in full before write). Anything outside the set is **never executed by Detent, even with consent** — it is printed with rationale for the user to run in their own shell, after which re-running `init` resumes from checkpoint. In greenfield, setup preferentially routes into bootstrap ticket #1, where it is reviewed as code (C-4).
   *AC:* off-list fixture (e.g. a piped-shell installer) spawns no child process and prints the command with rationale; the allowlist lives in one data module with its own tests.
-- **C-7** Approval is dual-exit: offered inline at the end of `init` (TTY), and, if deferred or non-TTY, presented by the first `foreman run`. Approval is recorded (who/when/plan-hash) in `.foreman/plan/approval.json`.
+- **C-7** Approval is dual-exit: offered inline at the end of `init` (TTY), and, if deferred or non-TTY, presented by the first `detent run`. Approval is recorded (who/when/plan-hash) in `.detent/plan/approval.json`.
   *AC:* unapproved plan → `run` presents it before executing; declining leaves state READY-unapproved, exit 2.
 - **C-8** Re-running `init`: replays from the first checkpoint whose inputs drifted (F-4). On an approved plan it prints status and requires `--replan` to regenerate; hand-edited tickets invalidate approval and re-present the diff.
   *AC:* editing PRD.md between runs re-executes ANALYZE forward; editing nothing re-executes nothing.
-### 4.2 `foreman run`
+### 4.2 `detent run`
 - **C-9** Executes only an approved plan (else behaves per C-7). Claims tickets atomically; resumable pool includes all non-terminal in-flight states, so crash/interrupt/escalation resume by re-running `run`.
   *AC:* oracle crash-resume test class ports green (kill mid-FIX → resume enters RESEARCH; exactly one blind-fix launch ever).
 - **C-10** Escalations are handled **inside `run`** on a TTY: dossier summary, then approve / requeue-with-guidance / skip / quit; the loop continues in-process. Non-TTY: exit 10 with a machine-readable summary on stdout.
@@ -115,29 +118,30 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO]
 - **C-13** User-facing vocabulary maps all internal states to five labels — planning / implementing / verifying / reviewing / waiting on you — with full state names only in `transitions.jsonl`. Resume always announces itself ("resuming t-014 — informed fix, research applied").
   *AC:* terminal output snapshot contains no internal state names.
 - **C-14 Porcelain freeze.** The golden path is exactly two commands and the five C-5 interrupts. Adding a porcelain command or an interrupt class is a **major-version** decision requiring a PRD amendment; new capabilities land as plumbing or inside existing phases.
+  Renaming both porcelain verbs at draft.6 (D-20) is exactly such a major-version decision, taken deliberately and before any release; the freeze binds from v1 onward.
   *AC:* release checklist item; docs test asserts the two-command golden-path snapshot.
 ---
 ## 5. Filesystem Contract (F)
-- **F-1** Layout under `.foreman/` (git root only):
+- **F-1** Layout under `.detent/` (git root only):
   **Committed:** `config.json` (schema_version, budgets, protected/risk globs, model routing, pinned SDK/CLI versions), `bindings.json` (§6), `plan/` (tickets `*.json`, `approval.json`), `research/` (`failures/` env-composite-keyed briefs per X-6/D-18; `planning/` question-keyed briefs), `agents/assignments.json`.
-  **Local** (enforced by a Foreman-written `.foreman/.gitignore`): `state/` (checkpoints), `runs/` (journals, artifacts, dossiers), `ledger.jsonl`, `transitions.jsonl`, `logs/`, `claims/`, `worktrees/`.
+  **Local** (enforced by a Detent-written `.detent/.gitignore`): `state/` (checkpoints), `runs/` (journals, artifacts, dossiers), `ledger.jsonl`, `transitions.jsonl`, `logs/`, `claims/`, `worktrees/`.
   Artifacts are per-ticket or per-run. `state/`, `runs/`, `claims/`, and `worktrees/` are keyed per ticket and serialized by the C-9 claim. `ledger.jsonl` and `transitions.jsonl` are **run-level, single-writer**: exactly one process appends to each for the lifetime of a run. Atomic claims do not serialize these files — a claim scopes a ticket, not the run journal.
   *AC:* fresh init produces the split; `git status` shows only the committed set; a single-writer assertion covers each run-level artifact.
-- **F-2** **Boundary (never-list):** `.foreman/` never contains project dependencies, build/lint/test/TypeScript configuration, application configuration, or source code; `init` never silently modifies project configuration (C-6 is the only pathway, and it is loud).
-  *AC:* boundary lint over `.foreman/` contents in CI; violation fails the fixture suite.
-- **F-3** Every committed file carries `schema_version`; migrations are explicit, versioned, and tested (`foreman` refuses newer-schema files with an upgrade hint).
-  *AC:* v1-reading-v2 fixture exits 2 with message.
+- **F-2** **Boundary (never-list):** `.detent/` never contains project dependencies, build/lint/test/TypeScript configuration, application configuration, or source code; `init` never silently modifies project configuration (C-6 is the only pathway, and it is loud).
+  *AC:* boundary lint over `.detent/` contents in CI; violation fails the fixture suite.
+- **F-3** Every committed file carries `schema_version`; migrations are explicit, versioned, and tested (`detent` refuses newer-schema files with an upgrade hint). The v0→v1 migration additionally relocates the state directory from `.foreman/` to `.detent/` (D-20); a repository initialized before the rename is migrated, never dual-read.
+  *AC:* v1-reading-v2 fixture exits 2 with message; a fixture repository carrying a `.foreman/` directory migrates to `.detent/` and leaves no `.foreman/` behind.
 - **F-4** Checkpoints are content-addressed: each phase persists outputs plus a hash of its inputs; consuming a checkpoint whose input hash no longer matches is impossible — the phase re-executes.
   *AC:* property test — mutate any input file, observe exactly the dependent phases re-run.
 ## 6. Verification Adapter Contract (V)
 Gate slots: `test`, `test_single`, `lint`, `typecheck`, `build`, `e2e`.
 - **V-1** Discovery → **execution** → approval. Deterministic discovery proposes candidate bindings from native tooling (package.json scripts + lockfile ⇒ package manager; Makefile/justfile targets; pyproject/go.mod/Cargo.toml; tsconfig ⇒ `tsc --noEmit`). Every proposed binding is executed once with a timeout before it may be approved; watch-mode is detected (timeout with no exit ⇒ rejected candidate with explanation). Ambiguity (two plausible candidates) → AWAIT_BINDING_CHOICE, never a guess. Unbound slot → human-acknowledged skip recorded with who/when.
   *AC:* watch-mode fixture rejected; `make test`+`npm test` fixture interrupts once; skip records actor.
-- **V-2** Binding record: `{ slot, adapter, ref, resolved, pm, config_hash, executed_at, approved_by, status, schema_version }`. `resolved` is the literal command Foreman will run; `config_hash` covers the defining config region; `approved_by ∈ {"auto", <user>}` records provenance (C-3b); `status ∈ {provisional, approved}` supports greenfield finalization (C-4).
+- **V-2** Binding record: `{ slot, adapter, ref, resolved, pm, config_hash, executed_at, approved_by, status, schema_version }`. `resolved` is the literal command Detent will run; `config_hash` covers the defining config region; `approved_by ∈ {"auto", <user>}` records provenance (C-3b); `status ∈ {provisional, approved}` supports greenfield finalization (C-4).
   *AC:* schema-validated; oracle-style adapter tests per ecosystem fixture.
-- **V-3** **Drift halting.** Before every gate, re-resolve and compare with the stored record. Any drift in a gate definition is a halting event (exit 2, "verification changed — re-baseline"), never a silent re-resolve. `foreman verify sync` re-runs V-1 with consent to accept legitimate evolution. Drift comparison applies to `approved` bindings; `provisional` bindings finalize per C-4.
+- **V-3** **Drift halting.** Before every gate, re-resolve and compare with the stored record. Any drift in a gate definition is a halting event (exit 2, "verification changed — re-baseline"), never a silent re-resolve. `detent verify sync` re-runs V-1 with consent to accept legitimate evolution. Drift comparison applies to `approved` bindings; `provisional` bindings finalize per C-4.
   *AC:* mid-run edit of `scripts.test` halts before the next gate; sync + approval resumes.
-- **V-4** Invocation-time normalization is Foreman's job and does not violate F-2: package-manager selection from the lockfile, CI-mode flags (`vitest run`, `--watchAll=false`, `--reporter` choices), env (`CI=1`), exit-code normalization; the classify/signature layer (X-7) sits above.
+- **V-4** Invocation-time normalization is Detent's job and does not violate F-2: package-manager selection from the lockfile, CI-mode flags (`vitest run`, `--watchAll=false`, `--reporter` choices), env (`CI=1`), exit-code normalization; the classify/signature layer (X-7) sits above.
   *AC:* normalization matrix tests per adapter.
 - **V-5** Monorepo (D-5): root entrypoints only; when workspace markers are detected, prefer orchestrator-native candidates (`turbo run test`, `pnpm -r test`, `nx run-many`) and print the workspace-wide-gates notice; `test_single` may bind to a deterministic affected-filter command (`turbo … --filter=…[BASE]`, `nx affected …`). No per-ticket arguments.
   *AC:* workspace fixture binds turbo candidates first; notice printed once.
@@ -211,18 +215,19 @@ Events: `CLAIMED, REPRO_AS_PREDICTED, REPRO_WRONG, PREMISE_FALSIFIED, GATE_GREEN
   *AC:* allowlist capture test (oracle TestResearchNetworkAllowlist ports).
 - **S-4** Telemetry: typed usage/cost/turn fields from SDK results feed the ledger; a session whose telemetry fields are absent is budget-breaching (circuit breaker → NEEDS_HUMAN).
   *AC:* corrupted-result fixture routes to NEEDS_HUMAN.
-- **S-5** Pinning: SDK version is an **exact** dependency in Foreman's lockfile; `config.json` additionally pins the expected Claude Code CLI/runtime version surfaced by `doctor`; upgrades are PRs gated on the cross-ecosystem fixture suite.
+- **S-5** Pinning: SDK version is an **exact** dependency in Detent's lockfile; `config.json` additionally pins the expected Claude Code CLI/runtime version surfaced by `doctor`; upgrades are PRs gated on the cross-ecosystem fixture suite.
   *AC:* `doctor` fails on mismatch naming both versions.
 - **S-6** Prompt assembly: stable per-role prefix (role prompt + rules + bindings preamble, byte-identical within a run) + per-ticket variable suffix, for prompt-cache efficiency.
   *AC:* prefix-hash uniqueness-per-role test ports.
 - **S-7** Role definitions are **curated at development time** (D-9): the VoltAgent subagent catalog and comparable sources are evaluated, vetted, and adapted per release, with upstream attribution and license compliance recorded in `ATTRIBUTIONS.md` — then **vendored in the npm package and hash-pinned**. PREPARE_AGENTS selects from this vendored set only; `agents/assignments.json` references role@hash. No network fetch of agents, ever (SEC-2). The eight role identifiers of S-1 are a stable identifier space: `agents/assignments.json` is committed (F-1) and references `role@hash`, so adding, removing, or renaming a role is a `schema_version` event under F-3 with a migration, not an editorial change.
   *AC:* packaging test verifies prompt hashes and `ATTRIBUTIONS.md` presence; assignments referencing unknown hashes fail closed.
 ## 9. Branch & Merge Contract (B)
-- **B-1** Default mode (D-8): `run` creates `foreman/run-<id>` off the base branch and commits directly to it; every commit carries a `Foreman-Ticket: <id>` trailer; ticket DONE = finalized commits + transition record. The run branch is the deliverable; merging it is the human's PR.
-  *AC:* history fixture shows trailers; base branch SHA unchanged across a full run.
+- **B-1** Default mode (D-8): `run` creates `detent/run-<id>` off the base branch and commits directly to it; every commit carries a `Detent-Ticket: <id>` trailer; ticket DONE = finalized commits + transition record. The run branch is the deliverable; merging it is the human's PR.
+  Identifiers written before the D-20 rename are not rewritten: history is immutable, so commits already carrying a `Foreman-Ticket:` trailer keep it and run branches already carrying the `foreman/` prefix keep theirs. Readers of trailers accept both forms permanently; only the current form is ever written.
+  *AC:* history fixture shows trailers; base branch SHA unchanged across a full run; a fixture history mixing both trailer forms is parsed completely, and no writer emits the legacy form.
 - **B-2** `--worktree`: per-ticket worktree + branch, merged `--no-ff` into the **run branch** on DONE. The worktree isolates a ticket's working tree, which is the git-side prerequisite for parallelism; v1 remains single-worker (NG4). Two problems stay open before workers may run concurrently: concurrent merge to the run branch is untested, and the run-level artifacts of F-1 have no multi-writer append protocol — concurrent appends interleave and are not atomic above the platform pipe buffer.
   *AC:* worktree fixture merges into run branch, never base.
-- **B-3** **Foreman never writes to the base branch** (P7): no commit, merge, push, or checkout mutation of it in any mode. Repository initialization (C-1) — `git init` plus the initial commit — *creates* the base branch; P7 binds from that moment onward.
+- **B-3** **Detent never writes to the base branch** (P7): no commit, merge, push, or checkout mutation of it in any mode. Repository initialization (C-1) — `git init` plus the initial commit — *creates* the base branch; P7 binds from that moment onward.
   *AC:* red-team fixture (hostile ticket asks for it) — base SHA byte-identical.
 - **B-4** Risk gate: a DONE-candidate whose diff touches `risk[]` globs (or carries `risk_label`) requires human approval before finalize; approval re-enters APPROVED for kernel re-verification.
   *AC:* oracle risk test ports (approve → re-verify → DONE).
@@ -252,13 +257,13 @@ All JSON, schema-validated (zod), `schema_version`-stamped. Field lists abridged
 - **N-4 Performance:** kernel overhead is the wall time from event construction to the transition being durable — event validation, `machine.apply`, the `transitions.jsonl` append, and any checkpoint write triggered by the transition. It excludes gate execution, session time, and network. Budget: **p95 < 100 ms** and **max < 500 ms** over a synthetic run of ≥500 transitions traversing every X-3 row at least once, with gates stubbed to a constant-time green. Gates dominate wall time by design and are excluded from this figure.
   *AC:* `tests/perf/transition-overhead.bench.ts` reports p95 and max over the synthetic run; CI fails on p95 ≥ 100 ms or max ≥ 500 ms; the harness prints the per-component split (validate / apply / append / checkpoint) so a regression names its cause.
 - **N-5 Observability:** `transitions.jsonl` + ledger + journals reconstruct any run without model output.
-- **N-6 Docs:** README golden path (two commands), CONTRIBUTING with the porting-oracle rule **and the no-deviation rule** — implementation may not "improve" the architecture in flight; divergence requires a PRD amendment (tickets tagged `prd-review`) first — schema reference generated from zod.
-- **N-7 Self-build gate (D-16):** the ultimate integration test is Foreman building itself — `foreman init && foreman run` on a folder containing only this PRD must read the PRD, generate its own tickets, select its own agents, build, test, and review its way to DONE on the walking skeleton. First green at M3; thereafter a **release gate**: every version bump and every pinned-backend upgrade (S-5) must pass it before publish. The skeleton subset runs in regular CI; the full budgeted self-build runs in the release pipeline.
+- **N-6 Docs:** README golden path (two commands), CONTRIBUTING with the porting-oracle rule **and the no-deviation rule** — implementation may not "improve" the architecture in flight; divergence requires a PRD amendment (tickets tagged `prd-review`) first — schema reference generated from zod. `prd-review` tickets quote the document as it stood when the finding was filed: evidence blocks predating a rename or amendment are preserved verbatim and never retro-edited, because they record what the document said, not what it says.
+- **N-7 Self-build gate (D-16):** the ultimate integration test is Detent building itself — `detent init && detent run` on a folder containing only this PRD must read the PRD, generate its own tickets, select its own agents, build, test, and review its way to DONE on the walking skeleton. First green at M3; thereafter a **release gate**: every version bump and every pinned-backend upgrade (S-5) must pass it before publish. The skeleton subset runs in regular CI; the full budgeted self-build runs in the release pipeline.
 ## 13. Milestones
 - **M0 — Oracle port.** Translate the 52-test Python suite to TS (vitest) against interfaces only; then the state machine, budgets, resolver, signatures until green. *Exit:* oracle parity report checked in. Oracle mapping: the reference's `fix_sessions ∈ {0,1,2}` corresponds to `(blind_fix, informed_fix) ∈ {(0,0),(1,0),(1,1)}` and `review_fix_sessions` to `review_fix_attempts` — translation preserves properties, not identifiers. One deliberate divergence: the oracle resets `attempts` on requeue; TS supersedes this with X-8 generations (D-17), and the requeue test translates to generation semantics.
 - **M1 — Adapter + filesystem.** V-1..V-5, F-1..F-4, drift halting, `verify sync`, `doctor`. *Exit:* three-ecosystem binding fixtures green.
 - **M2 — `run` live.** SDK sessions, canUseTool guard, continuation-based stop-gating, ladder end-to-end on a fixture repo with real sessions. *Exit:* budgeted live run completes a 3-ticket plan.
-- **M3 — `init` pipeline.** Discovery → analyze → plan → approval, checkpointed resume, interrupt set. *Exit (recursive):* `foreman init && foreman run` in a folder containing only **this PRD** scaffolds and green-tests Foreman's own walking skeleton — the first green of the permanent N-7 self-build gate.
+- **M3 — `init` pipeline.** Discovery → analyze → plan → approval, checkpointed resume, interrupt set. *Exit (recursive):* `detent init && detent run` in a folder containing only **this PRD** scaffolds and green-tests Detent's own walking skeleton — the first green of the permanent N-7 self-build gate.
 - **M4 — Public release.** Schema freeze (`schema_version: 1`), security review against SEC fixtures, N-7 self-build green, npm publish under the chosen name, docs site.
 ## 14. Metrics
 **Human intervention** — a ticket counts as human-intervened if it entered `NEEDS_HUMAN` or `BLOCKED` at any point in any generation, or if a B-4 risk approval was required before finalize. Init-time interrupts (C-5) are per-run, not per-ticket, and are excluded. Tickets resolved by C-10 *skip* or *quit* never reach DONE and fall out of the numerator and the denominator alike.
@@ -285,9 +290,8 @@ Every row is computable from artifacts F-1 already mandates; no row implies a ne
 | OSS supply chain | SEC-2 vendoring; minimal pinned deps (N-3) |
 | Scope creep in porcelain | C-5 closed interrupt set; C-12 golden path; C-14 porcelain freeze |
 ## 16. Open Questions
-- **OQ-1** npm name (`foreman` is taken): scoped `@<org>/foreman` vs rename. Blocks M4 only.
 - **OQ-2** License: MIT vs Apache-2.0 (patent grant). Blocks M4 only.
 - **OQ-3** Windows-native timeline (post-v1; WSL documented meanwhile).
 - **OQ-4** v2 workspace scoping design (named migration per D-5).
 ---
-*End of PRD 2.0-draft.5 — review findings as tickets tagged `prd-review`. The Python reference (v0.1.3, 52 tests) remains authoritative where this document is silent, except where a decision log entry records a deliberate divergence (D-17).*
+*End of PRD 2.0-draft.6 — review findings as tickets tagged `prd-review`. The Python reference (v0.1.3, 52 tests) remains authoritative where this document is silent, except where a decision log entry records a deliberate divergence (D-17).*

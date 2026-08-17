@@ -5,7 +5,7 @@ state: READY
 severity: major
 category: security
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["SEC-2", "SEC-3", "S-1", "S-3", "NG6", "P5", "F-2"]
 acceptance_criteria: ["The PRD states that the session backend loads no settings from the working tree, the user's home directory, or any other on-disk source outside `.foreman/`, and names that as a required session-construction parameter rather than a default to rely on.", "NG6's \"no runtime fetching of policies\" is shown to hold against a backend whose default behavior is to read policy from the repository under work.", "A test asserts the setting-source configuration, so a backend upgrade that changes the default cannot silently re-enable repository policy.", "The PRD states what happens when the working tree contains backend settings files — ignored, and whether their presence is reported."]
 non_goals: ["Does not change `.foreman/config.json` as the source of Foreman's own configuration.", "Does not forbid the operator from configuring the backend outside Foreman; it forbids the session inheriting policy from the repository being worked on.", "Does not add a scanner for settings files in the target repo — ignoring them is sufficient."]

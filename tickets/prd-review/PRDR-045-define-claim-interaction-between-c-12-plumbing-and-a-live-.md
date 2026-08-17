@@ -5,7 +5,7 @@ state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["C-12", "C-9", "C-10", "C-11", "X-3", "X-8", "F-1", "NG4"]
 acceptance_criteria: ["C-12 states whether `approve <id>` and `requeue <id>` must respect the C-9 claim, and names the outcome when the ticket is claimed — refusal or acquisition — with no third reading available.", "If refusal is chosen, C-11's exit-code list covers the case; if a new code is needed, C-11 is amended rather than overloaded silently.", "The PRD states which X-3 rows plumbing may drive and from which states, so a reader can determine whether `approve` on an IN_PROGRESS ticket is legal without consulting an implementation.", "A stale claim (crashed run) is distinguishable from a live one, and the PRD says how — otherwise the refusal path deadlocks the operator after any crash.", "NG4's single-worker statement is qualified to say whether plumbing counts as a second writer of ticket state."]
 non_goals: ["Does not lift NG4 or introduce parallel ticket execution.", "Does not add plumbing commands beyond C-12's existing six, nor move any of them onto the golden path (C-14 unaffected).", "Does not specify a claim file format or locking primitive."]

@@ -5,7 +5,7 @@ state: DONE
 severity: minor
 category: testability
 labels: ["prd-review"]
-surface: ["foreman-prd-v2.md"]
+surface: ["detent-prd-v2.md"]
 prd_refs: ["N-2", "C-2", "X-2", "X-5", "X-7", "X-3", "ARCH-1"]
 acceptance_criteria: ["N-2 carries an AC line of its own, in the same form as N-1 and N-3, satisfying the reading guide's claim that every requirement has a machine-checkable AC.", "The AC covers all five components N-2 names — discovery, classification, signatures, resolver, transitions — not only discovery.", "The AC states what determinism means per component (byte-identical output for discovery; equal output for equal input for the pure functions) so a reviewer can tell the two forms apart.", "N-2's AC does not merely cross-reference C-2's byte-identical discovery fixture; a reader can grade N-2 without navigating to another requirement."]
 non_goals: ["Does not add a purity or immutability requirement to any component N-2 does not already name.", "Does not require property-based testing specifically; table-driven repeat-execution tests satisfy the AC.", "Does not duplicate C-2's discovery fixture — N-2's AC may subsume it by reference as one of the five, but must cover the other four itself."]
