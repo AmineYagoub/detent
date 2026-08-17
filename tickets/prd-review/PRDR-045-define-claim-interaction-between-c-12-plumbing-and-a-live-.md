@@ -1,7 +1,7 @@
 ---
 id: PRDR-045
 title: "Define the claim interaction between C-12 state-mutating plumbing and a live run"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-045 — Define the claim interaction between C-12 state-mutating plumbing and a live run
 
 **Severity:** major · **Category:** gap · **Amends:** C-12, C-9, C-11, NG4
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

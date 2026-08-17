@@ -1,7 +1,7 @@
 ---
 id: PRDR-047
 title: "Give N-2 its own AC covering all five components it declares pure"
-state: READY
+state: DONE
 severity: minor
 category: testability
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-047 — Give N-2 its own AC covering all five components it declares pure
 
 **Severity:** minor · **Category:** testability · **Amends:** N-2
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

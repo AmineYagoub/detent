@@ -1,7 +1,7 @@
 ---
 id: PRDR-044
 title: "Reconcile S-1's role identifiers with D-12's BLIND_FIX rename and pin the role set as a wire format"
-state: READY
+state: DONE
 severity: minor
 category: clarity
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-044 — Reconcile S-1's role identifiers with D-12's BLIND_FIX rename and pin the role set as a wire format
 
 **Severity:** minor · **Category:** clarity · **Amends:** S-1, S-7
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

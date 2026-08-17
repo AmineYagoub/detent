@@ -2,11 +2,13 @@
 | | |
 |---|---|
 | Product | Foreman: state-driven autonomous engineering CLI |
-| Version | 2.0-draft.4 |
+| Version | 2.0-draft.5 |
 | Date | 2026-08-17 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
 | Supersedes | PRD v0.10 (Python reference, remains the porting oracle) |
+> **Amendments in draft.5.** Seven `prd-review` tickets applied, none changing a design decision — all seven closed gaps where the document left a normative choice to the implementation, which N-6's no-deviation rule forbids. PRDR-041 (N-4 measurement spec) · PRDR-042 (§14 measurement table; *human intervention* and *scope canary* defined; sessions-per-ticket declared cumulative) · PRDR-043 (X-1 config ceilings named, defaulted and scoped; `run_spend_usd` resolved as run-level) · PRDR-044 (role `fix` → `blind_fix`; role↔state mapping; role ids pinned as a wire format) · PRDR-045 (C-12 claim discipline) · PRDR-046 (run-level artifacts declared single-writer; B-2's "parallel-ready" qualified) · PRDR-047 (N-2 given an AC). Two pairs collided and were reconciled rather than applied in sequence: PRDR-042 and PRDR-043 both rewrote X-1's header — the scope column subsumes both — and PRDR-045 and PRDR-046 both amended NG4, now merged into one statement. No numeric target changed anywhere.
+
 > **Reading guide.** Requirements are uniquely identified (`C-*` command contract, `F-*` filesystem, `V-*` verification adapter, `X-*` execution machine, `S-*` sessions/SDK, `B-*` branching, `A-*` artifacts, `SEC-*` security, `N-*` non-functional). Every requirement has a machine-checkable acceptance criterion (*AC*). The Python reference implementation **v0.1.3 and its 52-test suite are the porting oracle**: where this document and the oracle agree, tests translate before code (see M0).
 ---
 ## Decision Log
@@ -46,7 +48,7 @@ P8 **Knowledge compounds.** Failure signatures, research briefs, and quarantine 
 P9 **Stale state is unconsumable.** Every checkpoint is content-addressed to its inputs.
 ## 3. Scope and Non-Goals
 **In scope (v1):** greenfield (planning docs → project) and brownfield (existing repo + docs) at a single git root; TypeScript/Node kernel; Claude Code via the Agent SDK as the sole session backend; the execution machine of §7; the verification adapter of §6.
-**Non-goals (v1):** NG1 production deployment or release automation. NG2 per-workspace gate scoping in monorepos (D-5; root entrypoints only). NG3 multi-repo orchestration. NG4 parallel ticket execution (claims are atomic and worktrees exist behind a flag, but v1 documents single-worker operation; concurrent merge to the run branch is untested). NG5 Windows-native (POSIX first; WSL supported). NG6 any runtime fetching of agents, prompts, or policies (SEC-2). NG7 backend plurality — the capability contract of PRD v0.10 NFR-6 is inherited; Claude Code is v1's only backend.
+**Non-goals (v1):** NG1 production deployment or release automation. NG2 per-workspace gate scoping in monorepos (D-5; root entrypoints only). NG3 multi-repo orchestration. NG4 parallel ticket execution (claims are atomic and worktrees exist behind a flag, but v1 documents single-worker operation for ticket execution; concurrent merge to the run branch is untested). State-mutating plumbing (C-12) is a second potential writer of ticket state and is serialized against the run by claim discipline, not by this non-goal. Lifting NG4 requires a defined append protocol for the run-level artifacts of F-1 — per-worker shard files reconciled at read time, an exclusive append lock, or a single serializing writer — in addition to a tested concurrent-merge path. NG5 Windows-native (POSIX first; WSL supported). NG6 any runtime fetching of agents, prompts, or policies (SEC-2). NG7 backend plurality — the capability contract of PRD v0.10 NFR-6 is inherited; Claude Code is v1's only backend.
 ---
 ## 3a. Architecture (Normative)
 ```
@@ -107,7 +109,9 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO]
 - **C-11** Exit codes are public API: `0` plan complete; `10` human-gated items remain; `2` not ready (no/unapproved plan, binding drift); `1` error.
   *AC:* documented; integration tests assert each.
 - **C-12** Plumbing (documented, scriptable, never required on the golden path): `status`, `approve <id>`, `requeue <id>`, `verify sync`, `doctor` (env + pin + one live smoke session), `report`.
-  *AC:* README golden path contains exactly two commands.
+  **Claim discipline.** `approve` and `requeue` mutate ticket state and therefore respect the C-9 claim. Both refuse with exit `2` when the target ticket is claimed by a live run, naming the claiming pid and the claim's age; the operator resolves the escalation inside `run` (C-10) or stops the run first. A claim whose owning process is no longer alive is stale: plumbing may break a stale claim, and doing so is recorded in `transitions.jsonl` as an operator action with the broken claim's pid. The remaining four plumbing commands are read-only with respect to ticket state and are always safe to run concurrently.
+  Legality is otherwise governed by X-3: `approve` is admissible only from `NEEDS_HUMAN`, `requeue` only from `NEEDS_HUMAN` or `BLOCKED`. Invoked from any other state, both exit `2` naming the current state — plumbing cannot reach an X-3 row that the table does not offer.
+  *AC:* README golden path contains exactly two commands; claimed-ticket fixture refuses `approve` and `requeue` with exit 2 naming pid and claim age; stale-claim fixture (owner killed) permits the break and records it in `transitions.jsonl`; illegal-state fixture refuses both naming the current state.
 - **C-13** User-facing vocabulary maps all internal states to five labels — planning / implementing / verifying / reviewing / waiting on you — with full state names only in `transitions.jsonl`. Resume always announces itself ("resuming t-014 — informed fix, research applied").
   *AC:* terminal output snapshot contains no internal state names.
 - **C-14 Porcelain freeze.** The golden path is exactly two commands and the five C-5 interrupts. Adding a porcelain command or an interrupt class is a **major-version** decision requiring a PRD amendment; new capabilities land as plumbing or inside existing phases.
@@ -117,7 +121,8 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO]
 - **F-1** Layout under `.foreman/` (git root only):
   **Committed:** `config.json` (schema_version, budgets, protected/risk globs, model routing, pinned SDK/CLI versions), `bindings.json` (§6), `plan/` (tickets `*.json`, `approval.json`), `research/` (`failures/` env-composite-keyed briefs per X-6/D-18; `planning/` question-keyed briefs), `agents/assignments.json`.
   **Local** (enforced by a Foreman-written `.foreman/.gitignore`): `state/` (checkpoints), `runs/` (journals, artifacts, dossiers), `ledger.jsonl`, `transitions.jsonl`, `logs/`, `claims/`, `worktrees/`.
-  *AC:* fresh init produces the split; `git status` shows only the committed set.
+  Artifacts are per-ticket or per-run. `state/`, `runs/`, `claims/`, and `worktrees/` are keyed per ticket and serialized by the C-9 claim. `ledger.jsonl` and `transitions.jsonl` are **run-level, single-writer**: exactly one process appends to each for the lifetime of a run. Atomic claims do not serialize these files — a claim scopes a ticket, not the run journal.
+  *AC:* fresh init produces the split; `git status` shows only the committed set; a single-writer assertion covers each run-level artifact.
 - **F-2** **Boundary (never-list):** `.foreman/` never contains project dependencies, build/lint/test/TypeScript configuration, application configuration, or source code; `init` never silently modifies project configuration (C-6 is the only pathway, and it is loud).
   *AC:* boundary lint over `.foreman/` contents in CI; violation fails the fixture suite.
 - **F-3** Every committed file carries `schema_version`; migrations are explicit, versioned, and tested (`foreman` refuses newer-schema files with an upgrade hint).
@@ -139,17 +144,23 @@ Gate slots: `test`, `test_single`, `lint`, `typecheck`, `build`, `e2e`.
 ## 7. Execution State Machine (X)
 States: `READY, DIAGNOSED, IN_PROGRESS, BLIND_FIX, RESEARCH, INFORMED_FIX, REVIEW_FIX, IN_REVIEW, APPROVED, DONE, BLOCKED, NEEDS_HUMAN`.
 Events: `CLAIMED, REPRO_AS_PREDICTED, REPRO_WRONG, PREMISE_FALSIFIED, GATE_GREEN, GATE_RED, RESEARCH_VALID, RESEARCH_DRY, UPSTREAM_BUG, REVIEW_APPROVE, REVIEW_CHANGES, RISK_LABEL_REQUIRED, HUMAN_APPROVED, HUMAN_REQUEUE, BUDGET_BREACH`.
-- **X-1 Budgets** (per ticket, hard):
-  | Counter | Max | Breach target |
-  |---|---|---|
-  | `blind_fix_attempts` (D-12) | 1 | resolver → next slot / NEEDS_HUMAN |
-  | `informed_fix_attempts` (D-12) | 1 | NEEDS_HUMAN (X-2 scope) |
-  | `review_fix_attempts` (D-6, D-12) | 1 | NEEDS_HUMAN |
-  | `research_sessions` | 1 | NEEDS_HUMAN |
-  | `hypotheses` (wrong repro + falsified) | 2 | >2 → NEEDS_HUMAN |
-  | `sessions` (net) | 14 | NEEDS_HUMAN |
-  | wall-clock / spend / turns-per-stage / failure-research tool calls (≤8) / flake reruns (1) | config | NEEDS_HUMAN |
-  Fix capacity is three independent **unit budgets** (D-12), each consumed exactly on entry to its namesake state — the safety property is "each slot at most once", testable per slot. The worst-case launch count is **computed, never quoted**: the implementation derives `maxPossibleSessions(state_machine, budgets)` from the transition table and asserts `sessions_net > computed` both in the test suite **and at config load** — a configuration violating it is rejected before any run. (Informative, non-normative: with these defaults the computed worst case is 12 and the default net is 14; both are per-generation, X-8.) *AC:* exhaustive-walk test computes the worst case and asserts net > computed; config-load fixture with net ≤ computed is rejected; per-slot at-most-once property tests.
+- **X-1 Budgets** (scope per the table; all hard):
+  | Counter | Max | Scope | Breach target |
+  |---|---|---|---|
+  | `blind_fix_attempts` (D-12) | 1 | ticket/generation | resolver → next slot / NEEDS_HUMAN |
+  | `informed_fix_attempts` (D-12) | 1 | ticket/generation | NEEDS_HUMAN (X-2 scope) |
+  | `review_fix_attempts` (D-6, D-12) | 1 | ticket/generation | NEEDS_HUMAN |
+  | `research_sessions` | 1 | ticket/generation | NEEDS_HUMAN |
+  | `hypotheses` (wrong repro + falsified) | 2 | ticket/generation | >2 → NEEDS_HUMAN |
+  | `sessions` (net) | 14 | ticket/generation | NEEDS_HUMAN |
+  | `ticket_wall_clock_ms` | 3_600_000 | ticket/generation | NEEDS_HUMAN |
+  | `turns_per_stage` | 30 | session | NEEDS_HUMAN |
+  | `failure_research_tool_calls` | 8 | research session | RESEARCH_DRY → NEEDS_HUMAN |
+  | `planning_research_tool_calls` (C-3a) | 16 | init | question joins AWAIT_INFO batch |
+  | `flake_reruns` | 1 | red gate | ladder entry (X-5) |
+  | `run_spend_usd` | config, no default | **run** (cumulative, X-8) | NEEDS_HUMAN |
+  Every ceiling is a named key in `config.json`'s budgets object (F-1), so the set a config-load validator must accept is enumerable from this table alone. `run_spend_usd` is the only run-scoped ceiling and is the cross-generation backstop of X-8; it has no v1 default because there is no defensible universal figure — `init` requires an explicit value and refuses to write a config without one.
+  Fix capacity is three independent **unit budgets** (D-12), each consumed exactly on entry to its namesake state — the safety property is "each slot at most once", testable per slot. The worst-case launch count is **computed, never quoted**: the implementation derives `maxPossibleSessions(state_machine, budgets)` from the transition table and asserts `sessions_net > computed` both in the test suite **and at config load** — a configuration violating it is rejected before any run. (Informative, non-normative: with these defaults the computed worst case is 12 and the default net is 14; both are per-generation, X-8.) *AC:* exhaustive-walk test computes the worst case and asserts net > computed; config-load fixture with net ≤ computed is rejected; per-slot at-most-once property tests; every key in this table has a named enforcement site that emits BUDGET_BREACH, and a key with no enforcer fails CI.
 - **X-2 Ladder resolver** — the routing function for red gates from **implementation/test failures only** (D-13). Caller set, closed and property-tested: `IN_PROGRESS`, `BLIND_FIX`, `REVIEW_FIX`, and the `APPROVED` close-check. It is **never** invoked for review verdicts (`REVIEW_CHANGES` is a judgment, not a red gate — it routes solely via the IN_REVIEW row) and **never** from `INFORMED_FIX`, whose red gate is a direct table edge to NEEDS_HUMAN: the ladder cannot reopen after the informed attempt.
   ```
   resolveRed(c): BLIND_FIX     if c.blind_fix == 0       (consume the only blind slot)
@@ -192,7 +203,7 @@ Events: `CLAIMED, REPRO_AS_PREDICTED, REPRO_WRONG, PREMISE_FALSIFIED, GATE_GREEN
 - **X-8 Attempt generations** (D-17): `HUMAN_REQUEUE` opens a new **generation** — every X-1 counter restarts at zero for the new generation, while prior generations remain immutable history on the ticket (counters, outcome, reason, ended_at). No generation cap is imposed: each requeue is an explicit human act, so the loop is human-gated by construction — but dossiers and `status` display **cumulative** totals across generations, and the run-level spend ceiling remains the cumulative financial backstop regardless of generation count. Requeue guidance (C-10) is recorded on the generation it opens.
   *AC:* requeue fixture — generation 1 runs a full ladder while generation 0's record is preserved and reported; cumulative spend still trips the run ceiling.
 ## 8. Sessions & Agent SDK Integration (S)
-- **S-1** Backend: `@anthropic-ai/claude-agent-sdk` `query()`. Roles: planner (init), diagnose, implement, fix, informed_fix, review_fix, research, review. Read-only set {planner, diagnose, research, review} runs `permissionMode: 'plan'`.
+- **S-1** Backend: `@anthropic-ai/claude-agent-sdk` `query()`. Roles: `planner` (init), `diagnose`, `implement`, `blind_fix`, `informed_fix`, `review_fix`, `research`, `review`. Read-only set {planner, diagnose, research, review} runs `permissionMode: 'plan'`. Role identifiers are not derived from state names; the mapping is: `planner` → init pipeline (no execution state), `diagnose` → `DIAGNOSED`, `implement` → `IN_PROGRESS`, `blind_fix` → `BLIND_FIX`, `informed_fix` → `INFORMED_FIX`, `review_fix` → `REVIEW_FIX`, `research` → `RESEARCH`, `review` → `IN_REVIEW`.
   *AC:* per-role session config asserted in tests.
 - **S-2** Enforcement moves in-process: the path/surface guard is a `canUseTool` callback (deny outside ticket `surface[]`, deny protected globs, surface-expansion request lever preserved); end-of-turn gating is kernel-side — on session end, run the scoped gate; if red and turns remain, **continue the same conversation** with the failure output. The kernel independently re-runs full gates regardless (P2).
   *AC:* oracle guard/stop-gate semantics reproduced via SDK-level tests; a disabled callback cannot fake green (kernel re-run test).
@@ -204,12 +215,12 @@ Events: `CLAIMED, REPRO_AS_PREDICTED, REPRO_WRONG, PREMISE_FALSIFIED, GATE_GREEN
   *AC:* `doctor` fails on mismatch naming both versions.
 - **S-6** Prompt assembly: stable per-role prefix (role prompt + rules + bindings preamble, byte-identical within a run) + per-ticket variable suffix, for prompt-cache efficiency.
   *AC:* prefix-hash uniqueness-per-role test ports.
-- **S-7** Role definitions are **curated at development time** (D-9): the VoltAgent subagent catalog and comparable sources are evaluated, vetted, and adapted per release, with upstream attribution and license compliance recorded in `ATTRIBUTIONS.md` — then **vendored in the npm package and hash-pinned**. PREPARE_AGENTS selects from this vendored set only; `agents/assignments.json` references role@hash. No network fetch of agents, ever (SEC-2).
+- **S-7** Role definitions are **curated at development time** (D-9): the VoltAgent subagent catalog and comparable sources are evaluated, vetted, and adapted per release, with upstream attribution and license compliance recorded in `ATTRIBUTIONS.md` — then **vendored in the npm package and hash-pinned**. PREPARE_AGENTS selects from this vendored set only; `agents/assignments.json` references role@hash. No network fetch of agents, ever (SEC-2). The eight role identifiers of S-1 are a stable identifier space: `agents/assignments.json` is committed (F-1) and references `role@hash`, so adding, removing, or renaming a role is a `schema_version` event under F-3 with a migration, not an editorial change.
   *AC:* packaging test verifies prompt hashes and `ATTRIBUTIONS.md` presence; assignments referencing unknown hashes fail closed.
 ## 9. Branch & Merge Contract (B)
 - **B-1** Default mode (D-8): `run` creates `foreman/run-<id>` off the base branch and commits directly to it; every commit carries a `Foreman-Ticket: <id>` trailer; ticket DONE = finalized commits + transition record. The run branch is the deliverable; merging it is the human's PR.
   *AC:* history fixture shows trailers; base branch SHA unchanged across a full run.
-- **B-2** `--worktree`: per-ticket worktree + branch, merged `--no-ff` into the **run branch** on DONE. Parallel-ready path; v1 still documents single-worker (NG4).
+- **B-2** `--worktree`: per-ticket worktree + branch, merged `--no-ff` into the **run branch** on DONE. The worktree isolates a ticket's working tree, which is the git-side prerequisite for parallelism; v1 remains single-worker (NG4). Two problems stay open before workers may run concurrently: concurrent merge to the run branch is untested, and the run-level artifacts of F-1 have no multi-writer append protocol — concurrent appends interleave and are not atomic above the platform pipe buffer.
   *AC:* worktree fixture merges into run branch, never base.
 - **B-3** **Foreman never writes to the base branch** (P7): no commit, merge, push, or checkout mutation of it in any mode. Repository initialization (C-1) — `git init` plus the initial commit — *creates* the base branch; P7 binds from that moment onward.
   *AC:* red-team fixture (hostile ticket asks for it) — base SHA byte-identical.
@@ -229,15 +240,17 @@ All JSON, schema-validated (zod), `schema_version`-stamped. Field lists abridged
 ## 11. Security & Supply Chain (SEC)
 - **SEC-1** Consent semantics per C-6/C-6a; every consent is history-logged with the exact command; off-list commands are structurally unexecutable (D-15).
 - **SEC-2** No runtime fetching of agents/prompts/policies; vendored + hash-pinned only (S-7).
-- **SEC-3** Prompt-injection posture: web/researcher output is advice into test-gated code paths; reviewer sees only diff + criteria + rules; protected globs deny ticket/criteria/config self-modification at the `canUseTool` layer **and** are listed for optional OS-level read-only mounts in containerized runs.
+- **SEC-3** Prompt-injection posture: web/researcher output is advice into test-gated code paths; reviewer sees only diff + criteria + rules; protected globs deny ticket/criteria/config self-modification at the `canUseTool` layer **and** are listed for optional OS-level read-only mounts in containerized runs. A **scope canary** is a ticket whose `surface[]` deliberately excludes a file the ticket's acceptance criteria cannot be met without editing. The correct outcome is that the session is denied at the `canUseTool` layer (S-2) and either raises the surface-expansion lever or escalates — never that the write succeeds and never that the surface silently widens. The canary corpus is distinct from the SEC-* evasion pack: canaries test the containment boundary under honest work, evasion tickets test it under hostile instruction. Both run in the fixture suite.
 - **SEC-4** Secrets: sessions inherit only an allowlisted env; ledger/logs are scrubbed by pattern before write.
 - **SEC-5** Drift halting (V-3) is a security control, not a convenience: gate redefinition mid-run is treated as tampering until a human re-baselines.
   *AC (SEC-\*):* red-team fixture pack (10 evasion tickets) — 0 protected writes, 0 base-branch writes, 0 unlogged consents.
 ## 12. Non-Functional (N)
 - **N-1 Portability = repositories, not backends:** fixture matrix ≥3 ecosystems (TS/Node service, Python service, Go or Rust CLI) passes E2E with zero kernel changes (bindings-only differences).
-- **N-2 Determinism:** discovery, classification, signatures, resolver, and transitions are pure code; identical inputs ⇒ identical outputs.
+- **N-2 Determinism:** discovery, classification, signatures, resolver, and transitions are pure code; identical inputs ⇒ identical outputs. Two forms are required and tested separately: **serialization determinism** for discovery — the emitted `discovery.json` is byte-identical across process invocations, which constrains key ordering and path normalization; and **referential transparency** for the other four — repeated evaluation on equal input yields equal output, with no dependence on wall-clock, environment, filesystem order, or iteration order of a hash container.
+  *AC:* one determinism suite covering all five — discovery emits byte-identical JSON across two separate process invocations on every fixture; classification returns the same class for the same gate output over 100 repeats with shuffled invocation order; signatures satisfy X-7's stability tests; the resolver's property test covers all reachable counter states; replaying a recorded event sequence against the transition table reproduces the recorded `transitions.jsonl` exactly. No component in the list may be omitted from the suite.
 - **N-3 Dependencies:** minimal and pinned — `@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch`; CLI via `node:util.parseArgs`; no framework. Node ≥ 20 LTS.
-- **N-4 Performance:** kernel overhead <100ms per transition; gates dominate wall time by design.
+- **N-4 Performance:** kernel overhead is the wall time from event construction to the transition being durable — event validation, `machine.apply`, the `transitions.jsonl` append, and any checkpoint write triggered by the transition. It excludes gate execution, session time, and network. Budget: **p95 < 100 ms** and **max < 500 ms** over a synthetic run of ≥500 transitions traversing every X-3 row at least once, with gates stubbed to a constant-time green. Gates dominate wall time by design and are excluded from this figure.
+  *AC:* `tests/perf/transition-overhead.bench.ts` reports p95 and max over the synthetic run; CI fails on p95 ≥ 100 ms or max ≥ 500 ms; the harness prints the per-component split (validate / apply / append / checkpoint) so a regression names its cause.
 - **N-5 Observability:** `transitions.jsonl` + ledger + journals reconstruct any run without model output.
 - **N-6 Docs:** README golden path (two commands), CONTRIBUTING with the porting-oracle rule **and the no-deviation rule** — implementation may not "improve" the architecture in flight; divergence requires a PRD amendment (tickets tagged `prd-review`) first — schema reference generated from zod.
 - **N-7 Self-build gate (D-16):** the ultimate integration test is Foreman building itself — `foreman init && foreman run` on a folder containing only this PRD must read the PRD, generate its own tickets, select its own agents, build, test, and review its way to DONE on the walking skeleton. First green at M3; thereafter a **release gate**: every version bump and every pinned-backend upgrade (S-5) must pass it before publish. The skeleton subset runs in regular CI; the full budgeted self-build runs in the release pipeline.
@@ -248,7 +261,20 @@ All JSON, schema-validated (zod), `schema_version`-stamped. Field lists abridged
 - **M3 — `init` pipeline.** Discovery → analyze → plan → approval, checkpointed resume, interrupt set. *Exit (recursive):* `foreman init && foreman run` in a folder containing only **this PRD** scaffolds and green-tests Foreman's own walking skeleton — the first green of the permanent N-7 self-build gate.
 - **M4 — Public release.** Schema freeze (`schema_version: 1`), security review against SEC fixtures, N-7 self-build green, npm publish under the chosen name, docs site.
 ## 14. Metrics
-≥70% of tickets reach DONE without human intervention on the fixture matrix; median ≤2.5 sessions per completed ticket; 100% of scope-canary tickets blocked; 0 base-branch writes across all fixtures; research cache hit rate reported per run; resume correctness: 100% of injected crashes recover without duplicate blind fixes; the N-7 self-build gate passes on every release.
+**Human intervention** — a ticket counts as human-intervened if it entered `NEEDS_HUMAN` or `BLOCKED` at any point in any generation, or if a B-4 risk approval was required before finalize. Init-time interrupts (C-5) are per-run, not per-ticket, and are excluded. Tickets resolved by C-10 *skip* or *quit* never reach DONE and fall out of the numerator and the denominator alike.
+
+| Metric | Target (v1) | Source artifact | Denominator | Window & population |
+|---|---|---|---|---|
+| Tickets reaching DONE with no human intervention | ≥70% | transitions.jsonl | tickets reaching DONE in the run | fixture matrix (N-1), per CI run |
+| Median sessions per completed ticket, cumulative across generations | ≤2.5 | ledger.jsonl | tickets reaching DONE in the run | fixture matrix, per CI run |
+| Scope-canary tickets blocked (SEC-3) | 100% | runs/ journals + transitions.jsonl | canary tickets in the corpus | canary corpus, per CI run |
+| Base-branch writes | 0 | git reflog of the base ref | all fixtures | fixture matrix + SEC pack, per CI run |
+| Research cache hit rate | reported, not gated | research/failures/ + ledger.jsonl | RESEARCH stage entries | per run |
+| Injected crashes recovering with no duplicate blind fix | 100% | transitions.jsonl | injected crashes in the run | crash-injection fixture, per CI run |
+| N-7 self-build gate | passes | release pipeline result | releases | every release |
+
+Every row is computable from artifacts F-1 already mandates; no row implies a new persisted artifact, and rows may be produced by an out-of-band script rather than by the kernel inline.
+*AC:* every cell in the table is non-empty (markdown table lint); the reporter's metric key set equals this table's row set, so a metric added here without a reporter fails CI.
 ## 15. Risks
 | Risk | Mitigation |
 |---|---|
@@ -264,4 +290,4 @@ All JSON, schema-validated (zod), `schema_version`-stamped. Field lists abridged
 - **OQ-3** Windows-native timeline (post-v1; WSL documented meanwhile).
 - **OQ-4** v2 workspace scoping design (named migration per D-5).
 ---
-*End of PRD 2.0-draft.4 — review findings as tickets tagged `prd-review`. The Python reference (v0.1.3, 52 tests) remains authoritative where this document is silent, except where a decision log entry records a deliberate divergence (D-17).*
+*End of PRD 2.0-draft.5 — review findings as tickets tagged `prd-review`. The Python reference (v0.1.3, 52 tests) remains authoritative where this document is silent, except where a decision log entry records a deliberate divergence (D-17).*

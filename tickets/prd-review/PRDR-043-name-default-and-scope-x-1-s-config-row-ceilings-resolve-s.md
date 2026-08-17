@@ -1,7 +1,7 @@
 ---
 id: PRDR-043
 title: "Name, default, and scope X-1's config-row ceilings; resolve per-ticket vs per-run spend"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-043 — Name, default, and scope X-1's config-row ceilings; resolve per-ticket vs per-run spend
 
 **Severity:** major · **Category:** gap · **Amends:** X-1, X-8, C-3a
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

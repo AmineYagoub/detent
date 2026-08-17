@@ -1,7 +1,7 @@
 ---
 id: PRDR-042
 title: "Give §14 metrics measurement specs, define human intervention and scope canary, and state the generation basis"
-state: READY
+state: DONE
 severity: major
 category: testability
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-042 — Give §14 metrics measurement specs, define human intervention and scope canary, and state the generation basis
 
 **Severity:** major · **Category:** testability · **Amends:** §14, X-8, SEC-3
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

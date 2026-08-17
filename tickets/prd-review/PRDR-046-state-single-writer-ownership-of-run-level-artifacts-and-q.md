@@ -1,7 +1,7 @@
 ---
 id: PRDR-046
 title: "State single-writer ownership of run-level artifacts and qualify B-2's parallel-ready claim"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-046 — State single-writer ownership of run-level artifacts and qualify B-2's parallel-ready claim
 
 **Severity:** minor · **Category:** gap · **Amends:** B-2, F-1, NG4
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 

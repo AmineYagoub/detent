@@ -1,7 +1,7 @@
 ---
 id: PRDR-041
 title: "Give N-4 a measurement spec: define kernel overhead, percentile, and population"
-state: READY
+state: DONE
 severity: minor
 category: testability
 labels: ["prd-review"]
@@ -17,6 +17,8 @@ depends_on: []
 # PRDR-041 — Give N-4 a measurement spec: define kernel overhead, percentile, and population
 
 **Severity:** minor · **Category:** testability · **Amends:** N-4
+
+**Applied in 2.0-draft.5.** See the PRD's draft.5 amendment note for where this ticket was reconciled against another.
 
 ## Problem
 
