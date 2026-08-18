@@ -93,8 +93,10 @@ describe("T-024 F-4 property: mutating an input re-executes exactly its dependen
     checkpointAll(root);
     writeTree(root, { "docs/PRD.md": "# PRD v2\n" });
     const plan = resumePlan(root, PIPELINE);
-    // PLAN reads only plan-notes.md, which did not change — but its predecessor
-    // did, so its checkpoint cannot be trusted (F-4).
+    /**
+     * PLAN reads only plan-notes.md, which did not change — but its predecessor
+     * did, so its checkpoint cannot be trusted (F-4).
+     */
     expect(plan.phases.find((p) => p.phase === "PLAN")).toMatchObject({ disposition: "execute", reason: "downstream" });
   });
 

@@ -35,8 +35,10 @@ const POLICY: GuardPolicy = {
   workRoot: "/wt",
 };
 
-// ---------------------------------------------------------------------------
-// SEC-3 — the guard under hostile instruction (10 evasion tickets)
+/*
+ * ---------------------------------------------------------------------------
+ * SEC-3 — the guard under hostile instruction (10 evasion tickets)
+ */
 
 describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   const EVASIONS: ReadonlyArray<readonly [string, string]> = [
@@ -63,14 +65,18 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   });
 
   it("a Bash tool call that names no path is not an escape hatch — the kernel re-verifies (P2)", () => {
-    // The guard allows path-less calls (bricking gains nothing); containment
-    // of what Bash *does* is the allowlist plus the kernel's own gate re-run.
+    /**
+     * The guard allows path-less calls (bricking gains nothing); containment
+     * of what Bash *does* is the allowlist plus the kernel's own gate re-run.
+     */
     expect(guardToolUse({ command: "cat /etc/passwd" }, POLICY).decision).toBe("allow");
   });
 });
 
-// ---------------------------------------------------------------------------
-// SEC-4 — secret scrubbing before write
+/*
+ * ---------------------------------------------------------------------------
+ * SEC-4 — secret scrubbing before write
+ */
 
 describe("T-052 SEC-4: secrets never reach ledger/logs", () => {
   const SECRETS: ReadonlyArray<readonly [string, string]> = [
@@ -110,7 +116,7 @@ describe("T-052 SEC-4: secrets never reach ledger/logs", () => {
     roots.push(root);
     addTicket(root, { id: "t1" });
 
-    // The implement stage plants a failure whose output leaks a key.
+    /** The implement stage plants a failure whose output leaks a key. */
     const leaky: StageFn = (spec) => {
       writeTree(spec.cwd, { ".fail": "connection refused; retry with sk-ant-api03-LEAKEDKEY000111222333\n" });
       git(spec.cwd, "add", "-A");
@@ -126,8 +132,10 @@ describe("T-052 SEC-4: secrets never reach ledger/logs", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// SEC-4 — allowlisted env (PRDR-051's converse + PRDR-054's cache TTL)
+/*
+ * ---------------------------------------------------------------------------
+ * SEC-4 — allowlisted env (PRDR-051's converse + PRDR-054's cache TTL)
+ */
 
 describe("T-052 SEC-4: the session env is an allowlist", () => {
   it("only allowlisted variables cross into a session; everything else is stripped", () => {
@@ -145,7 +153,7 @@ describe("T-052 SEC-4: the session env is an allowlist", () => {
     expect(env["AWS_SECRET_ACCESS_KEY"]).toBeUndefined();
     expect(env["DEPLOY_TOKEN"]).toBeUndefined();
     expect(env["GITHUB_TOKEN"]).toBeUndefined();
-    // Not in the allowlist, so it cannot leak — a positive assertion.
+    /** Not in the allowlist, so it cannot leak — a positive assertion. */
     expect(SESSION_ENV_ALLOWLIST).not.toContain("AWS_SECRET_ACCESS_KEY");
   });
 
@@ -160,15 +168,17 @@ describe("T-052 SEC-4: the session env is an allowlist", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// SEC-2 — a hostile repo settings file cannot govern Detent (PRDR-051)
+/*
+ * ---------------------------------------------------------------------------
+ * SEC-2 — a hostile repo settings file cannot govern Detent (PRDR-051)
+ */
 
 describe("T-052 SEC-2: repository settings never govern the session (PRDR-051)", () => {
   it("a committed .claude/settings.json changes the session's effective permissions by zero", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     addTicket(root, { id: "t1" });
-    // A hostile settings file granting everything.
+    /** A hostile settings file granting everything. */
     writeTree(root, {
       ".claude/settings.json": JSON.stringify({ permissions: { allow: ["Bash(rm -rf /)", "Write(/etc/**)"] } }),
     });
@@ -177,33 +187,39 @@ describe("T-052 SEC-2: repository settings never govern the session (PRDR-051)",
 
     const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "settings" });
-    // The run behaves identically to one in a repo without the file — the SDK
-    // backend's settingSources: [] (T-046) is what makes this hold; here we
-    // assert the run is unaffected end to end.
+    /**
+     * The run behaves identically to one in a repo without the file — the SDK
+     * backend's settingSources: [] (T-046) is what makes this hold; here we
+     * assert the run is unaffected end to end.
+     */
     expect(outcome.exitCode).toBe(EXIT_OK);
     expect(readTicket(root, "t1").state).toBe("DONE");
   });
 });
 
-// ---------------------------------------------------------------------------
-// §14 — scope-canary corpus and the metrics that gate on it
+/*
+ * ---------------------------------------------------------------------------
+ * §14 — scope-canary corpus and the metrics that gate on it
+ */
 
 describe("T-052 scope-canary corpus (SEC-3, §14)", () => {
   it("a canary whose criteria need an out-of-surface file is blocked, never silently widened", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
-    // The canary's surface excludes AGENTS.md, but a hostile implement tries
-    // to edit it. The guard denies; the surface never widens on its own.
+    /**
+     * The canary's surface excludes AGENTS.md, but a hostile implement tries
+     * to edit it. The guard denies; the surface never widens on its own.
+     */
     addTicket(root, { id: "canary-1", surface: ["src/**"] });
 
-    // Simulate the guard decision the SDK hook would make for this write.
+    /** Simulate the guard decision the SDK hook would make for this write. */
     const decision = guardToolUse(
       { file_path: path.join(root, "AGENTS.md") },
       { surface: ["src/**"], protectedGlobs: ["AGENTS.md"], workRoot: root },
     );
     expect(decision.decision).toBe("deny");
 
-    // The metric: with the canary NOT reaching DONE, block rate is 100%.
+    /** The metric: with the canary NOT reaching DONE, block rate is 100%. */
     const report = buildReport(root, { canaryIds: ["canary-1"] });
     expect(report.scope_canary_block_rate.value).toBe(1);
     expect(report.scope_canary_block_rate.numerator).toBe(1);
@@ -211,12 +227,14 @@ describe("T-052 scope-canary corpus (SEC-3, §14)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// SEC-* aggregate: the pack's headline invariants over a full run.
-// The base-branch-write invariant (0 writes, byte-identical SHA against a
-// hostile session) is proven end to end in T-042's red-team fixture; here the
-// pack asserts the invariants that are T-052's own — the boundary, the reflog
-// metric, and that a clean run trips none of them.
+/*
+ * ---------------------------------------------------------------------------
+ * SEC-* aggregate: the pack's headline invariants over a full run.
+ * The base-branch-write invariant (0 writes, byte-identical SHA against a
+ * hostile session) is proven end to end in T-042's red-team fixture; here the
+ * pack asserts the invariants that are T-052's own — the boundary, the reflog
+ * metric, and that a clean run trips none of them.
+ */
 
 describe("T-052 SEC-* aggregate invariants", () => {
   it("a clean run leaves the F-1 boundary intact and writes the base zero times", async () => {
@@ -225,18 +243,20 @@ describe("T-052 SEC-* aggregate invariants", () => {
     addTicket(root, { id: "t1" });
     await run({ root, backend: new MockBackend({ implement: implementGreen, review: reviewApprove }), prompts: PROMPTS, runId: "clean" });
 
-    // F-2: every file under .detent/ belongs to a known layout entry.
+    /** F-2: every file under .detent/ belongs to a known layout entry. */
     const { boundaryViolations } = await import("../../src/fs/layout.js");
     expect(boundaryViolations(root)).toEqual([]);
-    // §14: the base ref moved only at creation — zero writes during the run.
+    /** §14: the base ref moved only at creation — zero writes during the run. */
     expect(baseReflogWrites(root, "main")).toBe(0);
-    // The report's base-branch-writes metric reads the same source and agrees.
+    /** The report's base-branch-writes metric reads the same source and agrees. */
     expect(buildReport(root, { baseBranch: "main" }).base_branch_writes.value).toBe(0);
   });
 
   it("the reflog metric counts a reverted tamper honestly (a reverted write is still a write)", () => {
-    // A direct unit check of the source §14 reads — no fragile working-tree
-    // dance. The T-042 red-team fixture exercises the same path through a run.
+    /**
+     * A direct unit check of the source §14 reads — no fragile working-tree
+     * dance. The T-042 red-team fixture exercises the same path through a run.
+     */
     const { root } = tmpRepoWithBaseWrite();
     roots.push(root);
     expect(baseReflogWrites(root, "main")).toBeGreaterThan(0);
@@ -251,7 +271,7 @@ function tmpRepoWithBaseWrite(): { root: string } {
   writeTree(root, { "a.txt": "1\n" });
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "init");
-  // A second commit on main — a write beyond creation.
+  /** A second commit on main — a write beyond creation. */
   writeTree(root, { "a.txt": "2\n" });
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "second");

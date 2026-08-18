@@ -69,7 +69,7 @@ describe("T-028 package-manager selection happens at call time (V-4)", () => {
     const root = tree(pkg({ test: "vitest run" }));
     const candidate = testCandidate(root);
     expect(candidate.pm).toBe("npm");
-    // V-4 puts pm selection at call time, so the stored binding does not pin it.
+    /** V-4 puts pm selection at call time, so the stored binding does not pin it. */
     expect(normalizeInvocation(candidate, { pm: "pnpm" }).command).toBe("pnpm run test");
   });
 

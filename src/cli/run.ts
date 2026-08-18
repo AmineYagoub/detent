@@ -24,7 +24,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       "max-tickets": { type: "string" },
       backend: { type: "string", default: "mock" },
       worker: { type: "string", default: "w1" },
-      // B-2: per-ticket worktrees, merged --no-ff into the run branch on DONE.
+      /* B-2: per-ticket worktrees, merged --no-ff into the run branch on DONE. */
       worktree: { type: "boolean", default: false },
     },
   });
@@ -37,8 +37,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   const root = positionals[0] ?? process.cwd();
   const maxTickets = values["max-tickets"] === undefined ? undefined : Number(values["max-tickets"]);
 
-  // C-10: escalations resolve inside `run` on a TTY; non-TTY exits 10 with
-  // the machine-readable summary instead.
+  /**
+   * C-10: escalations resolve inside `run` on a TTY; non-TTY exits 10 with
+   * the machine-readable summary instead.
+   */
   const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
   const outcome = await run({
     root,

@@ -58,8 +58,10 @@ export const pythonEngine: Engine = {
       );
     }
 
-    // A pyproject with no pytest table still very likely tests with pytest —
-    // proposed at rank 1 so a declared configuration always wins.
+    /**
+     * A pyproject with no pytest table still very likely tests with pytest —
+     * proposed at rank 1 so a declared configuration always wins.
+     */
     if (!out.some((c) => c.slot === "test")) {
       out.push(
         candidate({

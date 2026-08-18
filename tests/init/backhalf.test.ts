@@ -85,8 +85,10 @@ const LONE_CANDIDATE = {
   "scripts/test.sh": "#!/bin/sh\nexit 0\n",
 };
 
-// ---------------------------------------------------------------------------
-// T-064
+/*
+ * ---------------------------------------------------------------------------
+ * T-064
+ */
 
 describe("T-064 auto-binding (C-3b, D-10)", () => {
   it("a lone plausible candidate binds automatically — executed, provenance auto, ZERO interrupts", async () => {
@@ -97,11 +99,11 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
     if (outcome.kind !== "complete") throw new Error("unreachable");
     const bindings = outcome.outputs["bindings"] as { slot: string; approved_by: string; status: string }[];
     const test = bindings.find((b) => b.slot === "test");
-    // C-3b's provenance
+    /** C-3b's provenance */
     expect(test?.approved_by).toBe("auto");
-    // brownfield
+    /** brownfield */
     expect(test?.status).toBe("approved");
-    // V-1: it was executed, not merely proposed — the record carries the time.
+    /** V-1: it was executed, not merely proposed — the record carries the time. */
     expect(readBindings(root).bindings.find((b) => b.slot === "test")?.executed_at).toBeTruthy();
   });
 
@@ -112,7 +114,7 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
     expect(outcome.interrupt).toBe("AWAIT_BINDING_CHOICE");
-    // exactly one slot in question
+    /** exactly one slot in question */
     expect(outcome.items).toEqual(["test"]);
     expect(outcome.message).toContain("npm run test");
     expect(outcome.message).toContain("make test");
@@ -139,10 +141,12 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
   });
 
   it("greenfield proposes from the CHOSEN STACK and never executes — provisional by construction (C-4)", async () => {
-    // A real greenfield tree: no tooling exists yet, so there is nothing to
-    // execute. The bindings follow from ANALYZE's stack decision (D-10) and
-    // are provisional precisely because V-1's execution is deferred to
-    // bootstrap #1.
+    /**
+     * A real greenfield tree: no tooling exists yet, so there is nothing to
+     * execute. The bindings follow from ANALYZE's stack decision (D-10) and
+     * are provisional precisely because V-1's execution is deferred to
+     * bootstrap #1.
+     */
     const root = repo({ "PRD.md": "# build it\n" });
     const outcome = await determineVerification({
       root,
@@ -180,8 +184,10 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// T-065
+/*
+ * ---------------------------------------------------------------------------
+ * T-065
+ */
 
 describe("T-065 the setup allowlist (C-6a, D-15)", () => {
   it.each([
@@ -237,14 +243,14 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
       actor: "operator",
       confirm: async () => {
         asked += 1;
-        // even a yes cannot make this run
+        /* even a yes cannot make this run */
         return true;
       },
       print: (t) => printed.push(t),
     });
 
     expect(outcome.kind).toBe("off-list");
-    // never even asked — consent is not the gate here
+    /** never even asked — consent is not the gate here */
     expect(asked).toBe(0);
     expect(printed.join("")).toContain("outside the v1 setup allowlist");
     expect(printed.join("")).toContain("Run it yourself");
@@ -262,7 +268,7 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
       },
     });
 
-    // verbatim, pre-execution
+    /** verbatim, pre-execution */
     expect(shown).toContain("git init");
     expect(outcome.kind).toBe("executed");
     const log = readFileSync(consentLogPath(root), "utf8");
@@ -287,16 +293,16 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
     const outcome = await proposeConfigWrite("vitest.config.ts", "export default { test: {} }\n", "add coverage", {
       root,
       actor: "alice",
-      // consent cannot override rule 1
+      /* consent cannot override rule 1 */
       confirm: async () => true,
       print: (t) => printed.push(t),
     });
 
     expect(outcome.kind).toBe("refused-existing");
-    // untouched
+    /** untouched */
     expect(readFileSync(path.join(root, "vitest.config.ts"), "utf8")).toBe("export default {}\n");
     expect(printed.join("")).toContain("will not modify an existing configuration file");
-    // the proposal, shown
+    /** the proposal, shown */
     expect(printed.join("")).toContain("export default { test: {} }");
   });
 
@@ -313,14 +319,16 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
     });
 
     expect(outcome.kind).toBe("created");
-    // in full, before writing
+    /** in full, before writing */
     expect(shown).toContain("export default { test: {} }");
     expect(readFileSync(path.join(root, "vitest.config.ts"), "utf8")).toContain("test:");
   });
 });
 
-// ---------------------------------------------------------------------------
-// T-066 / T-067 / T-068 — through the whole pipeline
+/*
+ * ---------------------------------------------------------------------------
+ * T-066 / T-067 / T-068 — through the whole pipeline
+ */
 
 describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("brownfield: no bootstrap ticket, bindings approved at init", async () => {
@@ -328,12 +336,12 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200"])) });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
-    // PRESENT defers approval with no `ask` — that is C-7, not a failure.
+    /** PRESENT defers approval with no `ask` — that is C-7, not a failure. */
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     const ids = allTickets(root).map((t) => t.id);
     expect(ids).not.toContain(BOOTSTRAP_TICKET_ID);
     expect(readBindings(root).bindings.every((b) => b.status === "approved")).toBe(true);
-    // Drafted dependencies survive as A-1 blockers.
+    /** Drafted dependencies survive as A-1 blockers. */
     expect(readTicket(root, "t-200").blockers).toEqual(["t-100"]);
   });
 
@@ -346,12 +354,12 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
 
     const bootstrap = readTicket(root, BOOTSTRAP_TICKET_ID);
-    // claimed first
+    /** claimed first */
     expect(bootstrap.priority).toBeGreaterThan(0);
     expect(bootstrap.acceptance_criteria.join(" ")).toContain("gate runs and exits 0");
     expect(bootstrap.non_goals.join(" ")).toContain(".detent/");
 
-    // C-4: every other ticket is blocked on #1, and unclaimable before it.
+    /** C-4: every other ticket is blocked on #1, and unclaimable before it. */
     for (const id of ["t-100", "t-200"]) {
       expect(readTicket(root, id).blockers).toContain(BOOTSTRAP_TICKET_ID);
     }
@@ -368,14 +376,16 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(readBindings(root).bindings.every((b) => b.status === "provisional")).toBe(true);
 
-    // Bootstrap #1 does its job: the project now HAS node tooling. That is
-    // what finalization re-discovers — the provisional `greenfield:typescript`
-    // proposal is replaced by the real binding, with the real config region
-    // V-3 will watch from here on.
-    // Every provisional slot must resolve: bootstrap's OWN gates are those
-    // bindings, so a bootstrap that reached DONE necessarily made all of them
-    // runnable. A fixture creating only `test` would be describing a bootstrap
-    // that could not have passed.
+    /**
+     * Bootstrap #1 does its job: the project now HAS node tooling. That is
+     * what finalization re-discovers — the provisional `greenfield:typescript`
+     * proposal is replaced by the real binding, with the real config region
+     * V-3 will watch from here on.
+     * Every provisional slot must resolve: bootstrap's OWN gates are those
+     * bindings, so a bootstrap that reached DONE necessarily made all of them
+     * runnable. A fixture creating only `test` would be describing a bootstrap
+     * that could not have passed.
+     */
     writeTree(root, {
       "package.json": JSON.stringify(
         { name: "new", scripts: { test: "vitest run", lint: "eslint .", typecheck: "tsc --noEmit", build: "tsup" } },
@@ -402,13 +412,13 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     const after = readBindings(root).bindings;
     expect(after.every((b) => b.status === "approved")).toBe(true);
     expect(after.find((b) => b.slot === "test")?.status).toBe("approved");
-    // The baseline is the REAL region now — not the greenfield proposal.
+    /** The baseline is the REAL region now — not the greenfield proposal. */
     expect(after.find((b) => b.slot === "test")?.adapter).toBe("node-scripts");
     expect(after.find((b) => b.slot === "test")?.resolved).toBe("npm run test");
-    // Drift now has something to compare against (V-3).
+    /** Drift now has something to compare against (V-3). */
     expect(finalizeBinding(after.find((b) => b.slot === "test")!, discover(root)).status).toBe("approved");
 
-    // Idempotent, and a no-op for any other ticket.
+    /** Idempotent, and a no-op for any other ticket. */
     expect(
       finalizeBootstrap(root, BOOTSTRAP_TICKET_ID, {
         readBindings: () => readBindings(root),
@@ -457,7 +467,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
       writeBindings: (file) => {
         written = file as { bindings: { status: string }[] };
       },
-      // bootstrap left nothing discoverable
+      /* bootstrap left nothing discoverable */
       rediscover: () => [],
     });
     expect(written!.bindings[0]?.status).toBe("provisional");
@@ -506,14 +516,16 @@ describe("T-067 PREPARE_AGENTS (S-7)", () => {
   });
 
   it("an assignment naming a hash the vendored set does not carry fails closed at READ time (S-7's AC)", () => {
-    // Writing is self-consistent by construction — prepareAgents composes the
-    // ref from the same set it validates against. The failure S-7 guards is a
-    // COMMITTED assignments file meeting a differently-vendored build, e.g.
-    // after a prompt is edited without re-pinning. That is a read.
+    /**
+     * Writing is self-consistent by construction — prepareAgents composes the
+     * ref from the same set it validates against. The failure S-7 guards is a
+     * COMMITTED assignments file meeting a differently-vendored build, e.g.
+     * after a prompt is edited without re-pinning. That is a read.
+     */
     const stale = `implement@${"0".repeat(64)}`;
     expect(() => resolveAssignment(stale, PROMPTS)).toThrow(/does not match|vendored set has/);
     expect(() => resolveAssignment(`nosuchrole@${PROMPTS.hashes.implement}`, PROMPTS)).toThrow(/unknown role/);
-    // And the shape itself is schema-guarded.
+    /** And the shape itself is schema-guarded. */
     expect(() => assignmentsFileSchema.parse({ schema_version: 1, assignments: { "t-1": "implement@short" } })).toThrow();
   });
 });
@@ -531,7 +543,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     );
 
     const text = printed.join("\n");
-    // C-3b: auto bindings are visible
+    /** C-3b: auto bindings are visible */
     expect(text).toContain("approved_by: auto");
     expect(text).toContain(BOOTSTRAP_TICKET_ID);
     expect(text).toContain("provisional bindings above to approved");
@@ -571,9 +583,9 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     expect(result.exitCode).toBe(2);
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     expect(result.interrupt?.message).toContain("declined");
-    // nothing recorded
+    /** nothing recorded */
     expect(existsSync(approvalPath(root))).toBe(false);
-    // the plan survives
+    /** the plan survives */
     expect(allTickets(root).map((t) => t.id)).toEqual(["t-100"]);
   });
 
@@ -583,7 +595,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.message).toContain("deferred");
-    // The renderer is shared, so `run` shows exactly what `init` showed.
+    /** The renderer is shared, so `run` shows exactly what `init` showed. */
     const stored = readBindings(root);
     const same = renderPresentation({
       root,

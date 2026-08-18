@@ -16,8 +16,10 @@ export function ctx(type: "feature" | "bug" = "feature", budgets: Budgets = DEFA
   return { ticket: { type }, budgets };
 }
 
-// ---------------------------------------------------------------------------
-// Filesystem fixtures (M1). The adapter and fs tickets all need a scratch tree.
+/*
+ * ---------------------------------------------------------------------------
+ * Filesystem fixtures (M1). The adapter and fs tickets all need a scratch tree.
+ */
 
 /** A scratch directory; the caller removes it with `removeTree`. */
 export function tmpTree(files: Readonly<Record<string, string>> = {}): string {

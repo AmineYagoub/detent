@@ -20,8 +20,12 @@ the implementation plan, the PRD wins and this file gets fixed.
 
 ## Comments
 
-- **No inline comments** — a comment never shares a line with code.
-  **[lint: `no-inline-comments`]**
+- **No `//` comments, anywhere in a `.ts` file.** Documentation is a `/** … */`
+  doc-block on the declaration it describes; a rare standalone `/* … */` may
+  state an in-body why the code cannot (an empty catch, a deliberate no-op).
+  Compiler/lint directives (`@ts-expect-error`, `eslint-…`) are the one escape
+  — TypeScript only honors them in line form.
+  **[lint: `detent/no-line-comments`, `no-inline-comments`]**
 - No narration. A comment that restates what the next line does is deleted on
   sight; the fix for unclear code is clearer code.
 - Comments state what the code cannot: the constraint, the invariant, the

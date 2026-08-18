@@ -14,9 +14,11 @@ describe("T-018 oracle parity report (M0 exit)", () => {
   });
 
   it("the ratchet: every entry of a landed milestone is green — no gaps behind the line", () => {
-    // One direction only. Above the line, entries go green ticket by ticket
-    // (M2 lands mid-milestone); a green entry's honesty is enforced by the
-    // ts-home check below, which requires a real test file citing the ticket.
+    /**
+     * One direction only. Above the line, entries go green ticket by ticket
+     * (M2 lands mid-milestone); a green entry's honesty is enforced by the
+     * ts-home check below, which requires a real test file citing the ticket.
+     */
     for (const e of PARITY) {
       if (hasLanded(milestoneOf(e.ticket))) {
         expect(statusOf(e), `${e.oracle} (${e.ticket}) sits behind LANDED_THROUGH but is not green`).toBe("green");
@@ -35,9 +37,11 @@ describe("T-018 oracle parity report (M0 exit)", () => {
   });
 
   it("the full oracle suite is ported — all 52 green, zero pending (mode-1 closed with the M3 back half)", () => {
-    // The last pending entry, test_mode1_stub_detected (T-060), went green when
-    // the init back half (T-064..T-068) made greenfield detection meaningful:
-    // a PRD-only non-git folder is caught and `detent init` returns 2.
+    /**
+     * The last pending entry, test_mode1_stub_detected (T-060), went green when
+     * the init back half (T-064..T-068) made greenfield detection meaningful:
+     * a PRD-only non-git folder is caught and `detent init` returns 2.
+     */
     expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(ORACLE_TEST_COUNT);
     expect(PARITY.filter((e) => statusOf(e) !== "green")).toEqual([]);
   });
@@ -52,10 +56,12 @@ describe("T-018 oracle parity report (M0 exit)", () => {
   });
 
   it("the status vocabulary needed four values — mode-1 closes in M3, past the {green,M1,M2} range", () => {
-    // R-2 assumed {green, pending-M1, pending-M2}. test_mode1_stub_detected maps
-    // to greenfield/brownfield detection, whose closing ticket T-060 is M3 — so
-    // a three-value vocabulary could never have labelled it while it was still
-    // pending. The entry is green now, but that structural fact is permanent.
+    /**
+     * R-2 assumed {green, pending-M1, pending-M2}. test_mode1_stub_detected maps
+     * to greenfield/brownfield detection, whose closing ticket T-060 is M3 — so
+     * a three-value vocabulary could never have labelled it while it was still
+     * pending. The entry is green now, but that structural fact is permanent.
+     */
     const mode1 = PARITY.find((e) => e.oracle === "test_extra.py::test_mode1_stub_detected");
     expect(mode1?.ticket).toBe("T-060");
     expect(milestoneOf("T-060")).toBe("M3");

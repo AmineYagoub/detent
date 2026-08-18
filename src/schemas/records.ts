@@ -42,8 +42,10 @@ export const researchBriefSchema = z
       code_checked: z.array(z.string()).default([]),
     }),
   })
-  // T-063: one X-6a validator, shared with the planning-brief schema, so the
-  // two research kinds cannot drift apart on the rule that binds both.
+  /*
+   * T-063: one X-6a validator, shared with the planning-brief schema, so the
+   * two research kinds cannot drift apart on the rule that binds both.
+   */
   .superRefine(requireLocalSearchBeforeWeb);
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 

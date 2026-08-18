@@ -92,7 +92,7 @@ describe("T-010 artifact schemas (A-1..A-8, F-3)", () => {
     });
     expect(parseArtifact(researchBriefSchema, brief("https://docs.example/x", {})).ok).toBe(false);
     expect(parseArtifact(researchBriefSchema, brief("https://docs.example/x", { code_checked: ["src/a.ts"] })).ok).toBe(true);
-    // A brief citing only local sources needs no local_search entries.
+    /** A brief citing only local sources needs no local_search entries. */
     expect(parseArtifact(researchBriefSchema, brief("src/a.ts", {})).ok).toBe(true);
   });
 
@@ -145,7 +145,7 @@ describe("T-010 remaining artifact schemas (A-2, A-3, A-7, A-8)", () => {
       status: "proposed" as const,
     };
     expect(parseArtifact(hypothesisSchema, { ...base, evidence: [{ file: "a.ts", line: 3, what: "here" }] }).ok).toBe(true);
-    // Prose is inadmissible: evidence cannot be empty.
+    /** Prose is inadmissible: evidence cannot be empty. */
     expect(parseArtifact(hypothesisSchema, { ...base, evidence: [] }).ok).toBe(false);
   });
 
@@ -175,7 +175,7 @@ describe("T-010 local-set records (F-1)", () => {
       evidence: "test:exit=1", counters: {},
     };
     expect(transitionLineSchema.safeParse(line).success).toBe(true);
-    // The vocabulary is closed: an event outside §7 cannot be logged.
+    /** The vocabulary is closed: an event outside §7 cannot be logged. */
     expect(transitionLineSchema.safeParse({ ...line, event: "MADE_UP" }).success).toBe(false);
     expect(transitionLineSchema.safeParse({ ...line, to: "QUARANTINED" }).success).toBe(false);
   });
@@ -187,7 +187,7 @@ describe("T-010 local-set records (F-1)", () => {
     };
     const parsed = ledgerRowSchema.safeParse(row);
     expect(parsed.success).toBe(true);
-    // PRDR-053: a crashed session is recorded as a flagged lower bound, not zero.
+    /** PRDR-053: a crashed session is recorded as a flagged lower bound, not zero. */
     expect(ledgerRowSchema.safeParse({ ...row, partial: "crash" }).success).toBe(true);
     expect(ledgerRowSchema.safeParse({ ...row, partial: "whatever" }).success).toBe(false);
   });

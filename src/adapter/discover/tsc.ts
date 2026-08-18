@@ -27,8 +27,10 @@ export const tscEngine: Engine = {
         resolved: `${exec} tsc --noEmit`,
         pm: facts.pm,
         config_file: config,
-        // The command follows from the file existing, not from its contents:
-        // editing `strict` changes what typecheck *reports*, not what runs.
+        /*
+         * The command follows from the file existing, not from its contents:
+         * editing `strict` changes what typecheck *reports*, not what runs.
+         */
         config_region: `exists:${config}`,
         rank: 1,
       }),

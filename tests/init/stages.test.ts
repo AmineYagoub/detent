@@ -36,8 +36,10 @@ function repo(files: Record<string, string> = {}): string {
   return root;
 }
 
-// ---------------------------------------------------------------------------
-// T-061
+/*
+ * ---------------------------------------------------------------------------
+ * T-061
+ */
 
 describe("T-061 doc discovery (C-2 docs half)", () => {
   it("finds the named patterns, sorted and POSIX — deterministic across calls", () => {
@@ -58,9 +60,9 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
       "docs/architecture.md",
       "docs/deep/notes.txt",
     ]);
-    // N-2
+    /** N-2 */
     expect(discoverDocs(root).docs).toEqual(found.docs);
-    // Source and manifests are not planning documents.
+    /** Source and manifests are not planning documents. */
     expect(found.docs).not.toContain("src/main.ts");
     expect(found.docs).not.toContain("package.json");
   });
@@ -95,8 +97,10 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// T-062
+/*
+ * ---------------------------------------------------------------------------
+ * T-062
+ */
 
 const ANALYSIS_BROWNFIELD = {
   schema_version: 1,
@@ -162,7 +166,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(outcome.kind).toBe("complete");
     if (outcome.kind !== "complete") throw new Error("unreachable");
     expect(sawInputs!["greenfield"]).toBe(true);
-    // D-10: the stack decision is an ANALYZE output that T-064 consumes.
+    /** D-10: the stack decision is an ANALYZE output that T-064 consumes. */
     expect((outcome.outputs["analysis"] as { stack: { language: string } }).stack.language).toBe("typescript");
     expect(outcome.outputs["greenfield"]).toBe(true);
   });
@@ -175,7 +179,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
         docs: ["PRD.md"],
         stackMarkers: [],
         launch: async () => {
-          // stack: null
+          /** stack: null */
           writeFileSync(analysisPath(root), JSON.stringify(ANALYSIS_BROWNFIELD));
         },
       }),
@@ -220,7 +224,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
     expect(outcome.interrupt).toBe("AWAIT_INFO");
-    // blocking only, batched together
+    /** blocking only, batched together */
     expect(outcome.items).toHaveLength(2);
     expect(outcome.message).toContain("Which database");
     expect(outcome.message).toContain("multi-tenancy");
@@ -255,8 +259,10 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// T-063
+/*
+ * ---------------------------------------------------------------------------
+ * T-063
+ */
 
 const VALID_BRIEF = (question: string) => ({
   schema_version: 1,
@@ -327,7 +333,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
       note: (t) => notes.push(t),
       researchOne: async (question) => {
         launched += 1;
-        // The first question burns the whole allowance.
+        /* The first question burns the whole allowance. */
         return { brief: VALID_BRIEF(question), toolCalls: 16 };
       },
     });
@@ -335,7 +341,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     expect(launched).toBe(1);
     expect(result.toolCallsUsed).toBe(16);
     expect(result.toolCallsUsed).toBeLessThanOrEqual(BUDGETS.planning_research_tool_calls);
-    // C-3a: no new interrupt class — the unanswered questions batch into AWAIT_INFO.
+    /** C-3a: no new interrupt class — the unanswered questions batch into AWAIT_INFO. */
     expect(result.unanswered).toEqual(["q two?", "q three?"]);
     expect(notes.join(" ")).toContain("exhausted");
   });
@@ -389,7 +395,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
       research: { budget: 16, researchOne: async () => ({ brief: VALID_BRIEF(question), toolCalls: 2 }) },
     });
 
-    // The question was researched, not asked: no interrupt at all.
+    /** The question was researched, not asked: no interrupt at all. */
     expect(outcome.kind).toBe("complete");
     if (outcome.kind !== "complete") throw new Error("unreachable");
     expect(outcome.outputs["research_tool_calls"]).toBe(2);

@@ -158,8 +158,10 @@ describe("T-023 F-2 boundary lint", () => {
   it("does not flag the committed set — .gitignore and JSON artifacts are Detent's own", () => {
     const root = tree();
     initLayout(root);
-    // `config.json` is Detent's config, not the project's: F-2 forbids the
-    // project's configuration, and a rule that caught this would be wrong.
+    /**
+     * `config.json` is Detent's config, not the project's: F-2 forbids the
+     * project's configuration, and a rule that caught this would be wrong.
+     */
     expect(boundaryViolations(root)).toEqual([]);
     expect(BOUNDARY_RULES.length).toBe(4);
   });
@@ -170,7 +172,7 @@ describe("T-023 F-2 boundary lint", () => {
     writeTree(root, { ".detent/eslint.config.js": "export default []\n" });
     const [first] = boundaryViolations(root);
     expect(first?.rel).toBe("eslint.config.js");
-    // Source-code and config rules both match; the first rule in order wins.
+    /** Source-code and config rules both match; the first rule in order wins. */
     expect(first?.rule).toBe("build, lint, test or TypeScript configuration");
   });
 });
@@ -198,8 +200,10 @@ describe("T-023 F-3 stamping", () => {
   it("refuses a path that escapes through a layout directory", () => {
     const root = tree();
     initLayout(root);
-    // `plan/` is a real layout entry, so a prefix match alone would accept this
-    // and then join it straight out of `.detent/`.
+    /**
+     * `plan/` is a real layout entry, so a prefix match alone would accept this
+     * and then join it straight out of `.detent/`.
+     */
     expect(() => writeArtifact(root, "plan/../../../escaped.json", {})).toThrow(/would resolve outside/);
     expect(() => writeArtifact(root, "/etc/passwd", {})).toThrow(/would resolve outside/);
     expect(existsSync(path.join(root, "..", "escaped.json"))).toBe(false);

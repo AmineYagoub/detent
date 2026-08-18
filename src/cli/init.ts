@@ -32,26 +32,30 @@ export async function main(argv: readonly string[]): Promise<number> {
   });
   const root = positionals[0] ?? process.cwd();
 
-  // C-1: root-only, with the root path hinted — and no `.detent/` created.
+  /** C-1: root-only, with the root path hinted — and no `.detent/` created. */
   const where = checkRoot(root);
   if (where.kind === "subdirectory") {
     process.stderr.write(`\`detent init\` runs only at the git root — run it from ${where.root}\n`);
     return EXIT_NOT_READY;
   }
   if (where.kind === "no-repo") {
-    // C-1/C-6: a non-repo directory with planning docs may be offered `git
-    // init` under setup-consent rules. That offer is T-065's; until it lands,
-    // saying so is more useful than a bare refusal.
+    /* C-1/C-6: a non-repo directory with planning docs may be offered `git */
+    /*
+     * init` under setup-consent rules. That offer is T-065's; until it lands,
+     * saying so is more useful than a bare refusal.
+     */
     process.stderr.write(
       "not a git repository — `detent init` needs one. Consented `git init` lands with the setup-consent engine (T-065); run `git init` yourself meanwhile.\n",
     );
     return EXIT_NOT_READY;
   }
 
-  // `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
-  // and a mock that writes nothing produces no analysis. Unlike `run`, which
-  // has a genuine fixture path, init needs a live backend — so say so plainly
-  // rather than failing three phases later with a confusing artifact error.
+  /**
+   * `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
+   * and a mock that writes nothing produces no analysis. Unlike `run`, which
+   * has a genuine fixture path, init needs a live backend — so say so plainly
+   * rather than failing three phases later with a confusing artifact error.
+   */
   if (process.env["ANTHROPIC_API_KEY"] === undefined) {
     process.stderr.write(
       "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
@@ -70,7 +74,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     budgets: budgetsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
-    // C-7: approval is offered inline on a TTY, deferred to `run` otherwise.
+    /* C-7: approval is offered inline on a TTY, deferred to `run` otherwise. */
     ...(interactive ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") } : {}),
   });
 
@@ -78,8 +82,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     result = await runInit(root, handlers, { replan: values.replan });
   } catch (err) {
-    // A phase that could not complete is an error (C-11's `1`), not an
-    // interrupt — there is nothing for the user to answer.
+    /*
+     * A phase that could not complete is an error (C-11's `1`), not an
+     * interrupt — there is nothing for the user to answer.
+     */
     process.stderr.write(`init failed: ${(err as Error).message}\n`);
     return EXIT_ERROR;
   }
@@ -93,7 +99,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT_NOT_READY;
   }
 
-  // Honest about the pipeline's own gaps rather than claiming READY.
+  /** Honest about the pipeline's own gaps rather than claiming READY. */
   const pending = pendingPhases(handlers);
   if (pending.length > 0) {
     process.stdout.write(

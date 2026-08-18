@@ -96,9 +96,9 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     const log: string[] = [];
     const handlers = (): PhaseHandler[] => [
       probe("INIT_FS", () => listingDigest([".detent"]), log),
-      // DISCOVER reads the LISTING: which docs exist.
+      /** DISCOVER reads the LISTING: which docs exist. */
       probe("DISCOVER", () => listingDigest(["PRD.md"]), log),
-      // ANALYZE reads the CONTENTS: what they say.
+      /** ANALYZE reads the CONTENTS: what they say. */
       probe("ANALYZE", () => contentsDigest(root, ["PRD.md"]), log),
       probe("PLAN", () => listingDigest(["plan"]), log),
     ];
@@ -107,14 +107,14 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     expect(first.exitCode).toBe(0);
     expect(log).toEqual(["INIT_FS", "DISCOVER", "ANALYZE", "PLAN"]);
 
-    // Editing nothing re-executes nothing (C-8's AC, second half).
+    /* Editing nothing re-executes nothing (C-8's AC, second half). */
     log.length = 0;
     const unchanged = await runInit(root, handlers());
     expect(log).toEqual([]);
     expect(unchanged.replayedFrom).toBeNull();
     expect(unchanged.reused).toEqual(["INIT_FS", "DISCOVER", "ANALYZE", "PLAN"]);
 
-    // Editing PRD.md re-executes ANALYZE forward — and NOT discovery.
+    /* Editing PRD.md re-executes ANALYZE forward — and NOT discovery. */
     log.length = 0;
     writeTree(root, { "PRD.md": "# v2 — now with more spec\n" });
     const edited = await runInit(root, handlers());
@@ -167,7 +167,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     expect(existsSync(path.join(stateDir(root), "state", "DISCOVER.json"))).toBe(false);
     expect(existsSync(path.join(stateDir(root), "state", "INIT_FS.json"))).toBe(true);
 
-    // Resume: INIT_FS is reused, DISCOVER re-runs, the pipeline continues.
+    /* Resume: INIT_FS is reused, DISCOVER re-runs, the pipeline continues. */
     log.length = 0;
     interrupts = false;
     const resumed = await runInit(root, handlers);
@@ -231,14 +231,14 @@ describe("T-060 C-8: approval state", () => {
     );
     expect(approvalState(root).stale).toBe(false);
 
-    // The human edits a ticket after approving it.
+    /** The human edits a ticket after approving it. */
     writeTree(root, { ".detent/plan/t-1.json": '{"id":"t-1","title":"edited by hand"}\n' });
     expect(approvalState(root).stale).toBe(true);
 
     const log: string[] = [];
     const result = await runInit(root, [probe("DISCOVER", () => listingDigest(["x"]), log)]);
     expect(result.messages.join(" ")).toContain("approval invalidated");
-    // replayed despite a fresh checkpoint
+    /** replayed despite a fresh checkpoint */
     expect(log).toEqual(["DISCOVER"]);
   });
 
@@ -258,9 +258,9 @@ describe("T-060 digests are honest", () => {
     const listingBefore = listingDigest(["a.md"]);
     const contentsBefore = contentsDigest(root, ["a.md"]);
     writeTree(root, { "a.md": "two\n" });
-    // listing unchanged
+    /** listing unchanged */
     expect(listingDigest(["a.md"])).toBe(listingBefore);
-    // contents moved
+    /** contents moved */
     expect(contentsDigest(root, ["a.md"])).not.toBe(contentsBefore);
   });
 

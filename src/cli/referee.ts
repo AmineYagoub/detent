@@ -65,7 +65,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const server = buildServer(core);
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // Serve until the client closes stdin; the journal lock rides the process.
+  /* Serve until the client closes stdin; the journal lock rides the process. */
   await new Promise<void>((resolve) => {
     transport.onclose = () => {
       journal.close();
@@ -75,7 +75,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   return 0;
 }
 
-// Executed as an entry point (the plugin's .mcp.json spawns this file directly).
+/** Executed as an entry point (the plugin's .mcp.json spawns this file directly). */
 const invoked = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
 if (invoked) {
   main(process.argv.slice(2))

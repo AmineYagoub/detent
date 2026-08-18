@@ -109,8 +109,10 @@ export function detectEcosystems(root: string): readonly Omit<EcosystemFingerpri
     if (manifests.length === 0) continue;
 
     const locks = locksFor(root, spec, entries);
-    // R-7: no lockfile means hashing the manifest instead, recorded as such —
-    // a fingerprint that silently hashed nothing would collide across repos.
+    /**
+     * R-7: no lockfile means hashing the manifest instead, recorded as such —
+     * a fingerprint that silently hashed nothing would collide across repos.
+     */
     const hashed = locks.length > 0 ? locks : manifests;
     found.push({
       ecosystem: spec.name,

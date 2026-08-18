@@ -86,8 +86,10 @@ describe("T-017 ticket store (A-1, R-3)", () => {
     const tsx = path.resolve(import.meta.dirname, "../../node_modules/.bin/tsx");
     const barrier = path.join(root, "go");
 
-    // Start all 8 first; each spins until the barrier appears, so the claim
-    // attempts overlap rather than running one after another.
+    /**
+     * Start all 8 first; each spins until the barrier appears, so the claim
+     * attempts overlap rather than running one after another.
+     */
     const children = Array.from({ length: 8 }, (_, i) =>
       run(tsx, [racer, root, "t-1", `worker-${i}`, barrier], { encoding: "utf8" }),
     );
@@ -113,7 +115,7 @@ describe("T-017 ticket store (A-1, R-3)", () => {
       id: "t-9", type: "bug", title: "flaky test", acceptance_criteria: ["stable"],
     });
     expect(child.links).toContainEqual({ rel: "discovered_from", ref: "t-1" });
-    // The back-link is not `discovered_from`: t-1 was not discovered from t-9.
+    /** The back-link is not `discovered_from`: t-1 was not discovered from t-9. */
     expect(readTicket(root, "t-1").links).toContainEqual({ rel: "related", ref: "t-9" });
   });
 

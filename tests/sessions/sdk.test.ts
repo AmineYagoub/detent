@@ -46,8 +46,10 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
   it("settingSources is the EMPTY SET — repository policy can never load (PRDR-051)", () => {
     const options = buildOptions(spec(), CONFIG);
     expect(options.settingSources).toEqual([]);
-    // Not undefined: undefined would mean the SDK default, which enables
-    // project scope resolving against the repository under work.
+    /**
+     * Not undefined: undefined would mean the SDK default, which enables
+     * project scope resolving against the repository under work.
+     */
     expect(Object.hasOwn(options, "settingSources")).toBe(true);
   });
 
@@ -101,7 +103,7 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
   it("reads the per-model breakdown as the token source of record — not the cumulative usage field", () => {
     const parsed = parseResultMessage(SUCCESS);
     expect(parsed.telemetryParsed).toBe(true);
-    // 1200 ≠ the cumulative field's 900: the breakdown includes what usage excludes.
+    /** 1200 ≠ the cumulative field's 900: the breakdown includes what usage excludes. */
     expect(parsed.inputTokens).toBe(1200);
     expect(parsed.outputTokens).toBe(120);
     expect(parsed.cacheReadInputTokens).toBe(400);
@@ -113,7 +115,7 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
   it("budget-exceeded results read the breakdown, which includes the response that crossed the ceiling", () => {
     const parsed = parseResultMessage({ ...SUCCESS, subtype: "error_max_budget_usd", is_error: true });
     expect(parsed.ok).toBe(false);
-    // never the omitting cumulative field
+    /** never the omitting cumulative field */
     expect(parsed.inputTokens).toBe(1200);
   });
 
@@ -132,7 +134,7 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
       usage: { input_tokens: 0, output_tokens: 0 },
       modelUsage: {},
     });
-    // zeroed ≠ absent
+    /** zeroed ≠ absent */
     expect(parsed.telemetryParsed).toBe(true);
     expect(parsed.crashed).toBe(true);
   });
@@ -157,7 +159,7 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
 
     const backend = new MockBackend({
       "t1:implement": requesting("docs/extra.md"),
-      // protected (config)
+      /* protected (config) */
       "t2:implement": requesting("AGENTS.md"),
       review: reviewApprove,
     });
@@ -171,7 +173,7 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
     const t2 = readTicket(root, "t2");
     expect(t2.surface).not.toContain("AGENTS.md");
     expect(t2.notes.map((n) => n.text).join(" ")).toContain("surface DENIED: AGENTS.md");
-    // a denied expansion is not an escalation
+    /** a denied expansion is not an escalation */
     expect(outcome.exitCode).toBe(0);
   });
 });

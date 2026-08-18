@@ -94,7 +94,7 @@ describe("T-027 V-3 drift halting", () => {
 
     const check = checkBinding(bindings.find((b) => b.slot === "test")!, discover(root));
     expect(check.status).toBe("clean");
-    // The lint binding *did* drift; precision means the test gate is unaffected.
+    /** The lint binding *did* drift; precision means the test gate is unaffected. */
     expect(checkBinding(bindings.find((b) => b.slot === "lint")!, discover(root)).status).toBe("drifted");
   });
 

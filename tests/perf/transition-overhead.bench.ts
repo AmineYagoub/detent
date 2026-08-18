@@ -72,8 +72,10 @@ describe("N-4 transition overhead", () => {
           journal.appendTransition(line);
           const t3 = performance.now();
 
-          // The durable ticket write is N-4's "checkpoint" component: the
-          // state that must survive a crash for C-9's resume to work.
+          /**
+           * The durable ticket write is N-4's "checkpoint" component: the
+           * state that must survive a crash for C-9's resume to work.
+           */
           const ticket = readTicket(root, "bench");
           writeTicket(root, { ...ticket, state: "READY" });
           const t4 = performance.now();
@@ -96,7 +98,7 @@ describe("N-4 transition overhead", () => {
     const max = sorted.at(-1) as number;
     const n = samples.length;
 
-    // The per-component split, so a regression names its cause (N-4 AC).
+    /* The per-component split, so a regression names its cause (N-4 AC). */
     console.log(
       `[N-4] n=${n} p95=${p95.toFixed(3)}ms max=${max.toFixed(3)}ms | per-transition avg: ` +
         `validate=${(split.validate / n).toFixed(3)}ms apply=${(split.apply / n).toFixed(3)}ms ` +
@@ -106,7 +108,7 @@ describe("N-4 transition overhead", () => {
     expect(p95).toBeLessThan(100);
     expect(max).toBeLessThan(500);
 
-    // Sanity: the corpus really covered every row.
+    /** Sanity: the corpus really covered every row. */
     const covered = new Set(rows.map((r) => transitionKey(r.from, r.event)));
     expect(covered.size).toBe(TABLE.size);
   });

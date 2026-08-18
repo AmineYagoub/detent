@@ -30,14 +30,14 @@ describe("T-060 mode-1 parity: a PRD-only, non-git folder is not a runnable proj
 
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
-      // The oracle's exact scenario: PRD.md, no `.git`. It returned 2; so do we.
+      /** The oracle's exact scenario: PRD.md, no `.git`. It returned 2; so do we. */
       expect(await main([root])).toBe(2);
       expect(err.mock.calls.join("")).toMatch(/not a git repository/);
     } finally {
       err.mockRestore();
     }
 
-    // C-1's refusal is pure: nothing is written into the folder it declined.
+    /** C-1's refusal is pure: nothing is written into the folder it declined. */
     expect(existsSync(path.join(root, ".detent"))).toBe(false);
   });
 });

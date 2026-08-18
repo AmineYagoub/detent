@@ -65,7 +65,7 @@ describe("T-100 R-1: the tool set is closed", () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     const core = await openCore(root);
-    // ticket_id missing
+    /** ticket_id missing */
     const result = await callTool(core, "claim", { op: "acquire" });
     expect((result as { error: { code: string; message: string } }).error.code).toBe("INVALID_INPUT");
     expect((result as { error: { message: string } }).error.message).toContain("claim");
@@ -83,7 +83,7 @@ describe("T-101 R-2: next + claim", () => {
     const next = (await callTool(core, "next", {})) as { pool: { id: string }[] };
     expect(next.pool.map((p) => p.id).sort()).toEqual(["t-1", "t-2"]);
 
-    // The driver picks the SECOND — the referee admits any legal choice (R-2).
+    /** The driver picks the SECOND — the referee admits any legal choice (R-2). */
     const acquired = (await callTool(core, "claim", { op: "acquire", ticket_id: "t-2" })) as {
       ok: boolean;
       claimed_ref?: string;
@@ -159,9 +159,11 @@ describe("T-102 the evidence escrow behind transition", () => {
     addTicket(root, { id: "t-1" });
     const core = await openCore(root);
 
-    // Hoard: mint gate evidence while READY, then move the ticket via the
-    // claimed ref. The hoarded gate ref must NOT satisfy a later state — the
-    // close-check-skipping attack a model driver could otherwise mount.
+    /**
+     * Hoard: mint gate evidence while READY, then move the ticket via the
+     * claimed ref. The hoarded gate ref must NOT satisfy a later state — the
+     * close-check-skipping attack a model driver could otherwise mount.
+     */
     const acquired = (await callTool(core, "claim", { op: "acquire", ticket_id: "t-1" })) as { claimed_ref: string };
     const hoarded = (await callTool(core, "gate", { ticket_id: "t-1" })) as { ref: string };
     await callTool(core, "transition", { ticket_id: "t-1", ref: acquired.claimed_ref });
@@ -178,8 +180,10 @@ describe("T-102 the evidence escrow behind transition", () => {
     addTicket(root, { id: "t-1" });
     const core = await openCore(root);
 
-    // Real gate evidence (green), minted while t-1 is still READY — a state
-    // from which GATE_GREEN is not admissible.
+    /*
+     * Real gate evidence (green), minted while t-1 is still READY — a state
+     * from which GATE_GREEN is not admissible.
+     */
     (await callTool(core, "claim", { op: "acquire", ticket_id: "t-1" })) as { claimed_ref: string };
     const gate = (await callTool(core, "gate", { ticket_id: "t-1" })) as { ref: string };
 
@@ -216,7 +220,7 @@ describe("T-104 R-4: attempt is metered", () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     addTicket(root, { id: "t-1" });
-    // The ledger IS the record: a prior run spent past the ceiling.
+    /** The ledger IS the record: a prior run spent past the ceiling. */
     appendFileSync(path.join(stateDir(root), "ledger.jsonl"), `${JSON.stringify({ cost_estimate_usd: 1000 })}\n`);
     const core = await openCore(root);
 
@@ -253,12 +257,14 @@ describe("T-105 R-3/D-30: persist-before-return", () => {
     const applied = (await callTool(core, "transition", { ticket_id: "t-1", ref: acquired.claimed_ref })) as {
       to: string;
     };
-    // On disk BEFORE anything else happens — R-3's persist-before-return.
+    /** On disk BEFORE anything else happens — R-3's persist-before-return. */
     expect(transitions(root).at(-1)?.to).toBe(applied.to);
 
-    // "Crash": release the claim and drop the core; a FRESH core sees the
-    // in-flight state in its resumable pool (D-30 — resume is a referee
-    // property, not a driver property).
+    /*
+     * "Crash": release the claim and drop the core; a FRESH core sees the
+     * in-flight state in its resumable pool (D-30 — resume is a referee
+     * property, not a driver property).
+     */
     await callTool(core, "claim", { op: "release", ticket_id: "t-1" });
     journals.splice(0).forEach((j) => j.close());
 

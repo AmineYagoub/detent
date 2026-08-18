@@ -55,13 +55,15 @@ export function pendingPhases(handlers: readonly PhaseHandler[]): InitPhase[] {
   return INIT_PHASES.filter((p) => !built.has(p));
 }
 
-// ---------------------------------------------------------------------------
+/* --------------------------------------------------------------------------- */
 
 function initFsPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "INIT_FS",
-    // The layout either exists or it does not; nothing about its contents
-    // changes what this phase does.
+    /*
+     * The layout either exists or it does not; nothing about its contents
+     * changes what this phase does.
+     */
     digest: () => listingDigest([stateDir(deps.root)]),
     run: async () => {
       initLayout(deps.root);
@@ -87,7 +89,7 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
       const docs = discoverDocs(deps.root);
       const stack = discoverStack(deps.root);
       if (docs.docs.length === 0) {
-        // C-2: no docs → AWAIT_DOCS with the exact list of what was looked for.
+        /* C-2: no docs → AWAIT_DOCS with the exact list of what was looked for. */
         return {
           kind: "interrupt",
           interrupt: "AWAIT_DOCS",
@@ -163,9 +165,11 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
             );
             const { readFileSync, existsSync } = await import("node:fs");
             const brief = existsSync(artifactOut) ? JSON.parse(readFileSync(artifactOut, "utf8")) : null;
-            // Turns are the observable proxy for tool calls the backend reports;
-            // S-4's telemetry has no per-call counter, so a turn is one call's
-            // worth of budget. The ceiling is enforced either way (C-3a).
+            /*
+             * Turns are the observable proxy for tool calls the backend reports;
+             * S-4's telemetry has no per-call counter, so a turn is one call's
+             * worth of budget. The ceiling is enforced either way (C-3a).
+             */
             return { brief, toolCalls: Math.max(1, result.turns) };
           },
         },
@@ -198,7 +202,7 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
 function planPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PLAN",
-    // Chained: PLAN re-runs whenever analysis or the bindings moved.
+    /* Chained: PLAN re-runs whenever analysis or the bindings moved. */
     digest: (ctx) => valueDigest([ctx.outputs["ANALYZE"]?.["analysis"] ?? null, ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null]),
     run: async (ctx) => {
       const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
@@ -229,8 +233,10 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
 function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PREPARE_AGENTS",
-    // The vendored prompt hashes plus the ticket set: a re-vendored prompt
-    // must re-assign, because `role@hash` would otherwise name a stale build.
+    /*
+     * The vendored prompt hashes plus the ticket set: a re-vendored prompt
+     * must re-assign, because `role@hash` would otherwise name a stale build.
+     */
     digest: (ctx) => valueDigest([deps.prompts.hashes, ctx.outputs["PLAN"]?.["tickets"] ?? null]),
     run: async () =>
       prepareAgents({

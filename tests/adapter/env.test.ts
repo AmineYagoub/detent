@@ -153,8 +153,10 @@ describe("T-021 polyglot repositories", () => {
     const fp = await fingerprint(root, { probe: async (cmd) => (cmd.startsWith("go") ? "1.22.1" : "22.0.0") });
     expect(fp.ecosystems.map((e) => e.ecosystem)).toEqual(["node", "go"]);
     expect(fp.runtime_version).toBe("go 1.22.1; node 22.0.0");
-    // The composite is order-independent by construction, so a readdir that
-    // reorders cannot move the cache key.
+    /**
+     * The composite is order-independent by construction, so a readdir that
+     * reorders cannot move the cache key.
+     */
     const again = await fingerprint(root, { probe: async (cmd) => (cmd.startsWith("go") ? "1.22.1" : "22.0.0") });
     expect(again.lockfile_hash).toBe(fp.lockfile_hash);
   });

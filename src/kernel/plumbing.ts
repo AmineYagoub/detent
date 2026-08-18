@@ -61,7 +61,7 @@ function guardClaim(root: string, id: string, deps: PlumbingDeps): ClaimGuard {
   if (!isClaimed(root, id)) return { ok: true };
   const info = readClaim(root, id);
   const alive = deps.isAlive ?? defaultAlive;
-  // An unreadable claim file is held-by-someone until proven stale (R-3).
+  /** An unreadable claim file is held-by-someone until proven stale (R-3). */
   if (info === null) return { ok: false, refusal: `ticket ${id} is claimed (claim unreadable — treat as held)` };
   if (alive(info.pid)) {
     const ageMs = Math.max(0, (deps.now ?? Date.now)() - Date.parse(info.at));
@@ -186,8 +186,10 @@ function reopenGeneration(root: string, id: string): void {
   const fresh = readTicket(root, id);
   const generation = currentGeneration(fresh);
   if (generation.ended_at === undefined) return;
-  // exactOptionalTypes: rebuild without ended_at rather than destructuring
-  // into an unused binding the lint rejects.
+  /**
+   * exactOptionalTypes: rebuild without ended_at rather than destructuring
+   * into an unused binding the lint rejects.
+   */
   const reopened = { ...generation, outcome: "in_flight" as const };
   delete (reopened as { ended_at?: string }).ended_at;
   writeTicket(root, {

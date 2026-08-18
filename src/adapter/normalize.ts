@@ -103,9 +103,11 @@ export function normalizeInvocation(candidate: Candidate, facts?: InvocationFact
   const pm = facts?.pm ?? candidate.pm;
   const flags = ciFlagsFor(candidate);
   let command = withPackageManager(candidate, pm, flags);
-  // Left intact when no baseline is supplied: resolving one is the caller's
-  // job (T-042), and an unresolvable baseline must fall back to the root
-  // command rather than run against a guess (V-5).
+  /**
+   * Left intact when no baseline is supplied: resolving one is the caller's
+   * job (T-042), and an unresolvable baseline must fall back to the root
+   * command rather than run against a guess (V-5).
+   */
   if (facts?.baseRef !== undefined && needsBaseRef(command)) {
     command = substituteBase(command, facts.baseRef);
   }
@@ -124,6 +126,6 @@ function withPackageManager(candidate: Candidate, pm: PackageManager | null, fla
     return `${EXEC[chosen]} tsc --noEmit`;
   }
 
-  // make, just, go, cargo, pytest: the command is already the invocation.
+  /* make, just, go, cargo, pytest: the command is already the invocation. */
   return flags.length === 0 ? candidate.resolved : `${candidate.resolved} ${flags.join(" ")}`;
 }

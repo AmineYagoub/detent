@@ -35,7 +35,7 @@ describe("T-040 oracle smoke (test_smoke_mock_backend)", () => {
     expect(result.ok).toBe(true);
     expect(result.telemetryParsed).toBe(true);
     expect(result.inputTokens + result.outputTokens).toBeGreaterThan(0);
-    // The interface takes the pin; the mock ignores it (version-free).
+    /** The interface takes the pin; the mock ignores it (version-free). */
     const asBackend: SessionBackend = backend;
     await expect(asBackend.checkVersion("anything")).resolves.toBeUndefined();
   });
@@ -58,7 +58,7 @@ describe("T-040 scripting semantics (oracle parity)", () => {
     });
     expect((await backend.run(spec({ role: "review" }))).turns).toBe(1);
     expect((await backend.run(spec({ role: "review" }))).turns).toBe(2);
-    // Exhausted numbered scripts fall through to the default.
+    /** Exhausted numbered scripts fall through to the default. */
     expect((await backend.run(spec({ role: "review" }))).ok).toBe(true);
   });
 

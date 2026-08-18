@@ -46,9 +46,11 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   const discovery = discover(root);
   const drift = checkAll(stored.bindings, discovery).checks;
 
-  // V-1 in full: the replacement candidates are executed before they may be
-  // approved, exactly as at init. A sync that skipped execution would approve
-  // an unexecuted binding, which P4 calls a guess.
+  /**
+   * V-1 in full: the replacement candidates are executed before they may be
+   * approved, exactly as at init. A sync that skipped execution would approve
+   * an unexecuted binding, which P4 calls a guess.
+   */
   const bind = deps.bind ?? bindAll;
   const report = await bind(discovery, {
     root,

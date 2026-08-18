@@ -47,8 +47,10 @@ export const nodeEngine: Engine = {
             resolved: `${pm} run ${name}`,
             pm,
             config_file: "package.json",
-            // Only this script's own text. Editing a sibling script is not
-            // drift, which is the precision V-3's AC asks for.
+            /*
+             * Only this script's own text. Editing a sibling script is not
+             * drift, which is the precision V-3's AC asks for.
+             */
             config_region: `scripts.${name}=${command}`,
             rank: rule.rank,
           }),
@@ -67,8 +69,10 @@ function readScripts(file: string): Record<string, string> {
       Object.entries(scripts).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
     );
   } catch {
-    // An unparseable manifest proposes nothing. Discovery is token-free and
-    // must not fail the run; the missing binding surfaces as an unbound slot.
+    /*
+     * An unparseable manifest proposes nothing. Discovery is token-free and
+     * must not fail the run; the missing binding surfaces as an unbound slot.
+     */
     return {};
   }
 }

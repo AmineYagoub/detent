@@ -65,8 +65,10 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
   ["IN_PROGRESS", "GATE_RED", guard("resolveRed")],
   ["BLIND_FIX", "GATE_RED", guard("resolveRed")],
   ["REVIEW_FIX", "GATE_RED", guard("resolveRed")],
-  // The ladder cannot reopen after the informed attempt: a direct table edge,
-  // not a resolver call (D-13).
+  /*
+   * The ladder cannot reopen after the informed attempt: a direct table edge,
+   * not a resolver call (D-13).
+   */
   ["INFORMED_FIX", "GATE_RED", to("NEEDS_HUMAN")],
 
   ["RESEARCH", "RESEARCH_VALID", guard("enterInformed")],
@@ -92,9 +94,11 @@ function buildTable(): ReadonlyMap<string, Row> {
     if (t.has(k)) throw new Error(`duplicate transition row: ${k}`);
     t.set(k, row);
   }
-  // Two events are legal from every non-DONE state (X-3): BUDGET_BREACH, and
-  // GATE_DRIFT (D-23) — the binding is under suspicion, so the ticket blocks
-  // until `verify sync` re-baselines and a requeue reopens it (V-3).
+  /**
+   * Two events are legal from every non-DONE state (X-3): BUDGET_BREACH, and
+   * GATE_DRIFT (D-23) — the binding is under suspicion, so the ticket blocks
+   * until `verify sync` re-baselines and a requeue reopens it (V-3).
+   */
   for (const s of STATES) {
     if (TERMINAL_STATES.has(s)) continue;
     t.set(key(s, "BUDGET_BREACH"), to("NEEDS_HUMAN"));
@@ -123,7 +127,7 @@ const GUARDS: Record<GuardName, (c: Counters, ctx: GuardContext) => GuardOutcome
   premiseFalsified: (c, ctx) => {
     const counters = countHypothesis(c);
     if (ctx.ticket.type !== "bug") {
-      // A falsified premise on a feature ticket is a plan-level flaw.
+      /* A falsified premise on a feature ticket is a plan-level flaw. */
       return { next: "NEEDS_HUMAN", counters };
     }
     return {
@@ -139,7 +143,7 @@ const GUARDS: Record<GuardName, (c: Counters, ctx: GuardContext) => GuardOutcome
       ? { next: "REVIEW_FIX", counters: consumeSlot(c, "review_fix_attempts") }
       : { next: "NEEDS_HUMAN", counters: c },
 
-  // X-1: the informed slot is consumed exactly on entry to its namesake state.
+  /* X-1: the informed slot is consumed exactly on entry to its namesake state. */
   enterInformed: (c) => ({
     next: "INFORMED_FIX",
     counters: consumeSlot(c, "informed_fix_attempts"),

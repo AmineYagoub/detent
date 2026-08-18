@@ -93,8 +93,10 @@ export function addTicket(root: string, input: Partial<NewTicket> & { readonly i
   });
 }
 
-// ---------------------------------------------------------------------------
-// Mock stage functions — TS ports of the oracle's helpers (H.*).
+/*
+ * ---------------------------------------------------------------------------
+ * Mock stage functions — TS ports of the oracle's helpers (H.*).
+ */
 
 export function writeArtifactStage(payload: object): StageFn {
   return (spec) => {
@@ -118,8 +120,10 @@ export const implementRed: StageFn = (spec) => {
     [`src/feature-${spec.ticketId}.txt`]: "attempt\n",
   });
   git(spec.cwd, "add", "src");
-  // --allow-empty: a later generation replaying this stage produces an
-  // identical tree, and a stage must not crash on "nothing to commit".
+  /**
+   * --allow-empty: a later generation replaying this stage produces an
+   * identical tree, and a stage must not crash on "nothing to commit".
+   */
   git(spec.cwd, "commit", "-q", "--allow-empty", "-m", `${spec.ticketId}: attempt`);
   return okResult();
 };

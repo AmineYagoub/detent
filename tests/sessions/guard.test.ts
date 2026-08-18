@@ -43,7 +43,7 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
     const readme = edit("/wt/README.md");
     expect(readme.decision).toBe("deny");
     expect(readme.reason).toContain("surface");
-    // the SEC-3 lever
+    /** the SEC-3 lever */
     expect(readme.reason).toContain("surface_request.json");
   });
 
@@ -62,7 +62,7 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
 
   it("matchAny keeps the oracle's directory conveniences", () => {
     expect(matchAny("src/deep/nested.py", ["src/**"])).toBe(true);
-    // the bare directory
+    /** the bare directory */
     expect(matchAny("src", ["src/**"])).toBe(true);
     expect(matchAny("AGENTS.md", ["AGENTS.md"])).toBe(true);
     expect(matchAny("srcx/file.py", ["src/**"])).toBe(false);
@@ -86,11 +86,11 @@ describe("T-046 stop gate (oracle test_hooks ports)", () => {
   });
 
   it("test_read_only_stage_and_loop_guard", async () => {
-    // Read-only stages have no stop gate, even with a red command bound.
+    /** Read-only stages have no stop gate, even with a red command bound. */
     const review = await stopGate({ stage: "review", gateCmd: "sh -c 'exit 1'", stopHookActive: false }, red);
     expect(review.decision).toBe("allow");
     expect(READ_ONLY_STAGES.has("review")).toBe(true);
-    // stop_hook_active breaks hook-induced loops; the kernel judges from here.
+    /** stop_hook_active breaks hook-induced loops; the kernel judges from here. */
     const looped = await stopGate({ stage: "implement", gateCmd: "sh -c 'exit 1'", stopHookActive: true }, red);
     expect(looped.decision).toBe("allow");
   });
@@ -119,8 +119,10 @@ describe("T-046 tool surfaces (S-3, oracle test_research_session_gets_domain_sco
   });
 
   it("allowlists are the surface, never the containment — the guard runs regardless of them", () => {
-    // The decision function takes no allowlist at all: nothing a role is
-    // granted can shadow the deny (D-21's whole point).
+    /**
+     * The decision function takes no allowlist at all: nothing a role is
+     * granted can shadow the deny (D-21's whole point).
+     */
     expect(edit("/wt/AGENTS.md").decision).toBe("deny");
   });
 });

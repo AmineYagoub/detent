@@ -49,7 +49,7 @@ describe("T-042 B-1: trailers on every commit", () => {
     for (const commit of commits) {
       expect(parseTicketTrailers(commit.message), commit.message).toContain("t1");
     }
-    // The writer never emits the legacy form (B-1/D-20).
+    /** The writer never emits the legacy form (B-1/D-20). */
     expect(commits.some((c) => c.message.includes("Foreman-Ticket:"))).toBe(false);
   });
 
@@ -70,8 +70,10 @@ describe("T-042 B-3/P7: the base-write guard", () => {
     addTicket(root, { id: "t1" });
     const baseSha = git(root, "rev-parse", "main").trim();
 
-    // The hostile stage checks out main, commits an implant, and returns to
-    // the run branch so the loop's own git keeps working.
+    /**
+     * The hostile stage checks out main, commits an implant, and returns to
+     * the run branch so the loop's own git keeps working.
+     */
     const hostile: StageFn = (spec) => {
       const runBranch = git(spec.cwd, "rev-parse", "--abbrev-ref", "HEAD").trim();
       git(spec.cwd, "checkout", "-q", "main");
@@ -127,11 +129,11 @@ describe("T-042 B-2: worktree mode", () => {
 
     expect(outcome.exitCode).toBe(EXIT_OK);
     expect(readTicket(root, "t1").state).toBe("DONE");
-    // The work arrived on the run branch through a merge commit…
+    /** The work arrived on the run branch through a merge commit… */
     expect(existsSync(path.join(root, "src/feature-t1.txt"))).toBe(true);
     const merge = git(root, "log", "--merges", "--oneline", "detent/run-wt").trim();
     expect(merge).toContain("merge t1");
-    // …the base is untouched, and the worktree is cleaned up.
+    /** …the base is untouched, and the worktree is cleaned up. */
     expect(git(root, "rev-parse", "main").trim()).toBe(baseSha);
     expect(existsSync(worktreePath(root, "t1"))).toBe(false);
   });
@@ -143,7 +145,7 @@ describe("T-042 B-5: crash recovery resets dirty tracked files", () => {
     addTicket(root, { id: "t1" });
 
     const crash: StageFn = (spec) => {
-      // Mutates a TRACKED file without committing, then dies.
+      /** Mutates a TRACKED file without committing, then dies. */
       writeFileSync(path.join(spec.cwd, "src/calc.py"), "def totals(x):\n    return 0  # sabotage\n");
       throw new Error("crash with dirty tree");
     };
@@ -152,7 +154,7 @@ describe("T-042 B-5: crash recovery resets dirty tracked files", () => {
     expect(first.exitCode).toBe(1);
     expect(readFileSync(path.join(root, "src/calc.py"), "utf8")).toContain("sabotage");
 
-    // Resume: B-5 resets the dirty tracked file before judging the tree.
+    /** Resume: B-5 resets the dirty tracked file before judging the tree. */
     const second = await run({
       root,
       backend: new MockBackend({ review: reviewApprove }),
@@ -172,7 +174,7 @@ describe("T-042 V-5: the run baseline", () => {
     expect(runBranch.base).toBe("main");
     const resolved = resolveBaseRef(root, runBranch);
     expect(resolved).toBe(git(root, "rev-parse", "main").trim());
-    // Re-entering the same run branch recovers the recorded base.
+    /** Re-entering the same run branch recovers the recorded base. */
     const again = ensureRunBranch(root, "ignored");
     expect(again).toEqual(runBranch);
   });

@@ -106,14 +106,14 @@ describe("T-022 oracle ports", () => {
     expect(readTicket(root, "t1").links).toContainEqual({ rel: "quarantines", ref: "t1-flake-1" });
     expect(allTickets(root).filter((t) => t.id.startsWith("t1-flake"))).toHaveLength(1);
 
-    // Zero fix budget consumed: the filter is given no counters to charge.
+    /** Zero fix budget consumed: the filter is given no counters to charge. */
     expect(readTicket(root, "t1").generations.at(-1)!.counters).toEqual(before);
   });
 });
 
 describe("T-022 D-14: a pattern never absolves a real regression", () => {
   it("adversarial — a real regression whose output matches a flake pattern enters the ladder", async () => {
-    // A genuine assertion failure that happens to mention a reset connection.
+    /** A genuine assertion failure that happens to mention a reset connection. */
     const output = "FAILED tests/test_totals.py::test_totals\nAssertionError: totals mismatch\nconnection reset by peer\n";
     let reruns = 0;
     const decision = await filterFlake({
@@ -164,9 +164,11 @@ describe("T-022 D-14: a pattern never absolves a real regression", () => {
     expect(quarantined.kind).toBe("quarantine");
     expect(laddered.kind).toBe("ladder");
 
-    // And it is not merely a convention: the writer takes a QuarantineDecision,
-    // so a ladder decision cannot be handed to it. `npm run typecheck` fails if
-    // this stops being true.
+    /**
+     * And it is not merely a convention: the writer takes a QuarantineDecision,
+     * so a ladder decision cannot be handed to it. `npm run typecheck` fails if
+     * this stops being true.
+     */
     const root = tree();
     createTicket(root, { id: "t1", type: "feature", title: "t", acceptance_criteria: ["x"] });
     // @ts-expect-error a ladder decision is not evidence of a flake
@@ -227,9 +229,11 @@ describe("T-022 flake_reruns ceiling (X-1)", () => {
   });
 
   it("the ledger is not optional — X-1's ceiling cannot be forgotten (P6)", () => {
-    // A ledger a caller may omit hands every red gate a fresh allowance, which
-    // is an X-1 ceiling silently disabled. The type is the enforcement, so this
-    // is a compile-time assertion: `npm run typecheck` fails if it goes optional.
+    /*
+     * A ledger a caller may omit hands every red gate a fresh allowance, which
+     * is an X-1 ceiling silently disabled. The type is the enforcement, so this
+     * is a compile-time assertion: `npm run typecheck` fails if it goes optional.
+     */
     // @ts-expect-error `ledger` is required
     const withoutLedger: FlakeInput = { first: red("x"), rerunInIsolation: async () => red("x") };
     expect(withoutLedger.ledger).toBeUndefined();

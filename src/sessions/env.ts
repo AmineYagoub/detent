@@ -15,9 +15,11 @@ const RUNTIME_VARS = ["PATH", "HOME", "SHELL", "TMPDIR", "TERM", "LANG", "LC_ALL
 const BACKEND_VARS = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_BASE_URL",
-  // S-6 (PRDR-054): the extended prompt-cache lifetime rides the documented
-  // custom-headers mechanism; the behavioural check — non-zero cache reads
-  // across a >5-minute gate gap — is T-046's live AC.
+  /*
+   * S-6 (PRDR-054): the extended prompt-cache lifetime rides the documented
+   * custom-headers mechanism; the behavioural check — non-zero cache reads
+   * across a >5-minute gate gap — is T-046's live AC.
+   */
   "ANTHROPIC_CUSTOM_HEADERS",
 ] as const;
 
@@ -40,7 +42,7 @@ export function buildSessionEnv(
     const value = parent[key];
     if (value !== undefined) env[key] = value;
   }
-  // S-6: request the extended cache lifetime unless the operator already did.
+  /** S-6: request the extended cache lifetime unless the operator already did. */
   if (env["ANTHROPIC_CUSTOM_HEADERS"] === undefined) {
     env["ANTHROPIC_CUSTOM_HEADERS"] = EXTENDED_CACHE_HEADER;
   }

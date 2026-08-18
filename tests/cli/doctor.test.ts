@@ -23,7 +23,7 @@ const named = (report: Awaited<ReturnType<typeof doctor>>, name: string) =>
 
 describe("T-050 pin checks (S-5)", () => {
   it("a matching SDK pin passes; a mismatch fails naming BOTH versions", async () => {
-    // fixture pins agent_sdk 0.3.191 == installed
+    /** fixture pins agent_sdk 0.3.191 == installed */
     const root = await fixture();
     const ok = await doctor(root, { installedSdkVersion: () => "0.3.191", env: {} });
     expect(named(ok, "agent-sdk-pin")?.ok).toBe(true);
@@ -39,7 +39,7 @@ describe("T-050 pin checks (S-5)", () => {
   it("the CLI pin rides the backend's own checkVersion, failing with its message", async () => {
     const root = await fixture();
     const backend = new MockBackend();
-    // The mock accepts any pin (version-free) — passes.
+    /** The mock accepts any pin (version-free) — passes. */
     const ok = await doctor(root, { backend, installedSdkVersion: () => "0.3.191", env: {} });
     expect(named(ok, "claude-code-pin")?.ok).toBe(true);
 
@@ -54,7 +54,7 @@ describe("T-050 pin checks (S-5)", () => {
     const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.191", env: {} });
     const check = named(bad, "claude-code-pin");
     expect(check?.ok).toBe(false);
-    // the pin from config
+    /** the pin from config */
     expect(check?.detail).toContain("2.1.191");
     expect(check?.detail).toContain("9.9.9");
   });
@@ -108,7 +108,7 @@ describe("T-050 smoke session (R-10)", () => {
     expect(check?.ok).toBe(true);
     expect(check?.detail).toContain("smoke OK");
     expect(backend.calls).toHaveLength(1);
-    // read-only smoke
+    /** read-only smoke */
     expect(backend.calls[0]?.spec.permissionMode).toBe("plan");
 
     const failing = new MockBackend({ review: () => okResult({ telemetryParsed: false }) });

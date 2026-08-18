@@ -142,9 +142,11 @@ describe("T-026 ambiguity is an interrupt, never a guess (V-1)", () => {
   });
 
   it("accepts an answer that came back through a checkpoint, not the same object", async () => {
-    // C-5 interrupts batch at phase boundaries and resume from a checkpoint
-    // (F-4), so the answer arrives in a later process. Reference identity
-    // cannot survive that; value identity must.
+    /**
+     * C-5 interrupts batch at phase boundaries and resume from a checkpoint
+     * (F-4), so the answer arrives in a later process. Reference identity
+     * cannot survive that; value identity must.
+     */
     const root = tree({ ...pkg({ test: "vitest run" }), Makefile: "test:\n\techo hi\n" });
     const choice = await bindSlot("test", discover(root).candidates, { root, runner: async (s) => okResult(s.command), now: NOW });
     if (choice.kind !== "choice-required") throw new Error("expected a choice");

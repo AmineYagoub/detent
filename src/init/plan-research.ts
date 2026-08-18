@@ -20,7 +20,7 @@ import { planningBriefSchema, type PlanningBrief } from "../schemas/init.js";
  */
 
 export function questionHash(question: string): string {
-  // Normalized: the same question asked twice is the same cache entry.
+  /* Normalized: the same question asked twice is the same cache entry. */
   return createHash("sha256").update(question.trim().toLowerCase().replace(/\s+/g, " ")).digest("hex");
 }
 
@@ -68,8 +68,10 @@ export async function planResearch(
     const hash = questionHash(question);
     const file = planningBriefPath(deps.root, hash);
 
-    // Cache first: a re-run of `init` answers a repeated question with ZERO
-    // web calls (C-3a's AC), which is why the key is the question itself.
+    /**
+     * Cache first: a re-run of `init` answers a repeated question with ZERO
+     * web calls (C-3a's AC), which is why the key is the question itself.
+     */
     if (existsSync(file)) {
       const parsed = parseArtifact(planningBriefSchema, JSON.parse(readFileSync(file, "utf8")));
       if (parsed.ok) {
@@ -83,7 +85,7 @@ export async function planResearch(
 
     const remaining = deps.budget - toolCallsUsed;
     if (remaining <= 0) {
-      // C-3a: no new interrupt class — the question joins the AWAIT_INFO batch.
+      /* C-3a: no new interrupt class — the question joins the AWAIT_INFO batch. */
       deps.note?.(`planning_research_tool_calls exhausted (${deps.budget}); "${question}" joins the AWAIT_INFO batch`);
       unanswered.push(question);
       continue;
@@ -91,8 +93,10 @@ export async function planResearch(
 
     const result = await deps.researchOne(question, remaining);
     sessionsLaunched += 1;
-    // Charge what was spent, clamped: a backend that over-reports must not be
-    // able to push the counter past the ceiling and hide the overrun.
+    /*
+     * Charge what was spent, clamped: a backend that over-reports must not be
+     * able to push the counter past the ceiling and hide the overrun.
+     */
     toolCallsUsed += Math.min(result.toolCalls, remaining);
 
     const parsed = parseArtifact(planningBriefSchema, result.brief);

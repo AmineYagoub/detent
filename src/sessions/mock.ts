@@ -42,7 +42,7 @@ export class MockBackend implements SessionBackend {
   constructor(private readonly script: Readonly<Record<string, StageFn>> = {}) {}
 
   async checkVersion(): Promise<void> {
-    // The mock is version-free (oracle parity).
+    /* The mock is version-free (oracle parity). */
   }
 
   async run(spec: SessionSpec): Promise<SessionResult> {

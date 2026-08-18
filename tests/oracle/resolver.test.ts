@@ -43,7 +43,7 @@ describe("T-013 ladder resolver (X-2, D-13)", () => {
           };
           const r = resolveRed(before);
           expect(LADDER).toContain(r.next);
-          // Monotone: a slot never decreases, and at most one is consumed.
+          /** Monotone: a slot never decreases, and at most one is consumed. */
           const deltas =
             r.counters.blind_fix_attempts - before.blind_fix_attempts +
             (r.counters.research_sessions - before.research_sessions) +
@@ -52,7 +52,7 @@ describe("T-013 ladder resolver (X-2, D-13)", () => {
           expect(r.counters.blind_fix_attempts).toBeGreaterThanOrEqual(before.blind_fix_attempts);
           expect(r.counters.research_sessions).toBeGreaterThanOrEqual(before.research_sessions);
           expect(r.counters.informed_fix_attempts).toBeGreaterThanOrEqual(before.informed_fix_attempts);
-          // All three consumed -> the ladder is closed.
+          /** All three consumed -> the ladder is closed. */
           if (blind === 1 && research === 1 && informed === 1) expect(r.next).toBe("NEEDS_HUMAN");
         }
       }
@@ -67,12 +67,12 @@ describe("T-013 ladder resolver (X-2, D-13)", () => {
       informed_fix_attempts: 1,
     };
     expect(apply("INFORMED_FIX", "GATE_RED", exhausted, ctx()).to).toBe("NEEDS_HUMAN");
-    // ...and it holds even with every slot free, which a resolver call would not.
+    /** ...and it holds even with every slot free, which a resolver call would not. */
     expect(apply("INFORMED_FIX", "GATE_RED", ZERO_COUNTERS, ctx()).to).toBe("NEEDS_HUMAN");
   });
 
   it("crash-resume property: exactly one blind fix across a full ladder traversal", () => {
-    // Oracle crash-resume class: kill mid-FIX, resume enters RESEARCH.
+    /** Oracle crash-resume class: kill mid-FIX, resume enters RESEARCH. */
     const afterBlind = apply("IN_PROGRESS", "GATE_RED", ZERO_COUNTERS, ctx());
     expect(afterBlind.to).toBe("BLIND_FIX");
     const resumed = apply("BLIND_FIX", "GATE_RED", afterBlind.counters, ctx());

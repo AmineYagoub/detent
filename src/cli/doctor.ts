@@ -51,7 +51,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
   const checks: DoctorCheck[] = [];
   const env = deps.env ?? process.env;
 
-  // ---- config loads; the computed worst case is reported (X-1) -------------
+  /** ---- config loads; the computed worst case is reported (X-1) ------------- */
   let loaded: LoadedConfig | null = null;
   const configPath = path.join(stateDir(root), "config.json");
   if (!existsSync(configPath)) {
@@ -71,7 +71,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
     }
   }
 
-  // ---- SDK pin (S-5) -------------------------------------------------------
+  /** ---- SDK pin (S-5) ------------------------------------------------------- */
   if (loaded !== null) {
     const installed = (deps.installedSdkVersion ?? installedSdk)();
     const pinned = loaded.config.pinned.agent_sdk;
@@ -84,7 +84,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
           : `MISMATCH: pinned ${pinned}, installed ${installed} (S-5 — upgrades are PRs gated on the fixture suite)`,
     });
 
-    // ---- CLI pin (S-5), via the backend's own check ------------------------
+    /** ---- CLI pin (S-5), via the backend's own check ------------------------ */
     if (deps.backend !== undefined) {
       try {
         await deps.backend.checkVersion(loaded.config.pinned.claude_code);
@@ -97,10 +97,12 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
     }
   }
 
-  // ---- WebFetch rule forms (S-3/PRDR-050) ---------------------------------
-  // PRDR-062: the domain list has no config home yet; doctor validates the
-  // FORM the composer emits, so a malformed domain fails here rather than
-  // becoming a silent no-op rule in a session.
+  /**
+   * ---- WebFetch rule forms (S-3/PRDR-050) ---------------------------------
+   * PRDR-062: the domain list has no config home yet; doctor validates the
+   * FORM the composer emits, so a malformed domain fails here rather than
+   * becoming a silent no-op rule in a session.
+   */
   const probeDomains = ["docs.example.com"];
   const malformed = researchTools(probeDomains)
     .filter((t) => t.startsWith("WebFetch("))
@@ -114,7 +116,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
         : `unrecognizable rule form(s): ${malformed.join(", ")} — a silent no-op here is an unenforced network boundary`,
   });
 
-  // ---- live smoke (R-10) ---------------------------------------------------
+  /** ---- live smoke (R-10) --------------------------------------------------- */
   if (env["ANTHROPIC_API_KEY"] === undefined || deps.backend === undefined) {
     checks.push({
       name: "smoke-session",

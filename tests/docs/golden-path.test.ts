@@ -57,11 +57,13 @@ describe("T-069 C-5: the interrupt set is frozen at five", () => {
   });
 
   it("no module raises a prompt outside the closed set (C-5's lint half)", () => {
-    // Prompting primitives may appear only where an interrupt is legitimately
-    // presented: escalation (X-8), `verify sync` drift confirmation, and the
-    // init CLI's inline AWAIT_APPROVAL prompt (C-7). Each presents one of the
-    // five closed interrupts; a `readline` anywhere else would be a sixth
-    // interrupt class in disguise.
+    /**
+     * Prompting primitives may appear only where an interrupt is legitimately
+     * presented: escalation (X-8), `verify sync` drift confirmation, and the
+     * init CLI's inline AWAIT_APPROVAL prompt (C-7). Each presents one of the
+     * five closed interrupts; a `readline` anywhere else would be a sixth
+     * interrupt class in disguise.
+     */
     const SANCTIONED = new Set(["cli/escalate.ts", "cli/verify.ts", "cli/approve.ts"]);
     const offenders: string[] = [];
     for (const file of walkTs(SRC)) {

@@ -16,7 +16,7 @@ import { PARITY, ORACLE_TEST_COUNT, LANDED_THROUGH, milestoneOf, statusOf } from
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PLAN = path.join(ROOT, "docs/implementation-plan.md");
 
-// ---- parity report ---------------------------------------------------------
+/* ---- parity report --------------------------------------------------------- */
 
 export function renderParity(): string {
   const rows = [...PARITY].sort((a, b) => a.oracle.localeCompare(b.oracle));
@@ -52,7 +52,7 @@ export function renderParity(): string {
   return lines.join("\n");
 }
 
-// ---- critical path ---------------------------------------------------------
+/* ---- critical path --------------------------------------------------------- */
 
 interface Ticket { readonly id: string; readonly deps: readonly string[] }
 
@@ -101,7 +101,7 @@ export function longestChain(tickets: readonly Ticket[]): string[] {
     if (cached !== undefined) return cached;
     let best = 0;
     let from: string | null = null;
-    // Ascending id breaks ties, so the output is stable across runs.
+    /** Ascending id breaks ties, so the output is stable across runs. */
     for (const d of [...byId.get(id)!.deps].sort()) {
       const v = solve(d, [...onPath, id]);
       if (v > best) { best = v; from = d; }
@@ -135,7 +135,7 @@ export function renderCriticalPath(tickets: readonly Ticket[]): string {
   ].join("\n");
 }
 
-// ---- entry point -----------------------------------------------------------
+/* ---- entry point ----------------------------------------------------------- */
 
 const OUTPUTS = () => {
   const tickets = parsePlan(readFileSync(PLAN, "utf8"));

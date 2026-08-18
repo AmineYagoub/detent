@@ -55,15 +55,17 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     const backend = new MockBackend({ implement: implementAuth, review: reviewApprove });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "risk", escalate });
 
-    // Approved in-run (C-10): the loop continued in-process to DONE.
+    /** Approved in-run (C-10): the loop continued in-process to DONE. */
     expect(outcome.exitCode).toBe(EXIT_OK);
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("DONE");
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.reason).toContain("risk-path change requires human approval");
 
-    // The journal shows the whole B-4 shape: risk → NEEDS_HUMAN → approval →
-    // APPROVED → re-verify (close-check gates) → DONE. Never a direct DONE.
+    /**
+     * The journal shows the whole B-4 shape: risk → NEEDS_HUMAN → approval →
+     * APPROVED → re-verify (close-check gates) → DONE. Never a direct DONE.
+     */
     const journal = readFileSync(path.join(root, ".detent/transitions.jsonl"), "utf8");
     expect(journal).toContain("RISK_LABEL_REQUIRED");
     expect(journal).toContain("HUMAN_APPROVED");
@@ -72,13 +74,13 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     const doneAt = lines.findIndex((l) => l.to === "DONE");
     expect(approvedAt).toBeGreaterThanOrEqual(0);
     expect(doneAt).toBeGreaterThan(approvedAt);
-    // the re-verify, not the approval
+    /** the re-verify, not the approval */
     expect(lines[doneAt]?.event).toBe("GATE_GREEN");
   });
 
   it("oracle test_risk_detection_on_master_based_repo: globs fire against a master-based repository", async () => {
     const root = await fixture(["src/auth/**"]);
-    // Rename the base to master BEFORE the run creates its branch.
+    /** Rename the base to master BEFORE the run creates its branch. */
     git(root, "branch", "-q", "-m", "main", "master");
     addTicket(root, { id: "t1", surface: ["src/**"] });
 
@@ -89,7 +91,7 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("NEEDS_HUMAN");
     expect(t1.notes.map((n) => n.text).join(" ")).toContain("src/auth/login.py");
-    // base intact
+    /** base intact */
     expect(git(root, "rev-parse", "master")).toBeTruthy();
   });
 
@@ -116,8 +118,10 @@ describe("T-049 C-10 escalation actions", () => {
         : { kind: "skip", by: "operator" };
     };
 
-    // Generation 0 exhausts the ladder; generation 1's implement acts on the
-    // guidance — it removes the failure gen 0 planted, then implements.
+    /**
+     * Generation 0 exhausts the ladder; generation 1's implement acts on the
+     * guidance — it removes the failure gen 0 planted, then implements.
+     */
     const backend = new MockBackend({
       "implement:0": implementRed,
       blind_fix: noopFix,
@@ -137,7 +141,7 @@ describe("T-049 C-10 escalation actions", () => {
     expect(t1.generations).toHaveLength(2);
     expect(t1.generations[0]).toMatchObject({ outcome: "requeued" });
     expect(t1.generations[1]?.reason).toBe("the fix is in the seed row");
-    // X-8: fresh counters in the new generation; the old record is frozen.
+    /** X-8: fresh counters in the new generation; the old record is frozen. */
     expect(t1.generations[0]?.counters.blind_fix_attempts).toBe(1);
     expect(t1.generations[1]?.counters.blind_fix_attempts).toBe(0);
   });
@@ -156,7 +160,7 @@ describe("T-049 C-10 escalation actions", () => {
 
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
     expect(readTicket(root, "t1").notes.map((n) => n.text).join(" ")).toContain("skipped at escalation");
-    // quit fired during t2's escalation: the run stopped, both pending.
+    /** quit fired during t2's escalation: the run stopped, both pending. */
     expect(outcome.summary.pending.map((p) => p.id).sort()).toEqual(["t1", "t2"]);
   });
 });
@@ -166,7 +170,7 @@ describe("T-049 A-8 dossier", () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
-    // Exhaust gen 0, requeue via escalation, exhaust gen 1, then skip.
+    /** Exhaust gen 0, requeue via escalation, exhaust gen 1, then skip. */
     let offered = 0;
     const escalate = async (): Promise<EscalationAction> => {
       offered += 1;
@@ -188,14 +192,16 @@ describe("T-049 A-8 dossier", () => {
     expect(dossier.artifact_index).toContain("last_failure.json");
 
     const summary = dossierSummary(t1, dossier);
-    // Cumulative across generations (X-8): gen 0 is a full 4-session ladder;
-    // gen 1 re-runs it with the research stage served from the D-18 cache —
-    // the slot consumed, no session launched — so 3 sessions there.
+    /**
+     * Cumulative across generations (X-8): gen 0 is a full 4-session ladder;
+     * gen 1 re-runs it with the research stage served from the D-18 cache —
+     * the slot consumed, no session launched — so 3 sessions there.
+     */
     expect(summary).toContain("generations: 2");
     expect(summary).toContain("7 sessions");
     expect(summary).toContain("4 fixes");
     expect(summary).toContain("2 research");
-    // The cache hit is visible in gen 1's counters: slot 1, and one fewer session.
+    /** The cache hit is visible in gen 1's counters: slot 1, and one fewer session. */
     expect(t1.generations[1]?.counters.research_sessions).toBe(1);
     expect(t1.generations[1]?.counters.sessions).toBe(3);
   });

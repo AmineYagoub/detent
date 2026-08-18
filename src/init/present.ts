@@ -85,9 +85,11 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     return { kind: "complete", outputs: { approved: true, approved_by: decision.by } };
   }
 
-  // C-7: declining or deferring both leave the plan READY-unapproved. The
-  // difference is only what the user was told; neither is an error, and the
-  // first `run` presents the same summary either way.
+  /*
+   * C-7: declining or deferring both leave the plan READY-unapproved. The
+   * difference is only what the user was told; neither is an error, and the
+   * first `run` presents the same summary either way.
+   */
   return {
     kind: "interrupt",
     interrupt: "AWAIT_APPROVAL",

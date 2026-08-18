@@ -50,7 +50,7 @@ export async function researchStage(deps: ResearchDeps): Promise<ResearchOutcome
   const env = await (deps.env ?? (() => fingerprint(deps.root)))();
   const key = signature === null ? null : cacheKey(signature, env);
 
-  // ---- cache read (D-18): key hit + version_facts agreement, else miss -----
+  /** ---- cache read (D-18): key hit + version_facts agreement, else miss ----- */
   if (key !== null) {
     const file = briefCachePath(deps.root, key);
     if (existsSync(file)) {
@@ -69,7 +69,7 @@ export async function researchStage(deps: ResearchDeps): Promise<ResearchOutcome
     }
   }
 
-  // ---- live session ---------------------------------------------------------
+  /* ---- live session --------------------------------------------------------- */
   await deps.launch({
     ...deps.ticketInputs,
     tool_call_ceiling: deps.toolCallCeiling,

@@ -28,7 +28,7 @@ describe("T-015 attempt generations (X-8, D-17)", () => {
   });
 
   it("the prior generation is preserved, closed, and stamped — not erased", () => {
-    // The oracle reset `attempts` in place; X-8 supersedes that (PRD §13).
+    /** The oracle reset `attempts` in place; X-8 supersedes that (PRD §13). */
     const spent = { ...ZERO_COUNTERS, blind_fix_attempts: 1, sessions: 5 };
     const gens = openGeneration({ generations: [gen(0, spent)] }, { at: AT });
     expect(gens[0]!.counters).toEqual(spent);
@@ -52,7 +52,7 @@ describe("T-015 attempt generations (X-8, D-17)", () => {
     const g1 = gen(1, { ...ZERO_COUNTERS, blind_fix_attempts: 1, sessions: 4 });
     const total = cumulativeCounters({ generations: [g0, g1] });
     expect(total.sessions).toBe(10);
-    // Per-generation the slot was consumed at most once; cumulatively it is 2.
+    /** Per-generation the slot was consumed at most once; cumulatively it is 2. */
     expect(total.blind_fix_attempts).toBe(2);
   });
 

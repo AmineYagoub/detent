@@ -27,7 +27,7 @@ export interface ParityEntry {
 }
 
 export const PARITY: readonly ParityEntry[] = [
-  // ---- test_state.py (7) ----------------------------------------------------
+  /* ---- test_state.py (7) ---------------------------------------------------- */
   { oracle: "test_state.py::test_illegal_transitions_raise", ticket: "T-011", ts: "tests/oracle/state.test.ts" },
   { oracle: "test_state.py::test_happy_paths", ticket: "T-011", ts: "tests/oracle/state.test.ts" },
   {
@@ -46,14 +46,14 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_state.py::test_budget_caps_hold_on_every_reachable_path", ticket: "T-012", ts: "tests/oracle/budgets.test.ts" },
   { oracle: "test_state.py::test_budget_breach_from_anywhere", ticket: "T-011", ts: "tests/oracle/state.test.ts" },
 
-  // ---- test_tickets.py (5) --------------------------------------------------
+  /* ---- test_tickets.py (5) -------------------------------------------------- */
   { oracle: "test_tickets.py::test_schema_enforced", ticket: "T-017", ts: "tests/oracle/tickets.test.ts" },
   { oracle: "test_tickets.py::test_ready_respects_dependencies", ticket: "T-017", ts: "tests/oracle/tickets.test.ts" },
   { oracle: "test_tickets.py::test_atomic_claim_exactly_one_winner", ticket: "T-017", ts: "tests/oracle/tickets.test.ts" },
   { oracle: "test_tickets.py::test_discovered_from_link", ticket: "T-017", ts: "tests/oracle/tickets.test.ts" },
   { oracle: "test_tickets.py::test_notes_append_only", ticket: "T-017", ts: "tests/oracle/tickets.test.ts" },
 
-  // ---- test_contract.py (7) -------------------------------------------------
+  /* ---- test_contract.py (7) ------------------------------------------------- */
   { oracle: "test_contract.py::test_valid", ticket: "T-014", ts: "tests/oracle/worstcase.test.ts" },
   { oracle: "test_contract.py::test_missing_and_unknown_keys", ticket: "T-014", ts: "tests/oracle/worstcase.test.ts" },
   {
@@ -67,7 +67,7 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_contract.py::test_gate_executes_and_flags_unrunnable", ticket: "T-020", ts: "tests/adapter/run.test.ts", note: "the reference raised inside `validate_gate`; the runner's half is `runnable()`, the refusal is T-026's" },
   { oracle: "test_contract.py::test_gate_accepts_runnable_failing_command", ticket: "T-020", ts: "tests/adapter/run.test.ts" },
 
-  // ---- test_gates.py (7) ----------------------------------------------------
+  /* ---- test_gates.py (7) ---------------------------------------------------- */
   { oracle: "test_gates.py::test_flake", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
   { oracle: "test_gates.py::test_toolchain", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
   { oracle: "test_gates.py::test_assertion_default", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
@@ -76,8 +76,10 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_gates.py::test_run_and_flake_filter", ticket: "T-022", ts: "tests/kernel/flake.test.ts" },
   { oracle: "test_gates.py::test_persistent_failure_survives_filter", ticket: "T-022", ts: "tests/kernel/flake.test.ts" },
 
-  // ---- test_hooks.py (7) ----------------------------------------------------
-  // PRDR-050: these close at T-046 against a PreToolUse hook, not canUseTool.
+  /*
+   * ---- test_hooks.py (7) ----------------------------------------------------
+   * PRDR-050: these close at T-046 against a PreToolUse hook, not canUseTool.
+   */
   { oracle: "test_hooks.py::test_allows_in_surface", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
   { oracle: "test_hooks.py::test_denies_protected", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
   { oracle: "test_hooks.py::test_denies_out_of_surface_with_escape_hatch_hint", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
@@ -91,7 +93,7 @@ export const PARITY: readonly ParityEntry[] = [
     note: "the oracle's hooks were subprocess scripts over active_surface.json; the SDK registers the same pure decisions as in-process PreToolUse/Stop callbacks (D-21), so the seven ports run at the decision layer",
   },
 
-  // ---- test_extra.py (8) ----------------------------------------------------
+  /* ---- test_extra.py (8) ---------------------------------------------------- */
   { oracle: "test_extra.py::test_upstream_blocks_with_linked_ticket", ticket: "T-045", ts: "tests/kernel/stages.test.ts" },
   { oracle: "test_extra.py::test_unparsable_telemetry_is_budget_breaching", ticket: "T-046", ts: "tests/sessions/sdk.test.ts" },
   {
@@ -131,7 +133,7 @@ export const PARITY: readonly ParityEntry[] = [
     note: "risk globs match against any base name — changedFiles reads the recorded run-branch base, never a hardcoded main",
   },
 
-  // ---- test_kernel_e2e.py (11) ---------------------------------------------
+  /* ---- test_kernel_e2e.py (11) --------------------------------------------- */
   {
     oracle: "test_kernel_e2e.py::test_feature_to_done_and_merged",
     ticket: "T-041",

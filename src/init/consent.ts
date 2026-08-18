@@ -92,8 +92,10 @@ export async function runConsented(command: string, rationale: string, deps: Con
   return { kind: "executed", exitCode: result.normalizedExit, output: result.output };
 }
 
-// ---------------------------------------------------------------------------
-// C-6's three-way configuration rule
+/*
+ * ---------------------------------------------------------------------------
+ * C-6's three-way configuration rule
+ */
 
 export type ConfigWriteOutcome =
   | { readonly kind: "created"; readonly file: string }

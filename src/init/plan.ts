@@ -79,7 +79,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     }
   }
 
-  // ---- C-4: greenfield gets bootstrap #1, and everything blocks on it ------
+  /** ---- C-4: greenfield gets bootstrap #1, and everything blocks on it ------ */
   const written: Ticket[] = [];
   if (deps.greenfield) {
     written.push(createBootstrapTicket(deps));
@@ -102,12 +102,12 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     );
   }
 
-  // ---- A-2: the plan artifact -------------------------------------------
+  /** ---- A-2: the plan artifact ------------------------------------------- */
   const plan: Plan = planSchema.parse({
     schema_version: 1,
     tickets: written.map((t) => t.id),
     edges: written.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
-    // PREPARE_AGENTS fills these (T-067)
+    /* PREPARE_AGENTS fills these (T-067) */
     assignments: {},
     input_doc_hashes: Object.fromEntries(
       deps.docs.map((doc) => [doc, hashFile(path.join(deps.root, ...doc.split("/")))]),
@@ -158,15 +158,17 @@ function createBootstrapTicket(deps: PlanDeps): Ticket {
       "Detent's own state directory `.detent/` holds no project configuration (F-2).",
       "No feature work — this ticket establishes the ground the other tickets stand on.",
     ],
-    // scaffolding necessarily touches the whole tree
+    /* scaffolding necessarily touches the whole tree */
     surface: ["**"],
-    // claimed first
+    /* claimed first */
     priority: 100,
   });
 }
 
-// ---------------------------------------------------------------------------
-// The other half of C-4: finalization when bootstrap #1 goes DONE
+/*
+ * ---------------------------------------------------------------------------
+ * The other half of C-4: finalization when bootstrap #1 goes DONE
+ */
 
 /**
  * C-4: "Greenfield bindings are recorded `provisional` at init and finalized —
@@ -217,9 +219,11 @@ export function finalizeBootstrap(
     }
     const now = candidates.find((c) => c.slot === binding.slot);
     if (now === undefined) {
-      // Bootstrap's gates passed, so SOMETHING ran — but nothing discoverable
-      // backs this slot. Keeping it provisional is the honest record: an
-      // approved binding with no config region has no baseline to drift from.
+      /*
+       * Bootstrap's gates passed, so SOMETHING ran — but nothing discoverable
+       * backs this slot. Keeping it provisional is the honest record: an
+       * approved binding with no config region has no baseline to drift from.
+       */
       unresolved.push(binding.slot);
       finalized.push(binding);
       continue;

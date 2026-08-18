@@ -101,7 +101,7 @@ const PLANS: readonly FixturePlan[] = [
   {
     fixture: "go-cli",
     ecosystem: "go",
-    // no go.sum: a zero-dependency module (R-7 fallback)
+    /* no go.sum: a zero-dependency module (R-7 fallback) */
     lockfile: NO_LOCKFILE,
     bound: { test: ["make", "make test"], lint: ["go", "go vet ./..."], build: ["go", "go build ./..."] },
     choose: { slot: "test", adapter: "make" },
@@ -136,13 +136,13 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
   cpSync(path.join(FIXTURES, plan.fixture), root, { recursive: true });
   initLayout(root);
 
-  // --- discover -------------------------------------------------------------
+  /** --- discover ------------------------------------------------------------- */
   const fp = await fingerprint(root, { probeRuntimes: false });
   expect(fp.ecosystems.map((e) => e.ecosystem)).toEqual([plan.ecosystem]);
   expect(fp.ecosystems[0]?.lockfile).toBe(plan.lockfile);
   expect(detectWorkspace(gatherFacts(root))).toBeNull();
 
-  // --- execute + approve (V-1: every candidate runs before approval) --------
+  /** --- execute + approve (V-1: every candidate runs before approval) -------- */
   const report = await bindAll(discover(root), { root, timeoutMs: PROBE_TIMEOUT_MS });
   const bindings: Binding[] = [...report.bindings];
 
@@ -166,7 +166,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
   for (const [slot, [adapter, resolved]] of expected) {
     const binding = bindings.find((b) => b.slot === slot);
     expect(binding, slot).toMatchObject({ adapter, resolved, status: "approved" });
-    // C-3b provenance: auto everywhere a human did not choose.
+    /** C-3b provenance: auto everywhere a human did not choose. */
     expect(binding?.approved_by).toBe(plan.choose?.slot === slot ? "dev" : "auto");
   }
   expect([...report.unbound].sort()).toEqual([...plan.skips].sort());
@@ -175,7 +175,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
   expect(readBindings(root).bindings).toEqual(bindings);
   expect(assertNoDrift(readBindings(root).bindings, discover(root)).halting).toEqual([]);
 
-  // --- the run loop's path: every approved binding executes green as stored -
+  /** --- the run loop's path: every approved binding executes green as stored - */
   for (const binding of bindings) {
     const rerun = await runGate({
       command: binding.resolved,
@@ -188,7 +188,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
     expect(rerun.green, `${binding.slot}: ${binding.resolved}\n${rerun.output}`).toBe(true);
   }
 
-  // --- drift (V-3): edit the defining region, halt, re-baseline -------------
+  /* --- drift (V-3): edit the defining region, halt, re-baseline ------------- */
   plan.drift.edit(root);
   const before = readBindings(root).bindings;
   let halted: DriftHaltError | null = null;
@@ -203,7 +203,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
   expect(halted?.message).toContain(before.find((b) => b.slot === plan.drift.slot)?.config_hash);
 
   if (plan.choose === undefined) {
-    // `verify sync` re-runs V-1 — including execution — and re-baselines.
+    /** `verify sync` re-runs V-1 — including execution — and re-baselines. */
     const declined = await verifySync(root, { consent: async () => false });
     expect(declined.exitCode).toBe(EXIT_NOT_READY);
     expect(readBindings(root).bindings).toEqual(before);
@@ -212,8 +212,10 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
     expect(accepted.exitCode).toBe(EXIT_OK);
     expect(accepted.summary.drift.filter((d) => d.status === "drifted").map((d) => d.slot)).toEqual([plan.drift.slot]);
   } else {
-    // The ambiguous slot stays ambiguous, so sync refuses to guess (V-1) —
-    // asserted, because refusing is the correct behaviour, not a limitation.
+    /**
+     * The ambiguous slot stays ambiguous, so sync refuses to guess (V-1) —
+     * asserted, because refusing is the correct behaviour, not a limitation.
+     */
     let consulted = false;
     const refused = await verifySync(root, {
       consent: async () => {
@@ -225,7 +227,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
     expect(consulted).toBe(false);
     expect(refused.messages.join(" ")).toContain("plausible candidates");
 
-    // The human resolves it, exactly as at init; unchanged bindings survive.
+    /** The human resolves it, exactly as at init; unchanged bindings survive. */
     const choice = await bindSlot(plan.choose.slot, discover(root).candidates, { root, timeoutMs: PROBE_TIMEOUT_MS });
     if (choice.kind !== "choice-required") throw new Error("expected the ambiguity to persist");
     const chosen = choice.candidates.find((c) => c.adapter === plan.choose?.adapter) as Candidate;
@@ -239,7 +241,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
 
   const after = readBindings(root).bindings;
   expect(assertNoDrift(after, discover(root)).halting).toEqual([]);
-  // Drift is about the defining region, not the command: same resolved, new hash.
+  /** Drift is about the defining region, not the command: same resolved, new hash. */
   expect(after.find((b) => b.slot === plan.drift.slot)?.resolved).toBe(before.find((b) => b.slot === plan.drift.slot)?.resolved);
   expect(after.find((b) => b.slot === plan.drift.slot)?.config_hash).not.toBe(
     before.find((b) => b.slot === plan.drift.slot)?.config_hash,
@@ -295,7 +297,7 @@ describe("T-030 bindings-only diffs between fixtures", () => {
       expect(Object.keys(parsed).sort()).toEqual(["bindings", "schema_version", "skips"]);
       expect(parsed["schema_version"]).toBe(1);
     }
-    // Pairwise distinct: the ecosystem lives in the values, nowhere else.
+    /** Pairwise distinct: the ecosystem lives in the values, nowhere else. */
     for (let i = 0; i < done.length; i += 1) {
       for (let j = i + 1; j < done.length; j += 1) {
         expect(done[i]!.bindingsJson).not.toBe(done[j]!.bindingsJson);
@@ -308,15 +310,17 @@ describe("T-030 zero kernel involvement (N-1)", () => {
   it("this e2e and every layer beside the kernel import nothing from it; the CLI only its entry points", () => {
     const kernelImport = /from\s+"[^"]*\/kernel\//;
     expect(readFileSync(fileURLToPath(import.meta.url), "utf8")).not.toMatch(kernelImport);
-    // adapter, fs and schemas sit beside/below the kernel: zero kernel imports.
+    /** adapter, fs and schemas sit beside/below the kernel: zero kernel imports. */
     for (const dir of ["adapter", "fs", "schemas"]) {
       for (const file of walkTs(path.join(SRC, dir))) {
         expect(readFileSync(file, "utf8"), file).not.toMatch(kernelImport);
       }
     }
-    // The CLI sits ABOVE the kernel in §3a — importing kernel entry points is
-    // the diagram's own edge. What it must never touch is the machine or the
-    // mutators, mirroring the lint zone (PRDR-059).
+    /**
+     * The CLI sits ABOVE the kernel in §3a — importing kernel entry points is
+     * the diagram's own edge. What it must never touch is the machine or the
+     * mutators, mirroring the lint zone (PRDR-059).
+     */
     const forbidden = /from\s+"[^"]*\/kernel\/(machine|tickets\/mutations)/;
     for (const file of walkTs(path.join(SRC, "cli"))) {
       expect(readFileSync(file, "utf8"), file).not.toMatch(forbidden);
@@ -324,7 +328,7 @@ describe("T-030 zero kernel involvement (N-1)", () => {
   });
 
   it("the kernel contains no stack strings (oracle test_kernel_contains_no_stack_strings, strengthened)", () => {
-    // Assembled from pieces so this file stays clean, exactly as the oracle did.
+    /** Assembled from pieces so this file stays clean, exactly as the oracle did. */
     const banned = [
       ["np", "m "],
       ["pnp", "m "],

@@ -30,8 +30,10 @@ function tryGit(cwd: string, ...args: string[]): string | null {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Run branch (B-1)
+/*
+ * ---------------------------------------------------------------------------
+ * Run branch (B-1)
+ */
 
 export interface RunBranch {
   readonly branch: string;
@@ -58,8 +60,10 @@ export function ensureRunBranch(root: string, runId: string): RunBranch {
   return { branch, base: current };
 }
 
-// ---------------------------------------------------------------------------
-// Trailers (B-1)
+/*
+ * ---------------------------------------------------------------------------
+ * Trailers (B-1)
+ */
 
 /**
  * Sessions commit; the kernel cannot rewrite their history (and must not).
@@ -120,8 +124,10 @@ export function commitsOn(root: string, branch: string, since: string): readonly
     });
 }
 
-// ---------------------------------------------------------------------------
-// Base-write guard (B-3, P7)
+/*
+ * ---------------------------------------------------------------------------
+ * Base-write guard (B-3, P7)
+ */
 
 export type RefSnapshot = ReadonlyMap<string, string>;
 
@@ -163,7 +169,7 @@ export function enforceBaseGuard(root: string, snapshot: RefSnapshot, runBranch:
       git(root, "update-ref", `refs/heads/${ref}`, was);
     }
   }
-  // A brand-new non-run branch created by a session is also a write.
+  /** A brand-new non-run branch created by a session is also a write. */
   for (const [ref] of now) {
     if (snapshot.has(ref) || ref === runBranch || ref.startsWith(TICKET_BRANCH_PREFIX)) continue;
     violations.push({ ref, was: "(absent)", became: now.get(ref) ?? null });
@@ -172,8 +178,10 @@ export function enforceBaseGuard(root: string, snapshot: RefSnapshot, runBranch:
   return violations;
 }
 
-// ---------------------------------------------------------------------------
-// Worktree mode (B-2)
+/*
+ * ---------------------------------------------------------------------------
+ * Worktree mode (B-2)
+ */
 
 export function worktreePath(root: string, ticketId: string): string {
   return path.join(root, ".detent", "worktrees", ticketId);
@@ -220,8 +228,10 @@ export function baseReflogWrites(root: string, base: string): number {
   return Math.max(0, entries.length - 1);
 }
 
-// ---------------------------------------------------------------------------
-// Crash recovery (B-5)
+/*
+ * ---------------------------------------------------------------------------
+ * Crash recovery (B-5)
+ */
 
 /**
  * B-5: uncommitted worktree changes at resume are reset to the last ticket
@@ -241,8 +251,10 @@ export function resetDirtyTracked(cwd: string): string[] {
   return dirty;
 }
 
-// ---------------------------------------------------------------------------
-// V-5 [BASE] resolution (draft.7, T-042's half)
+/*
+ * ---------------------------------------------------------------------------
+ * V-5 [BASE] resolution (draft.7, T-042's half)
+ */
 
 /**
  * `[BASE]` is the merge-base of the run branch and its base branch, resolved

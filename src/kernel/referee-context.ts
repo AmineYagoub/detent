@@ -100,9 +100,9 @@ export class RefereeContext {
       2,
     );
     this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd);
-    // P7: every ref except the run branch is protected ground for this run.
+    /* P7: every ref except the run branch is protected ground for this run. */
     this.refs = snapshotRefs(opts.root);
-    // V-5: the run's baseline, resolved once; null falls back to root commands.
+    /* V-5: the run's baseline, resolved once; null falls back to root commands. */
     this.baseRef = resolveBaseRef(opts.root, runBranch);
   }
 

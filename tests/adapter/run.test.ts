@@ -83,14 +83,16 @@ describe("T-020 timeout (V-1 watch-mode substrate)", () => {
     expect(looksLikeWatchMode(r)).toBe(true);
     expect(r.exitCode).toBeNull();
     expect(r.normalizedExit).toBe(TIMEOUT_EXIT);
-    // X-5 reads exitCode === null as environmental until a rerun proves otherwise.
+    /** X-5 reads exitCode === null as environmental until a rerun proves otherwise. */
     expect(classify(r.output, r.exitCode).patternClass).toBe("flake-pattern");
     expect(classify(r.output, r.exitCode).suspectedFlake).toBe(true);
   });
 
   it("the whole process group dies, not just the shell", async () => {
-    // The shell exits immediately; the grandchild would hold the pipes open and
-    // outlive the timeout if only the shell were killed.
+    /**
+     * The shell exits immediately; the grandchild would hold the pipes open and
+     * outlive the timeout if only the shell were killed.
+     */
     const r = await runGate({
       command: "sleep 30 & wait",
       cwd: tree(),
@@ -136,7 +138,7 @@ describe("T-020 invocation surface", () => {
     expect(r.green).toBe(true);
     expect(r.output).toContain("marker.txt");
     expect(r.output).toContain("1");
-    // PATH survives, so the caller supplies additions rather than a whole env.
+    /** PATH survives, so the caller supplies additions rather than a whole env. */
     const p = await runGate({ command: "test -n \"$PATH\"", cwd: root, env: { DETENT_TEST_VAR: "1" } });
     expect(p.green).toBe(true);
   });

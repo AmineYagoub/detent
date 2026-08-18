@@ -146,11 +146,13 @@ export function workspaceCandidates(workspace: Workspace): Candidate[] {
     );
   }
 
-  // V-5: an affected filter where the orchestrator has one — stored as the
-  // template with the `BASE` placeholder intact, substituted at invocation
-  // time against the run's merge-base (PRDR-060; normalize.ts). Otherwise the
-  // root test command is the fallback, because D-5 forbids per-ticket
-  // arguments and a wrong single-test binding is worse than a slow correct one.
+  /**
+   * V-5: an affected filter where the orchestrator has one — stored as the
+   * template with the `BASE` placeholder intact, substituted at invocation
+   * time against the run's merge-base (PRDR-060; normalize.ts). Otherwise the
+   * root test command is the fallback, because D-5 forbids per-ticket
+   * arguments and a wrong single-test binding is worse than a slow correct one.
+   */
   const single = spec.affected ?? spec.gates.test;
   if (single !== undefined) {
     out.push(

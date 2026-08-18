@@ -63,8 +63,10 @@ export class RunJournal {
     appendFileSync(path.join(stateDir(this.root), "ledger.jsonl"), `${JSON.stringify(ledgerRowSchema.parse(row))}\n`);
   }
 
-  // ---- per-ticket session journal (B-5). Keyed per ticket, serialized by the
-  // C-9 claim, so it is not part of the single-writer registry.
+  /*
+   * ---- per-ticket session journal (B-5). Keyed per ticket, serialized by the
+   * C-9 claim, so it is not part of the single-writer registry.
+   */
 
   ticketJournalPath(ticketId: string): string {
     return path.join(stateDir(this.root), "runs", ticketId, "journal.jsonl");

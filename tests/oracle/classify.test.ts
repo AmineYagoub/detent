@@ -6,7 +6,7 @@ describe("T-016 classification and signatures (X-5, X-7, D-14)", () => {
     const r = classify("Error: connect ETIMEDOUT 10.0.0.1:5432", 1);
     expect(r.suspectedFlake).toBe(true);
     expect(r.patternClass).toBe("flake-pattern");
-    // D-14: there is no field a caller could read as "non-actionable".
+    /** D-14: there is no field a caller could read as "non-actionable". */
     expect(Object.keys(r).sort()).toEqual(["patternClass", "signature", "suspectedFlake"]);
   });
 
@@ -46,11 +46,13 @@ AssertionError: expected 1 to equal 2
   });
 
   it("a real regression whose output matches a flake pattern is still only *suspected* (D-14)", () => {
-    // Adversarial: the message contains "timed out" but is a genuine assertion.
+    /** Adversarial: the message contains "timed out" but is a genuine assertion. */
     const r = classify("AssertionError: request timed out after retry budget exhausted", 1);
     expect(r.suspectedFlake).toBe(true);
-    // The classifier cannot absolve it — quarantine needs a green rerun (T-022),
-    // which this module deliberately provides no way to express.
+    /**
+     * The classifier cannot absolve it — quarantine needs a green rerun (T-022),
+     * which this module deliberately provides no way to express.
+     */
     expect(r).not.toHaveProperty("nonActionable");
     expect(r).not.toHaveProperty("quarantine");
   });

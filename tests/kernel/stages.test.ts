@@ -72,7 +72,7 @@ describe("T-043 X-4: the kernel executes the repro", () => {
       writeTree(wt, { "src/feature-t1.txt": "done\n" });
       git(wt, "add", "-A");
       git(wt, "commit", "-q", "-m", "t1: corrected implementation");
-      // The fix removes the failure the diagnose stage planted.
+      /** The fix removes the failure the diagnose stage planted. */
       rmSync(path.join(wt, ".fail"), { force: true });
       return okResult();
     };
@@ -97,7 +97,7 @@ describe("T-043 X-4: the kernel executes the repro", () => {
     const root = await fixture();
     addTicket(root, { id: "t1", type: "bug" });
 
-    // The repro PASSES — the hypothesis never verifies (X-4).
+    /** The repro PASSES — the hypothesis never verifies (X-4). */
     const wrongHypothesis = writeArtifactStage({
       schema_version: 1,
       claim: "lint is broken",
@@ -173,8 +173,10 @@ describe("T-044 review routing (D-6, A-5)", () => {
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("NEEDS_HUMAN");
-    // D-6 divergence from the oracle's shared fix pool: review has its OWN
-    // unit budget, so the second changes verdict escalates directly.
+    /**
+     * D-6 divergence from the oracle's shared fix pool: review has its OWN
+     * unit budget, so the second changes verdict escalates directly.
+     */
     expect(t1.generations.at(-1)!.counters.review_fix_attempts).toBe(1);
     expect(t1.generations.at(-1)!.counters.blind_fix_attempts).toBe(0);
   });
@@ -191,7 +193,7 @@ describe("T-044 review routing (D-6, A-5)", () => {
     const variable = JSON.parse(reviewCall!.spec.promptVariable) as { inputs: Record<string, unknown> };
     expect(Object.keys(variable.inputs).sort()).toEqual([...REVIEWER_INPUT_KEYS].sort());
     expect(Object.keys(variable.inputs["ticket"] as object).sort()).toEqual([...REVIEWER_TICKET_KEYS].sort());
-    // The rules travel in the stable prefix, not the variable inputs (S-6).
+    /** The rules travel in the stable prefix, not the variable inputs (S-6). */
     expect(reviewCall!.spec.promptPrefix).toContain("== RULES ==");
   });
 
@@ -220,25 +222,25 @@ describe("T-045 research cache (X-6, D-18)", () => {
       implement: implementRed,
       blind_fix: noopFix,
       research: researchValid,
-      // t1 exhausts → NEEDS_HUMAN, brief cached
+      /* t1 exhausts → NEEDS_HUMAN, brief cached */
       "t1:informed_fix": noopFix,
-      // t2 hits the cache, then succeeds
+      /* t2 hits the cache, then succeeds */
       "t2:informed_fix": fixGreen,
       review: reviewApprove,
     });
     const outcome = await run(opts(root, backend));
 
-    // t1 pending; t2 done
+    /** t1 pending; t2 done */
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
     expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN");
     expect(readTicket(root, "t2").state).toBe("DONE");
 
-    // Zero research calls for t2; the slot was still consumed on entry (X-2).
+    /** Zero research calls for t2; the slot was still consumed on entry (X-2). */
     expect(backend.callsFor("t2").map((c) => c.role)).not.toContain("research");
     expect(readTicket(root, "t2").generations.at(-1)!.counters.research_sessions).toBe(1);
     expect(readTicket(root, "t2").notes.map((n) => n.text).join(" ")).toContain("research cache hit");
 
-    // Exactly one brief in the env-keyed cache, shared by both tickets.
+    /** Exactly one brief in the env-keyed cache, shared by both tickets. */
     const failures = path.join(root, ".detent/research/failures");
     const { readdirSync } = await import("node:fs");
     expect(readdirSync(failures).filter((f) => f.endsWith(".json"))).toHaveLength(1);
@@ -311,12 +313,12 @@ describe("T-045 research cache (X-6, D-18)", () => {
       readFailureSignature: () => signature,
       toolCallCeiling: 8,
       note: () => {},
-      // same lockfile+runtime → same KEY, contradicting facts
+      /* same lockfile+runtime → same KEY, contradicting facts */
       env: async () => envB,
       ticketInputs: {},
     });
 
-    // the hit was refused; a live session ran
+    /** the hit was refused; a live session ran */
     expect(launches).toBe(1);
     expect(outcome.cached).toBe(false);
   });

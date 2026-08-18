@@ -86,8 +86,10 @@ export function initLayout(root: string): void {
   writeFileSync(path.join(stateDir(root), ".gitignore"), gitignoreBody());
 }
 
-// ---------------------------------------------------------------------------
-// F-2 boundary
+/*
+ * ---------------------------------------------------------------------------
+ * F-2 boundary
+ */
 
 export interface BoundaryRule {
   readonly name: string;
@@ -191,7 +193,7 @@ function walk(dir: string, prefix = ""): string[] {
     const abs = path.join(dir, name);
     const rel = prefix === "" ? name : `${prefix}/${name}`;
     if (statSync(abs).isDirectory()) {
-      // A directory can itself be a violation (an empty `node_modules/`).
+      /* A directory can itself be a violation (an empty `node_modules/`). */
       out.push(`${rel}/`);
       out.push(...walk(abs, rel));
     } else {
@@ -201,8 +203,10 @@ function walk(dir: string, prefix = ""): string[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// F-3 stamping
+/*
+ * ---------------------------------------------------------------------------
+ * F-3 stamping
+ */
 
 export class UnstampedArtifactError extends Error {
   constructor(readonly rel: string) {

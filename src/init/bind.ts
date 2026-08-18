@@ -96,7 +96,7 @@ export interface DetermineOutputs {
 export async function determineVerification(deps: DetermineDeps): Promise<PhaseOutcome> {
   const at = deps.now?.() ?? new Date().toISOString();
 
-  // ---- greenfield: propose from the chosen stack, do not execute (C-4) ----
+  /** ---- greenfield: propose from the chosen stack, do not execute (C-4) ---- */
   if (deps.greenfield) {
     const bindings = provisionalBindingsFor(deps.analysis ?? null, at);
     if (bindings.length === 0) {
@@ -129,13 +129,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
   const report: BindReport = await bindAll(discovery, {
     root: deps.root,
     status,
-    // C-3b's provenance for anything a human did not choose
+    /* C-3b's provenance for anything a human did not choose */
     approvedBy: "auto",
     ...(deps.timeoutMs === undefined ? {} : { timeoutMs: deps.timeoutMs }),
     ...(deps.now === undefined ? {} : { now: deps.now }),
   });
 
-  // ---- C-3b interrupt 1: two plausible candidates — never a guess (V-1) ----
+  /** ---- C-3b interrupt 1: two plausible candidates — never a guess (V-1) ---- */
   const choices = report.interrupts.filter((i) => i.kind === "choice-required");
   if (choices.length > 0) {
     return {
@@ -155,7 +155,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     };
   }
 
-  // ---- C-3b interrupt 2: the sole candidate could not be executed ----------
+  /** ---- C-3b interrupt 2: the sole candidate could not be executed ---------- */
   const rejected = report.interrupts.filter((i) => i.kind === "rejected");
   if (rejected.length > 0) {
     return {
@@ -169,7 +169,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     };
   }
 
-  // ---- C-3b interrupt 3: no candidate where one is required ---------------
+  /** ---- C-3b interrupt 3: no candidate where one is required --------------- */
   const missingRequired = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
   if (missingRequired.length > 0) {
     return {
@@ -185,7 +185,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     };
   }
 
-  // Every remaining unbound slot is an ordinary acknowledged skip (V-1).
+  /** Every remaining unbound slot is an ordinary acknowledged skip (V-1). */
   const skips = report.unbound
     .filter((slot) => !SETUP_REQUIRED_SLOTS.includes(slot))
     .map((slot) => acknowledgeSkip(slot, deps.acknowledgedBy ?? "auto", deps.now?.() ?? new Date().toISOString()));

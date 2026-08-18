@@ -101,7 +101,7 @@ export class RefereeCore {
     return this.ctx.root;
   }
 
-  // -------------------------------------------------------------- escrow
+  /* -------------------------------------------------------------- escrow */
 
   private mintFor(ticketId: string, event: KernelEvent): string {
     const ref = `ev-${++this.escrowSeq}`;
@@ -131,7 +131,7 @@ export class RefereeCore {
     return entry.event;
   }
 
-  // ------------------------------------------------------- pool + claims
+  /* ------------------------------------------------------- pool + claims */
 
   /** The claimable pool; performs the V-3 drift-requeue sweep lazily once. */
   pool(): { id: string; state: State }[] {
@@ -140,9 +140,11 @@ export class RefereeCore {
       this.requeueDriftBlocked();
     }
     const readyPool = ready(this.root);
-    // A claimed in-flight ticket is skipped, exactly as the oracle skipped
-    // them: retrying a claim that cannot succeed would spin forever. Breaking
-    // a STALE claim (owner dead) is plumbing's job under C-12's discipline.
+    /**
+     * A claimed in-flight ticket is skipped, exactly as the oracle skipped
+     * them: retrying a claim that cannot succeed would spin forever. Breaking
+     * a STALE claim (owner dead) is plumbing's job under C-12's discipline.
+     */
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );
@@ -166,8 +168,10 @@ export class RefereeCore {
     if (ticket.state === "READY") {
       return { ok: true, claimedRef: this.mintFor(id, claimed()) };
     }
-    // B-5: uncommitted tracked changes at resume are reset to the last ticket
-    // commit; untracked files stay — the gate judges the tree as-is.
+    /**
+     * B-5: uncommitted tracked changes at resume are reset to the last ticket
+     * commit; untracked files stay — the gate judges the tree as-is.
+     */
     const reset = resetDirtyTracked(workDir);
     if (reset.length > 0) {
       appendNote(this.root, id, { author: "kernel", text: `B-5 resume reset: ${reset.join(", ")}` });
@@ -192,7 +196,7 @@ export class RefereeCore {
     this.gates.clearTicket(id);
   }
 
-  // -------------------------------------------------- drift (V-3, D-23)
+  /* -------------------------------------------------- drift (V-3, D-23) */
 
   private requeueDriftBlocked(): void {
     const bindings = readBindings(this.root).bindings;
@@ -235,7 +239,7 @@ export class RefereeCore {
     return `verification changed — re-baseline (V-3): ${halt.halting.map((h) => h.message).join(" | ")}`;
   }
 
-  // ------------------------------------------------------ derived moves
+  /* ------------------------------------------------------ derived moves */
 
   /** R-4: the sole billable path — the session arm meters, this core mints. */
   async attempt(id: string, state: (typeof ATTEMPT_STATES)[number]): Promise<{ falsifiedRef?: string }> {
@@ -276,7 +280,7 @@ export class RefereeCore {
     return { ref: this.mintFor(id, humanRequeue(`requeue by ${action.by}: ${action.guidance}`)) };
   }
 
-  // ------------------------------------------------- lifecycle bookkeeping
+  /* ------------------------------------------------- lifecycle bookkeeping */
 
   addNote(id: string, author: string, text: string): void {
     appendNote(this.root, id, { author, text });
@@ -321,8 +325,10 @@ export class RefereeCore {
   finalizeDone(id: string): void {
     const ticket = readTicket(this.root, id);
     const workDir = this.ctx.workDirFor(id);
-    // C-4: bootstrap #1's gates just passed, so greenfield's provisional
-    // bindings become the baseline. A no-op for every other ticket.
+    /**
+     * C-4: bootstrap #1's gates just passed, so greenfield's provisional
+     * bindings become the baseline. A no-op for every other ticket.
+     */
     finalizeBootstrap(this.root, ticket.id, {
       readBindings: () => readBindings(this.root),
       writeBindings: (file) => writeBindings(this.root, file as { bindings: Binding[]; skips: never[] }),
@@ -332,11 +338,11 @@ export class RefereeCore {
     git(workDir, "add", "-A");
     const dirty = git(workDir, "status", "--porcelain").trim();
     if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
-    // B-2: worktree mode merges --no-ff into the RUN branch — never the base.
+    /** B-2: worktree mode merges --no-ff into the RUN branch — never the base. */
     if (this.ctx.worktree) mergeWorktree(this.root, ticket.id);
   }
 
-  // -------------------------------------------------------------- admit
+  /* -------------------------------------------------------------- admit */
 
   /**
    * THE apply site (ARCH-1). Redeems a single-use evidence ref minted by a
@@ -376,7 +382,7 @@ export class RefereeCore {
     return writeTicket(this.root, updated);
   }
 
-  // ------------------------------------------------------------- reads
+  /* ------------------------------------------------------------- reads */
 
   statusData(): { pending: PendingEntry[]; states: { id: string; state: State }[] } {
     const tickets = allTickets(this.root);

@@ -14,7 +14,7 @@ describe("T-011 transition table (X-3)", () => {
         expect(() => apply(s, e, ZERO_COUNTERS, ctx())).toThrow(TransitionError);
       }
     }
-    // The table is sparse by design; if this ever hits zero the guard is vacuous.
+    /** The table is sparse by design; if this ever hits zero the guard is vacuous. */
     expect(illegal).toBeGreaterThan(0);
   });
 
@@ -38,8 +38,10 @@ describe("T-011 transition table (X-3)", () => {
   });
 
   it("GATE_DRIFT is legal from every non-DONE state and lands on BLOCKED (D-23 — draft.7, not an oracle port)", () => {
-    // V-3's halt is in the machine: a drift-blocked ticket reopens only via the
-    // BLOCKED | HUMAN_REQUEUE row, which opens a new generation (X-8).
+    /**
+     * V-3's halt is in the machine: a drift-blocked ticket reopens only via the
+     * BLOCKED | HUMAN_REQUEUE row, which opens a new generation (X-8).
+     */
     for (const s of STATES) {
       if (TERMINAL_STATES.has(s)) {
         expect(isLegal(s, "GATE_DRIFT")).toBe(false);

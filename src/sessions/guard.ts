@@ -58,8 +58,10 @@ export function pathOf(toolInput: unknown): string | null {
  */
 export function guardToolUse(toolInput: unknown, policy: GuardPolicy): GuardDecision {
   const target = pathOf(toolInput);
-  // A tool call naming no path (or a malformed one) is allowed here: bricking
-  // the session gains nothing, and the kernel re-runs full gates regardless (P2).
+  /**
+   * A tool call naming no path (or a malformed one) is allowed here: bricking
+   * the session gains nothing, and the kernel re-runs full gates regardless (P2).
+   */
   if (target === null) return { decision: "allow", reason: "no path in tool input" };
 
   const rel = path.relative(path.resolve(policy.workRoot), path.resolve(policy.workRoot, target));
@@ -83,8 +85,10 @@ export function guardToolUse(toolInput: unknown, policy: GuardPolicy): GuardDeci
   return { decision: "allow", reason: `${rel} is inside the declared surface` };
 }
 
-// ---------------------------------------------------------------------------
-// Stop gate (oracle `stop_gate.py`) — an accelerant, never the authority (P2).
+/*
+ * ---------------------------------------------------------------------------
+ * Stop gate (oracle `stop_gate.py`) — an accelerant, never the authority (P2).
+ */
 
 /** S-1's read-only roles have no stop gate: they produce artifacts, not diffs. */
 export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review"]);
@@ -125,8 +129,10 @@ export async function stopGate(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tool surfaces per role (S-3): the surface, never the containment.
+/*
+ * ---------------------------------------------------------------------------
+ * Tool surfaces per role (S-3): the surface, never the containment.
+ */
 
 export const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"] as const;
 export const WRITE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;

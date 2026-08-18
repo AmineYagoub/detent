@@ -26,7 +26,7 @@ afterEach(() => {
 const forSlot = (cs: readonly Candidate[], slot: string): Candidate[] => cs.filter((c) => c.slot === slot);
 const resolvedFor = (cs: readonly Candidate[], slot: string): string[] => forSlot(cs, slot).map((c) => c.resolved);
 
-// --- the fixture matrix -----------------------------------------------------
+/* --- the fixture matrix ----------------------------------------------------- */
 
 const NODE_FIXTURE = {
   "package.json": JSON.stringify(
@@ -137,7 +137,7 @@ describe("T-025 per-ecosystem candidates (V-1)", () => {
         "package.json": JSON.stringify({ scripts: { typecheck: "tsc --noEmit --pretty" } }),
       }),
     );
-    // Both are proposed, but only the project's own script is plausible (C-3b).
+    /** Both are proposed, but only the project's own script is plausible (C-3b). */
     expect(resolvedFor(withScript.candidates, "typecheck")).toEqual(["npm run typecheck", "npx tsc --noEmit"]);
     expect(plausible(withScript.candidates, "typecheck").map((c) => c.resolved)).toEqual(["npm run typecheck"]);
   });

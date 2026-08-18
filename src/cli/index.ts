@@ -55,7 +55,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   return await handler(rest);
 }
 
-// Executed as the CLI entry point (distinguished from an import).
+/** Executed as the CLI entry point (distinguished from an import). */
 const invoked = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
 if (invoked) {
   main(process.argv.slice(2))

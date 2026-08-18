@@ -77,7 +77,7 @@ export interface GateResult {
  * shell could not find — the reference had the same limitation.
  */
 export function runnable(result: GateResult): boolean {
-  // A 127 exit is already normalized to `not-found` by `build`.
+  /* A 127 exit is already normalized to `not-found` by `build`. */
   return result.outcome === "exited";
 }
 
@@ -105,9 +105,11 @@ export async function runGate(spec: GateSpec): Promise<GateResult> {
     let killTimer: NodeJS.Timeout | undefined;
     let drainTimer: NodeJS.Timeout | undefined;
 
-    // `detached` makes the shell a process-group leader so a test runner that
-    // spawns workers can be killed whole. Killing only the shell would leave
-    // the children holding the pipes open and the timeout would not end.
+    /**
+     * `detached` makes the shell a process-group leader so a test runner that
+     * spawns workers can be killed whole. Killing only the shell would leave
+     * the children holding the pipes open and the timeout would not end.
+     */
     const child = spawn(spec.command, {
       shell: true,
       cwd: spec.cwd,
@@ -116,10 +118,12 @@ export async function runGate(spec: GateSpec): Promise<GateResult> {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    // stdout and stderr are merged in arrival order rather than through a
-    // single fd, so interleaving between the two streams is approximate. The
-    // reference merged at the fd level; nothing downstream reads across the
-    // boundary, and X-7 normalizes over volatile detail anyway.
+    /*
+     * stdout and stderr are merged in arrival order rather than through a
+     * single fd, so interleaving between the two streams is approximate. The
+     * reference merged at the fd level; nothing downstream reads across the
+     * boundary, and X-7 normalizes over volatile detail anyway.
+     */
     child.stdout?.on("data", (c: Buffer) => tail.push(c));
     child.stderr?.on("data", (c: Buffer) => tail.push(c));
 
@@ -148,14 +152,16 @@ export async function runGate(spec: GateSpec): Promise<GateResult> {
     };
 
     child.on("error", () => {
-      // The shell itself could not be started (a missing cwd, most often).
+      /* The shell itself could not be started (a missing cwd, most often). */
       spawnFailed = true;
       finish(null, null);
     });
 
-    // `close` waits for the pipes, so output is complete when it fires. A
-    // daemonized grandchild can hold them open past its parent's exit, so
-    // `exit` arms a bounded drain rather than being ignored.
+    /*
+     * `close` waits for the pipes, so output is complete when it fires. A
+     * daemonized grandchild can hold them open past its parent's exit, so
+     * `exit` arms a bounded drain rather than being ignored.
+     */
     child.on("close", (code, signal) => finish(code, signal));
     child.on("exit", (code, signal) => {
       if (settled) return;
@@ -168,11 +174,13 @@ function killGroup(child: { pid?: number | undefined; kill: (s: NodeJS.Signals) 
   const pid = child.pid;
   if (pid === undefined) return;
   try {
-    // Negative pid targets the group created by `detached: true`.
+    /* Negative pid targets the group created by `detached: true`. */
     process.kill(-pid, signal);
   } catch {
-    // The group is already gone, or this platform refused; fall back to the
-    // process itself, which is still better than leaking the timeout.
+    /*
+     * The group is already gone, or this platform refused; fall back to the
+     * process itself, which is still better than leaking the timeout.
+     */
     try {
       child.kill(signal);
     } catch {
@@ -197,7 +205,7 @@ function build(spec: GateSpec, end: Ending): GateResult {
       ? "not-found"
       : "exited";
 
-  // A killed process reports no code; a timed-out one reports the timeout.
+  /** A killed process reports no code; a timed-out one reports the timeout. */
   const exitCode = end.timedOut ? null : end.spawnFailed ? NOT_FOUND_EXIT : end.exitCode;
 
   return {

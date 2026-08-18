@@ -112,8 +112,10 @@ export async function filterFlake(input: FlakeInput): Promise<FlakeDecision> {
   const signature = verdict.signature;
   const { ledger } = input;
 
-  // D-14: `suspectedFlake` is advisory. Not suspected means straight to the
-  // ladder — no rerun is spent on a failure nothing suggested was flaky.
+  /**
+   * D-14: `suspectedFlake` is advisory. Not suspected means straight to the
+   * ladder — no rerun is spent on a failure nothing suggested was flaky.
+   */
   if (!verdict.suspectedFlake) {
     return { kind: "ladder", result: first, signature, reason: "not-suspected", rerun: false };
   }
@@ -127,8 +129,10 @@ export async function filterFlake(input: FlakeInput): Promise<FlakeDecision> {
     return { kind: "quarantine", result: second, signature, firstOutput: first.output };
   }
 
-  // Red on the rerun: the ladder gets the *fresh* result, so the fix session
-  // reasons about the failure that actually persisted.
+  /*
+   * Red on the rerun: the ladder gets the *fresh* result, so the fix session
+   * reasons about the failure that actually persisted.
+   */
   return { kind: "ladder", result: second, signature, reason: "rerun-red", rerun: true };
 }
 

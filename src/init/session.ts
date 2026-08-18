@@ -44,7 +44,7 @@ export function initSessionSpec(deps: InitSessionDeps, request: InitSessionReque
   );
   return {
     role: request.role,
-    // No ticket exists during init; the id names the pipeline for the journal.
+    /* No ticket exists during init; the id names the pipeline for the journal. */
     ticketId: "init",
     promptPrefix: stablePrefix(deps.prompts.prompts[request.role], deps.rulesText ?? "(no rules file)", preamble),
     promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactOut }, null, 2),
@@ -54,8 +54,10 @@ export function initSessionSpec(deps: InitSessionDeps, request: InitSessionReque
       request.withWeb === true
         ? toolsForRole("research", deps.docsDomains ?? [])
         : toolsForRole(request.role, deps.docsDomains ?? []),
-    // S-1: the read-only set runs in plan mode. `planner` is in that set, so
-    // an init session cannot write anything but its own artifact.
+    /*
+     * S-1: the read-only set runs in plan mode. `planner` is in that set, so
+     * an init session cannot write anything but its own artifact.
+     */
     permissionMode: READ_ONLY_ROLES.has(request.role) ? "plan" : "",
     model: "",
     maxTurns: deps.maxTurns,

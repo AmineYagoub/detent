@@ -47,8 +47,10 @@ export const INTERRUPT_PHASE = {
   AWAIT_APPROVAL: "PRESENT",
 } as const satisfies Record<Interrupt, InitPhase>;
 
-// ---------------------------------------------------------------------------
-// ANALYZE's artifact (C-3)
+/*
+ * ---------------------------------------------------------------------------
+ * ANALYZE's artifact (C-3)
+ */
 
 /**
  * What ANALYZE produces. In greenfield the chosen `stack` is an ANALYZE
@@ -84,8 +86,10 @@ export const analysisSchema = z.strictObject({
 });
 export type Analysis = z.infer<typeof analysisSchema>;
 
-// ---------------------------------------------------------------------------
-// C-3a planning briefs (A-4's second kind)
+/*
+ * ---------------------------------------------------------------------------
+ * C-3a planning briefs (A-4's second kind)
+ */
 
 /**
  * A-4: "Planning briefs share the evidence and hierarchy fields, keyed by
@@ -135,8 +139,10 @@ export function requireLocalSearchBeforeWeb(
   }
 }
 
-// ---------------------------------------------------------------------------
-// PLAN's session output (C-4)
+/*
+ * ---------------------------------------------------------------------------
+ * PLAN's session output (C-4)
+ */
 
 /**
  * What the PLAN session emits: ticket drafts, before Detent turns them into

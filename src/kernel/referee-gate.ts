@@ -113,10 +113,12 @@ export class GateArm {
       return gateGreen(result);
     }
 
-    // X-5: one isolated rerun for a suspected flake, through T-022's filter.
-    // Isolation prefers the test_single binding; a `BASE` template resolves
-    // against the run's merge-base, or falls back to the failing command when
-    // the baseline is unresolvable (V-5).
+    /**
+     * X-5: one isolated rerun for a suspected flake, through T-022's filter.
+     * Isolation prefers the test_single binding; a `BASE` template resolves
+     * against the run's merge-base, or falls back to the failing command when
+     * the baseline is unresolvable (V-5).
+     */
     const single = bindings.find((b) => b.slot === "test_single");
     let isolationCmd = result.command;
     if (single !== undefined) {
@@ -192,8 +194,10 @@ export class GateArm {
       exit: result.exitCode,
       signature: verdict.signature,
       classification: verdict.patternClass,
-      // SEC-4: scrubbed BEFORE write — a secret echoed by a failing gate
-      // must never land in an artifact.
+      /*
+       * SEC-4: scrubbed BEFORE write — a secret echoed by a failing gate
+       * must never land in an artifact.
+       */
       output_tail: scrub(result.output.slice(-4000)),
     };
     const dir = runsDir(this.ctx.root, ticketId);

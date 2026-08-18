@@ -43,18 +43,18 @@ describe("T-055 oracle port (test_validate_report_approve_requeue, generation se
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("READY");
     expect(t1.generations).toHaveLength(2);
-    // Frozen history — NOT the oracle's attempts reset.
+    /** Frozen history — NOT the oracle's attempts reset. */
     expect(t1.generations[0]).toMatchObject({ outcome: "requeued" });
     expect(t1.generations[0]?.counters.blind_fix_attempts).toBe(1);
     expect(t1.generations[0]?.counters.sessions).toBe(4);
-    // Fresh generation, zeroed, carrying the guidance.
+    /** Fresh generation, zeroed, carrying the guidance. */
     expect(t1.generations[1]?.counters.sessions).toBe(0);
     expect(t1.generations[1]?.reason).toBe("look at the seed row");
   });
 
   it("approve re-enters APPROVED and the kernel re-verifies on the next run — never a direct DONE", async () => {
     const root = await exhausted();
-    // The human fixes the failure by hand, then approves.
+    /** The human fixes the failure by hand, then approves. */
     const { rmSync } = await import("node:fs");
     rmSync(path.join(root, ".fail"), { force: true });
 
@@ -62,7 +62,7 @@ describe("T-055 oracle port (test_validate_report_approve_requeue, generation se
     expect(result.exitCode).toBe(0);
     expect(readTicket(root, "t1").state).toBe("APPROVED");
 
-    // The next run picks APPROVED out of the resumable pool and re-verifies.
+    /** The next run picks APPROVED out of the resumable pool and re-verifies. */
     const backend = new MockBackend({ review: reviewApprove });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "verify" });
     expect(outcome.exitCode).toBe(EXIT_OK);
@@ -81,7 +81,7 @@ describe("T-055 X-3 legality", () => {
   it("approve from any state but NEEDS_HUMAN is refused with exit 2 naming the state", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
-    // READY
+    /** READY */
     addTicket(root, { id: "t1" });
     const result = approveTicket(root, "t1", "operator");
     expect(result.exitCode).toBe(2);
@@ -101,7 +101,7 @@ describe("T-055 X-3 legality", () => {
     expect(result.exitCode).toBe(0);
     expect(readTicket(root, "t1").state).toBe("READY");
 
-    // But a DONE ticket refuses.
+    /** But a DONE ticket refuses. */
     const t2 = { ...readTicket(root, "t1"), id: "t2", state: "DONE" as const };
     writeFileSync(path.join(root, ".detent/plan/t2.json"), `${JSON.stringify(t2, null, 2)}\n`);
     const refused = requeueTicket(root, "t2", "operator", "nope");
@@ -113,20 +113,20 @@ describe("T-055 X-3 legality", () => {
 describe("T-055 claim discipline (C-12)", () => {
   it("a live claim refuses with exit 2 naming the pid and the claim's age", async () => {
     const root = await exhausted();
-    // written with THIS live process's pid
+    /** written with THIS live process's pid */
     claim(root, "t1", "other-worker");
 
     const result = approveTicket(root, "t1", "operator", { now: () => Date.now() });
     expect(result.exitCode).toBe(2);
     expect(result.message).toContain(String(process.pid));
     expect(result.message).toMatch(/claim age \d+s/);
-    // untouched
+    /** untouched */
     expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN");
   });
 
   it("a stale claim (owner dead) may be broken, recorded in transitions.jsonl with the broken pid", async () => {
     const root = await exhausted();
-    // A claim owned by a pid that is certainly dead.
+    /** A claim owned by a pid that is certainly dead. */
     writeFileSync(
       path.join(root, ".detent/claims/t1.claim"),
       JSON.stringify({ owner: "w9", pid: 999999999, at: "2026-08-18T00:00:00.000Z" }),
@@ -136,8 +136,10 @@ describe("T-055 claim discipline (C-12)", () => {
     expect(result.exitCode).toBe(0);
     expect(readTicket(root, "t1").state).toBe("READY");
 
-    // The operator action with the broken pid is in the journal's evidence —
-    // recorded without inventing an X-3 event to carry it.
+    /**
+     * The operator action with the broken pid is in the journal's evidence —
+     * recorded without inventing an X-3 event to carry it.
+     */
     const journal = readFileSync(path.join(root, ".detent/transitions.jsonl"), "utf8");
     const requeueLine = journal
       .trim()

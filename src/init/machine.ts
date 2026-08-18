@@ -71,8 +71,10 @@ export interface InitResult {
   readonly outputs: Readonly<Record<string, Record<string, unknown>>>;
 }
 
-// ---------------------------------------------------------------------------
-// Digest helpers — the two shapes a phase's inputs can take
+/*
+ * ---------------------------------------------------------------------------
+ * Digest helpers — the two shapes a phase's inputs can take
+ */
 
 /** Which files exist, not what they say. Sorted, POSIX, contents ignored. */
 export function listingDigest(paths: readonly string[]): string {
@@ -95,8 +97,10 @@ export function valueDigest(value: unknown): string {
   return `value:${createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex")}`;
 }
 
-// ---------------------------------------------------------------------------
-// C-1 — root-only
+/*
+ * ---------------------------------------------------------------------------
+ * C-1 — root-only
+ */
 
 export class NotAtGitRootError extends Error {
   readonly exitCode = 2;
@@ -119,13 +123,15 @@ export function checkRoot(cwd: string): { readonly kind: "root" } | { readonly k
   } catch {
     return { kind: "no-repo" };
   }
-  // realpath both sides: macOS temp dirs are symlinked (/var -> /private/var).
+  /** realpath both sides: macOS temp dirs are symlinked (/var -> /private/var). */
   const same = statSync(top).ino === statSync(cwd).ino;
   return same ? { kind: "root" } : { kind: "subdirectory", root: top };
 }
 
-// ---------------------------------------------------------------------------
-// C-8 — approval state
+/*
+ * ---------------------------------------------------------------------------
+ * C-8 — approval state
+ */
 
 export interface ApprovalState {
   readonly approved: boolean;
@@ -158,8 +164,10 @@ export function approvalState(root: string): ApprovalState {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The driver
+/*
+ * ---------------------------------------------------------------------------
+ * The driver
+ */
 
 /**
  * Run the pipeline from the first phase whose inputs drifted (C-8). Phases
@@ -174,7 +182,7 @@ export async function runInit(
   const messages: string[] = [];
   const now = opts.now ?? (() => Date.now());
 
-  // C-8: an approved plan prints status and requires --replan to regenerate.
+  /** C-8: an approved plan prints status and requires --replan to regenerate. */
   const approval = approvalState(root);
   if (approval.approved && !approval.stale && opts.replan !== true) {
     return {
@@ -188,7 +196,7 @@ export async function runInit(
     };
   }
   if (approval.approved && approval.stale) {
-    // Hand-edited tickets invalidate the approval; PRESENT re-presents the diff.
+    /* Hand-edited tickets invalidate the approval; PRESENT re-presents the diff. */
     messages.push("tickets were edited after approval — approval invalidated, re-presenting (C-8)");
   }
 
@@ -222,7 +230,7 @@ export async function runInit(
 
     const outcome = await handler.run(ctx);
     if (outcome.kind === "interrupt") {
-      // Not checkpointed: the phase did not complete, so a re-run resumes here.
+      /* Not checkpointed: the phase did not complete, so a re-run resumes here. */
       return {
         exitCode: 2,
         reachedPhase: phase,

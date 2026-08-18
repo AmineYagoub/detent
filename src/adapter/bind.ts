@@ -139,9 +139,11 @@ export async function bindSlot(
     };
   }
 
-  // A command that runs and fails is a perfectly good binding: red tests are
-  // the normal state of a repository mid-work, and V-1 asks only that the
-  // command executes.
+  /*
+   * A command that runs and fails is a perfectly good binding: red tests are
+   * the normal state of a repository mid-work, and V-1 asks only that the
+   * command executes.
+   */
   return {
     kind: "bound",
     slot,

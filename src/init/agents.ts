@@ -43,8 +43,10 @@ export function prepareAgents(deps: PrepareAgentsDeps): PhaseOutcome {
     const role = openingRole(ticket);
     const hash = deps.prompts.hashes[role];
     const ref = `${role}@${hash}`;
-    // Fail closed BEFORE writing: resolveAssignment throws on an unknown role
-    // or a hash that does not match the vendored set (S-7's AC).
+    /**
+     * Fail closed BEFORE writing: resolveAssignment throws on an unknown role
+     * or a hash that does not match the vendored set (S-7's AC).
+     */
     resolveAssignment(ref, deps.prompts);
     assignments[ticket.id] = ref;
   }

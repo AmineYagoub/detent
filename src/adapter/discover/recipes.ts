@@ -26,11 +26,11 @@ export function parseRecipes(text: string): Recipe[] {
 
   for (const line of lines) {
     const match = TARGET.exec(line);
-    // A target declaration starts at column zero; anything indented is a body.
+    /** A target declaration starts at column zero; anything indented is a body. */
     if (match !== null && !/^\s/.test(line)) {
       flush();
       const name = match[1] as string;
-      // `.PHONY` and friends declare metadata, not work.
+      /* `.PHONY` and friends declare metadata, not work. */
       current = name.startsWith(".") ? null : { name, block: [line] };
       continue;
     }

@@ -41,7 +41,7 @@ describe("detent CLI dispatch", () => {
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     try {
-      // /tmp is not a git repository: C-1's other branch, reported plainly.
+      /** /tmp is not a git repository: C-1's other branch, reported plainly. */
       const code = await main(["init", "/tmp"]);
       expect(code).toBe(2);
       expect(`${err.mock.calls.join("")}${out.mock.calls.join("")}`).toMatch(/git repository|git root/);

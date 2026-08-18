@@ -65,9 +65,11 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const raw = readAnalysis(deps.root);
   const parsed = raw === null ? null : parseArtifact(analysisSchema, raw);
   if (parsed === null || !parsed.ok) {
-    // An invalid analysis is not a question for the user — it is a failed
-    // session. Surfacing it as AWAIT_INFO would put the model's malfunction
-    // in the user's lap, so it fails the phase instead (P2).
+    /*
+     * An invalid analysis is not a question for the user — it is a failed
+     * session. Surfacing it as AWAIT_INFO would put the model's malfunction
+     * in the user's lap, so it fails the phase instead (P2).
+     */
     throw new Error(
       parsed === null
         ? "ANALYZE produced no analysis artifact"
@@ -80,7 +82,7 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     throw new Error("ANALYZE ran on a greenfield project without choosing a stack — DETERMINE_VERIFICATION has nothing to bind (D-10)");
   }
 
-  // ---- C-3a: research the open questions before asking the human ----------
+  /** ---- C-3a: research the open questions before asking the human ---------- */
   let research: PlanResearchResult | null = null;
   const blocking = analysis.questions.filter((q) => q.blocking).map((q) => q.question);
 
@@ -91,11 +93,11 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     }
   }
 
-  // Questions research could not settle (or that were never researched).
+  /** Questions research could not settle (or that were never researched). */
   const stillOpen = research === null ? blocking : research.unanswered;
 
   if (stillOpen.length > 0) {
-    // C-3: ONE interruption carrying the whole batch.
+    /* C-3: ONE interruption carrying the whole batch. */
     return {
       kind: "interrupt",
       interrupt: "AWAIT_INFO",

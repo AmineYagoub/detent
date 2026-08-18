@@ -37,7 +37,7 @@ export function isToolError(result: unknown): result is RefereeToolError {
   return typeof result === "object" && result !== null && "error" in result;
 }
 
-// ---------------------------------------------------------------- schemas
+/* ---------------------------------------------------------------- schemas */
 
 const ticketId = z.string().min(1);
 
@@ -119,7 +119,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   report: "Read-only: counts by state and the run's recorded spend.",
 };
 
-// ---------------------------------------------------------------- dispatch
+/* ---------------------------------------------------------------- dispatch */
 
 /**
  * Validate, dispatch, and shape one tool call. Structured errors are part of

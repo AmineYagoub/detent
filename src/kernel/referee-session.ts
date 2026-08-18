@@ -57,8 +57,10 @@ export class SessionArm {
       return;
     }
 
-    // D-25: the spend ceiling is a launch gate, evaluated here and never
-    // mid-flight — overshoot is bounded by the one session in flight.
+    /*
+     * D-25: the spend ceiling is a launch gate, evaluated here and never
+     * mid-flight — overshoot is bounded by the one session in flight.
+     */
     ctx.spend.assertLaunchAllowed();
 
     let current = readTicket(ctx.root, id);
@@ -113,9 +115,11 @@ export class SessionArm {
     });
     this.rememberPrefix(role, spec);
 
-    // P7: a session is Detent's act, and Detent never writes the base branch.
-    // The S-2 hook prevents; this is the referee's independent line (P2) — any
-    // moved non-run ref is restored and the ticket escalates.
+    /**
+     * P7: a session is Detent's act, and Detent never writes the base branch.
+     * The S-2 hook prevents; this is the referee's independent line (P2) — any
+     * moved non-run ref is restored and the ticket escalates.
+     */
     const violations = enforceBaseGuard(ctx.root, ctx.refs, ctx.runBranch.branch);
     if (violations.length > 0) {
       const detail = violations.map((v) => `${v.ref}: ${v.was} -> ${v.became ?? "(deleted)"}`).join("; ");
@@ -188,9 +192,11 @@ export class SessionArm {
   }
 
   private toolsFor(role: RoleId): readonly string[] {
-    // The referee's advisory copy; the SDK backend composes the enforced set
-    // (sessions/guard.ts), including domain-scoped WebFetch once PRDR-062
-    // gives docs domains a config home.
+    /**
+     * The referee's advisory copy; the SDK backend composes the enforced set
+     * (sessions/guard.ts), including domain-scoped WebFetch once PRDR-062
+     * gives docs domains a config home.
+     */
     if (READ_ONLY_ROLES.has(role)) {
       return role === "research" ? ["Read", "Grep", "Glob", "WebSearch"] : ["Read", "Grep", "Glob"];
     }

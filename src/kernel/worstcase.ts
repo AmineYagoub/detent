@@ -87,8 +87,10 @@ export function maxPossibleSessions(
     const k = stateKey(state, counters, budgets);
     const seenAt = onPath.get(k);
     if (seenAt !== undefined) {
-      // Revisiting a node with no launch in between is a benign no-op loop;
-      // revisiting it *after* launching is an unbounded cycle.
+      /**
+       * Revisiting a node with no launch in between is a benign no-op loop;
+       * revisiting it *after* launching is an unbounded cycle.
+       */
       if (depth > seenAt) throw new UnboundedWorstCaseError([...onPath.keys()].slice(seenAt).concat(k));
       return 0;
     }
@@ -98,17 +100,19 @@ export function maxPossibleSessions(
     const nextOnPath = new Map(onPath).set(k, depth);
     let best = 0;
     for (const event of legalEvents(state, table)) {
-      // A human re-entry opens a new generation with zeroed counters (X-8);
-      // the per-generation worst case does not traverse it.
+      /**
+       * A human re-entry opens a new generation with zeroed counters (X-8);
+       * the per-generation worst case does not traverse it.
+       */
       if (event === "HUMAN_REQUEUE" || event === "HUMAN_APPROVED") continue;
-      // BUDGET_BREACH and GATE_DRIFT are halts, never the worst path.
+      /** BUDGET_BREACH and GATE_DRIFT are halts, never the worst path. */
       if (event === "BUDGET_BREACH" || event === "GATE_DRIFT") continue;
       let result;
       try {
         result = apply(state, event, counters, { ticket: { type: ticketType }, budgets }, table);
       } catch (err) {
         if (err instanceof TransitionError) continue;
-        // slot already consumed: this edge is unreachable here
+        /* slot already consumed: this edge is unreachable here */
         continue;
       }
       const cost = SESSION_ENTRY_STATES.has(result.to) ? 1 : 0;
@@ -118,7 +122,7 @@ export function maxPossibleSessions(
     return best;
   }
 
-  // A run begins by claiming a READY ticket; the claim itself launches nothing.
+  /* A run begins by claiming a READY ticket; the claim itself launches nothing. */
   return walk("READY", zeroCounters, new Map<string, number>(), 0);
 }
 

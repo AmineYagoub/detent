@@ -98,8 +98,10 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
   };
 }
 
-// ---------------------------------------------------------------------------
-// Telemetry (S-4, PRDR-052/053)
+/*
+ * ---------------------------------------------------------------------------
+ * Telemetry (S-4, PRDR-052/053)
+ */
 
 interface ModelUsageLike {
   readonly inputTokens?: number;
@@ -183,8 +185,10 @@ export function parseResultMessage(message: unknown): SessionResult {
   };
 }
 
-// ---------------------------------------------------------------------------
-// The live backend (transport — exercised under R-10's key gate only)
+/*
+ * ---------------------------------------------------------------------------
+ * The live backend (transport — exercised under R-10's key gate only)
+ */
 
 export class ClaudeCodeBackend implements SessionBackend {
   readonly name = "claude-code";
@@ -212,7 +216,7 @@ export class ClaudeCodeBackend implements SessionBackend {
         result = parseResultMessage(message);
       }
     }
-    // A stream that ended with no result message is the absent-telemetry case.
+    /* A stream that ended with no result message is the absent-telemetry case. */
     return result ?? parseResultMessage({});
   }
 }

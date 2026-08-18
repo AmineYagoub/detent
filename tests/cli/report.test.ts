@@ -30,7 +30,7 @@ describe("T-053 §14 enumeration (the metric key set equals the PRD table)", () 
     const rows = section
       .split("\n")
       .filter((l) => l.startsWith("| ") && !l.startsWith("| Metric") && !l.startsWith("|---"));
-    // One reporter key per PRD row; adding a row without a key fails here.
+    /** One reporter key per PRD row; adding a row without a key fails here. */
     expect(rows).toHaveLength(METRIC_KEYS.length);
     expect(METRIC_KEYS).toHaveLength(8);
   });
@@ -50,9 +50,9 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
   it("a mixed run produces every metric, with honest n/a where the denominator is empty", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
-    // will complete autonomously
+    /** will complete autonomously */
     addTicket(root, { id: "t1" });
-    // will exhaust the ladder
+    /** will exhaust the ladder */
     addTicket(root, { id: "t2" });
 
     const backend = new MockBackend({
@@ -66,21 +66,21 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
     await run({ root, backend, prompts: PROMPTS, runId: "report" });
 
     const report = buildReport(root, { baseBranch: "main" });
-    // t1 is the only DONE ticket and it never saw a human.
+    /** t1 is the only DONE ticket and it never saw a human. */
     expect(report.autonomous_completion_rate.value).toBe(1);
     expect(report.autonomous_completion_rate.denominator).toBe(1);
-    // t1 took 2 sessions (implement + review); close-check launches none.
+    /** t1 took 2 sessions (implement + review); close-check launches none. */
     expect(report.median_sessions_per_completed_ticket.value).toBe(2);
-    // No canary corpus supplied: n/a, never a fake 100%.
+    /** No canary corpus supplied: n/a, never a fake 100%. */
     expect(report.scope_canary_block_rate.value).toBeNull();
-    // A clean run writes the base exactly zero times (§14 target).
+    /** A clean run writes the base exactly zero times (§14 target). */
     expect(report.base_branch_writes.value).toBe(0);
-    // One research entry, served live (no cache seeded).
+    /** One research entry, served live (no cache seeded). */
     expect(report.research_cache_hit_rate.value).toBe(0);
     expect(report.research_cache_hit_rate.denominator).toBe(1);
-    // The mock reports zero cache reads; the ratio is 0, not n/a.
+    /** The mock reports zero cache reads; the ratio is 0, not n/a. */
     expect(report.prompt_cache_read_rate.value).toBe(0);
-    // No crash was injected.
+    /** No crash was injected. */
     expect(report.crash_resume_correctness.value).toBeNull();
     expect(report.self_build_gate.value).toBe("not-yet-run");
 
@@ -93,7 +93,7 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
     roots.push(root);
     addTicket(root, { id: "t1" });
 
-    // Exhaust the ladder, then approve at the escalation after a hand-fix.
+    /** Exhaust the ladder, then approve at the escalation after a hand-fix. */
     const backend = new MockBackend({
       implement: implementRed,
       blind_fix: noopFix,
@@ -116,7 +116,7 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
 
     const report = buildReport(root);
     expect(report.autonomous_completion_rate.denominator).toBe(1);
-    // DONE, but a human touched it
+    /** DONE, but a human touched it */
     expect(report.autonomous_completion_rate.value).toBe(0);
   });
 });
@@ -157,7 +157,7 @@ describe("T-053 C-13: the five-label vocabulary", () => {
     roots.push(root);
     addTicket(root, { id: "t1" });
 
-    // Crash mid-blind-fix, then resume with an announcer attached.
+    /** Crash mid-blind-fix, then resume with an announcer attached. */
     const crash = () => {
       throw new Error("boom");
     };

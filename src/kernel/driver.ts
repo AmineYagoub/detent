@@ -42,8 +42,10 @@ export class Driver {
       const { code, message } = (result as RefereeToolError).error;
       if (code === "BREACH") throw new DriverBreach(message);
       if (code === "DRIFT_HALT") throw new DriverDriftHalt(message);
-      // ILLEGAL_TRANSITION / BAD_EVIDENCE / INVALID_INPUT / UNKNOWN_TOOL from
-      // the deterministic driver are driver defects, not run outcomes.
+      /*
+       * ILLEGAL_TRANSITION / BAD_EVIDENCE / INVALID_INPUT / UNKNOWN_TOOL from
+       * the deterministic driver are driver defects, not run outcomes.
+       */
       throw new Error(`referee refused ${name}: ${code}: ${message}`);
     }
     return result as T;
@@ -54,7 +56,7 @@ export class Driver {
     return result.to;
   }
 
-  // ------------------------------------------------------------- the loop
+  /* ------------------------------------------------------------- the loop */
 
   async loop(): Promise<RunOutcome> {
     for (;;) {
@@ -98,7 +100,7 @@ export class Driver {
     return { exitCode: EXIT_OK, summary: { schema_version: 1, exit: EXIT_OK, pending: [] } };
   }
 
-  // ------------------------------------------------------ ticket driving
+  /* ------------------------------------------------------ ticket driving */
 
   private async processTicket(
     id: string,
@@ -110,8 +112,10 @@ export class Driver {
       state = await this.transition(id, acquired.claimed_ref);
     } else {
       state = acquired.resume?.state ?? "IN_PROGRESS";
-      // C-13: resume always announces itself, in the five-label vocabulary —
-      // the caller renders it; internal state names never reach a terminal.
+      /*
+       * C-13: resume always announces itself, in the five-label vocabulary —
+       * the caller renders it; internal state names never reach a terminal.
+       */
       this.opts.announce?.(this.resumeAnnouncement(id, state));
     }
 
@@ -192,7 +196,7 @@ export class Driver {
     return reason === undefined || reason === "" ? "escalated" : reason;
   }
 
-  // ---- escalation (C-10, T-049) -------------------------------------------
+  /* ---- escalation (C-10, T-049) ------------------------------------------- */
 
   /**
    * The in-run escalation flow. Approve applies HUMAN_APPROVED (the referee
@@ -220,11 +224,11 @@ export class Driver {
       });
       await this.transition(id, ref);
       await this.tool("record", { kind: "reopen_generation", ticket_id: id });
-      // The referee re-verifies: drive the ticket onward from APPROVED now.
+      /* The referee re-verifies: drive the ticket onward from APPROVED now. */
       await this.driveOn(id, "APPROVED");
       return;
     }
-    // requeue with guidance
+    /** requeue with guidance */
     const { ref } = await this.tool<{ ref: string }>("record", {
       kind: "human",
       ticket_id: id,

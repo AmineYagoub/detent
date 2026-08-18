@@ -43,8 +43,10 @@ export async function diagnoseStage(deps: DiagnoseDeps): Promise<DiagnoseOutcome
   }
 
   const hypothesis = parsed.value;
-  // X-4: the kernel runs the repro. A red repro whose output contains the
-  // predicted substring is fail-as-predicted; anything else falsifies.
+  /**
+   * X-4: the kernel runs the repro. A red repro whose output contains the
+   * predicted substring is fail-as-predicted; anything else falsifies.
+   */
   const repro = await deps.executeRepro(hypothesis.repro_test);
   const predicted = hypothesis.predicted_failure.trim().toLowerCase();
   const asPredicted = !repro.green && (predicted === "" || repro.output.toLowerCase().includes(predicted));

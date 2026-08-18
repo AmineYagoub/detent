@@ -19,7 +19,7 @@ const RULES: readonly ScrubRule[] = [
   { name: "bearer", pattern: /\b[Bb]earer\s+[A-Za-z0-9._~+/=-]{16,}/g },
   {
     name: "assignment",
-    // KEY=..., token: "...", password = '...' — the generic shapes.
+    /* KEY=..., token: "...", password = '...' — the generic shapes. */
     pattern: /\b(api[_-]?key|access[_-]?key|secret|token|password|passwd|credential)s?\b(["']?\s*[:=]\s*)(["']?)[^\s"'&]{6,}\3/gi,
   },
 ];
@@ -30,8 +30,10 @@ export function scrub(text: string): string {
   let out = text;
   for (const rule of RULES) {
     out = out.replace(rule.pattern, (match, ...groups) => {
-      // The assignment rule keeps the key name and the separator, so a
-      // scrubbed record still says WHAT was redacted.
+      /**
+       * The assignment rule keeps the key name and the separator, so a
+       * scrubbed record still says WHAT was redacted.
+       */
       if (rule.name === "assignment") {
         const [keyName, sep, quote] = groups as [string, string, string];
         return `${keyName}${sep}${quote}${REDACTED}${quote}`;

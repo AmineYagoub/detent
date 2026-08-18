@@ -99,7 +99,7 @@ export const budgetsSchema = z
     flake_reruns: withDefault("flake_reruns"),
     gate_timeout_ms: withDefault("gate_timeout_ms"),
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),
-    // No default by design (X-1): `init` writes an explicit figure.
+    /* No default by design (X-1): `init` writes an explicit figure. */
     run_spend_usd: z.number().positive(),
   })
   .describe("X-1 ceilings");

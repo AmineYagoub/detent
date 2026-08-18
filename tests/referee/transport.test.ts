@@ -57,7 +57,7 @@ function journaledTransitions(root: string): Record<string, unknown>[] {
     .filter((l) => l.trim() !== "")
     .map((l) => {
       const row = JSON.parse(l) as Record<string, unknown>;
-      // two wall clocks; everything else must agree
+      /* two wall clocks; everything else must agree */
       delete row["at"];
       return row;
     });
@@ -65,7 +65,7 @@ function journaledTransitions(root: string): Record<string, unknown>[] {
 
 describe("T-106 the stdio server and the in-process registry are one referee", () => {
   it("an identical sequence yields identical results and identical journals", { timeout: 60_000 }, async () => {
-    // Twin repositories: one driven over MCP stdio, one in-process.
+    /** Twin repositories: one driven over MCP stdio, one in-process. */
     const stdio = await makeRunRepo();
     const inproc = await makeRunRepo();
     cleanups.push(() => removeTree(stdio.root));
@@ -73,7 +73,7 @@ describe("T-106 the stdio server and the in-process registry are one referee", (
     addTicket(stdio.root, { id: "t-1" });
     addTicket(inproc.root, { id: "t-1" });
 
-    // ---- path A: a real spawned server, a real MCP client
+    /** ---- path A: a real spawned server, a real MCP client */
     const transport = new StdioClientTransport({
       command: path.join(ROOT, "node_modules", ".bin", "tsx"),
       args: [path.join(ROOT, "src", "cli", "referee.ts"), "--root", stdio.root, "--backend", "mock"],
@@ -99,7 +99,7 @@ describe("T-106 the stdio server and the in-process registry are one referee", (
     }
     await client.close();
 
-    // ---- path B: the same sequence, in-process
+    /** ---- path B: the same sequence, in-process */
     const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(inproc.root), "config.json"), "utf8")));
     const journal = RunJournal.open(inproc.root);
     cleanups.push(() => journal.close());
@@ -120,7 +120,7 @@ describe("T-106 the stdio server and the in-process registry are one referee", (
       inProcess.push(body);
     }
 
-    // ---- parity: results and journals agree field for field
+    /** ---- parity: results and journals agree field for field */
     expect(overStdio).toEqual(inProcess);
     expect(journaledTransitions(stdio.root)).toEqual(journaledTransitions(inproc.root));
   });

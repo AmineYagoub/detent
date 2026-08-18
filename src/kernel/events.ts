@@ -33,7 +33,7 @@ function make(event: Event, evidence: string): KernelEvent {
   return { [derived]: true, event, evidence } as KernelEvent;
 }
 
-// ---- claim / requeue (human- or kernel-act evidence) ------------------------
+/* ---- claim / requeue (human- or kernel-act evidence) ------------------------ */
 
 /** C-9: the atomic claim itself is the evidence. */
 export function claimed(): KernelEvent {
@@ -50,7 +50,7 @@ export function humanApproved(evidence: string): KernelEvent {
   return make("HUMAN_APPROVED", evidence);
 }
 
-// ---- gate-derived -----------------------------------------------------------
+/* ---- gate-derived ----------------------------------------------------------- */
 
 export function gateGreen(result: GateResult | null, qualifier = ""): KernelEvent {
   const base = result === null ? "no bound gates" : `${result.slot ?? "gate"}:exit=${result.exitCode ?? "none"}`;
@@ -80,7 +80,7 @@ export function premiseFalsified(note: string): KernelEvent {
   return make("PREMISE_FALSIFIED", `falsified.json: ${note}`);
 }
 
-// ---- validator-derived ------------------------------------------------------
+/* ---- validator-derived ------------------------------------------------------ */
 
 export function reviewApprove(review: Review): KernelEvent {
   return make("REVIEW_APPROVE", `review approve (verdict=${review.verdict})`);
@@ -102,7 +102,7 @@ export function upstreamBug(brief: ResearchBrief): KernelEvent {
   return make("UPSTREAM_BUG", `research.upstream_bug: ${brief.upstream_bug ?? ""}`);
 }
 
-// ---- kernel-decision events (ceiling and halt evidence) ---------------------
+/* ---- kernel-decision events (ceiling and halt evidence) --------------------- */
 
 export function budgetBreach(reason: string): KernelEvent {
   return make("BUDGET_BREACH", reason);

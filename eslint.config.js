@@ -58,6 +58,34 @@ const SESSIONS_FORBIDDEN = [
   },
 ];
 
+/**
+ * AGENTS.md: `//` never appears in a .ts file — documentation lives in
+ * `/** *\/` blocks on declarations; rare standalone block comments may state a
+ * why inside a body (an empty catch). Compiler/lint directives are the one
+ * escape: TypeScript only honors `@ts-expect-error` in line form.
+ */
+const detentPlugin = {
+  rules: {
+    "no-line-comments": {
+      meta: {
+        type: "layout",
+        messages: { line: "AGENTS.md: no `//` comments — use a /** */ doc-block on the declaration (or a standalone /* */ for an in-body why)." },
+      },
+      create(context) {
+        return {
+          Program() {
+            for (const comment of context.sourceCode.getAllComments()) {
+              if (comment.type !== "Line") continue;
+              if (/^\s*(@ts-|eslint-)/.test(comment.value)) continue;
+              context.report({ loc: comment.loc, messageId: "line" });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -76,9 +104,11 @@ export default tseslint.config(
     // AGENTS.md's lint-enforced half: file-size ceilings, no inline comments,
     // and the modern-syntax floor. Scoped to our TS so config files stay out.
     files: ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
+    plugins: { detent: detentPlugin },
     rules: {
       "max-lines": ["error", { max: 300, skipBlankLines: true, skipComments: true }],
       "no-inline-comments": "error",
+      "detent/no-line-comments": "error",
       "no-var": "error",
       "prefer-const": "error",
       "prefer-template": "error",
