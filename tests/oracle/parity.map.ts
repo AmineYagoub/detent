@@ -91,16 +91,40 @@ export const PARITY: readonly ParityEntry[] = [
     note: "the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset",
   },
   { oracle: "test_extra.py::test_mode1_stub_detected", ticket: "T-060", note: "greenfield vs brownfield detection is C-1's job in the init phase machine" },
-  { oracle: "test_extra.py::test_smoke_mock_backend", ticket: "T-040" },
+  {
+    oracle: "test_extra.py::test_smoke_mock_backend",
+    ticket: "T-040",
+    ts: "tests/sessions/mock.test.ts",
+    note: "the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050",
+  },
   { oracle: "test_extra.py::test_research_session_gets_domain_scoped_web_tools", ticket: "T-046" },
   { oracle: "test_extra.py::test_risk_detection_on_master_based_repo", ticket: "T-049" },
 
   // ---- test_kernel_e2e.py (11) ---------------------------------------------
-  { oracle: "test_kernel_e2e.py::test_feature_to_done_and_merged", ticket: "T-041" },
-  { oracle: "test_kernel_e2e.py::test_triage_unverified_blocks", ticket: "T-041" },
-  { oracle: "test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier", ticket: "T-041" },
+  {
+    oracle: "test_kernel_e2e.py::test_feature_to_done_and_merged",
+    ticket: "T-041",
+    ts: "tests/kernel/run.test.ts",
+    note: "merge-into-main becomes B-1: commits land on detent/run-<id>, base SHA byte-identical; --no-ff worktree merging lands at T-042",
+  },
+  {
+    oracle: "test_kernel_e2e.py::test_triage_unverified_blocks",
+    ticket: "T-041",
+    ts: "tests/kernel/run.test.ts",
+    note: "triage did not survive D-10 (planning moved to init); the preserved properties split: an unapproved plan runs nothing (C-9/C-7, exit 2) and a human-gated pool exits 10 with a machine-readable summary",
+  },
+  {
+    oracle: "test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier",
+    ticket: "T-041",
+    ts: "tests/kernel/run.test.ts",
+    note: "counters assert the §13 mapping (fix_sessions 2 = blind 1 + informed 1); the oracle's brief-cached assertion belongs to D-18's env-keyed cache and closes at T-045",
+  },
   { oracle: "test_kernel_e2e.py::test_research_cache_hit_skips_research_session", ticket: "T-045" },
-  { oracle: "test_kernel_e2e.py::test_no_second_blind_fix_after_crash", ticket: "T-041" },
+  {
+    oracle: "test_kernel_e2e.py::test_no_second_blind_fix_after_crash",
+    ticket: "T-041",
+    ts: "tests/kernel/run.test.ts",
+  },
   { oracle: "test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis", ticket: "T-043" },
   { oracle: "test_kernel_e2e.py::test_hypothesis_thrash_escalates", ticket: "T-043" },
   { oracle: "test_kernel_e2e.py::test_surface_request_grant_and_deny", ticket: "T-046" },
@@ -135,8 +159,12 @@ export const MILESTONE_ORDER = ["P0", "M0", "M1", "M2", "M3", "M4"] as const;
 export type Milestone = (typeof MILESTONE_ORDER)[number];
 
 /**
- * The last milestone whose tickets are all written. One ratchet: bumping it
- * without porting the milestone's oracle tests fails `parity.test.ts`.
+ * The last FULLY landed milestone. The ratchet is one-directional: every
+ * oracle test whose closing ticket sits at or below this line must be green,
+ * so a bump without the ports fails `parity.test.ts`. Above the line, entries
+ * go green ticket by ticket as their ports land — M2 lands mid-milestone
+ * (T-040/T-041 before T-043…T-055), which the M1-era both-directions form of
+ * this check could not express.
  */
 export const LANDED_THROUGH: Milestone = "M1";
 
@@ -149,9 +177,8 @@ export function hasLanded(milestone: Milestone): boolean {
  * closing ticket, which `parity.test.ts` verifies. A pending entry is labelled
  * by the milestone that will close it.
  *
- * The M0 version of this derived status from the milestone alone, which was
- * only correct while M0 was the last landed milestone: T-020 and T-022 landed
- * and their five oracle tests kept reporting `pending-M1`.
+ * The M0 version derived status from the milestone alone, which was only
+ * correct while M0 was the last landed milestone.
  */
 export function statusOf(entry: ParityEntry): ParityStatus {
   if (entry.ts !== undefined) return "green";

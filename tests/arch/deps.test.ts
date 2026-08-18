@@ -34,6 +34,14 @@ describe("ARCH-1 dependency direction", () => {
     expect(msgs.join(" ")).toContain("ARCH-1");
   });
 
+  it("src/kernel/** may not import the mock backend — only the interface is the seam (T-040 AC)", async () => {
+    const msgs = await messagesFor(
+      "src/kernel/__arch_fixture__.ts",
+      `import { MockBackend } from "../sessions/mock.js";\nexport const m = MockBackend;\n`,
+    );
+    expect(msgs.join(" ")).toContain("ARCH-1");
+  });
+
   it("src/kernel/** MAY import the SessionBackend interface — the one sanctioned seam", async () => {
     const msgs = await messagesFor(
       "src/kernel/__arch_fixture__.ts",

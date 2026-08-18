@@ -13,15 +13,14 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     for (const e of PARITY) expect(e.ticket, e.oracle).toMatch(/^T-\d{3}$/);
   });
 
-  it("green means exactly: the closing ticket's milestone has landed", () => {
-    // Both directions. A green entry whose ticket has not been written would be
-    // a lie; a landed milestone with an unported oracle test is a gap. The M0
-    // form of this derived status from the milestone alone, which made the
-    // second direction unfalsifiable.
+  it("the ratchet: every entry of a landed milestone is green — no gaps behind the line", () => {
+    // One direction only. Above the line, entries go green ticket by ticket
+    // (M2 lands mid-milestone); a green entry's honesty is enforced by the
+    // ts-home check below, which requires a real test file citing the ticket.
     for (const e of PARITY) {
-      expect(statusOf(e) === "green", `${e.oracle} (${e.ticket}, ${milestoneOf(e.ticket)})`).toBe(
-        hasLanded(milestoneOf(e.ticket)),
-      );
+      if (hasLanded(milestoneOf(e.ticket))) {
+        expect(statusOf(e), `${e.oracle} (${e.ticket}) sits behind LANDED_THROUGH but is not green`).toBe("green");
+      }
     }
   });
 
@@ -33,6 +32,11 @@ describe("T-018 oracle parity report (M0 exit)", () => {
   it("M1 exit threshold: zero pending-M1 (T-020 and T-022 close all five)", () => {
     expect(PARITY.filter((e) => statusOf(e) === "pending-M1")).toEqual([]);
     expect(LANDED_THROUGH).toBe("M1");
+  });
+
+  it("M2 progress: T-040 and T-041 close five more — 32 green, 19 pending-M2", () => {
+    expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(32);
+    expect(PARITY.filter((e) => statusOf(e) === "pending-M2")).toHaveLength(19);
   });
 
   it("every green entry's TypeScript home is a test file that exists and names its ticket", () => {

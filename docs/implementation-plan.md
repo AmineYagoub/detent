@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.7 — synced to PRD 2.0-draft.7; code deltas applied (§7) |
+| Plan version | 1.8 — M2 opened: T-040, T-041, T-047 landed (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -483,6 +483,29 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.8** — M2 opened: T-047 (vendored role prompts), T-040 (SessionBackend seam + mock), and T-041 (the kernel run loop) landed. Five more oracle tests green — parity **32 / 0 / 19 / 1**. All gates green: lint, typecheck, parity:check, prompts:check, 350 passed / 2 skipped. No ticket rescoped; the loop's deliberate scope boundaries are stated in `src/kernel/run.ts`'s header and below.
+
+Scope boundaries T-041 states rather than blurs — each is the named ticket's, not forgotten:
+
+| Deferred | Where it lands | What T-041 does meanwhile |
+|---|---|---|
+| X-4 repro execution | T-043 | an invalid/missing hypothesis is REPRO_WRONG (counted); a **valid** hypothesis throws a named boundary error — admitting one without executing the repro would advance a ticket on an unverified model claim (P2) |
+| review input-set discipline + changes-loop e2e | T-044 | the loop validates A-5 and routes verdicts; a malformed reviewer is a breaker (oracle behaviour) |
+| D-18 env-keyed research cache | T-045 | every RESEARCH entry is a live session; the ladder port's cache assertions move to T-045's cache-hit port (map note) |
+| real SDK enforcement (hook, allowlists, settingSources) | T-046 | spec fields are advisory; the S-4 breaker (unparsable telemetry → NEEDS_HUMAN) is live in the loop |
+| trailers, worktree mode, base-write guard, [BASE] resolution | T-042 | minimal B-1: work happens on `detent/run-<id>`, base branch untouched (asserted) |
+| TTY escalation, dossier UX, risk globs | T-049 | schema-valid dossier written on NEEDS_HUMAN; `risk_label` → RISK_LABEL_REQUIRED (the label half of B-4) |
+| stale-claim breaking | T-055 | the pool **skips** claimed in-flight tickets — never guesses about another process's liveness |
+
+Two defects found by composition during this batch, both fixed with regression tests:
+
+- **`allTickets` read `plan/approval.json` as a ticket** (T-017 latent): F-1 keeps one non-ticket file in `plan/`, and the reader didn't know. Every T-017 test passed because none had ever written an approval. Surfaced the moment the run loop met a C-7-complete fixture.
+- **A stale claim spun the loop forever** (T-041, caught in audit before commit): `ready()` filters claimed tickets but the resumable pool didn't, so a leftover claim file made `claim()` fail on the same ticket indefinitely. The pool now skips claimed in-flight tickets, matching the oracle.
+
+One boundary was redrawn with justification: T-030's zero-kernel-import scan covered `src/cli/**`, which was stricter than §3a — the CLI sits **above** the kernel, and `cli/run.ts` importing the kernel's entry point is the diagram's own edge. The scan now bans exactly what the lint zone bans there (machine, mutators) while adapter/fs/schemas stay at zero.
+
+Also in this batch: N-4's benchmark landed at its normative path (`tests/perf/transition-overhead.bench.ts`, run as a CI-gating test; measured p95 ≈ 0.16 ms, max ≈ 0.9 ms against bounds of 100/500 ms, split printed); `prompts:check` joins the derived-artifact checks (manifest.json diffed like PARITY.md); ARCH-1's seam grew the prompt-set contract — the kernel takes the loaded `PromptSet` as a **required** injection because the lint (correctly) refused `kernel → sessions/prompts`, and `backend.ts` now declares the shape and the S-6 prefix construction both backends share. The parity ratchet became one-directional (`LANDED_THROUGH` ⇒ green): M2 lands mid-milestone, which the M1-era both-directions form could not express.
+
 **1.7** — synced to PRD 2.0-draft.7 (PRDR-048…055, 057…061 applied) and, unlike every earlier sync, this one ships its code deltas in the same commit: draft.7 corrected figures the landed M0/M1 code embodied, so leaving code behind would have left `main` contradicting the PRD it claims to implement. All gates green; 302 passed / 2 skipped.
 
 | Plan | 1.6 | 1.7 |
@@ -598,4 +621,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.7 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.8 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*

@@ -10,9 +10,9 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 
 | Status | Count |
 |---|---:|
-| green | 27 |
+| green | 32 |
 | pending-M1 | 0 |
-| pending-M2 | 24 |
+| pending-M2 | 19 |
 | pending-later | 1 |
 | **total** | **52** |
 
@@ -28,7 +28,7 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_extra.py::test_mode1_stub_detected` | pending-later | T-060 (M3) | — | greenfield vs brownfield detection is C-1's job in the init phase machine |
 | `test_extra.py::test_research_session_gets_domain_scoped_web_tools` | pending-M2 | T-046 (M2) | — |  |
 | `test_extra.py::test_risk_detection_on_master_based_repo` | pending-M2 | T-049 (M2) | — |  |
-| `test_extra.py::test_smoke_mock_backend` | pending-M2 | T-040 (M2) | — |  |
+| `test_extra.py::test_smoke_mock_backend` | green | T-040 (M2) | `tests/sessions/mock.test.ts` | the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050 |
 | `test_extra.py::test_three_change_cycles_escalate` | pending-M2 | T-044 (M2) | — |  |
 | `test_extra.py::test_unparsable_telemetry_is_budget_breaching` | pending-M2 | T-046 (M2) | — |  |
 | `test_extra.py::test_upstream_blocks_with_linked_ticket` | pending-M2 | T-045 (M2) | — |  |
@@ -49,15 +49,15 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_hooks.py::test_read_only_stage_and_loop_guard` | pending-M2 | T-046 (M2) | — |  |
 | `test_kernel_e2e.py::test_changes_then_fix_then_approve` | pending-M2 | T-044 (M2) | — |  |
 | `test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis` | pending-M2 | T-043 (M2) | — |  |
-| `test_kernel_e2e.py::test_feature_to_done_and_merged` | pending-M2 | T-041 (M2) | — |  |
+| `test_kernel_e2e.py::test_feature_to_done_and_merged` | green | T-041 (M2) | `tests/kernel/run.test.ts` | merge-into-main becomes B-1: commits land on detent/run-<id>, base SHA byte-identical; --no-ff worktree merging lands at T-042 |
 | `test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines` | green | T-022 (M1) | `tests/kernel/flake.test.ts` | the reference drove the whole kernel; the run loop lands at T-041, so this ports at the level T-022's AC names — quarantine linked discovered_from, zero fix budget charged |
 | `test_kernel_e2e.py::test_hypothesis_thrash_escalates` | pending-M2 | T-043 (M2) | — |  |
-| `test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier` | pending-M2 | T-041 (M2) | — |  |
-| `test_kernel_e2e.py::test_no_second_blind_fix_after_crash` | pending-M2 | T-041 (M2) | — |  |
+| `test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier` | green | T-041 (M2) | `tests/kernel/run.test.ts` | counters assert the §13 mapping (fix_sessions 2 = blind 1 + informed 1); the oracle's brief-cached assertion belongs to D-18's env-keyed cache and closes at T-045 |
+| `test_kernel_e2e.py::test_no_second_blind_fix_after_crash` | green | T-041 (M2) | `tests/kernel/run.test.ts` |  |
 | `test_kernel_e2e.py::test_research_cache_hit_skips_research_session` | pending-M2 | T-045 (M2) | — |  |
 | `test_kernel_e2e.py::test_risk_path_requires_human_approval` | pending-M2 | T-049 (M2) | — |  |
 | `test_kernel_e2e.py::test_surface_request_grant_and_deny` | pending-M2 | T-046 (M2) | — |  |
-| `test_kernel_e2e.py::test_triage_unverified_blocks` | pending-M2 | T-041 (M2) | — |  |
+| `test_kernel_e2e.py::test_triage_unverified_blocks` | green | T-041 (M2) | `tests/kernel/run.test.ts` | triage did not survive D-10 (planning moved to init); the preserved properties split: an unapproved plan runs nothing (C-9/C-7, exit 2) and a human-gated pool exits 10 with a machine-readable summary |
 | `test_state.py::test_budget_breach_from_anywhere` | green | T-011 (M0) | `tests/oracle/state.test.ts` |  |
 | `test_state.py::test_budget_caps_hold_on_every_reachable_path` | green | T-012 (M0) | `tests/oracle/budgets.test.ts` |  |
 | `test_state.py::test_full_ladder_budget` | green | T-013 (M0) | `tests/oracle/resolver.test.ts` | counter mapping per PRD §13: fix_sessions{0,1,2} <-> (blind,informed){(0,0),(1,0),(1,1)} |

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "roles": {
+    "planner": "84244f2811bef1e7184fb902ba07723ffc47e6187e5044cdbb22731f78b91a08",
+    "diagnose": "99c6b377d305d191c5808433378e167b33490d57f372cd8d98ceba0defebea1f",
+    "implement": "9fc83b2f30807c44c33d77fea2a3e3078210ad38d951d8fbef8f0435ef22cb8b",
+    "blind_fix": "dbebb3a1f015e51bc267c4318d43ed693009dd043126b570d5dd7f09377d8646",
+    "informed_fix": "b41a6c8c0430272d0fd06672567d1164021ffafdeef3665a4682fbc19ecd193e",
+    "review_fix": "1e17365360baf66193f39bc57ecd06fa1fef1849938e8d3057036728d2b350e3",
+    "research": "bb0ab246daba97e842f2e37788fe6a2094ada65569c95ffa77f37fedffad1538",
+    "review": "66fed929746bfd9e962ee41d22731dab6864bab5c04085fa2e7f4e3b1d074fa1"
+  }
+}

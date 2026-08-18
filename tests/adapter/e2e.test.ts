@@ -304,13 +304,21 @@ describe("T-030 bindings-only diffs between fixtures", () => {
 });
 
 describe("T-030 zero kernel involvement (N-1)", () => {
-  it("this e2e and every module below the kernel import nothing from it", () => {
+  it("this e2e and every layer beside the kernel import nothing from it; the CLI only its entry points", () => {
     const kernelImport = /from\s+"[^"]*\/kernel\//;
     expect(readFileSync(fileURLToPath(import.meta.url), "utf8")).not.toMatch(kernelImport);
-    for (const dir of ["adapter", "fs", "cli", "schemas"]) {
+    // adapter, fs and schemas sit beside/below the kernel: zero kernel imports.
+    for (const dir of ["adapter", "fs", "schemas"]) {
       for (const file of walkTs(path.join(SRC, dir))) {
         expect(readFileSync(file, "utf8"), file).not.toMatch(kernelImport);
       }
+    }
+    // The CLI sits ABOVE the kernel in §3a — importing kernel entry points is
+    // the diagram's own edge. What it must never touch is the machine or the
+    // mutators, mirroring the lint zone (PRDR-059).
+    const forbidden = /from\s+"[^"]*\/kernel\/(machine|tickets\/mutations)/;
+    for (const file of walkTs(path.join(SRC, "cli"))) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(forbidden);
     }
   });
 

@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "parity": "tsx scripts/parity.ts",
-    "parity:check": "tsx scripts/parity.ts --check"
+    "parity:check": "tsx scripts/parity.ts --check",
+    "prompts": "tsx scripts/hash-prompts.ts",
+    "prompts:check": "tsx scripts/hash-prompts.ts --check"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.191",

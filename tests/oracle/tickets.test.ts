@@ -117,6 +117,15 @@ describe("T-017 ticket store (A-1, R-3)", () => {
     expect(readTicket(root, "t-1").links).toContainEqual({ rel: "related", ref: "t-9" });
   });
 
+  it("plan/approval.json is C-7's record, not a ticket — the pool ignores it (F-1)", () => {
+    mk("t-1");
+    writeFileSync(
+      path.join(root, ".detent", "plan", "approval.json"),
+      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: "a".repeat(64) }),
+    );
+    expect(allTickets(root).map((t) => t.id)).toEqual(["t-1"]);
+  });
+
   it("generations survive a round trip, including frozen history (X-8)", () => {
     const t = mk("t-1");
     const spent = { ...t.generations[0]!.counters, blind_fix_attempts: 1, sessions: 4 };

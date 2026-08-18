@@ -44,7 +44,8 @@ export function allTickets(root: string): Ticket[] {
   const dir = ticketsDir(root);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
+    // F-1 keeps one non-ticket file in plan/: the C-7 approval record.
+    .filter((f) => f.endsWith(".json") && f !== "approval.json")
     .map((f) => readTicket(root, f.slice(0, -".json".length)))
     .sort((a, b) => (b.priority - a.priority) || a.id.localeCompare(b.id));
 }
