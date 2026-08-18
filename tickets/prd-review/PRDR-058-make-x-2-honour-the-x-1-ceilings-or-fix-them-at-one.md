@@ -1,7 +1,7 @@
 ---
 id: PRDR-058
 title: "Make X-2 honour the X-1 ladder ceilings, or declare them fixed at one"
-state: READY
+state: DONE
 severity: minor
 category: contradiction
 labels: ["prd-review"]

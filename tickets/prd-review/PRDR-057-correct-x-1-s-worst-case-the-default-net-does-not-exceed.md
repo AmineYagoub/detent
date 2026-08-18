@@ -1,7 +1,7 @@
 ---
 id: PRDR-057
 title: "Correct X-1's worst case: it computes to 14, so the default net does not exceed it and no default config loads"
-state: READY
+state: DONE
 severity: major
 category: contradiction
 labels: ["prd-review"]

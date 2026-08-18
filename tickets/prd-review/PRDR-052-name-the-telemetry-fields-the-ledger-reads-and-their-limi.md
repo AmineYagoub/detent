@@ -1,7 +1,7 @@
 ---
 id: PRDR-052
 title: "Name the telemetry fields the ledger reads, and state that reported cost is an estimate"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]

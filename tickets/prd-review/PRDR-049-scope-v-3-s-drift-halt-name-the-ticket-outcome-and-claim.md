@@ -1,7 +1,7 @@
 ---
 id: PRDR-049
 title: "Scope V-3's drift halt: name the ticket outcome, the claim, and the multi-worker case"
-state: READY
+state: DONE
 severity: major
 category: security
 labels: ["prd-review"]

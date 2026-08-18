@@ -1,7 +1,7 @@
 ---
 id: PRDR-055
 title: "Raise N-3's Node floor — Node 20 reached end-of-life on 30 April 2026"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]

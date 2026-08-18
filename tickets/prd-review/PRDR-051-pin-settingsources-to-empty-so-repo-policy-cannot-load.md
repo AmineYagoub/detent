@@ -1,7 +1,7 @@
 ---
 id: PRDR-051
 title: "Pin the backend's setting sources to empty — the default loads policy from the target repository"
-state: READY
+state: DONE
 severity: major
 category: security
 labels: ["prd-review"]

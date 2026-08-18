@@ -1,7 +1,7 @@
 ---
 id: PRDR-061
 title: "Give the gate-execution and binding-probe timeouts X-1 rows — two ceilings route nowhere and cannot be configured"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]

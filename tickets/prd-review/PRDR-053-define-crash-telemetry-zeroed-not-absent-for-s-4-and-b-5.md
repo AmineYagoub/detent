@@ -1,7 +1,7 @@
 ---
 id: PRDR-053
 title: "Define crash telemetry: zeroed is not absent, so S-4's breaker misses it and B-5 mis-accounts"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]

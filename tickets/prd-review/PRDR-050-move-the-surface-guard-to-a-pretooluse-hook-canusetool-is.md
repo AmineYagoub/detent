@@ -1,7 +1,7 @@
 ---
 id: PRDR-050
 title: "Move the surface/protected-glob guard to a PreToolUse hook — canUseTool is bypassed by S-3's allowlists"
-state: READY
+state: DONE
 severity: major
 category: security
 labels: ["prd-review"]

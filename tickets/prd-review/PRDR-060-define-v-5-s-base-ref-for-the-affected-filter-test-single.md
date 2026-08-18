@@ -1,7 +1,7 @@
 ---
 id: PRDR-060
 title: "Define V-5's [BASE] ref — `test_single` claims a deterministic affected filter against an undefined baseline"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]

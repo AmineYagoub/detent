@@ -1,7 +1,7 @@
 ---
 id: PRDR-054
 title: "Make S-6's prompt cache reachable — the default TTL expires between Foreman's sessions"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-048
 title: "Specify run_spend_usd enforcement as check-at-launch, and reserve the multi-worker protocol"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review"]

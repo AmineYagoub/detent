@@ -1,7 +1,7 @@
 ---
 id: PRDR-059
 title: "Extend ARCH-1's dependency lint to the layers below the kernel — adapter and fs are unzoned"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]
