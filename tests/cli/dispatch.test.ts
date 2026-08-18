@@ -37,13 +37,17 @@ describe("detent CLI dispatch", () => {
     }
   });
 
-  it("init reports it is the M3 pipeline rather than pretending", async () => {
+  it("init is wired to the pipeline and enforces C-1 root-only", async () => {
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     try {
-      expect(await main(["init"])).toBe(2);
-      expect(err.mock.calls.join("")).toContain("M3");
+      // /tmp is not a git repository: C-1's other branch, reported plainly.
+      const code = await main(["init", "/tmp"]);
+      expect(code).toBe(2);
+      expect(`${err.mock.calls.join("")}${out.mock.calls.join("")}`).toMatch(/git repository|git root/);
     } finally {
       err.mockRestore();
+      out.mockRestore();
     }
   });
 });

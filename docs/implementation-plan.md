@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.10 — M2 feature-complete: T-049/050/052/053/055 landed; 51/52 oracle tests green (§7) |
+| Plan version | 1.11 — M3 opened: T-060/061/062/063/069 landed (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -483,6 +483,24 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.11** — M3 opened with the front half of the `init` pipeline: T-060 (phase machine + resume), T-061 (doc discovery), T-062 (ANALYZE), T-063 (planning research), T-069 (porcelain freeze). All gates green: 508 passed / 2 skipped. Parity is unchanged at 51/52 — M3's one oracle test (`test_mode1_stub_detected`) closes at T-060's sibling work in the back half, and is deliberately still open.
+
+The modelling decision that makes C-8's AC true, recorded because it is not obvious:
+
+> **DISCOVER reads the listing; ANALYZE reads the contents.** C-8 requires that "editing PRD.md re-executes ANALYZE forward" while "editing nothing re-executes nothing". Both hold only if the two phases hash different things — which files *exist* versus what they *say*. Editing a document therefore reuses discovery and replays analysis; adding one replays both. T-024's checkpoints address content; the choice of *what content* is a phase's own, so the digests live in `init/machine.ts` (`listingDigest` / `contentsDigest`), with T-024 as the substrate the plan always called it.
+
+Per ticket:
+
+- **T-060**: the pipeline is data (an ordered phase list, one handler each) and the driver's only job is deciding what to replay. An interrupted phase is **not** checkpointed, so a re-run resumes exactly there — asserted by running a handler that interrupts, then flipping it. C-1 reports three cases rather than two (`root` / `subdirectory` / `no-repo`), because a non-repo directory is not an error: C-6 may offer `git init` there, which is T-065's.
+- **T-061**: C-2's docs half — the named patterns, sorted, POSIX, never traversing `node_modules`/`.detent`/`dist`. AWAIT_DOCS carries the exact pattern list, because "no docs found" without it cannot distinguish a misnamed file from a wrong directory.
+- **T-062**: greenfield is the *absence of stack markers*, not a flag, and a greenfield analysis without a chosen stack **fails the phase** — D-10 would have nothing to bind. An invalid analysis also fails rather than becoming an AWAIT_INFO: surfacing a malformed artifact as a user question puts the model's malfunction in the human's lap (P2).
+- **T-063**: planning research keeps its own counter and its own cache key (question hash, not failure signature) — D-11's two capabilities, two budgets. Exhaustion adds the question to the **same** AWAIT_INFO batch C-3 already raises, so C-5 stays closed at five. A backend over-reporting tool calls cannot push the counter past the ceiling. The X-6a validator is now literally shared: `requireLocalSearchBeforeWeb` is one function used by both brief schemas.
+- **T-069**: the README gained a real golden path, and the freeze is asserted from it — exactly two commands parsed out of the fenced blocks, five interrupts, and a source scan proving no module outside the two sanctioned consent surfaces reaches for a prompt (C-5's lint half).
+
+One defect found in existing work: **T-054's apply-site scan matched any `machine.js`**, so it flagged `src/init/machine.ts` — a different module with no transition table — the moment M3 landed. The scan now matches `kernel/machine.js` specifically and requires the importer to be in `kernel/`. It was a false positive rather than a miss, but a scan that cries wolf gets loosened by the next person under time pressure.
+
+`init` is wired into the CLI dispatcher and **reports its own gaps**: with DETERMINE_VERIFICATION, PLAN, PREPARE_AGENTS and PRESENT unbuilt, it names them and exits 2 rather than claiming READY.
+
 **1.10** — the last five M2 tickets landed: T-049 (escalation UX + risk gate), T-050 (doctor), T-052 (SEC red-team pack + env allowlist + scrubbing), T-053 (status/report + all eight §14 metrics), T-055 (approve/requeue plumbing). The final three oracle tests close — parity **51 / 0 / 0 / 1**, zero pending-M2; only `test_mode1_stub_detected` (T-060, M3) remains. All gates green: 465 passed / 2 skipped. A `detent` CLI dispatcher (`src/cli/index.ts`) now routes the two porcelain verbs and the documented plumbing. **M2 is feature-complete; its exit ticket T-051 — a live budgeted 3-ticket run — is the one remaining step, and it is R-10-gated on a real API key + spend cap.**
 
 What each ticket proved:
@@ -652,4 +670,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.10 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.11 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*

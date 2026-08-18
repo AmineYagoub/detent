@@ -1,3 +1,4 @@
+import { main as initMain } from "./init.js";
 import { main as runMain } from "./run.js";
 import { main as statusMain } from "./status.js";
 import { main as reportMain } from "./report.js";
@@ -23,15 +24,12 @@ const VERBS: Record<string, Verb> = {
   doctor: doctorMain,
   approve: approveMain,
   requeue: requeueMain,
-  init: () => {
-    process.stderr.write("`detent init` is the M3 pipeline (T-060…); not yet built.\n");
-    return 2;
-  },
+  init: initMain,
 };
 
 const USAGE = `detent <command>
 
-  init                 prepare a project (M3 — not yet built)
+  init [root]          prepare a project: discover, analyze, plan, approve
   run [root]           execute the approved plan
   status [root]        show ticket status (C-13 vocabulary)
   report [root]        emit the §14 metrics

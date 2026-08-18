@@ -36,7 +36,12 @@ describe("T-054 the sanctioned apply-site set (source scan)", () => {
     const importers: string[] = [];
     for (const file of walkTs(SRC)) {
       const body = readFileSync(file, "utf8");
-      if (/from\s+"[^"]*\/machine\.js"|from\s+"\.\/machine\.js"/.test(body)) importers.push(rel(file));
+      // Precise about WHICH machine: `src/init/machine.ts` is the init phase
+      // driver, a different module that holds no transition table. A looser
+      // pattern flagged it the moment M3 landed.
+      if (/from\s+"(?:\.\.\/)*kernel\/machine\.js"|from\s+"\.\/machine\.js"/.test(body) && rel(file).startsWith("kernel/")) {
+        importers.push(rel(file));
+      }
     }
     // run.ts commits state; worstcase.ts walks table COPIES (a computation,
     // not a state mutation); plumbing.ts commits the two HUMAN_* events on an

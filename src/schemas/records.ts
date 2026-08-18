@@ -3,6 +3,7 @@ import { EVENTS, STATES } from "./states.js";
 import { SCHEMA_VERSION, isoTimestamp, nonEmptyString, sha256Hex } from "./common.js";
 import { countersSchema, reviewTags } from "./ticket.js";
 import { GATE_SLOTS } from "./gates.js";
+import { requireLocalSearchBeforeWeb } from "./init.js";
 
 /** A-3 Hypothesis (X-4). A root cause is inadmissible as prose. */
 export const hypothesisSchema = z.strictObject({
@@ -41,19 +42,9 @@ export const researchBriefSchema = z
       code_checked: z.array(z.string()).default([]),
     }),
   })
-  .superRefine((brief, ctx) => {
-    const citesUrl = brief.evidence.some((e) => /^https?:\/\//i.test(e.source));
-    const searchedLocally =
-      brief.local_search.docs_checked.length > 0 || brief.local_search.code_checked.length > 0;
-    if (citesUrl && !searchedLocally) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["local_search"],
-        message:
-          "X-6a: a brief citing a URL must record a non-empty local_search (tiers 1-2 consulted first)",
-      });
-    }
-  });
+  // T-063: one X-6a validator, shared with the planning-brief schema, so the
+  // two research kinds cannot drift apart on the rule that binds both.
+  .superRefine(requireLocalSearchBeforeWeb);
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 
 /** A-5 Review. Style is not a finding — the tag set is closed. */

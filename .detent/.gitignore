@@ -1,0 +1,10 @@
+# Written by Detent (F-1). Do not edit.
+# Local run state: checkpoints, journals, claims and worktrees never travel
+# between machines. Everything not listed here is committed on purpose.
+claims/
+ledger.jsonl
+logs/
+runs/
+state/
+transitions.jsonl
+worktrees/
