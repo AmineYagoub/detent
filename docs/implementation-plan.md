@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.4 — renamed to Detent (PRDR-056 / D-20) (§7) |
+| Plan version | 1.5 — M1 adapter + filesystem implemented, T-020…T-029 (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -24,7 +24,7 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 | # | Question | Resolution |
 |---|---|---|
 | R-1 | N-3 "minimal pinned deps" scope | Governs **direct runtime** deps (`@anthropic-ai/claude-agent-sdk`, `zod`, `picomatch`). Dev tooling (vitest, eslint, tsx, typescript) is unrestricted-but-lean and never ships. Two corrections from the upstream check: **zod 4** is the target (~7× faster array parsing, and TS type instantiations drop from >25k to ~175 — a compile-time win for a project whose backbone is `src/schemas/**` under a strict tsconfig; migration cost is `z.string().email()` → `z.email()`, `.merge()` → `.extend()`, the unified error param, and changed optional + `.catch()`/`.default()` semantics). And the agent SDK ships **platform-specific optional dependencies** (`-darwin-arm64`, `-linux-x64`, `-linux-x64-musl`, `-win32-x64`), so "three deps" means three *direct* deps — a transitive count will not be three. |
-| R-2 | Test runner | vitest (named in M0). All 52 oracle tests are translated against interfaces at M0 (PRD M0: "against interfaces only"); those needing a later layer land as `test.todo`. The parity report (T-018) records per test `status ∈ {green, pending-M1, pending-M2, pending-later}` **plus the ticket that closes it**, so each milestone exit asserts its own threshold instead of one global one. Status is *derived* from the closing ticket's milestone rather than asserted separately, so the two cannot drift. Measured distribution at M0 exit: **22 green, 5 pending-M1, 24 pending-M2, 1 pending-later**. The fourth value is not decoration — `test_mode1_stub_detected` maps to greenfield/brownfield detection, which is C-1's job at T-060 (M3), so a three-value vocabulary could not express it. |
+| R-2 | Test runner | vitest (named in M0). All 52 oracle tests are translated against interfaces at M0 (PRD M0: "against interfaces only"); those needing a later layer land as `test.todo`. The parity report (T-018) records per test `status ∈ {green, pending-M1, pending-M2, pending-later}` **plus the ticket that closes it**, so each milestone exit asserts its own threshold instead of one global one. Status is *derived* from the closing ticket's milestone rather than asserted separately, so the two cannot drift. Measured distribution at M0 exit: **22 green, 5 pending-M1, 24 pending-M2, 1 pending-later**; after T-020 and T-022, **27 / 0 / 24 / 1**. The fourth value is not decoration — `test_mode1_stub_detected` maps to greenfield/brownfield detection, which is C-1's job at T-060 (M3), so a three-value vocabulary could not express it. Status derives from whether the port exists (`ts` names a test file that cites the closing ticket), not from the closing ticket's milestone: the milestone-only form was correct only while M0 was the last landed milestone, and kept reporting `pending-M1` after T-020 and T-022 landed. `LANDED_THROUGH` is the single ratchet, asserted in both directions. |
 | R-3 | Atomic claim | `fs.openSync(path, "wx")` — POSIX O_CREAT\|O_EXCL, same semantics as the oracle. Claim-race test forks real processes via `node:child_process`. |
 | R-4 | Resolver caller-set test (X-2 AC) | Source-scan unit test (fs + regex over `src/`): `resolveRed(` may appear only in the four allowed call sites + its own module + tests. No AST dependency. |
 | R-5 | ARCH-1 dependency lint | eslint `no-restricted-imports` zones: `src/kernel/**` bans `@anthropic-ai/*` and `src/sessions/**` (except `src/sessions/backend.ts` interface); `src/sessions/**` bans `src/kernel/machine` and `src/kernel/tickets/mutations`. ARCH-1's "no kernel state mutators" is only expressible to `no-restricted-imports` if mutators are their own module, so T-017 lands `src/kernel/tickets/` as a directory splitting `mutations.ts` from `readers.ts`. dependency-cruiser avoided (R-1 leanness). |
@@ -34,7 +34,7 @@ The PRD deliberately leaves mechanics open; these are the resolutions (flagged h
 | R-9 | Where `maxPossibleSessions` runs | In the config module's load path — config parse → compute → assert → return; the CLI never sees an invalid config object. |
 | R-10 | Live-session CI | Jobs needing real SDK sessions (T-051, T-070, doctor smoke) are gated on `ANTHROPIC_API_KEY` presence + a spend cap env; contributors without keys still get a fully green mock suite. |
 | R-11 | Package identity pre-M4 | `package.json` name `detent-cli-placeholder`, `"private": true` until OQ-1/OQ-2 resolve at T-083. |
-| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,fixtures,sec,live,docs,perf}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. `tests/perf/` is fixed by draft.5's N-4, which names `tests/perf/transition-overhead.bench.ts` normatively. |
+| R-12 | Repo layout | `src/{cli,kernel,adapter,sessions,schemas,fs,init}` (with `src/kernel/tickets/{readers,mutations}.ts` per R-5) + `prompts/` + `scripts/` + `tests/{oracle,arch,adapter,fs,kernel,cli,fixtures,sec,live,docs,perf}` — directory names are what R-5's lint zones bind to, so every ticket surface must name one of them. `tests/perf/` is fixed by draft.5's N-4, which names `tests/perf/transition-overhead.bench.ts` normatively. `tests/{adapter,fs,kernel,cli}` mirror the `src/` layer they cover and were added at 1.5: M1's tickets are not oracle ports, and `tests/oracle/` had been the only home for module tests. Oracle ports are located by the parity map's `ts` field, not by directory. |
 
 ## 2. Execution Topology
 
@@ -477,6 +477,31 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.5** — M1's ten tickets implemented (T-020…T-029); no PRD semantics changed and no ticket rescoped. T-030, M1's exit ticket, is **not** included, so M1 is not exited — but its parity half is met: T-020 and T-022 close all five `pending-M1` oracle tests, so the count reaches 0 ahead of the exit review.
+
+| Plan | 1.4 | 1.5 |
+|---|---|---|
+| R-2 | status derived from the closing ticket's milestone | derived from whether the port **exists**. The milestone-only form was correct only while M0 was the last landed milestone: T-020 and T-022 landed and their five oracle tests still reported `pending-M1`. `LANDED_THROUGH` is now the one ratchet, asserted in both directions — a green entry whose milestone has not landed fails, and so does a landed milestone with an unported test |
+| R-2 | 22 / 5 / 24 / 1 | **27 / 0 / 24 / 1** measured after T-022 |
+| R-12 | `tests/{oracle,arch,fixtures,sec,live,docs,perf}` | + `tests/{adapter,fs,kernel,cli}` — M1's tickets are not oracle ports and had no home; oracle ports are located by the parity map's `ts` field, not by directory |
+| T-017 | `linkDiscovered` stamped `discovered_from` on both ends | the parent carries `quarantines` (X-5) or `related`. Both ends reading `discovered_from` made the direction unreadable — a reader of the parent saw "discovered from its own quarantine ticket" |
+| T-020 / T-025 | gate slots declared twice | `src/schemas/gates.ts` owns the vocabulary; A-6's enum and the adapter both derive from it, as `STATES` already did |
+
+Four defects found by the implementation and fixed inside these tickets rather than filed:
+
+| Where | Defect | Fix |
+|---|---|---|
+| T-023 | `writeArtifact("plan/../../../x.json")` matched the `plan/` entry by prefix and then joined straight out of `.detent/` | containment check on the relative path; regression test asserts nothing lands outside the state directory |
+| T-026 | `resolveChoice` tested candidate membership by object identity | membership by value. C-5 interrupts batch at phase boundaries and resume from a checkpoint (F-4), so the answer arrives in a later process and the offer's object identity is gone; the test now round-trips through JSON |
+| T-022 | `RerunLedger.used_for` | `usedFor` — the codebase is camelCase |
+| T-025 | discovery could have exposed `writeDiscovery(root, …)` that wrote nothing | removed; `discoveryPath` names where the checkpoint goes and `serializeDiscovery` produces the bytes |
+| T-022 | `filterFlake`'s rerun ledger was optional | required, and it carries the ceiling. An optional ledger hands every red gate a fresh allowance — an X-1 ceiling disabled by forgetting to thread a parameter, which is what P6 forbids. `ledgerFor(budgets)` builds one per generation |
+
+Two implementation notes worth carrying, neither a plan change:
+
+- **T-020 does not classify.** The plan says it *feeds* X-5/X-7, and it is written that way: the runner reports `outcome ∈ {exited, timed-out, not-found}` and leaves classification to `src/kernel/classify.ts`. That keeps the adapter free of any upward dependency on the kernel — a direction ARCH-1's lint does not currently enforce, since R-5 zones only `kernel/**` and `sessions/**`. Verified by grep, not by CI (see PRDR-059).
+- **T-022's third oracle port lands at the filter's level, not end to end.** `test_flake_charges_nothing_and_quarantines` drove the whole reference kernel; the run loop is T-041. It is ported against a real ticket store as T-022's AC words it — quarantine linked `discovered_from`, zero fix budget charged — and the parity map records that in its note.
+
 **1.4** — product renamed **Foreman → Detent** per PRDR-056 / D-20, applied to PRD 2.0-draft.6 first. Identifier rename only; no ticket added, removed, or rescoped, and no AC's meaning changed. Case-preserving throughout: product name, `.detent/`, `Detent-Ticket:` trailer, `detent/run-<id>` branch prefix, the `detent init` / `detent run` porcelain, `detent-prd-v2.md`, and R-11's placeholder package name. Three consequences are carried, not invented here: T-023 gains the `.foreman/` → `.detent/` relocation as part of F-3's v0→v1 migration; T-042 must parse both trailer forms while writing only the current one, since history is immutable; and T-070's self-build seed is the renamed PRD file. The Python oracle keeps its own name — it is a historical artifact, and `prd-review` evidence filed before the rename is preserved verbatim per N-6.
 
 **1.3** — verified against the live Agent SDK documentation and current release data; six findings filed as PRDR-050…055. The three plan-level ones are applied here; the PRD-level three (guard layer, setting sources, telemetry fields) are pre-applied to the tickets they implement so T-046/T-048 do not encode a design the PRD is about to amend.
@@ -526,4 +551,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.4 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.5 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*

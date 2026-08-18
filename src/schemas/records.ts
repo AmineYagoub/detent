@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EVENTS, STATES } from "./states.js";
 import { SCHEMA_VERSION, isoTimestamp, nonEmptyString, sha256Hex } from "./common.js";
 import { countersSchema, reviewTags } from "./ticket.js";
+import { GATE_SLOTS } from "./gates.js";
 
 /** A-3 Hypothesis (X-4). A root cause is inadmissible as prose. */
 export const hypothesisSchema = z.strictObject({
@@ -80,7 +81,7 @@ export type Review = z.infer<typeof reviewSchema>;
 /** A-6 Binding record (V-2). */
 export const bindingSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
-  slot: z.enum(["test", "test_single", "lint", "typecheck", "build", "e2e"]),
+  slot: z.enum(GATE_SLOTS),
   adapter: nonEmptyString,
   ref: nonEmptyString,
   resolved: nonEmptyString,
@@ -200,3 +201,23 @@ export const approvalSchema = z.strictObject({
   plan_hash: sha256Hex,
 });
 export type Approval = z.infer<typeof approvalSchema>;
+
+/**
+ * F-1's `bindings.json`: the committed collection of A-6 records. One file, so
+ * V-3 can re-resolve every slot in one read before a gate runs.
+ */
+export const bindingsFileSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  bindings: z.array(bindingSchema).default([]),
+  /** V-1: slots deliberately left unbound, with who acknowledged it and when. */
+  skips: z
+    .array(
+      z.strictObject({
+        slot: bindingSchema.shape.slot,
+        acknowledged_by: nonEmptyString,
+        at: isoTimestamp,
+      }),
+    )
+    .default([]),
+});
+export type BindingsFile = z.infer<typeof bindingsFileSchema>;

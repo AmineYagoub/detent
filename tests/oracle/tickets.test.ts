@@ -113,7 +113,8 @@ describe("T-017 ticket store (A-1, R-3)", () => {
       id: "t-9", type: "bug", title: "flaky test", acceptance_criteria: ["stable"],
     });
     expect(child.links).toContainEqual({ rel: "discovered_from", ref: "t-1" });
-    expect(readTicket(root, "t-1").links).toContainEqual({ rel: "discovered_from", ref: "t-9" });
+    // The back-link is not `discovered_from`: t-1 was not discovered from t-9.
+    expect(readTicket(root, "t-1").links).toContainEqual({ rel: "related", ref: "t-9" });
   });
 
   it("generations survive a round trip, including frozen history (X-8)", () => {

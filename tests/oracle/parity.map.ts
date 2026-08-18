@@ -59,8 +59,8 @@ export const PARITY: readonly ParityEntry[] = [
   },
   { oracle: "test_contract.py::test_unknown_budget_rejected", ticket: "T-014", ts: "tests/oracle/worstcase.test.ts" },
   { oracle: "test_contract.py::test_kernel_contains_no_stack_strings", ticket: "T-003", ts: "tests/arch/deps.test.ts", note: "generalized into ARCH-1's dependency-direction lint" },
-  { oracle: "test_contract.py::test_gate_executes_and_flags_unrunnable", ticket: "T-020" },
-  { oracle: "test_contract.py::test_gate_accepts_runnable_failing_command", ticket: "T-020" },
+  { oracle: "test_contract.py::test_gate_executes_and_flags_unrunnable", ticket: "T-020", ts: "tests/adapter/run.test.ts", note: "the reference raised inside `validate_gate`; the runner's half is `runnable()`, the refusal is T-026's" },
+  { oracle: "test_contract.py::test_gate_accepts_runnable_failing_command", ticket: "T-020", ts: "tests/adapter/run.test.ts" },
 
   // ---- test_gates.py (7) ----------------------------------------------------
   { oracle: "test_gates.py::test_flake", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
@@ -68,8 +68,8 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_gates.py::test_assertion_default", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
   { oracle: "test_gates.py::test_stable_across_volatile_details", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
   { oracle: "test_gates.py::test_different_failures_differ", ticket: "T-016", ts: "tests/oracle/classify.test.ts" },
-  { oracle: "test_gates.py::test_run_and_flake_filter", ticket: "T-022" },
-  { oracle: "test_gates.py::test_persistent_failure_survives_filter", ticket: "T-022" },
+  { oracle: "test_gates.py::test_run_and_flake_filter", ticket: "T-022", ts: "tests/kernel/flake.test.ts" },
+  { oracle: "test_gates.py::test_persistent_failure_survives_filter", ticket: "T-022", ts: "tests/kernel/flake.test.ts" },
 
   // ---- test_hooks.py (7) ----------------------------------------------------
   // PRDR-050: these close at T-046 against a PreToolUse hook, not canUseTool.
@@ -105,7 +105,12 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_kernel_e2e.py::test_hypothesis_thrash_escalates", ticket: "T-043" },
   { oracle: "test_kernel_e2e.py::test_surface_request_grant_and_deny", ticket: "T-046" },
   { oracle: "test_kernel_e2e.py::test_risk_path_requires_human_approval", ticket: "T-049" },
-  { oracle: "test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines", ticket: "T-022" },
+  {
+    oracle: "test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines",
+    ticket: "T-022",
+    ts: "tests/kernel/flake.test.ts",
+    note: "the reference drove the whole kernel; the run loop lands at T-041, so this ports at the level T-022's AC names — quarantine linked discovered_from, zero fix budget charged",
+  },
   { oracle: "test_kernel_e2e.py::test_changes_then_fix_then_approve", ticket: "T-044" },
 ];
 
@@ -113,7 +118,7 @@ export const PARITY: readonly ParityEntry[] = [
 export const ORACLE_TEST_COUNT = 52;
 
 /** Which milestone a closing ticket belongs to, from the plan's numbering. */
-export function milestoneOf(ticket: string): "P0" | "M0" | "M1" | "M2" | "M3" | "M4" {
+export function milestoneOf(ticket: string): Milestone {
   const n = Number(ticket.slice(2));
   if (n < 10) return "P0";
   if (n < 20) return "M0";
@@ -125,9 +130,32 @@ export function milestoneOf(ticket: string): "P0" | "M0" | "M1" | "M2" | "M3" | 
 
 export type ParityStatus = "green" | "pending-M1" | "pending-M2" | "pending-later";
 
+/** Milestones in order, so "has this landed yet?" is a comparison. */
+export const MILESTONE_ORDER = ["P0", "M0", "M1", "M2", "M3", "M4"] as const;
+export type Milestone = (typeof MILESTONE_ORDER)[number];
+
+/**
+ * The last milestone whose tickets are all written. One ratchet: bumping it
+ * without porting the milestone's oracle tests fails `parity.test.ts`.
+ */
+export const LANDED_THROUGH: Milestone = "M1";
+
+export function hasLanded(milestone: Milestone): boolean {
+  return MILESTONE_ORDER.indexOf(milestone) <= MILESTONE_ORDER.indexOf(LANDED_THROUGH);
+}
+
+/**
+ * Green means the port exists — `ts` names a real test file that cites the
+ * closing ticket, which `parity.test.ts` verifies. A pending entry is labelled
+ * by the milestone that will close it.
+ *
+ * The M0 version of this derived status from the milestone alone, which was
+ * only correct while M0 was the last landed milestone: T-020 and T-022 landed
+ * and their five oracle tests kept reporting `pending-M1`.
+ */
 export function statusOf(entry: ParityEntry): ParityStatus {
+  if (entry.ts !== undefined) return "green";
   const m = milestoneOf(entry.ticket);
-  if (m === "P0" || m === "M0") return "green";
   if (m === "M1") return "pending-M1";
   if (m === "M2") return "pending-M2";
   return "pending-later";

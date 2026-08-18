@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { PARITY, ORACLE_TEST_COUNT, milestoneOf, statusOf } from "./parity.map.js";
+import { PARITY, ORACLE_TEST_COUNT, LANDED_THROUGH, hasLanded, milestoneOf, statusOf } from "./parity.map.js";
 import { OUTPUTS, longestChain, parsePlan } from "../../scripts/parity.js";
 
 describe("T-018 oracle parity report (M0 exit)", () => {
@@ -9,17 +9,30 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     expect(new Set(PARITY.map((e) => e.oracle)).size).toBe(ORACLE_TEST_COUNT);
   });
 
-  it("every entry names a closing ticket, and every green entry names its TypeScript home", () => {
+  it("every entry names a closing ticket", () => {
+    for (const e of PARITY) expect(e.ticket, e.oracle).toMatch(/^T-\d{3}$/);
+  });
+
+  it("green means exactly: the closing ticket's milestone has landed", () => {
+    // Both directions. A green entry whose ticket has not been written would be
+    // a lie; a landed milestone with an unported oracle test is a gap. The M0
+    // form of this derived status from the milestone alone, which made the
+    // second direction unfalsifiable.
     for (const e of PARITY) {
-      expect(e.ticket, e.oracle).toMatch(/^T-\d{3}$/);
-      if (statusOf(e) === "green") expect(e.ts, `${e.oracle} is green but has no TS home`).toBeTruthy();
-      else expect(e.ts, `${e.oracle} is pending but claims a TS home`).toBeUndefined();
+      expect(statusOf(e) === "green", `${e.oracle} (${e.ticket}, ${milestoneOf(e.ticket)})`).toBe(
+        hasLanded(milestoneOf(e.ticket)),
+      );
     }
   });
 
   it("M0 exit threshold: at least 22 green", () => {
     const green = PARITY.filter((e) => statusOf(e) === "green");
     expect(green.length).toBeGreaterThanOrEqual(22);
+  });
+
+  it("M1 exit threshold: zero pending-M1 (T-020 and T-022 close all five)", () => {
+    expect(PARITY.filter((e) => statusOf(e) === "pending-M1")).toEqual([]);
+    expect(LANDED_THROUGH).toBe("M1");
   });
 
   it("every green entry's TypeScript home is a test file that exists and names its ticket", () => {

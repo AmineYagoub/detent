@@ -115,13 +115,24 @@ export function appendNote(
 /**
  * X-5 / X-6: a quarantine or upstream-bug ticket is linked back to the ticket
  * whose run surfaced it, so the discovery is traceable from either end.
+ *
+ * The two ends carry different rels on purpose. The child was discovered from
+ * the parent; the parent was not discovered from the child, and stamping
+ * `discovered_from` on both would make the direction unreadable. `back` names
+ * what the parent does to the child — `quarantines` for a flake (X-5),
+ * `related` otherwise.
  */
-export function linkDiscovered(root: string, parentId: string, child: NewTicket): Ticket {
+export function linkDiscovered(
+  root: string,
+  parentId: string,
+  child: NewTicket,
+  back: "quarantines" | "related" = "related",
+): Ticket {
   const created = createTicket(root, child);
   const parent = readTicket(root, parentId);
   writeTicket(root, {
     ...parent,
-    links: [...parent.links, { rel: "discovered_from", ref: created.id }],
+    links: [...parent.links, { rel: back, ref: created.id }],
   });
   return writeTicket(root, {
     ...created,
