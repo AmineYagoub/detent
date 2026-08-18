@@ -65,7 +65,8 @@ describe("T-100 R-1: the tool set is closed", () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     const core = await openCore(root);
-    const result = await callTool(core, "claim", { op: "acquire" }); // ticket_id missing
+    // ticket_id missing
+    const result = await callTool(core, "claim", { op: "acquire" });
     expect((result as { error: { code: string; message: string } }).error.code).toBe("INVALID_INPUT");
     expect((result as { error: { message: string } }).error.message).toContain("claim");
   });

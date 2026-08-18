@@ -113,7 +113,8 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
   it("budget-exceeded results read the breakdown, which includes the response that crossed the ceiling", () => {
     const parsed = parseResultMessage({ ...SUCCESS, subtype: "error_max_budget_usd", is_error: true });
     expect(parsed.ok).toBe(false);
-    expect(parsed.inputTokens).toBe(1200); // never the omitting cumulative field
+    // never the omitting cumulative field
+    expect(parsed.inputTokens).toBe(1200);
   });
 
   it("absent telemetry trips the breaker flag (S-4)", () => {
@@ -131,7 +132,8 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
       usage: { input_tokens: 0, output_tokens: 0 },
       modelUsage: {},
     });
-    expect(parsed.telemetryParsed).toBe(true); // zeroed ≠ absent
+    // zeroed ≠ absent
+    expect(parsed.telemetryParsed).toBe(true);
     expect(parsed.crashed).toBe(true);
   });
 });
@@ -155,7 +157,8 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
 
     const backend = new MockBackend({
       "t1:implement": requesting("docs/extra.md"),
-      "t2:implement": requesting("AGENTS.md"), // protected (config)
+      // protected (config)
+      "t2:implement": requesting("AGENTS.md"),
       review: reviewApprove,
     });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "sr" });
@@ -168,7 +171,8 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
     const t2 = readTicket(root, "t2");
     expect(t2.surface).not.toContain("AGENTS.md");
     expect(t2.notes.map((n) => n.text).join(" ")).toContain("surface DENIED: AGENTS.md");
-    expect(outcome.exitCode).toBe(0); // a denied expansion is not an escalation
+    // a denied expansion is not an escalation
+    expect(outcome.exitCode).toBe(0);
   });
 });
 

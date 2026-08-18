@@ -50,8 +50,10 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
   it("a mixed run produces every metric, with honest n/a where the denominator is empty", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
-    addTicket(root, { id: "t1" }); // will complete autonomously
-    addTicket(root, { id: "t2" }); // will exhaust the ladder
+    // will complete autonomously
+    addTicket(root, { id: "t1" });
+    // will exhaust the ladder
+    addTicket(root, { id: "t2" });
 
     const backend = new MockBackend({
       "t1:implement": implementGreen,
@@ -114,7 +116,8 @@ describe("T-053 report computes from artifacts alone (N-5)", () => {
 
     const report = buildReport(root);
     expect(report.autonomous_completion_rate.denominator).toBe(1);
-    expect(report.autonomous_completion_rate.value).toBe(0); // DONE, but a human touched it
+    // DONE, but a human touched it
+    expect(report.autonomous_completion_rate.value).toBe(0);
   });
 });
 

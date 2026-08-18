@@ -57,7 +57,8 @@ function journaledTransitions(root: string): Record<string, unknown>[] {
     .filter((l) => l.trim() !== "")
     .map((l) => {
       const row = JSON.parse(l) as Record<string, unknown>;
-      delete row["at"]; // two wall clocks; everything else must agree
+      // two wall clocks; everything else must agree
+      delete row["at"];
       return row;
     });
 }

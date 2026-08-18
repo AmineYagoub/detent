@@ -72,7 +72,8 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     const doneAt = lines.findIndex((l) => l.to === "DONE");
     expect(approvedAt).toBeGreaterThanOrEqual(0);
     expect(doneAt).toBeGreaterThan(approvedAt);
-    expect(lines[doneAt]?.event).toBe("GATE_GREEN"); // the re-verify, not the approval
+    // the re-verify, not the approval
+    expect(lines[doneAt]?.event).toBe("GATE_GREEN");
   });
 
   it("oracle test_risk_detection_on_master_based_repo: globs fire against a master-based repository", async () => {
@@ -88,7 +89,8 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("NEEDS_HUMAN");
     expect(t1.notes.map((n) => n.text).join(" ")).toContain("src/auth/login.py");
-    expect(git(root, "rev-parse", "master")).toBeTruthy(); // base intact
+    // base intact
+    expect(git(root, "rev-parse", "master")).toBeTruthy();
   });
 
   it("the risk_label half still fires without any glob", async () => {

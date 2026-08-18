@@ -101,7 +101,8 @@ const PLANS: readonly FixturePlan[] = [
   {
     fixture: "go-cli",
     ecosystem: "go",
-    lockfile: NO_LOCKFILE, // no go.sum: a zero-dependency module (R-7 fallback)
+    // no go.sum: a zero-dependency module (R-7 fallback)
+    lockfile: NO_LOCKFILE,
     bound: { test: ["make", "make test"], lint: ["go", "go vet ./..."], build: ["go", "go build ./..."] },
     choose: { slot: "test", adapter: "make" },
     skips: ["test_single", "typecheck", "e2e"],

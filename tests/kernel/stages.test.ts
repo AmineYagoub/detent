@@ -220,13 +220,16 @@ describe("T-045 research cache (X-6, D-18)", () => {
       implement: implementRed,
       blind_fix: noopFix,
       research: researchValid,
-      "t1:informed_fix": noopFix, // t1 exhausts → NEEDS_HUMAN, brief cached
-      "t2:informed_fix": fixGreen, // t2 hits the cache, then succeeds
+      // t1 exhausts → NEEDS_HUMAN, brief cached
+      "t1:informed_fix": noopFix,
+      // t2 hits the cache, then succeeds
+      "t2:informed_fix": fixGreen,
       review: reviewApprove,
     });
     const outcome = await run(opts(root, backend));
 
-    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED); // t1 pending; t2 done
+    // t1 pending; t2 done
+    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
     expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN");
     expect(readTicket(root, "t2").state).toBe("DONE");
 
@@ -308,11 +311,13 @@ describe("T-045 research cache (X-6, D-18)", () => {
       readFailureSignature: () => signature,
       toolCallCeiling: 8,
       note: () => {},
-      env: async () => envB, // same lockfile+runtime → same KEY, contradicting facts
+      // same lockfile+runtime → same KEY, contradicting facts
+      env: async () => envB,
       ticketInputs: {},
     });
 
-    expect(launches).toBe(1); // the hit was refused; a live session ran
+    // the hit was refused; a live session ran
+    expect(launches).toBe(1);
     expect(outcome.cached).toBe(false);
   });
 

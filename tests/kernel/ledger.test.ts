@@ -48,7 +48,8 @@ describe("T-048 D-25: the spend ceiling is a launch gate", () => {
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "spend" });
 
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
-    expect(backend.calls.map((c) => c.role)).toEqual(["implement"]); // exactly one launch
+    // exactly one launch
+    expect(backend.calls.map((c) => c.role)).toEqual(["implement"]);
     const t1 = readTicket(root, "t1");
     expect(t1.state).toBe("NEEDS_HUMAN");
     expect(t1.notes.map((n) => n.text).join(" ")).toContain("run-spend exhaustion");

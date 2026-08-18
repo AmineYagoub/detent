@@ -55,7 +55,8 @@ export function discoverDocs(root: string, patterns: readonly string[] = DOC_PAT
       try {
         stats = statSync(abs);
       } catch {
-        continue; // a broken symlink is not a document
+        // a broken symlink is not a document
+        continue;
       }
       if (stats.isDirectory()) walk(abs, rel);
       else if (isMatch(rel)) found.push(rel);

@@ -73,6 +73,34 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // AGENTS.md's lint-enforced half: file-size ceilings, no inline comments,
+    // and the modern-syntax floor. Scoped to our TS so config files stay out.
+    files: ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
+    rules: {
+      "max-lines": ["error", { max: 300, skipBlankLines: true, skipComments: true }],
+      "no-inline-comments": "error",
+      "no-var": "error",
+      "prefer-const": "error",
+      "prefer-template": "error",
+      "prefer-arrow-callback": "error",
+      "object-shorthand": "error",
+      eqeqeq: ["error", "smart"],
+      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
+      "no-restricted-syntax": [
+        "error",
+        { selector: "TSEnumDeclaration", message: "AGENTS.md: no enums — use a union of string literals." },
+        { selector: "ExportDefaultDeclaration", message: "AGENTS.md: named exports only." },
+      ],
+    },
+  },
+  {
+    // Test and script files: same rules, roomier ceiling (AGENTS.md).
+    files: ["tests/**/*.ts", "scripts/**/*.ts"],
+    rules: {
+      "max-lines": ["error", { max: 600, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
     // MP0 (v3): `src/referee/**` — the tool boundary — sits with the kernel on
     // the sealed side of ARCH-1: same rules, same seam. The MCP transport SDK
     // is infrastructure, not the session backend, and stays permitted.

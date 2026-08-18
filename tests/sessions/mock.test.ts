@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fullPrompt, prefixHash, type SessionSpec } from "../../src/sessions/backend.js";
+import type { SessionBackend } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 
 /**
@@ -35,7 +36,7 @@ describe("T-040 oracle smoke (test_smoke_mock_backend)", () => {
     expect(result.telemetryParsed).toBe(true);
     expect(result.inputTokens + result.outputTokens).toBeGreaterThan(0);
     // The interface takes the pin; the mock ignores it (version-free).
-    const asBackend: import("../../src/sessions/backend.js").SessionBackend = backend;
+    const asBackend: SessionBackend = backend;
     await expect(asBackend.checkVersion("anything")).resolves.toBeUndefined();
   });
 });

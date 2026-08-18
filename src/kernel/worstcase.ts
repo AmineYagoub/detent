@@ -108,7 +108,8 @@ export function maxPossibleSessions(
         result = apply(state, event, counters, { ticket: { type: ticketType }, budgets }, table);
       } catch (err) {
         if (err instanceof TransitionError) continue;
-        continue; // slot already consumed: this edge is unreachable here
+        // slot already consumed: this edge is unreachable here
+        continue;
       }
       const cost = SESSION_ENTRY_STATES.has(result.to) ? 1 : 0;
       best = Math.max(best, cost + walk(result.to, result.counters, nextOnPath, depth + cost));

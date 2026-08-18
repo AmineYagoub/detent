@@ -97,8 +97,10 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
     if (outcome.kind !== "complete") throw new Error("unreachable");
     const bindings = outcome.outputs["bindings"] as { slot: string; approved_by: string; status: string }[];
     const test = bindings.find((b) => b.slot === "test");
-    expect(test?.approved_by).toBe("auto"); // C-3b's provenance
-    expect(test?.status).toBe("approved"); // brownfield
+    // C-3b's provenance
+    expect(test?.approved_by).toBe("auto");
+    // brownfield
+    expect(test?.status).toBe("approved");
     // V-1: it was executed, not merely proposed — the record carries the time.
     expect(readBindings(root).bindings.find((b) => b.slot === "test")?.executed_at).toBeTruthy();
   });
@@ -110,7 +112,8 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
     expect(outcome.interrupt).toBe("AWAIT_BINDING_CHOICE");
-    expect(outcome.items).toEqual(["test"]); // exactly one slot in question
+    // exactly one slot in question
+    expect(outcome.items).toEqual(["test"]);
     expect(outcome.message).toContain("npm run test");
     expect(outcome.message).toContain("make test");
   });
@@ -234,13 +237,15 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
       actor: "operator",
       confirm: async () => {
         asked += 1;
-        return true; // even a yes cannot make this run
+        // even a yes cannot make this run
+        return true;
       },
       print: (t) => printed.push(t),
     });
 
     expect(outcome.kind).toBe("off-list");
-    expect(asked).toBe(0); // never even asked — consent is not the gate here
+    // never even asked — consent is not the gate here
+    expect(asked).toBe(0);
     expect(printed.join("")).toContain("outside the v1 setup allowlist");
     expect(printed.join("")).toContain("Run it yourself");
   });
@@ -257,7 +262,8 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
       },
     });
 
-    expect(shown).toContain("git init"); // verbatim, pre-execution
+    // verbatim, pre-execution
+    expect(shown).toContain("git init");
     expect(outcome.kind).toBe("executed");
     const log = readFileSync(consentLogPath(root), "utf8");
     expect(log).toContain('"actor":"alice"');
@@ -281,14 +287,17 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
     const outcome = await proposeConfigWrite("vitest.config.ts", "export default { test: {} }\n", "add coverage", {
       root,
       actor: "alice",
-      confirm: async () => true, // consent cannot override rule 1
+      // consent cannot override rule 1
+      confirm: async () => true,
       print: (t) => printed.push(t),
     });
 
     expect(outcome.kind).toBe("refused-existing");
-    expect(readFileSync(path.join(root, "vitest.config.ts"), "utf8")).toBe("export default {}\n"); // untouched
+    // untouched
+    expect(readFileSync(path.join(root, "vitest.config.ts"), "utf8")).toBe("export default {}\n");
     expect(printed.join("")).toContain("will not modify an existing configuration file");
-    expect(printed.join("")).toContain("export default { test: {} }"); // the proposal, shown
+    // the proposal, shown
+    expect(printed.join("")).toContain("export default { test: {} }");
   });
 
   it("C-6 rule 2: a MISSING config file may be created, shown in full first", async () => {
@@ -304,7 +313,8 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
     });
 
     expect(outcome.kind).toBe("created");
-    expect(shown).toContain("export default { test: {} }"); // in full, before writing
+    // in full, before writing
+    expect(shown).toContain("export default { test: {} }");
     expect(readFileSync(path.join(root, "vitest.config.ts"), "utf8")).toContain("test:");
   });
 });
@@ -336,7 +346,8 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
 
     const bootstrap = readTicket(root, BOOTSTRAP_TICKET_ID);
-    expect(bootstrap.priority).toBeGreaterThan(0); // claimed first
+    // claimed first
+    expect(bootstrap.priority).toBeGreaterThan(0);
     expect(bootstrap.acceptance_criteria.join(" ")).toContain("gate runs and exits 0");
     expect(bootstrap.non_goals.join(" ")).toContain(".detent/");
 
@@ -446,7 +457,8 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
       writeBindings: (file) => {
         written = file as { bindings: { status: string }[] };
       },
-      rediscover: () => [], // bootstrap left nothing discoverable
+      // bootstrap left nothing discoverable
+      rediscover: () => [],
     });
     expect(written!.bindings[0]?.status).toBe("provisional");
   });
@@ -519,7 +531,8 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     );
 
     const text = printed.join("\n");
-    expect(text).toContain("approved_by: auto"); // C-3b: auto bindings are visible
+    // C-3b: auto bindings are visible
+    expect(text).toContain("approved_by: auto");
     expect(text).toContain(BOOTSTRAP_TICKET_ID);
     expect(text).toContain("provisional bindings above to approved");
     expect(text).toContain("overridable");
@@ -558,8 +571,10 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     expect(result.exitCode).toBe(2);
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     expect(result.interrupt?.message).toContain("declined");
-    expect(existsSync(approvalPath(root))).toBe(false); // nothing recorded
-    expect(allTickets(root).map((t) => t.id)).toEqual(["t-100"]); // the plan survives
+    // nothing recorded
+    expect(existsSync(approvalPath(root))).toBe(false);
+    // the plan survives
+    expect(allTickets(root).map((t) => t.id)).toEqual(["t-100"]);
   });
 
   it("a non-TTY init defers to `run`, which presents the SAME summary (C-7's dual exit)", async () => {

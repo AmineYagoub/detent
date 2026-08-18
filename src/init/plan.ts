@@ -107,7 +107,8 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     schema_version: 1,
     tickets: written.map((t) => t.id),
     edges: written.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
-    assignments: {}, // PREPARE_AGENTS fills these (T-067)
+    // PREPARE_AGENTS fills these (T-067)
+    assignments: {},
     input_doc_hashes: Object.fromEntries(
       deps.docs.map((doc) => [doc, hashFile(path.join(deps.root, ...doc.split("/")))]),
     ),
@@ -157,8 +158,10 @@ function createBootstrapTicket(deps: PlanDeps): Ticket {
       "Detent's own state directory `.detent/` holds no project configuration (F-2).",
       "No feature work — this ticket establishes the ground the other tickets stand on.",
     ],
-    surface: ["**"], // scaffolding necessarily touches the whole tree
-    priority: 100, // claimed first
+    // scaffolding necessarily touches the whole tree
+    surface: ["**"],
+    // claimed first
+    priority: 100,
   });
 }
 
@@ -236,8 +239,8 @@ export function finalizeBootstrap(
   deps.writeBindings({ bindings: finalized, skips: [...file.skips] });
   const promoted = provisional.length - unresolved.length;
   deps.note?.(
-    `bootstrap complete: ${promoted} provisional binding(s) finalized with drift baselines (C-4)` +
-      (unresolved.length === 0 ? "" : `; ${unresolved.join(", ")} stayed provisional — nothing discoverable backs them`),
+    `bootstrap complete: ${promoted} provisional binding(s) finalized with drift baselines (C-4)${ 
+      unresolved.length === 0 ? "" : `; ${unresolved.join(", ")} stayed provisional — nothing discoverable backs them`}`,
   );
   return true;
 }

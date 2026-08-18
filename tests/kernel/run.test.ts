@@ -128,7 +128,8 @@ describe("T-041 oracle full ladder (test_ladder_exhausts_to_needs_human_with_dos
     expect(counters.blind_fix_attempts).toBe(1);
     expect(counters.informed_fix_attempts).toBe(1);
     expect(counters.research_sessions).toBe(1);
-    expect(counters.sessions).toBe(4); // implement + blind + research + informed
+    // implement + blind + research + informed
+    expect(counters.sessions).toBe(4);
 
     const roles = backend.rolesLaunched();
     expect(roles.filter((r) => r === "blind_fix")).toHaveLength(1);

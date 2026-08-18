@@ -58,7 +58,8 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
       "docs/architecture.md",
       "docs/deep/notes.txt",
     ]);
-    expect(discoverDocs(root).docs).toEqual(found.docs); // N-2
+    // N-2
+    expect(discoverDocs(root).docs).toEqual(found.docs);
     // Source and manifests are not planning documents.
     expect(found.docs).not.toContain("src/main.ts");
     expect(found.docs).not.toContain("package.json");
@@ -174,7 +175,8 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
         docs: ["PRD.md"],
         stackMarkers: [],
         launch: async () => {
-          writeFileSync(analysisPath(root), JSON.stringify(ANALYSIS_BROWNFIELD)); // stack: null
+          // stack: null
+          writeFileSync(analysisPath(root), JSON.stringify(ANALYSIS_BROWNFIELD));
         },
       }),
     ).rejects.toThrow(/without choosing a stack/);
@@ -218,7 +220,8 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
     expect(outcome.interrupt).toBe("AWAIT_INFO");
-    expect(outcome.items).toHaveLength(2); // blocking only, batched together
+    // blocking only, batched together
+    expect(outcome.items).toHaveLength(2);
     expect(outcome.message).toContain("Which database");
     expect(outcome.message).toContain("multi-tenancy");
   });

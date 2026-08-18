@@ -43,7 +43,8 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
     const readme = edit("/wt/README.md");
     expect(readme.decision).toBe("deny");
     expect(readme.reason).toContain("surface");
-    expect(readme.reason).toContain("surface_request.json"); // the SEC-3 lever
+    // the SEC-3 lever
+    expect(readme.reason).toContain("surface_request.json");
   });
 
   it("test_denies_outside_worktree", () => {
@@ -61,7 +62,8 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
 
   it("matchAny keeps the oracle's directory conveniences", () => {
     expect(matchAny("src/deep/nested.py", ["src/**"])).toBe(true);
-    expect(matchAny("src", ["src/**"])).toBe(true); // the bare directory
+    // the bare directory
+    expect(matchAny("src", ["src/**"])).toBe(true);
     expect(matchAny("AGENTS.md", ["AGENTS.md"])).toBe(true);
     expect(matchAny("srcx/file.py", ["src/**"])).toBe(false);
   });

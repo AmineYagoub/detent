@@ -100,9 +100,9 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
       kind: "interrupt",
       interrupt: "AWAIT_INFO",
       message:
-        `The plan needs ${stillOpen.length} question(s) answered before it can be written.\n` +
-        stillOpen.map((q, i) => `  ${i + 1}. ${q}`).join("\n") +
-        `\n\nAnswer them in the planning documents and re-run \`detent init\`.`,
+        `The plan needs ${stillOpen.length} question(s) answered before it can be written.\n${ 
+        stillOpen.map((q, i) => `  ${i + 1}. ${q}`).join("\n") 
+        }\n\nAnswer them in the planning documents and re-run \`detent init\`.`,
       items: stillOpen,
     };
   }

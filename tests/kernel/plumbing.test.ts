@@ -81,7 +81,8 @@ describe("T-055 X-3 legality", () => {
   it("approve from any state but NEEDS_HUMAN is refused with exit 2 naming the state", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
-    addTicket(root, { id: "t1" }); // READY
+    // READY
+    addTicket(root, { id: "t1" });
     const result = approveTicket(root, "t1", "operator");
     expect(result.exitCode).toBe(2);
     expect(result.message).toContain("READY");
@@ -112,13 +113,15 @@ describe("T-055 X-3 legality", () => {
 describe("T-055 claim discipline (C-12)", () => {
   it("a live claim refuses with exit 2 naming the pid and the claim's age", async () => {
     const root = await exhausted();
-    claim(root, "t1", "other-worker"); // written with THIS live process's pid
+    // written with THIS live process's pid
+    claim(root, "t1", "other-worker");
 
     const result = approveTicket(root, "t1", "operator", { now: () => Date.now() });
     expect(result.exitCode).toBe(2);
     expect(result.message).toContain(String(process.pid));
     expect(result.message).toMatch(/claim age \d+s/);
-    expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN"); // untouched
+    // untouched
+    expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN");
   });
 
   it("a stale claim (owner dead) may be broken, recorded in transitions.jsonl with the broken pid", async () => {

@@ -129,7 +129,8 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
   const report: BindReport = await bindAll(discovery, {
     root: deps.root,
     status,
-    approvedBy: "auto", // C-3b's provenance for anything a human did not choose
+    // C-3b's provenance for anything a human did not choose
+    approvedBy: "auto",
     ...(deps.timeoutMs === undefined ? {} : { timeoutMs: deps.timeoutMs }),
     ...(deps.now === undefined ? {} : { now: deps.now }),
   });

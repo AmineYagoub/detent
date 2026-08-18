@@ -238,7 +238,8 @@ describe("T-060 C-8: approval state", () => {
     const log: string[] = [];
     const result = await runInit(root, [probe("DISCOVER", () => listingDigest(["x"]), log)]);
     expect(result.messages.join(" ")).toContain("approval invalidated");
-    expect(log).toEqual(["DISCOVER"]); // replayed despite a fresh checkpoint
+    // replayed despite a fresh checkpoint
+    expect(log).toEqual(["DISCOVER"]);
   });
 
   it("planHash ignores approval.json itself — approving cannot invalidate the approval", () => {
@@ -257,8 +258,10 @@ describe("T-060 digests are honest", () => {
     const listingBefore = listingDigest(["a.md"]);
     const contentsBefore = contentsDigest(root, ["a.md"]);
     writeTree(root, { "a.md": "two\n" });
-    expect(listingDigest(["a.md"])).toBe(listingBefore); // listing unchanged
-    expect(contentsDigest(root, ["a.md"])).not.toBe(contentsBefore); // contents moved
+    // listing unchanged
+    expect(listingDigest(["a.md"])).toBe(listingBefore);
+    // contents moved
+    expect(contentsDigest(root, ["a.md"])).not.toBe(contentsBefore);
   });
 
   it("a missing file hashes to a marker, so creating it is drift", () => {

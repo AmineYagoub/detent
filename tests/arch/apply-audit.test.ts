@@ -68,7 +68,7 @@ describe("T-054 the sanctioned apply-site set (source scan)", () => {
     // even NAME an event: the only path to a transition is an evidence ref a
     // validator or gate minted. This is ARCH-1's audit extended to the tool
     // boundary — true regardless of which driver calls.
-    for (const file of ["kernel/run.ts", "referee/registry.ts"]) {
+    for (const file of ["kernel/run.ts", "kernel/driver.ts", "referee/registry.ts"]) {
       const body = readFileSync(path.join(SRC, file), "utf8");
       expect(body.match(/\bapply\(/g) ?? [], `${file} must not apply`).toHaveLength(0);
       expect(body, `${file} must not import the machine`).not.toMatch(/from\s+"[^"]*kernel\/machine\.js"/);
