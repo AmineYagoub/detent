@@ -101,8 +101,8 @@ export function maxPossibleSessions(
       // A human re-entry opens a new generation with zeroed counters (X-8);
       // the per-generation worst case does not traverse it.
       if (event === "HUMAN_REQUEUE" || event === "HUMAN_APPROVED") continue;
-      // BUDGET_BREACH is the escape hatch, never the worst path.
-      if (event === "BUDGET_BREACH") continue;
+      // BUDGET_BREACH and GATE_DRIFT are halts, never the worst path.
+      if (event === "BUDGET_BREACH" || event === "GATE_DRIFT") continue;
       let result;
       try {
         result = apply(state, event, counters, { ticket: { type: ticketType }, budgets }, table);

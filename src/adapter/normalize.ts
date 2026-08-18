@@ -16,6 +16,25 @@ export interface Invocation {
   readonly env: Readonly<Record<string, string>>;
 }
 
+/**
+ * V-5: an affected-filter binding stores its template with the `BASE`
+ * placeholder intact, so the binding does not drift merely because a new run
+ * started from a new merge-base. The placeholder is substituted here, at
+ * invocation time, with the run's baseline — the merge-base of the run branch
+ * and the base branch it was created from (resolved once per run, T-042).
+ */
+export const BASE_PLACEHOLDER = /\bBASE\b/g;
+
+export function needsBaseRef(command: string): boolean {
+  BASE_PLACEHOLDER.lastIndex = 0;
+  return BASE_PLACEHOLDER.test(command);
+}
+
+export function substituteBase(command: string, baseRef: string): string {
+  if (baseRef.trim() === "") throw new Error("V-5: an empty base ref is not a baseline");
+  return command.replace(BASE_PLACEHOLDER, baseRef);
+}
+
 /** V-4: `CI=1`. Runners that watch by default fall back to a single run. */
 export const CI_ENV: Readonly<Record<string, string>> = { CI: "1" };
 
@@ -75,13 +94,22 @@ export function ciFlagsFor(candidate: Candidate): string[] {
  * package manager: V-4 puts pm selection at call time, so a lockfile swapped
  * after discovery is honoured rather than baked into the stored binding.
  */
-export function normalizeInvocation(
-  candidate: Candidate,
-  facts?: Pick<StackFacts, "pm">,
-): Invocation {
+export interface InvocationFacts extends Pick<StackFacts, "pm"> {
+  /** The run's resolved baseline for `BASE` templates (V-5). */
+  readonly baseRef?: string;
+}
+
+export function normalizeInvocation(candidate: Candidate, facts?: InvocationFacts): Invocation {
   const pm = facts?.pm ?? candidate.pm;
   const flags = ciFlagsFor(candidate);
-  return { command: withPackageManager(candidate, pm, flags), env: { ...CI_ENV } };
+  let command = withPackageManager(candidate, pm, flags);
+  // Left intact when no baseline is supplied: resolving one is the caller's
+  // job (T-042), and an unresolvable baseline must fall back to the root
+  // command rather than run against a guess (V-5).
+  if (facts?.baseRef !== undefined && needsBaseRef(command)) {
+    command = substituteBase(command, facts.baseRef);
+  }
+  return { command, env: { ...CI_ENV } };
 }
 
 function withPackageManager(candidate: Candidate, pm: PackageManager | null, flags: readonly string[]): string {

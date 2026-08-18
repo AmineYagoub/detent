@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import { GATE_SLOTS, type GateSlot } from "../schemas/gates.js";
+import { CEILINGS } from "../schemas/budgets.js";
 
 /**
  * T-020 — the gate runner (V-4).
@@ -25,7 +26,8 @@ export const TIMEOUT_EXIT = 124;
 /** POSIX shells report a command they cannot find as 127. */
 export const NOT_FOUND_EXIT = 127;
 
-export const DEFAULT_TIMEOUT_MS = 900_000;
+/** X-1's `gate_timeout_ms` default — the table is the single source (PRDR-061). */
+export const DEFAULT_TIMEOUT_MS: number = CEILINGS.gate_timeout_ms.default;
 export const DEFAULT_TAIL_BYTES = 64 * 1024;
 /** How long a killed process group gets before SIGKILL. */
 export const DEFAULT_KILL_GRACE_MS = 2_000;

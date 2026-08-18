@@ -31,6 +31,7 @@ export const EVENTS = [
   "PREMISE_FALSIFIED",
   "GATE_GREEN",
   "GATE_RED",
+  "GATE_DRIFT",
   "RESEARCH_VALID",
   "RESEARCH_DRY",
   "UPSTREAM_BUG",
@@ -44,7 +45,11 @@ export const EVENTS = [
 
 export type Event = (typeof EVENTS)[number];
 
-/** DONE is the only terminal state; BUDGET_BREACH is legal from every other (X-3). */
+/**
+ * DONE is the only terminal state. Two events are legal from every other state
+ * (X-3): BUDGET_BREACH → NEEDS_HUMAN, and GATE_DRIFT → BLOCKED (D-23) — a
+ * drift halt is in the machine, not a process exit that bypasses it.
+ */
 export const TERMINAL_STATES: ReadonlySet<State> = new Set<State>(["DONE"]);
 
 /**

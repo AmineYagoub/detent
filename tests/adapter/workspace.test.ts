@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { discover, gatherFacts, plausible } from "../../src/adapter/discover/index.js";
 import {
-  DEFAULT_BASE_REF,
   NoticeLog,
   detectWorkspace,
   preferOrchestrator,
   workspaceCandidates,
   workspaceNotice,
 } from "../../src/adapter/workspace.js";
+import { needsBaseRef, normalizeInvocation, substituteBase } from "../../src/adapter/normalize.js";
 import { removeTree, tmpTree } from "../helpers.js";
 
 /** T-029 — monorepo detection and root candidates (V-5, D-5). */
@@ -105,20 +105,35 @@ describe("T-029 orchestrator-native root commands are preferred (V-5)", () => {
   });
 });
 
-describe("T-029 test_single (V-5)", () => {
+describe("T-029 test_single (V-5, PRDR-060)", () => {
   it.each([
-    ["turbo", `turbo run test --filter=...[${DEFAULT_BASE_REF}]`],
-    ["nx", `nx affected -t test --base=${DEFAULT_BASE_REF}`],
-  ])("%s binds a deterministic affected filter", (kind, expected) => {
+    ["turbo", "turbo run test --filter=...[BASE]"],
+    ["nx", "nx affected -t test --base=BASE"],
+  ])("%s stores the affected filter as a template, BASE un-substituted", (kind, expected) => {
+    // V-5: `resolved` holds the template, so the binding does not drift merely
+    // because a new run started from a new merge-base.
     const workspace = detectWorkspace(gatherFacts(tree(FIXTURES[kind]!)))!;
     const single = workspaceCandidates(workspace).find((c) => c.slot === "test_single");
     expect(single?.resolved).toBe(expected);
+    expect(needsBaseRef(single!.resolved)).toBe(true);
   });
 
-  it("the base ref is the run's, not a hard-coded one", () => {
+  it("the baseline is substituted at invocation time, not at discovery", () => {
     const workspace = detectWorkspace(gatherFacts(tree(FIXTURES["turbo"]!)))!;
-    const single = workspaceCandidates(workspace, { base: "origin/main" }).find((c) => c.slot === "test_single");
-    expect(single?.resolved).toBe("turbo run test --filter=...[origin/main]");
+    const single = workspaceCandidates(workspace).find((c) => c.slot === "test_single")!;
+    const invocation = normalizeInvocation(single, { pm: null, baseRef: "origin/main" });
+    expect(invocation.command).toBe("turbo run test --filter=...[origin/main]");
+    // Without a resolved baseline the template is left intact for the caller:
+    // an unresolvable baseline falls back to the root command (T-042), never a guess.
+    expect(normalizeInvocation(single, { pm: null }).command).toContain("[BASE]");
+  });
+
+  it("substituteBase replaces the placeholder and refuses an empty ref", () => {
+    expect(substituteBase("nx affected -t test --base=BASE", "main")).toBe("nx affected -t test --base=main");
+    expect(substituteBase("turbo run test --filter=...[BASE]", "abc123")).toBe("turbo run test --filter=...[abc123]");
+    expect(() => substituteBase("x --base=BASE", "  ")).toThrow(/empty base ref/);
+    // Word-bounded: a command mentioning DATABASE is not a template.
+    expect(needsBaseRef("run DATABASE_URL=x test")).toBe(false);
   });
 
   it.each([["pnpm", "pnpm -r test"], ["lerna", "lerna run test"]])(

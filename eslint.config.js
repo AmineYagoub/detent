@@ -27,6 +27,24 @@ const KERNEL_FORBIDDEN = [
   },
 ];
 
+/**
+ * PRDR-059 / draft.7: the layers below the kernel are zoned too. The zone list
+ * is §3a's diagram read as edges — sessions and the verification adapter (and
+ * the fs/cli layers beside it) import no kernel state mutators and no
+ * transition table; `schemas/**` is below every layer and importable anywhere.
+ */
+const BELOW_KERNEL_FORBIDDEN = [
+  {
+    group: ["**/kernel/machine", "**/kernel/machine.js"],
+    message:
+      "ARCH-1: layers below the kernel do not apply events or read the transition table. Only the kernel applies events (P2).",
+  },
+  {
+    group: ["**/kernel/tickets/mutations", "**/kernel/tickets/mutations.js"],
+    message: "ARCH-1: only the kernel writes ticket state. Read via tickets/readers.ts.",
+  },
+];
+
 const SESSIONS_FORBIDDEN = [
   {
     group: ["**/kernel/machine", "**/kernel/machine.js"],
@@ -64,6 +82,12 @@ export default tseslint.config(
     files: ["src/sessions/**/*.ts"],
     rules: {
       "no-restricted-imports": ["error", { patterns: SESSIONS_FORBIDDEN }],
+    },
+  },
+  {
+    files: ["src/adapter/**/*.ts", "src/fs/**/*.ts", "src/cli/**/*.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: BELOW_KERNEL_FORBIDDEN }],
     },
   },
   {

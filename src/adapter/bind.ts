@@ -17,8 +17,11 @@ import { GATE_SLOTS, looksLikeWatchMode, runGate, runnable, type GateResult, typ
  * guessing there a defect.
  */
 
-/** V-1's default probe timeout. Long enough to be a real run, short enough to catch a watcher. */
-export const DEFAULT_PROBE_TIMEOUT_MS = 120_000;
+import { CEILINGS } from "../schemas/budgets.js";
+
+/** X-1's `binding_probe_timeout_ms` default — deliberately shorter than the gate
+ *  timeout: a probe asks "does this terminate at all" (PRDR-061). */
+export const DEFAULT_PROBE_TIMEOUT_MS: number = CEILINGS.binding_probe_timeout_ms.default;
 
 export type RejectReason = "watch-mode" | "unrunnable";
 

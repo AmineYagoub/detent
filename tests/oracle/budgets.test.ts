@@ -46,12 +46,20 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());
   });
 
-  it("each ceiling declares its own breach target — three are not BUDGET_BREACH", () => {
+  it("each ceiling declares its own breach target — five are not BUDGET_BREACH", () => {
     expect(breachTargetFor("failure_research_tool_calls")).toBe("RESEARCH_DRY");
     expect(breachTargetFor("planning_research_tool_calls")).toBe("AWAIT_INFO_BATCH");
     expect(breachTargetFor("flake_reruns")).toBe("LADDER_ENTRY");
+    expect(breachTargetFor("gate_timeout_ms")).toBe("RED_GATE_NO_EXIT");
+    expect(breachTargetFor("binding_probe_timeout_ms")).toBe("REJECTED_CANDIDATE");
     const nonBreach = ALL_CEILING_KEYS.filter((k) => breachTargetFor(k) !== "BUDGET_BREACH");
-    expect(nonBreach).toHaveLength(3);
+    expect(nonBreach).toHaveLength(5);
+  });
+
+  it("the X-1 table has exactly fourteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
+    expect(ALL_CEILING_KEYS).toHaveLength(14);
+    expect(CEILINGS.gate_timeout_ms.default).toBe(900_000);
+    expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
   });
 
   it("run_spend_usd is the only run-scoped ceiling and the only one without a default", () => {

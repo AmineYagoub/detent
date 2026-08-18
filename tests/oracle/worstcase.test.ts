@@ -16,22 +16,42 @@ const validConfig = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("T-014 maxPossibleSessions (X-1)", () => {
-  it("computes the worst path from the table rather than quoting it", () => {
-    // Regression pin, not a spec constant: X-1 states the figure is computed and
-    // never quoted. If a table edit moves this, that is the signal, not a bug.
+  it("regression pin (X-1 AC, PRDR-057): the computed worst case is exactly 14", () => {
+    // X-1's AC requires this pin so a table or budget edit that moves the
+    // figure fails CI rather than silently invalidating the shipped defaults.
+    // If this moves, the PRD's informative note and the default net move with
+    // it — deliberately, not incidentally.
     expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(14);
   });
 
-  it("DEFECT PIN — the X-1 default net (14) does not exceed the computed worst case (14)", () => {
-    // X-1 asserts `sessions_net > computed` and its informative note quotes 12.
-    // The graph walk finds 14 via the APPROVED close-check re-entering the
-    // ladder, which X-2 explicitly permits. The shipped default is therefore
-    // unloadable. Pinned here so the fix is deliberate rather than incidental.
-    const computed = maxPossibleSessions(DEFAULT_BUDGETS);
-    expect(computed).toBe(14);
-    expect(DEFAULT_BUDGETS.sessions).toBe(14);
-    expect(DEFAULT_BUDGETS.sessions > computed).toBe(false);
-    expect(() => loadConfig(validConfig({ budgets: { run_spend_usd: 25 } }))).toThrow(ConfigRejectedError);
+  it("PRDR-057 resolved: the default config loads — net 18 strictly exceeds the computed 14", () => {
+    // Draft.6 shipped sessions=14 against a computed worst case of 14, so no
+    // default config could load (the defect this suite pinned until draft.7).
+    const { config, computedWorstCase } = loadConfig(validConfig({ budgets: { run_spend_usd: 25 } }));
+    expect(computedWorstCase).toBe(14);
+    expect(config.budgets.sessions).toBe(18);
+    expect(DEFAULT_BUDGETS.sessions).toBe(18);
+  });
+
+  it("D-24: a ladder ceiling set to any value but 1 is rejected at load, naming the key", () => {
+    for (const key of ["blind_fix_attempts", "informed_fix_attempts", "research_sessions"]) {
+      for (const value of [0, 2]) {
+        try {
+          loadConfig(validConfig({ budgets: { run_spend_usd: 25, [key]: value } }));
+          expect.unreachable(`${key}=${value} must be refused`);
+        } catch (err) {
+          expect(String(err), `${key}=${value}`).toContain(key);
+        }
+      }
+    }
+    // review_fix_attempts is deliberately not structural (PRDR-058 non-goal).
+    expect(() => loadConfig(validConfig({ budgets: { run_spend_usd: 25, review_fix_attempts: 2 } }))).not.toThrow();
+  });
+
+  it("the walk never traverses GATE_DRIFT — a halt is not the worst path (D-23)", () => {
+    // If the walk took drift edges, BLOCKED would join every path at zero cost;
+    // the figure must be identical to a table with no drift rows at all.
+    expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(14);
   });
 
   it("is sensitive to the TABLE: a synthetic recovery edge raises the figure", () => {

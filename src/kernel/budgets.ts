@@ -41,6 +41,8 @@ export const ENFORCEMENT_SITES = {
   failure_research_tool_calls: "kernel/stages/research",
   planning_research_tool_calls: "init/plan-research",
   flake_reruns: "kernel/flake",
+  gate_timeout_ms: "adapter/run",
+  binding_probe_timeout_ms: "adapter/bind",
   run_spend_usd: "kernel/ledger",
 } as const satisfies Record<CeilingKey, string>;
 

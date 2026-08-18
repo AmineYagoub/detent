@@ -124,16 +124,8 @@ const ROOT_COMMANDS: Record<WorkspaceKind, RootCommands> = {
   },
 };
 
-/** The default base ref for an affected filter, until a run supplies its own (B-1). */
-export const DEFAULT_BASE_REF = "HEAD^1";
-
-export interface WorkspaceOptions {
-  /** The run's base branch. V-5's `[BASE]`. */
-  readonly base?: string;
-}
-
 /** Orchestrator-native root candidates, at rank 0 so they outrank per-package ones. */
-export function workspaceCandidates(workspace: Workspace, opts: WorkspaceOptions = {}): Candidate[] {
+export function workspaceCandidates(workspace: Workspace): Candidate[] {
   const spec = ROOT_COMMANDS[workspace.kind];
   const marker = workspace.markers[0] as string;
   const region = `workspace:${workspace.kind}:${marker}`;
@@ -154,10 +146,12 @@ export function workspaceCandidates(workspace: Workspace, opts: WorkspaceOptions
     );
   }
 
-  // V-5: an affected filter where the orchestrator has one; otherwise the root
-  // test command is the fallback, because D-5 forbids per-ticket arguments and
-  // a wrong single-test binding is worse than a slow correct one.
-  const single = spec.affected?.replace("BASE", opts.base ?? DEFAULT_BASE_REF) ?? spec.gates.test;
+  // V-5: an affected filter where the orchestrator has one — stored as the
+  // template with the `BASE` placeholder intact, substituted at invocation
+  // time against the run's merge-base (PRDR-060; normalize.ts). Otherwise the
+  // root test command is the fallback, because D-5 forbids per-ticket
+  // arguments and a wrong single-test binding is worse than a slow correct one.
+  const single = spec.affected ?? spec.gates.test;
   if (single !== undefined) {
     out.push(
       candidate({
@@ -185,10 +179,9 @@ export function workspaceCandidates(workspace: Workspace, opts: WorkspaceOptions
 export function preferOrchestrator(
   candidates: readonly Candidate[],
   workspace: Workspace | null,
-  opts: WorkspaceOptions = {},
 ): Candidate[] {
   if (workspace === null) return [...candidates];
-  const native = workspaceCandidates(workspace, opts);
+  const native = workspaceCandidates(workspace);
   const nativeCommands = new Set(native.map((c) => `${c.slot}\0${c.resolved}`));
   const demoted = candidates
     .filter((c) => !nativeCommands.has(`${c.slot}\0${c.resolved}`))

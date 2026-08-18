@@ -37,6 +37,21 @@ describe("T-011 transition table (X-3)", () => {
     }
   });
 
+  it("GATE_DRIFT is legal from every non-DONE state and lands on BLOCKED (D-23 — draft.7, not an oracle port)", () => {
+    // V-3's halt is in the machine: a drift-blocked ticket reopens only via the
+    // BLOCKED | HUMAN_REQUEUE row, which opens a new generation (X-8).
+    for (const s of STATES) {
+      if (TERMINAL_STATES.has(s)) {
+        expect(isLegal(s, "GATE_DRIFT")).toBe(false);
+        continue;
+      }
+      const result = apply(s, "GATE_DRIFT", ZERO_COUNTERS, ctx());
+      expect(result.to).toBe("BLOCKED");
+      expect(result.counters).toEqual(ZERO_COUNTERS);
+    }
+    expect(apply("BLOCKED", "HUMAN_REQUEUE", ZERO_COUNTERS, ctx()).to).toBe("READY");
+  });
+
   it("DONE is terminal: no event is legal from it", () => {
     expect(legalEvents("DONE")).toEqual([]);
   });

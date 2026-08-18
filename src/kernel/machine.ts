@@ -92,9 +92,13 @@ function buildTable(): ReadonlyMap<string, Row> {
     if (t.has(k)) throw new Error(`duplicate transition row: ${k}`);
     t.set(k, row);
   }
-  // BUDGET_BREACH is legal from every non-DONE state (X-3).
+  // Two events are legal from every non-DONE state (X-3): BUDGET_BREACH, and
+  // GATE_DRIFT (D-23) — the binding is under suspicion, so the ticket blocks
+  // until `verify sync` re-baselines and a requeue reopens it (V-3).
   for (const s of STATES) {
-    if (!TERMINAL_STATES.has(s)) t.set(key(s, "BUDGET_BREACH"), to("NEEDS_HUMAN"));
+    if (TERMINAL_STATES.has(s)) continue;
+    t.set(key(s, "BUDGET_BREACH"), to("NEEDS_HUMAN"));
+    t.set(key(s, "GATE_DRIFT"), to("BLOCKED"));
   }
   return t;
 }

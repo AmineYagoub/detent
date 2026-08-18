@@ -56,6 +56,28 @@ describe("ARCH-1 dependency direction", () => {
     expect(mutMsgs.join(" ")).toContain("ARCH-1");
   });
 
+  it("the adapter may not import kernel mutators or the transition table (PRDR-059)", async () => {
+    const mutMsgs = await messagesFor(
+      "src/adapter/__arch_fixture__.ts",
+      `import { writeTicket } from "../kernel/tickets/mutations.js";\nexport const w = writeTicket;\n`,
+    );
+    expect(mutMsgs.join(" ")).toContain("ARCH-1");
+
+    const applyMsgs = await messagesFor(
+      "src/fs/__arch_fixture__.ts",
+      `import { apply } from "../kernel/machine.js";\nexport const a = apply;\n`,
+    );
+    expect(applyMsgs.join(" ")).toContain("ARCH-1");
+  });
+
+  it("every layer may import schemas — the vocabulary sits below all of them", async () => {
+    const msgs = await messagesFor(
+      "src/adapter/__arch_fixture__.ts",
+      `import { GATE_SLOTS } from "../schemas/gates.js";\nexport const g = GATE_SLOTS;\n`,
+    );
+    expect(msgs.filter((m) => m.includes("ARCH-1"))).toEqual([]);
+  });
+
   it("the zones are scoped: the same import is fine outside src/kernel", async () => {
     const msgs = await messagesFor(
       "src/sessions/__arch_fixture__.ts",
