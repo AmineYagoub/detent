@@ -10,9 +10,9 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 
 | Status | Count |
 |---|---:|
-| green | 32 |
+| green | 48 |
 | pending-M1 | 0 |
-| pending-M2 | 19 |
+| pending-M2 | 3 |
 | pending-later | 1 |
 | **total** | **52** |
 
@@ -26,12 +26,12 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_contract.py::test_unknown_budget_rejected` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
 | `test_contract.py::test_valid` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
 | `test_extra.py::test_mode1_stub_detected` | pending-later | T-060 (M3) | — | greenfield vs brownfield detection is C-1's job in the init phase machine |
-| `test_extra.py::test_research_session_gets_domain_scoped_web_tools` | pending-M2 | T-046 (M2) | — |  |
+| `test_extra.py::test_research_session_gets_domain_scoped_web_tools` | green | T-046 (M2) | `tests/sessions/guard.test.ts` | composition takes the domain list as a parameter — the configured value has no F-1 home yet (PRDR-062), so the kernel passes an empty list until the PRD gives it one |
 | `test_extra.py::test_risk_detection_on_master_based_repo` | pending-M2 | T-049 (M2) | — |  |
 | `test_extra.py::test_smoke_mock_backend` | green | T-040 (M2) | `tests/sessions/mock.test.ts` | the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050 |
-| `test_extra.py::test_three_change_cycles_escalate` | pending-M2 | T-044 (M2) | — |  |
-| `test_extra.py::test_unparsable_telemetry_is_budget_breaching` | pending-M2 | T-046 (M2) | — |  |
-| `test_extra.py::test_upstream_blocks_with_linked_ticket` | pending-M2 | T-045 (M2) | — |  |
+| `test_extra.py::test_three_change_cycles_escalate` | green | T-044 (M2) | `tests/kernel/stages.test.ts` | D-6 divergence: the oracle recycled review changes into a shared fix pool (three cycles to exhaust); review has its own unit budget here, so the SECOND changes verdict escalates — the preserved property is that repeated changes reach a human |
+| `test_extra.py::test_unparsable_telemetry_is_budget_breaching` | green | T-046 (M2) | `tests/sessions/sdk.test.ts` |  |
+| `test_extra.py::test_upstream_blocks_with_linked_ticket` | green | T-045 (M2) | `tests/kernel/stages.test.ts` |  |
 | `test_extra.py::test_validate_report_approve_requeue` | pending-M2 | T-055 (M2) | — | the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset |
 | `test_gates.py::test_assertion_default` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
 | `test_gates.py::test_different_failures_differ` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
@@ -40,23 +40,23 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_gates.py::test_run_and_flake_filter` | green | T-022 (M1) | `tests/kernel/flake.test.ts` |  |
 | `test_gates.py::test_stable_across_volatile_details` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
 | `test_gates.py::test_toolchain` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
-| `test_hooks.py::test_allows_in_surface` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_allows_stop_when_green` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_blocks_stop_while_red` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_denies_out_of_surface_with_escape_hatch_hint` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_denies_outside_worktree` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_denies_protected` | pending-M2 | T-046 (M2) | — |  |
-| `test_hooks.py::test_read_only_stage_and_loop_guard` | pending-M2 | T-046 (M2) | — |  |
-| `test_kernel_e2e.py::test_changes_then_fix_then_approve` | pending-M2 | T-044 (M2) | — |  |
-| `test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis` | pending-M2 | T-043 (M2) | — |  |
+| `test_hooks.py::test_allows_in_surface` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_allows_stop_when_green` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_blocks_stop_while_red` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_denies_out_of_surface_with_escape_hatch_hint` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_denies_outside_worktree` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_denies_protected` | green | T-046 (M2) | `tests/sessions/guard.test.ts` |  |
+| `test_hooks.py::test_read_only_stage_and_loop_guard` | green | T-046 (M2) | `tests/sessions/guard.test.ts` | the oracle's hooks were subprocess scripts over active_surface.json; the SDK registers the same pure decisions as in-process PreToolUse/Stop callbacks (D-21), so the seven ports run at the decision layer |
+| `test_kernel_e2e.py::test_changes_then_fix_then_approve` | green | T-044 (M2) | `tests/kernel/stages.test.ts` |  |
+| `test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis` | green | T-043 (M2) | `tests/kernel/stages.test.ts` |  |
 | `test_kernel_e2e.py::test_feature_to_done_and_merged` | green | T-041 (M2) | `tests/kernel/run.test.ts` | merge-into-main becomes B-1: commits land on detent/run-<id>, base SHA byte-identical; --no-ff worktree merging lands at T-042 |
 | `test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines` | green | T-022 (M1) | `tests/kernel/flake.test.ts` | the reference drove the whole kernel; the run loop lands at T-041, so this ports at the level T-022's AC names — quarantine linked discovered_from, zero fix budget charged |
-| `test_kernel_e2e.py::test_hypothesis_thrash_escalates` | pending-M2 | T-043 (M2) | — |  |
+| `test_kernel_e2e.py::test_hypothesis_thrash_escalates` | green | T-043 (M2) | `tests/kernel/stages.test.ts` |  |
 | `test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier` | green | T-041 (M2) | `tests/kernel/run.test.ts` | counters assert the §13 mapping (fix_sessions 2 = blind 1 + informed 1); the oracle's brief-cached assertion belongs to D-18's env-keyed cache and closes at T-045 |
 | `test_kernel_e2e.py::test_no_second_blind_fix_after_crash` | green | T-041 (M2) | `tests/kernel/run.test.ts` |  |
-| `test_kernel_e2e.py::test_research_cache_hit_skips_research_session` | pending-M2 | T-045 (M2) | — |  |
+| `test_kernel_e2e.py::test_research_cache_hit_skips_research_session` | green | T-045 (M2) | `tests/kernel/stages.test.ts` | the cache key is D-18's env-composite, superseding the oracle's plain signature; the ladder port's cache assertions close here as promised at T-041 |
 | `test_kernel_e2e.py::test_risk_path_requires_human_approval` | pending-M2 | T-049 (M2) | — |  |
-| `test_kernel_e2e.py::test_surface_request_grant_and_deny` | pending-M2 | T-046 (M2) | — |  |
+| `test_kernel_e2e.py::test_surface_request_grant_and_deny` | green | T-046 (M2) | `tests/sessions/sdk.test.ts` |  |
 | `test_kernel_e2e.py::test_triage_unverified_blocks` | green | T-041 (M2) | `tests/kernel/run.test.ts` | triage did not survive D-10 (planning moved to init); the preserved properties split: an unapproved plan runs nothing (C-9/C-7, exit 2) and a human-gated pool exits 10 with a machine-readable summary |
 | `test_state.py::test_budget_breach_from_anywhere` | green | T-011 (M0) | `tests/oracle/state.test.ts` |  |
 | `test_state.py::test_budget_caps_hold_on_every_reachable_path` | green | T-012 (M0) | `tests/oracle/budgets.test.ts` |  |

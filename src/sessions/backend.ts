@@ -48,6 +48,14 @@ export function prefixHash(spec: SessionSpec): string {
  * client-side estimate, named accordingly (PRDR-052). `telemetryParsed: false`
  * is the S-4 circuit breaker — the kernel treats it as budget-breaching.
  */
+export interface ModelTokenUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadInputTokens: number;
+  readonly cacheCreationInputTokens: number;
+  readonly costUSD: number;
+}
+
 export interface SessionResult {
   /** Process-level success. NOT gate success. */
   readonly ok: boolean;
@@ -59,6 +67,17 @@ export interface SessionResult {
   readonly cacheCreationInputTokens: number;
   readonly turns: number;
   readonly rawTail: string;
+  /**
+   * PRDR-053: the backend zeroes telemetry when its process crashes. Zeroed is
+   * not absent — the ledger records a flagged lower bound, never free work.
+   */
+  readonly crashed?: boolean;
+  /**
+   * PRDR-052: the per-model breakdown is the token source of record — it
+   * includes nested-agent tokens and the response that crossed a budget
+   * ceiling, both of which the cumulative fields exclude.
+   */
+  readonly perModel?: Readonly<Record<string, ModelTokenUsage>>;
 }
 
 export interface SessionBackend {

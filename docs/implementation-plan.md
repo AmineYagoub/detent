@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.8 — M2 opened: T-040, T-041, T-047 landed (§7) |
+| Plan version | 1.9 — T-042…T-046, T-048, T-054 landed; 48/52 oracle tests green (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -483,6 +483,20 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.9** — seven tickets landed: T-042 (branch contract), T-043 (diagnosis gate), T-044 (review routing), T-045 (research cache), T-046 (SDK backend + guard), T-048 (ledger + spend backstop), T-054 (apply-site audit). Sixteen more oracle tests close — parity **48 / 0 / 3 / 1**; only T-049's two and T-055's one remain in M2. All gates green: 403 passed / 2 skipped. PRDR-062 filed (research docs domains have no F-1 home).
+
+What each ticket proved, and the divergences recorded in the parity map:
+
+- **T-042**: trailers land on *session* commits via a repo-local `prepare-commit-msg` hook keyed off a `.git/DETENT_TICKET` marker (the kernel cannot rewrite session history and must not); dual-read parses `Foreman-Ticket:` forever, writes only the current form; the base-write guard snapshots every ref and restores + escalates on any non-run-branch movement — the hostile-ticket fixture ends with the base SHA byte-identical; worktree mode merges `--no-ff` into the run branch and cleans up; B-5's reset is scoped to tracked project files, **excluding `.detent/`** — a naive `reset --hard` would have destroyed the very ticket state resume depends on.
+- **T-043**: the kernel executes the repro (X-4) — T-041's named boundary error is gone; fail-as-predicted persists `status: "confirmed"` onto the artifact; the falsified signal is consumed only mid-implementation, exactly as X-3 rows allow, which forced a prompt correction: `blind_fix.md` and `informed_fix.md` had inherited the oracle's "write falsified.json" instruction, but X-3 has no PREMISE_FALSIFIED row from fix states — the prompts now say to record the contradiction in the commit message (manifest re-pinned).
+- **T-044**: reviewer input set closed by construction (`buildReviewerInputs` is the only assembly point; the test asserts the recorded spec's exact key set); the D-6 divergence is in the map — the oracle exhausted three shared-pool cycles, Detent's second changes verdict escalates on review's own unit budget.
+- **T-045**: D-18's env-composite key supersedes the oracle's plain signature; a `version_facts` contradiction is a MISS even on a key hit (tested with injected fingerprints, since the fixture repo has no ecosystems to contradict); the cache-hit e2e shows the slot consumed (X-2) with zero research launches.
+- **T-046**: the two load-bearing security lines have their own regression tests — `settingSources` is asserted to be the *present empty array* (absent would mean the SDK default, which loads repo policy — D-22), and the guard is a PreToolUse hook with `canUseTool` asserted absent from the options (D-21). The seven oracle hook tests port at the decision layer: the oracle's subprocess scripts become pure functions the SDK registers as callbacks. Telemetry parsing reads the per-model breakdown as the token source of record and distinguishes zeroed-crash from absent (PRDR-052/053). Live transport remains R-10-gated (doctor smoke at T-050, M2 exit at T-051).
+- **T-048**: D-25 measured — the overshoot fixture sets the ceiling below one session's cost and proves exactly one launch happens, the overshoot is recorded honestly, and the next launch is refused into NEEDS_HUMAN; spend accumulates from `ledger.jsonl` itself, so resumed invocations and requeues never reset the money (X-8).
+- **T-054**: `KernelEvent` is brand-sealed (the symbol is constructed in exactly one module) and every constructor demands its justifying artifact; the scan asserts `machine.apply` is importable only from `kernel/run.ts` and `kernel/worstcase.ts`, that the run loop contains **no raw event-name string**, and that stage modules commit nothing themselves. One runtime lesson cost a probe: `declare const brand: unique symbol` has no runtime value — the brand must be a real unexported `Symbol()`.
+
+Deferred within the batch, all previously assigned: escalation UX + risk globs (T-049), doctor's checks (T-050), the SEC pack + env allowlist (T-052), status/report (T-053), approve/requeue plumbing (T-055), and the live M2 exit (T-051, R-10-gated on a key + spend cap).
+
 **1.8** — M2 opened: T-047 (vendored role prompts), T-040 (SessionBackend seam + mock), and T-041 (the kernel run loop) landed. Five more oracle tests green — parity **32 / 0 / 19 / 1**. All gates green: lint, typecheck, parity:check, prompts:check, 350 passed / 2 skipped. No ticket rescoped; the loop's deliberate scope boundaries are stated in `src/kernel/run.ts`'s header and below.
 
 Scope boundaries T-041 states rather than blurs — each is the named ticket's, not forgotten:
@@ -621,4 +635,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.8 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.9 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*

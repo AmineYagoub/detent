@@ -23,6 +23,8 @@ export async function main(argv: readonly string[]): Promise<number> {
       "max-tickets": { type: "string" },
       backend: { type: "string", default: "mock" },
       worker: { type: "string", default: "w1" },
+      // B-2: per-ticket worktrees, merged --no-ff into the run branch on DONE.
+      worktree: { type: "boolean", default: false },
     },
   });
 
@@ -39,6 +41,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     backend: new MockBackend(),
     prompts: loadPromptSet(),
     worker: values.worker,
+    worktree: values.worktree,
     ...(maxTickets === undefined || Number.isNaN(maxTickets) ? {} : { maxTickets }),
   });
 

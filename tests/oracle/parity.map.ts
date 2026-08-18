@@ -73,18 +73,28 @@ export const PARITY: readonly ParityEntry[] = [
 
   // ---- test_hooks.py (7) ----------------------------------------------------
   // PRDR-050: these close at T-046 against a PreToolUse hook, not canUseTool.
-  { oracle: "test_hooks.py::test_allows_in_surface", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_denies_protected", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_denies_out_of_surface_with_escape_hatch_hint", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_denies_outside_worktree", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_blocks_stop_while_red", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_allows_stop_when_green", ticket: "T-046" },
-  { oracle: "test_hooks.py::test_read_only_stage_and_loop_guard", ticket: "T-046" },
+  { oracle: "test_hooks.py::test_allows_in_surface", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  { oracle: "test_hooks.py::test_denies_protected", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  { oracle: "test_hooks.py::test_denies_out_of_surface_with_escape_hatch_hint", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  { oracle: "test_hooks.py::test_denies_outside_worktree", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  { oracle: "test_hooks.py::test_blocks_stop_while_red", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  { oracle: "test_hooks.py::test_allows_stop_when_green", ticket: "T-046", ts: "tests/sessions/guard.test.ts" },
+  {
+    oracle: "test_hooks.py::test_read_only_stage_and_loop_guard",
+    ticket: "T-046",
+    ts: "tests/sessions/guard.test.ts",
+    note: "the oracle's hooks were subprocess scripts over active_surface.json; the SDK registers the same pure decisions as in-process PreToolUse/Stop callbacks (D-21), so the seven ports run at the decision layer",
+  },
 
   // ---- test_extra.py (8) ----------------------------------------------------
-  { oracle: "test_extra.py::test_upstream_blocks_with_linked_ticket", ticket: "T-045" },
-  { oracle: "test_extra.py::test_unparsable_telemetry_is_budget_breaching", ticket: "T-046" },
-  { oracle: "test_extra.py::test_three_change_cycles_escalate", ticket: "T-044" },
+  { oracle: "test_extra.py::test_upstream_blocks_with_linked_ticket", ticket: "T-045", ts: "tests/kernel/stages.test.ts" },
+  { oracle: "test_extra.py::test_unparsable_telemetry_is_budget_breaching", ticket: "T-046", ts: "tests/sessions/sdk.test.ts" },
+  {
+    oracle: "test_extra.py::test_three_change_cycles_escalate",
+    ticket: "T-044",
+    ts: "tests/kernel/stages.test.ts",
+    note: "D-6 divergence: the oracle recycled review changes into a shared fix pool (three cycles to exhaust); review has its own unit budget here, so the SECOND changes verdict escalates — the preserved property is that repeated changes reach a human",
+  },
   {
     oracle: "test_extra.py::test_validate_report_approve_requeue",
     ticket: "T-055",
@@ -97,7 +107,12 @@ export const PARITY: readonly ParityEntry[] = [
     ts: "tests/sessions/mock.test.ts",
     note: "the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050",
   },
-  { oracle: "test_extra.py::test_research_session_gets_domain_scoped_web_tools", ticket: "T-046" },
+  {
+    oracle: "test_extra.py::test_research_session_gets_domain_scoped_web_tools",
+    ticket: "T-046",
+    ts: "tests/sessions/guard.test.ts",
+    note: "composition takes the domain list as a parameter — the configured value has no F-1 home yet (PRDR-062), so the kernel passes an empty list until the PRD gives it one",
+  },
   { oracle: "test_extra.py::test_risk_detection_on_master_based_repo", ticket: "T-049" },
 
   // ---- test_kernel_e2e.py (11) ---------------------------------------------
@@ -119,15 +134,20 @@ export const PARITY: readonly ParityEntry[] = [
     ts: "tests/kernel/run.test.ts",
     note: "counters assert the §13 mapping (fix_sessions 2 = blind 1 + informed 1); the oracle's brief-cached assertion belongs to D-18's env-keyed cache and closes at T-045",
   },
-  { oracle: "test_kernel_e2e.py::test_research_cache_hit_skips_research_session", ticket: "T-045" },
+  {
+    oracle: "test_kernel_e2e.py::test_research_cache_hit_skips_research_session",
+    ticket: "T-045",
+    ts: "tests/kernel/stages.test.ts",
+    note: "the cache key is D-18's env-composite, superseding the oracle's plain signature; the ladder port's cache assertions close here as promised at T-041",
+  },
   {
     oracle: "test_kernel_e2e.py::test_no_second_blind_fix_after_crash",
     ticket: "T-041",
     ts: "tests/kernel/run.test.ts",
   },
-  { oracle: "test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis", ticket: "T-043" },
-  { oracle: "test_kernel_e2e.py::test_hypothesis_thrash_escalates", ticket: "T-043" },
-  { oracle: "test_kernel_e2e.py::test_surface_request_grant_and_deny", ticket: "T-046" },
+  { oracle: "test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis", ticket: "T-043", ts: "tests/kernel/stages.test.ts" },
+  { oracle: "test_kernel_e2e.py::test_hypothesis_thrash_escalates", ticket: "T-043", ts: "tests/kernel/stages.test.ts" },
+  { oracle: "test_kernel_e2e.py::test_surface_request_grant_and_deny", ticket: "T-046", ts: "tests/sessions/sdk.test.ts" },
   { oracle: "test_kernel_e2e.py::test_risk_path_requires_human_approval", ticket: "T-049" },
   {
     oracle: "test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines",
@@ -135,7 +155,7 @@ export const PARITY: readonly ParityEntry[] = [
     ts: "tests/kernel/flake.test.ts",
     note: "the reference drove the whole kernel; the run loop lands at T-041, so this ports at the level T-022's AC names — quarantine linked discovered_from, zero fix budget charged",
   },
-  { oracle: "test_kernel_e2e.py::test_changes_then_fix_then_approve", ticket: "T-044" },
+  { oracle: "test_kernel_e2e.py::test_changes_then_fix_then_approve", ticket: "T-044", ts: "tests/kernel/stages.test.ts" },
 ];
 
 /** The reference suite's size. A map that does not cover it exactly is a defect. */

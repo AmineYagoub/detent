@@ -1,47 +1,76 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import picomatch from "picomatch";
 import { discover } from "../adapter/discover/index.js";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
+import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
-import { CI_ENV } from "../adapter/normalize.js";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { approvalSchema, hypothesisSchema, researchBriefSchema, reviewSchema, dossierSchema } from "../schemas/records.js";
+import { approvalSchema, dossierSchema, hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
 import type { GateSlot } from "../schemas/gates.js";
-import { READ_ONLY_ROLES, roleForState, type SessionState } from "../schemas/roles.js";
-import type { Event, State } from "../schemas/states.js";
+import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
+import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import {
   prefixHash,
   stablePrefix,
   type PromptSet,
   type SessionBackend,
-  type SessionResult,
   type SessionSpec,
 } from "../sessions/backend.js";
-import { classify } from "./classify.js";
+import {
+  budgetBreach,
+  claimed,
+  gateDrift,
+  gateGreen,
+  gateRed,
+  humanRequeue,
+  premiseFalsified,
+  riskLabelRequired,
+  type KernelEvent,
+} from "./events.js";
 import { RerunLedger, filterFlake, ledgerFor, quarantineTicket } from "./flake.js";
+import { classify } from "./classify.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
+import {
+  clearCurrentTicket,
+  ensureRunBranch,
+  ensureWorktree,
+  enforceBaseGuard,
+  git,
+  installTrailerHook,
+  markCurrentTicket,
+  mergeWorktree,
+  resetDirtyTracked,
+  resolveBaseRef,
+  snapshotRefs,
+  type RefSnapshot,
+  type RunBranch,
+} from "./git.js";
 import { RunJournal, runsDir } from "./journal.js";
+import { SpendExhaustedError, SpendLedger } from "./ledger.js";
 import { apply, type GuardContext } from "./machine.js";
+import { diagnoseStage } from "./stages/diagnose.js";
+import { reviewStage } from "./stages/review.js";
+import { researchStage } from "./stages/research.js";
 import { allTickets, isClaimed, readTicket, ready } from "./tickets/readers.js";
-import { claim, release, writeTicket, appendNote } from "./tickets/mutations.js";
+import { claim, release, writeTicket, appendNote, linkDiscovered } from "./tickets/mutations.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
 
 /**
- * T-041 — the kernel run loop (C-9, C-11, B-5, X-1 enforcement, V-3/D-23).
+ * T-041 — the kernel run loop (C-9, C-11, B-5, X-1 enforcement, V-3/D-23),
+ * composed at this batch with T-042 (branch contract), T-043 (diagnosis gate),
+ * T-044 (review routing), T-045 (research cache), T-048 (spend backstop).
  *
- * The composition point: claim a ticket, drive it stage by stage — one fresh
- * session per stage, gates between — and let the X-3 table decide every
- * move. The loop launches sessions and runs gates; it never decides an
- * outcome a validator or a gate did not establish (P2, ARCH-1).
+ * The loop launches sessions and runs gates; it never decides an outcome a
+ * validator or a gate did not establish (P2, ARCH-1) — mechanically, its
+ * commit path accepts only the evidence-carrying events of `events.ts`
+ * (T-054), so a bare event string cannot reach `machine.apply`.
  *
- * Scope boundaries, stated rather than implied: the diagnosis gate's repro
- * execution is T-043 (a valid hypothesis cannot be admitted here — see the
- * DIAGNOSED handler); the review stage's input-set discipline is T-044; the
- * research cache is T-045 (D-18 superseded the oracle's plain-signature
- * cache); real SDK enforcement is T-046; the full branch contract is T-042.
+ * Remaining boundaries: real SDK transport is exercised under R-10's key gate
+ * (doctor smoke, M2 exit); escalation UX is T-049; stale-claim breaking is
+ * T-055's plumbing.
  */
 
 export const EXIT_OK = 0;
@@ -67,6 +96,8 @@ export interface RunOptions {
   readonly worker?: string;
   readonly maxTickets?: number;
   readonly runId?: string;
+  /** B-2: per-ticket worktrees, merged `--no-ff` into the run branch on DONE. */
+  readonly worktree?: boolean;
   /** Injectable wall clock (ms) for the X-1 `ticket_wall_clock_ms` fixtures. */
   readonly now?: () => number;
   /**
@@ -120,9 +151,8 @@ export async function run(opts: RunOptions): Promise<RunOutcome> {
 
 /**
  * Exposed separately for the X-1 backstop fixtures: the net-sessions ceiling
- * is unreachable under any config `loadConfig` accepts (net > computed worst
- * case by construction), so proving the enforcement fires requires handing the
- * loop budgets the load path would refuse. Production callers use `run`.
+ * is unreachable under any config `loadConfig` accepts, so proving the
+ * enforcement fires requires budgets the load path would refuse.
  */
 export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Promise<RunOutcome> {
   const { root } = opts;
@@ -137,8 +167,9 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   }
 
   try {
-    ensureRunBranch(root, opts.runId ?? `${process.pid}-${Date.now().toString(36)}`);
-    const kernel = new Kernel(opts, loaded, journal);
+    const runBranch = ensureRunBranch(root, opts.runId ?? `${process.pid}-${Date.now().toString(36)}`);
+    installTrailerHook(root);
+    const kernel = new Kernel(opts, loaded, journal, runBranch);
     return await kernel.loop();
   } catch (err) {
     return {
@@ -164,18 +195,6 @@ function readApproval(root: string): string {
   return "ok";
 }
 
-/** B-1 minimal: work happens on a `detent/run-<id>` branch, never the base.
- *  Trailers, worktree mode, and the base-write guard land at T-042. */
-function ensureRunBranch(root: string, runId: string): void {
-  const current = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
-  if (current.startsWith("detent/run-")) return;
-  git(root, "checkout", "-q", "-b", `detent/run-${runId}`);
-}
-
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-}
-
 /** Thrown to unwind to the top when V-3 halts the run (SEC-5, D-23). */
 class DriftHaltSignal extends Error {
   constructor(readonly halt: DriftHaltError) {
@@ -190,12 +209,16 @@ class Kernel {
   private readonly prompts: PromptSet;
   private readonly rulesText: string;
   private readonly bindingsPreamble: string;
+  private readonly spend: SpendLedger;
+  private readonly refs: RefSnapshot;
+  private readonly baseRef: string | null;
   private processed = 0;
 
   constructor(
     private readonly opts: RunOptions,
     private readonly loaded: LoadedConfig,
     private readonly journal: RunJournal,
+    private readonly runBranch: RunBranch,
   ) {
     this.worker = opts.worker ?? "w1";
     this.now = opts.now ?? (() => Date.now());
@@ -211,6 +234,11 @@ class Kernel {
       null,
       2,
     );
+    this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd);
+    // P7: every ref except the run branch is protected ground for this run.
+    this.refs = snapshotRefs(opts.root);
+    // V-5: the run's baseline, resolved once; null falls back to root commands.
+    this.baseRef = resolveBaseRef(opts.root, runBranch);
   }
 
   private get root(): string {
@@ -224,9 +252,6 @@ class Kernel {
   // ------------------------------------------------------------- the loop
 
   async loop(): Promise<RunOutcome> {
-    // A requeue is human-gated by construction (X-8); for drift the human act
-    // is the `verify sync` consent, so a clean baseline reopens drift-blocked
-    // tickets before the pool is read (V-3, plan 1.7).
     this.requeueDriftBlocked();
 
     for (;;) {
@@ -235,12 +260,14 @@ class Kernel {
 
       const ticket = pool[0] as Ticket;
       if (!claim(this.root, ticket.id, this.worker)) continue;
+      markCurrentTicket(this.root, ticket.id);
       try {
         await this.processTicket(ticket.id);
       } catch (err) {
         if (err instanceof DriftHaltSignal) return this.haltForDrift(err.halt);
         throw err;
       } finally {
+        clearCurrentTicket(this.root);
         release(this.root, ticket.id);
       }
 
@@ -276,7 +303,6 @@ class Kernel {
   private requeueDriftBlocked(): void {
     const bindings = readBindings(this.root).bindings;
     if (bindings.length === 0) return;
-    // Still drifted? Then nothing reopens; the halt below will fire again.
     try {
       assertNoDrift(bindings, discover(this.root));
     } catch {
@@ -284,7 +310,7 @@ class Kernel {
     }
     for (const ticket of allTickets(this.root)) {
       if (ticket.state !== "BLOCKED" || !lastNote(ticket).startsWith("drift-blocked:")) continue;
-      const requeued = this.commit(ticket, "HUMAN_REQUEUE", "verify-sync-rebaseline");
+      const requeued = this.commit(ticket, humanRequeue("verify-sync-rebaseline"));
       const generations = openGeneration(requeued, {
         at: new Date(this.now()).toISOString(),
         reason: `gate drift re-baselined via verify sync; ${lastNote(ticket)}`,
@@ -295,17 +321,11 @@ class Kernel {
   }
 
   private haltForDrift(halt: DriftHaltError): RunOutcome {
-    // SEC-5: the bindings are under suspicion, so every claimed non-terminal
-    // ticket blocks — reconstructable from transitions.jsonl (a crash leaves
-    // no such rows), claims released, exit 2.
     for (const ticket of allTickets(this.root)) {
-      // Draft.7's V-3: GATE_DRIFT applies to every non-terminal CLAIMED
-      // ticket. Unclaimed tickets — READY, or human-gated ones whose claims
-      // were released — keep their state; the halt is about work in flight
-      // against the suspect bindings.
+      // Draft.7's V-3: GATE_DRIFT applies to every non-terminal CLAIMED ticket.
       if (ticket.state === "DONE" || ticket.state === "BLOCKED") continue;
       if (!isClaimed(this.root, ticket.id)) continue;
-      const blocked = this.commit(ticket, "GATE_DRIFT", halt.halting.map((h) => h.slot).join(","));
+      const blocked = this.commit(ticket, gateDrift(halt));
       this.closeGeneration(blocked, "blocked");
       appendNote(this.root, ticket.id, {
         author: "kernel",
@@ -330,8 +350,18 @@ class Kernel {
     let ticket = readTicket(this.root, id);
     const startedAt = this.now();
     const flakeLedger = ledgerFor(this.budgets);
+    const workDir = this.opts.worktree === true ? ensureWorktree(this.root, id) : this.root;
 
-    if (ticket.state === "READY") ticket = this.commit(ticket, "CLAIMED", "claim-lock");
+    if (ticket.state === "READY") {
+      ticket = this.commit(ticket, claimed());
+    } else {
+      // B-5: uncommitted tracked changes at resume are reset to the last
+      // ticket commit; untracked files stay — the gate judges the tree as-is.
+      const reset = resetDirtyTracked(workDir);
+      if (reset.length > 0) {
+        appendNote(this.root, id, { author: "kernel", text: `B-5 resume reset: ${reset.join(", ")}` });
+      }
+    }
 
     while (ticket.state !== "DONE" && ticket.state !== "NEEDS_HUMAN" && ticket.state !== "BLOCKED") {
       if (this.now() - startedAt > this.budgets.ticket_wall_clock_ms) {
@@ -339,10 +369,10 @@ class Kernel {
         break;
       }
       try {
-        ticket = await this.stage(ticket, flakeLedger);
+        ticket = await this.stage(ticket, flakeLedger, workDir);
       } catch (err) {
-        if (err instanceof Breach) {
-          ticket = this.breach(ticket, err.message);
+        if (err instanceof Breach || err instanceof SpendExhaustedError) {
+          ticket = this.breach(readTicket(this.root, id), (err as Error).message);
           break;
         }
         throw err;
@@ -355,118 +385,140 @@ class Kernel {
     } else if (ticket.state === "BLOCKED") {
       this.closeGeneration(ticket, "blocked");
     } else if (ticket.state === "DONE") {
-      this.finalize(ticket);
+      this.finalize(ticket, workDir);
       this.closeGeneration(ticket, "done");
     }
   }
 
-  private async stage(ticket: Ticket, flakeLedger: RerunLedger): Promise<Ticket> {
+  private async stage(ticket: Ticket, flakeLedger: RerunLedger, workDir: string): Promise<Ticket> {
     switch (ticket.state) {
-      case "IN_PROGRESS":
-        await this.session(ticket, "IN_PROGRESS", { ticket: publicTicket(ticket) });
-        return await this.evaluateGate(ticket, flakeLedger);
+      case "IN_PROGRESS": {
+        await this.session(ticket, "IN_PROGRESS", { ticket: publicTicket(ticket) }, workDir);
+        const falsified = this.consumeFalsifiedSignal(ticket.id);
+        if (falsified !== null) {
+          return this.commit(readTicket(this.root, ticket.id), premiseFalsified(falsified));
+        }
+        return await this.evaluateGate(ticket, flakeLedger, workDir);
+      }
       case "BLIND_FIX":
-        await this.session(ticket, "BLIND_FIX", this.fixInputs(ticket));
-        return await this.evaluateGate(ticket, flakeLedger);
+        await this.session(ticket, "BLIND_FIX", this.fixInputs(ticket, workDir), workDir);
+        return await this.evaluateGate(ticket, flakeLedger, workDir);
       case "INFORMED_FIX":
-        await this.session(ticket, "INFORMED_FIX", {
-          ...this.fixInputs(ticket),
-          research: this.maybeArtifact(ticket.id, "research.json"),
-        });
-        return await this.evaluateGate(ticket, flakeLedger, "informed fix failed — the ladder cannot reopen (D-13)");
+        await this.session(
+          ticket,
+          "INFORMED_FIX",
+          { ...this.fixInputs(ticket, workDir), research: this.maybeArtifact(ticket.id, "research.json") },
+          workDir,
+        );
+        return await this.evaluateGate(ticket, flakeLedger, workDir, "informed fix failed — the ladder cannot reopen (D-13)");
       case "REVIEW_FIX":
-        await this.session(ticket, "REVIEW_FIX", {
-          ...this.fixInputs(ticket),
-          review: this.maybeArtifact(ticket.id, "review.json"),
-        });
-        return await this.evaluateGate(ticket, flakeLedger);
+        await this.session(
+          ticket,
+          "REVIEW_FIX",
+          { ...this.fixInputs(ticket, workDir), review: this.maybeArtifact(ticket.id, "review.json") },
+          workDir,
+        );
+        return await this.evaluateGate(ticket, flakeLedger, workDir);
       case "RESEARCH":
-        return await this.stageResearch(ticket);
+        return await this.stageResearch(ticket, workDir);
       case "IN_REVIEW":
-        return await this.stageReview(ticket);
+        return await this.stageReview(ticket, workDir);
       case "APPROVED":
-        return await this.stageCloseCheck(ticket, flakeLedger);
+        return await this.stageCloseCheck(ticket, flakeLedger, workDir);
       case "DIAGNOSED":
-        return await this.stageDiagnose(ticket);
+        return await this.stageDiagnose(ticket, workDir);
       default:
         throw new KernelBoundaryError(`kernel has no handler for state ${ticket.state}`);
     }
   }
 
-  private async stageDiagnose(ticket: Ticket): Promise<Ticket> {
-    await this.session(ticket, "DIAGNOSED", { ticket: publicTicket(ticket) });
-    const raw = this.maybeArtifact(ticket.id, "hypothesis.json");
-    const parsed = raw === null ? null : parseArtifact(hypothesisSchema, raw);
-    if (parsed === null || !parsed.ok) {
-      const detail = parsed === null ? "no hypothesis artifact" : "hypothesis invalid";
-      appendNote(this.root, ticket.id, { author: "kernel", text: `${detail} — counted against hypotheses (X-1)` });
-      return this.commit(readTicket(this.root, ticket.id), "REPRO_WRONG", detail);
+  // ---- T-043: the diagnosis gate ------------------------------------------
+
+  private async stageDiagnose(ticket: Ticket, workDir: string): Promise<Ticket> {
+    const artifactPath = path.join(runsDir(this.root, ticket.id), "hypothesis.json");
+    const outcome = await diagnoseStage({
+      launch: async () => {
+        await this.session(ticket, "DIAGNOSED", { ticket: publicTicket(ticket) }, workDir);
+      },
+      readArtifact: () => this.maybeArtifact(ticket.id, "hypothesis.json"),
+      writeArtifact: (h: Hypothesis) => {
+        mkdirSync(path.dirname(artifactPath), { recursive: true });
+        writeFileSync(artifactPath, `${JSON.stringify(h, null, 2)}\n`);
+      },
+      executeRepro: (command) =>
+        runGate({ command, cwd: workDir, slot: "test", timeoutMs: this.budgets.gate_timeout_ms, env: CI_ENV }),
+      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
+    });
+    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  }
+
+  // ---- T-044: review consumption ------------------------------------------
+
+  private async stageReview(ticket: Ticket, workDir: string): Promise<Ticket> {
+    const hypothesisRaw = this.maybeArtifact(ticket.id, "hypothesis.json");
+    const hypothesisParsed = hypothesisRaw === null ? null : parseArtifact(hypothesisSchema, hypothesisRaw);
+    const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
+    const outcome = await reviewStage(ticket, this.diff(workDir), hypothesis, {
+      launch: async (inputs) => {
+        await this.session(ticket, "IN_REVIEW", inputs, workDir);
+      },
+      readArtifact: () => this.maybeArtifact(ticket.id, "review.json"),
+      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
+    });
+    if (outcome.kind === "breaker") throw new Breach(outcome.reason);
+    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  }
+
+  // ---- T-045: research with the env-keyed cache ---------------------------
+
+  private async stageResearch(ticket: Ticket, workDir: string): Promise<Ticket> {
+    const outcome = await researchStage({
+      root: this.root,
+      launch: async (inputs) => {
+        await this.session(ticket, "RESEARCH", inputs, workDir);
+      },
+      readArtifact: () => this.maybeArtifact(ticket.id, "research.json"),
+      readFailureSignature: () => {
+        const failure = this.maybeArtifact(ticket.id, "last_failure.json") as { signature?: string } | null;
+        return failure?.signature ?? null;
+      },
+      toolCallCeiling: this.budgets.failure_research_tool_calls,
+      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
+      ticketInputs: {
+        ticket: publicTicket(ticket),
+        failure: this.maybeArtifact(ticket.id, "last_failure.json"),
+      },
+    });
+    if (outcome.upstream !== undefined) {
+      this.linkUpstream(ticket, outcome.upstream);
     }
-    // X-4: a verified hypothesis requires the kernel to EXECUTE the repro and
-    // observe fail-as-predicted. That gate is T-043; admitting a hypothesis
-    // without it would advance a ticket on an unverified model claim (P2).
-    throw new KernelBoundaryError(
-      "X-4 repro execution lands at T-043; a hypothesis cannot be admitted without the kernel running it (P2)",
+    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  }
+
+  private linkUpstream(ticket: Ticket, brief: ResearchBrief): void {
+    const source = brief.evidence[0]?.source ?? "unknown";
+    linkDiscovered(
+      this.root,
+      ticket.id,
+      {
+        id: `${ticket.id}-upstream`,
+        type: "bug",
+        title: `Upstream bug blocking ${ticket.id}`,
+        description: `See ${source}. ${brief.upstream_bug ?? ""}`,
+        acceptance_criteria: ["upstream fix released, or an approved workaround chosen"],
+      },
+      "related",
     );
   }
 
-  private async stageResearch(ticket: Ticket): Promise<Ticket> {
-    // The D-18 env-keyed cache lands at T-045; every entry here is a live session.
-    await this.session(ticket, "RESEARCH", {
-      ticket: publicTicket(ticket),
-      failure: this.maybeArtifact(ticket.id, "last_failure.json"),
-      tool_call_ceiling: this.budgets.failure_research_tool_calls,
-    });
-    const raw = this.maybeArtifact(ticket.id, "research.json");
-    const parsed = raw === null ? null : parseArtifact(researchBriefSchema, raw);
-    if (parsed === null || !parsed.ok) {
-      const detail = parsed === null ? "research produced no brief" : "research brief invalid (X-6a)";
-      appendNote(this.root, ticket.id, { author: "kernel", text: detail });
-      return this.commit(readTicket(this.root, ticket.id), "RESEARCH_DRY", detail);
-    }
-    if (parsed.value.upstream_bug !== undefined && parsed.value.upstream_bug !== "") {
-      appendNote(this.root, ticket.id, { author: "kernel", text: `upstream bug: ${parsed.value.upstream_bug}` });
-      return this.commit(readTicket(this.root, ticket.id), "UPSTREAM_BUG", "research.upstream_bug");
-    }
-    return this.commit(readTicket(this.root, ticket.id), "RESEARCH_VALID", "research.json valid");
-  }
+  // ---- close-check ---------------------------------------------------------
 
-  private async stageReview(ticket: Ticket): Promise<Ticket> {
-    // T-044 owns the input-set discipline; the loop already confines the
-    // reviewer's inputs to diff + criteria + rules + hypothesis (SEC-3).
-    await this.session(ticket, "IN_REVIEW", {
-      ticket: {
-        id: ticket.id,
-        title: ticket.title,
-        acceptance_criteria: ticket.acceptance_criteria,
-        non_goals: ticket.non_goals,
-      },
-      diff: this.diff(),
-      hypothesis: this.maybeArtifact(ticket.id, "hypothesis.json"),
-    });
-    const raw = this.maybeArtifact(ticket.id, "review.json");
-    const parsed = raw === null ? null : parseArtifact(reviewSchema, raw);
-    if (parsed === null || !parsed.ok) {
-      // A malformed reviewer is a breaker, never partial acceptance (A-*).
-      throw new Breach(parsed === null ? "review produced no artifact" : "review artifact invalid");
-    }
-    if (parsed.value.verdict === "approve") {
-      return this.commit(readTicket(this.root, ticket.id), "REVIEW_APPROVE", "review approve");
-    }
-    appendNote(this.root, ticket.id, {
-      author: "kernel",
-      text: `review changes: ${parsed.value.changes.map((c) => c.tag).join(",")}`,
-    });
-    return this.commit(readTicket(this.root, ticket.id), "REVIEW_CHANGES", `${parsed.value.changes.length} findings`);
-  }
-
-  private async stageCloseCheck(ticket: Ticket, flakeLedger: RerunLedger): Promise<Ticket> {
-    // B-4's diff-based risk globs land at T-049/T-042; the label half is live.
+  private async stageCloseCheck(ticket: Ticket, flakeLedger: RerunLedger, workDir: string): Promise<Ticket> {
     if (ticket.risk_label) {
       appendNote(this.root, ticket.id, { author: "kernel", text: "risk-labelled change requires human approval (B-4)" });
-      return this.commit(ticket, "RISK_LABEL_REQUIRED", "risk gate");
+      return this.commit(ticket, riskLabelRequired());
     }
-    return await this.evaluateGate(ticket, flakeLedger, undefined, ["lint", "typecheck", "test", "build", "e2e"]);
+    return await this.evaluateGate(ticket, flakeLedger, workDir, undefined, ["lint", "typecheck", "test", "build", "e2e"]);
   }
 
   // --------------------------------------------------------------- gates
@@ -474,33 +526,36 @@ class Kernel {
   private async evaluateGate(
     ticket: Ticket,
     flakeLedger: RerunLedger,
+    workDir: string,
     escalateReason?: string,
     slots: readonly GateSlot[] = ["lint", "typecheck", "test"],
   ): Promise<Ticket> {
     const bindings = readBindings(this.root).bindings;
     try {
-      assertNoDrift(bindings, discover(this.root));
+      assertNoDrift(bindings, discover(workDir));
     } catch (err) {
       if (err instanceof DriftHaltError) throw new DriftHaltSignal(err);
       throw err;
     }
 
-    const result = await this.runScopedGates(bindings, slots);
+    const result = await this.runScopedGates(bindings, slots, workDir);
     if (result === null || result.green) {
-      return this.commit(
-        readTicket(this.root, ticket.id),
-        "GATE_GREEN",
-        result === null ? "no bound gates" : evidenceOf(result),
-      );
+      return this.commit(readTicket(this.root, ticket.id), gateGreen(result));
     }
 
     // X-5: one isolated rerun for a suspected flake, through T-022's filter.
-    // Isolation uses the test_single binding where one exists, else the same
-    // command; a green rerun quarantines and charges nothing.
-    const single = bindings.find((b) => b.slot === "test_single") ?? bindings.find((b) => b.slot === result.slot);
+    // Isolation prefers the test_single binding; a `BASE` template resolves
+    // against the run's merge-base, or falls back to the failing command when
+    // the baseline is unresolvable (V-5).
+    const single = bindings.find((b) => b.slot === "test_single");
+    let isolationCmd = result.command;
+    if (single !== undefined) {
+      if (!needsBaseRef(single.resolved)) isolationCmd = single.resolved;
+      else if (this.baseRef !== null) isolationCmd = substituteBase(single.resolved, this.baseRef);
+    }
     const decision = await filterFlake({
       first: result,
-      rerunInIsolation: () => this.gate(single?.resolved ?? result.command, result.slot ?? "test"),
+      rerunInIsolation: () => this.gate(isolationCmd, result.slot ?? "test", workDir),
       ledger: flakeLedger,
     });
 
@@ -512,41 +567,40 @@ class Kernel {
         author: "kernel",
         text: `flaky gate quarantined as ${quarantineId}; nothing charged (X-5)`,
       });
-      return this.commit(readTicket(this.root, ticket.id), "GATE_GREEN", `${evidenceOf(decision.result)}:flake-filtered`);
+      return this.commit(readTicket(this.root, ticket.id), gateGreen(decision.result, "flake-filtered"));
     }
 
     this.recordFailure(ticket.id, decision.result);
     if (escalateReason !== undefined) {
       appendNote(this.root, ticket.id, { author: "kernel", text: escalateReason });
     }
-    return this.commit(readTicket(this.root, ticket.id), "GATE_RED", evidenceOf(decision.result));
+    return this.commit(readTicket(this.root, ticket.id), gateRed(decision.result));
   }
 
   private async runScopedGates(
     bindings: ReturnType<typeof readBindings>["bindings"],
     slots: readonly GateSlot[],
+    workDir: string,
   ): Promise<GateResult | null> {
     let last: GateResult | null = null;
     for (const slot of slots) {
       const binding = bindings.find((b) => b.slot === slot);
       if (binding === undefined) continue;
-      last = await this.gate(binding.resolved, slot);
+      last = await this.gate(binding.resolved, slot, workDir);
       if (!last.green) return last;
     }
     return last;
   }
 
-  private async gate(command: string, slot: GateSlot): Promise<GateResult> {
+  private async gate(command: string, slot: GateSlot, workDir: string): Promise<GateResult> {
     const result = await runGate({
       command,
-      cwd: this.root,
+      cwd: workDir,
       slot,
       timeoutMs: this.budgets.gate_timeout_ms,
       env: CI_ENV,
     });
     if (result.outcome === "not-found" || !runnable(result)) {
-      // An unrunnable binding is a broken baseline, not a red gate the ladder
-      // could fix — surface it as a breach rather than burning fix slots.
       throw new Breach(`gate ${slot} is not runnable: \`${command}\` (exit ${result.normalizedExit})`);
     }
     return result;
@@ -568,22 +622,28 @@ class Kernel {
 
   // ------------------------------------------------------------ sessions
 
-  private async session(ticket: Ticket, state: SessionState, inputs: Record<string, unknown>): Promise<void> {
+  private async session(
+    ticket: Ticket,
+    state: SessionState,
+    inputs: Record<string, unknown>,
+    workDir: string,
+  ): Promise<void> {
     const role = roleForState(state);
     const id = ticket.id;
     if (this.journal.unfinished(id, role)) {
-      // B-5: the budget was consumed; the gate judges the tree as-is.
       this.journal.appendTicketEvent(id, { stage: role, event: "skipped_after_crash", at: this.iso() });
       return;
     }
+
+    // D-25: the spend ceiling is a launch gate, evaluated here and never
+    // mid-flight — overshoot is bounded by the one session in flight.
+    this.spend.assertLaunchAllowed();
 
     let current = readTicket(this.root, id);
     const counters = currentCounters(current);
     if (counters.sessions >= this.budgets.sessions) {
       throw new Breach("net session ceiling (X-1) — backstop against a kernel accounting defect");
     }
-    // Count BEFORE launch, and persist: a crash between launch and result must
-    // not refund the session (B-5).
     const generation = currentGeneration(current);
     current = {
       ...current,
@@ -610,7 +670,7 @@ class Kernel {
         null,
         2,
       ),
-      cwd: this.root,
+      cwd: workDir,
       artifactOut,
       allowedTools: this.toolsFor(role),
       permissionMode: READ_ONLY_ROLES.has(role) ? "plan" : "",
@@ -620,7 +680,8 @@ class Kernel {
 
     this.journal.appendTicketEvent(id, { stage: role, event: "start", at: this.iso() });
     const result = await this.opts.backend.run(spec);
-    this.ledgerRow(id, role, result);
+    const generationNow = currentGeneration(readTicket(this.root, id));
+    this.spend.record(id, generationNow.index, role, result, this.iso());
     this.journal.appendTicketEvent(id, {
       stage: role,
       event: "end",
@@ -629,7 +690,63 @@ class Kernel {
       cost: result.costEstimateUsd,
     });
     this.rememberPrefix(role, spec);
+
+    // P7: a session is Detent's act, and Detent never writes the base branch.
+    // The S-2 hook prevents; this is the kernel's independent line (P2) — any
+    // moved non-run ref is restored and the ticket escalates.
+    const violations = enforceBaseGuard(this.root, this.refs, this.runBranch.branch);
+    if (violations.length > 0) {
+      const detail = violations.map((v) => `${v.ref}: ${v.was} -> ${v.became ?? "(deleted)"}`).join("; ");
+      appendNote(this.root, id, { author: "kernel", text: `base-branch write detected and reverted (B-3/P7): ${detail}` });
+      throw new Breach(`base-branch write detected and reverted (B-3/P7): ${detail}`);
+    }
+
+    if (!READ_ONLY_ROLES.has(role)) this.handleSurfaceRequest(id);
     if (!result.telemetryParsed) throw new Breach("telemetry unparsable (S-4 circuit breaker)");
+  }
+
+  /**
+   * SEC-3's lever: the hook denies and points here; the KERNEL decides.
+   * Granting appends to the ticket surface (logged); protected paths and a
+   * grant budget of three are hard limits.
+   */
+  private handleSurfaceRequest(ticketId: string): void {
+    const file = path.join(runsDir(this.root, ticketId), "surface_request.json");
+    if (!existsSync(file)) return;
+    let request: { path?: string; justification?: string };
+    try {
+      request = JSON.parse(readFileSync(file, "utf8")) as typeof request;
+    } catch {
+      request = {};
+    }
+    rmSync(file, { force: true });
+    const target = (request.path ?? "").trim();
+    const why = (request.justification ?? "").slice(0, 200);
+    const ticket = readTicket(this.root, ticketId);
+    const grants = ticket.notes.filter((n) => n.text.startsWith("surface granted:")).length;
+
+    const isProtected = target !== "" && picomatch.isMatch(target, [...this.loaded.config.protected], { dot: true });
+    if (target === "" || isProtected || grants >= 3) {
+      appendNote(this.root, ticketId, { author: "kernel", text: `surface DENIED: ${target} (${why}) (SEC-3)` });
+      return;
+    }
+    writeTicket(this.root, { ...ticket, surface: [...ticket.surface, target] });
+    appendNote(this.root, ticketId, { author: "kernel", text: `surface granted: ${target} — ${why} (SEC-3)` });
+  }
+
+  private consumeFalsifiedSignal(ticketId: string): string | null {
+    const file = path.join(runsDir(this.root, ticketId), "falsified.json");
+    if (!existsSync(file)) return null;
+    let note = "premise falsified";
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: string };
+      if (typeof parsed.note === "string" && parsed.note !== "") note = parsed.note;
+    } catch {
+      /* the signal's existence is the event; the note is best-effort */
+    }
+    rmSync(file, { force: true });
+    appendNote(this.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${note}` });
+    return note;
   }
 
   private readonly prefixSeen = new Map<string, string>();
@@ -643,30 +760,15 @@ class Kernel {
     this.prefixSeen.set(role, hash);
   }
 
-  private ledgerRow(ticketId: string, role: string, result: SessionResult): void {
-    const generation = currentGeneration(readTicket(this.root, ticketId));
-    this.journal.appendLedger({
-      at: this.iso(),
-      ticket: ticketId,
-      generation: generation.index,
-      role,
-      cost_estimate_usd: result.costEstimateUsd,
-      input_tokens: result.inputTokens,
-      output_tokens: result.outputTokens,
-      cache_read_input_tokens: result.cacheReadInputTokens,
-      cache_creation_input_tokens: result.cacheCreationInputTokens,
-      turns: result.turns,
-    });
+  private prefixFor(role: RoleId): string {
+    return stablePrefix(this.prompts.prompts[role], this.rulesText, this.bindingsPreamble);
   }
 
-  private prefixFor(role: string): string {
-    return stablePrefix(this.prompts.prompts[role as keyof PromptSet["prompts"]], this.rulesText, this.bindingsPreamble);
-  }
-
-  private toolsFor(role: string): readonly string[] {
-    // Advisory until T-046 wires the PreToolUse hook and per-role allowlists
-    // against the real SDK (S-2/S-3); domain-scoped WebFetch forms land there.
-    if (READ_ONLY_ROLES.has(role as never)) {
+  private toolsFor(role: RoleId): readonly string[] {
+    // The kernel's advisory copy; the SDK backend composes the enforced set
+    // (sessions/guard.ts), including domain-scoped WebFetch once PRDR-062
+    // gives docs domains a config home.
+    if (READ_ONLY_ROLES.has(role)) {
       return role === "research" ? ["Read", "Grep", "Glob", "WebSearch"] : ["Read", "Grep", "Glob"];
     }
     return ["Read", "Grep", "Glob", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"];
@@ -674,19 +776,19 @@ class Kernel {
 
   // ------------------------------------------------------------- commits
 
-  private commit(ticket: Ticket, event: Event, evidence: string): Ticket {
+  private commit(ticket: Ticket, kernelEvent: KernelEvent): Ticket {
     const counters = currentCounters(ticket);
     const ctx: GuardContext = { ticket: { type: ticket.type }, budgets: this.budgets };
-    const result = apply(ticket.state, event, counters, ctx);
+    const result = apply(ticket.state, kernelEvent.event, counters, ctx);
     const generation = currentGeneration(ticket);
     this.journal.appendTransition({
       at: this.iso(),
       ticket: ticket.id,
       generation: generation.index,
       from: result.from,
-      event,
+      event: kernelEvent.event,
       to: result.to,
-      evidence,
+      evidence: kernelEvent.evidence,
       counters: result.counters,
     });
     const updated: Ticket = {
@@ -699,7 +801,7 @@ class Kernel {
 
   private breach(ticket: Ticket, reason: string): Ticket {
     appendNote(this.root, ticket.id, { author: "kernel", text: reason });
-    return this.commit(readTicket(this.root, ticket.id), "BUDGET_BREACH", reason);
+    return this.commit(readTicket(this.root, ticket.id), budgetBreach(reason));
   }
 
   private closeGeneration(ticket: Ticket, outcome: "done" | "blocked" | "needs_human"): void {
@@ -708,10 +810,7 @@ class Kernel {
     if (generation.ended_at !== undefined) return;
     writeTicket(this.root, {
       ...fresh,
-      generations: [
-        ...fresh.generations.slice(0, -1),
-        { ...generation, outcome, ended_at: this.iso() },
-      ],
+      generations: [...fresh.generations.slice(0, -1), { ...generation, outcome, ended_at: this.iso() }],
     });
   }
 
@@ -736,26 +835,28 @@ class Kernel {
     writeFileSync(path.join(dir, "dossier.json"), `${JSON.stringify(dossier, null, 2)}\n`);
   }
 
-  private finalize(ticket: Ticket): void {
-    git(this.root, "add", "-A");
-    const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: this.root, encoding: "utf8" }).trim();
-    if (dirty !== "") git(this.root, "commit", "-q", "-m", `${ticket.id}: finalize`);
+  private finalize(ticket: Ticket, workDir: string): void {
+    git(workDir, "add", "-A");
+    const dirty = git(workDir, "status", "--porcelain").trim();
+    if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
+    // B-2: worktree mode merges --no-ff into the RUN branch — never the base.
+    if (this.opts.worktree === true) mergeWorktree(this.root, ticket.id);
   }
 
   // -------------------------------------------------------------- helpers
 
-  private fixInputs(ticket: Ticket): Record<string, unknown> {
+  private fixInputs(ticket: Ticket, workDir: string): Record<string, unknown> {
     return {
       ticket: publicTicket(ticket),
       failure: this.maybeArtifact(ticket.id, "last_failure.json"),
       hypothesis: this.maybeArtifact(ticket.id, "hypothesis.json"),
-      diff: this.diff(),
+      diff: this.diff(workDir),
     };
   }
 
-  private diff(): string {
+  private diff(workDir: string): string {
     try {
-      return git(this.root, "diff", "HEAD").slice(-8000);
+      return git(workDir, "diff", "HEAD").slice(-8000);
     } catch {
       return "";
     }
@@ -801,10 +902,6 @@ function artifactNameFor(role: string): string {
   if (role === "research") return "research.json";
   if (role === "review") return "review.json";
   return `${role}.json`;
-}
-
-function evidenceOf(result: GateResult): string {
-  return `${result.slot ?? "gate"}:exit=${result.exitCode ?? "none"}`;
 }
 
 function lastNote(ticket: Ticket): string {
