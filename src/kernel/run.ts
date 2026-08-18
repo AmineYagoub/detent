@@ -7,7 +7,7 @@ import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { approvalSchema, dossierSchema, hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
+import { approvalSchema, hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
 import type { GateSlot } from "../schemas/gates.js";
 import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { State } from "../schemas/states.js";
@@ -25,15 +25,18 @@ import {
   gateDrift,
   gateGreen,
   gateRed,
+  humanApproved,
   humanRequeue,
   premiseFalsified,
-  riskLabelRequired,
+  riskRequired,
   type KernelEvent,
 } from "./events.js";
+import { writeDossier } from "./dossier.js";
 import { RerunLedger, filterFlake, ledgerFor, quarantineTicket } from "./flake.js";
 import { classify } from "./classify.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import {
+  changedFiles,
   clearCurrentTicket,
   ensureRunBranch,
   ensureWorktree,
@@ -51,6 +54,7 @@ import {
 import { RunJournal, runsDir } from "./journal.js";
 import { SpendExhaustedError, SpendLedger } from "./ledger.js";
 import { apply, type GuardContext } from "./machine.js";
+import { scrub } from "./scrub.js";
 import { diagnoseStage } from "./stages/diagnose.js";
 import { reviewStage } from "./stages/review.js";
 import { researchStage } from "./stages/research.js";
@@ -106,7 +110,28 @@ export interface RunOptions {
    * kernel reaching past the backend seam to fetch it.
    */
   readonly prompts: PromptSet;
+  /**
+   * C-10: escalations are handled INSIDE `run` on a TTY. When present, a
+   * NEEDS_HUMAN ticket is offered here — approve / requeue-with-guidance /
+   * skip / quit — and the loop continues in-process. Absent (non-TTY), the
+   * ticket stays pending and the run exits 10 with the JSON summary.
+   */
+  readonly escalate?: (input: EscalationInput) => Promise<EscalationAction>;
+  /** C-13: resume announcements and similar user-facing notices. */
+  readonly announce?: (message: string) => void;
 }
+
+export interface EscalationInput {
+  readonly ticket: Ticket;
+  readonly reason: string;
+  readonly summary: string;
+}
+
+export type EscalationAction =
+  | { readonly kind: "approve"; readonly by: string }
+  | { readonly kind: "requeue"; readonly by: string; readonly guidance: string }
+  | { readonly kind: "skip"; readonly by: string }
+  | { readonly kind: "quit" };
 
 export interface PendingEntry {
   readonly id: string;
@@ -213,6 +238,7 @@ class Kernel {
   private readonly refs: RefSnapshot;
   private readonly baseRef: string | null;
   private processed = 0;
+  private quitting = false;
 
   constructor(
     private readonly opts: RunOptions,
@@ -255,6 +281,7 @@ class Kernel {
     this.requeueDriftBlocked();
 
     for (;;) {
+      if (this.quitting) return this.finish();
       const pool = this.claimables();
       if (pool.length === 0) return this.finish();
 
@@ -355,6 +382,9 @@ class Kernel {
     if (ticket.state === "READY") {
       ticket = this.commit(ticket, claimed());
     } else {
+      // C-13: resume always announces itself, in the five-label vocabulary —
+      // the caller renders it; internal state names never reach a terminal.
+      this.opts.announce?.(this.resumeAnnouncement(ticket));
       // B-5: uncommitted tracked changes at resume are reset to the last
       // ticket commit; untracked files stay — the gate judges the tree as-is.
       const reset = resetDirtyTracked(workDir);
@@ -380,8 +410,10 @@ class Kernel {
     }
 
     if (ticket.state === "NEEDS_HUMAN") {
-      this.writeDossier(ticket, lastNote(ticket) || "escalated");
+      const reason = lastNote(ticket) || "escalated";
+      writeDossier(this.root, readTicket(this.root, id), reason);
       this.closeGeneration(ticket, "needs_human");
+      await this.offerEscalation(id, reason, flakeLedger, workDir);
     } else if (ticket.state === "BLOCKED") {
       this.closeGeneration(ticket, "blocked");
     } else if (ticket.state === "DONE") {
@@ -514,11 +546,127 @@ class Kernel {
   // ---- close-check ---------------------------------------------------------
 
   private async stageCloseCheck(ticket: Ticket, flakeLedger: RerunLedger, workDir: string): Promise<Ticket> {
-    if (ticket.risk_label) {
-      appendNote(this.root, ticket.id, { author: "kernel", text: "risk-labelled change requires human approval (B-4)" });
-      return this.commit(ticket, riskLabelRequired());
+    // B-4: the ticket's own label, or the diff touching risk globs — both
+    // require a human before finalize. A recorded human approval covers the
+    // risk once; the kernel still re-verifies the gates below (X-3).
+    const approved = ticket.notes.some((n) => n.text.startsWith("human-approved:"));
+    if (!approved) {
+      if (ticket.risk_label) {
+        appendNote(this.root, ticket.id, { author: "kernel", text: "risk-labelled change requires human approval (B-4)" });
+        // Fresh read: committing from the stale reference would overwrite the
+        // note appendNote just persisted (the lost-update this loop must never do).
+        return this.commit(readTicket(this.root, ticket.id), riskRequired("label"));
+      }
+      const globs = this.loaded.config.risk;
+      if (globs.length > 0) {
+        const touched = changedFiles(workDir, this.baseRef ?? this.runBranch.base).filter((f) =>
+          picomatch.isMatch(f, [...globs], { dot: true }),
+        );
+        if (touched.length > 0) {
+          appendNote(this.root, ticket.id, {
+            author: "kernel",
+            text: `risk-path change requires human approval (B-4): ${touched.join(", ")}`,
+          });
+          return this.commit(readTicket(this.root, ticket.id), riskRequired({ globs, files: touched }));
+        }
+      }
     }
     return await this.evaluateGate(ticket, flakeLedger, workDir, undefined, ["lint", "typecheck", "test", "build", "e2e"]);
+  }
+
+  // ---- escalation (C-10, T-049) -------------------------------------------
+
+  /**
+   * The in-run escalation flow. Approve applies HUMAN_APPROVED (the kernel
+   * re-verifies from APPROVED — never a direct DONE); requeue opens a fresh
+   * generation carrying the guidance (X-8); skip leaves the ticket pending;
+   * quit stops the run. The human act is the answer itself.
+   */
+  private async offerEscalation(id: string, reason: string, flakeLedger: RerunLedger, workDir: string): Promise<void> {
+    if (this.opts.escalate === undefined || this.quitting) return;
+    const fresh = readTicket(this.root, id);
+    const { dossierSummary, buildDossier } = await import("./dossier.js");
+    const action = await this.opts.escalate({
+      ticket: fresh,
+      reason,
+      summary: dossierSummary(fresh, buildDossier(this.root, fresh, reason)),
+    });
+
+    if (action.kind === "quit") {
+      this.quitting = true;
+      return;
+    }
+    if (action.kind === "skip") {
+      appendNote(this.root, id, { author: action.by, text: `skipped at escalation (C-10)` });
+      return;
+    }
+    if (action.kind === "approve") {
+      appendNote(this.root, id, { author: action.by, text: `human-approved: by ${action.by} at escalation (C-10)` });
+      const approvedTicket = this.commit(readTicket(this.root, id), humanApproved(`approved in-run by ${action.by} (C-10)`));
+      this.reopenGeneration(id);
+      // The kernel re-verifies: drive the ticket onward from APPROVED now.
+      await this.driveOn(approvedTicket.id, flakeLedger, workDir);
+      return;
+    }
+    // requeue with guidance
+    appendNote(this.root, id, { author: action.by, text: `requeued with guidance (C-10): ${action.guidance}` });
+    const requeued = this.commit(readTicket(this.root, id), humanRequeue(`requeue by ${action.by}: ${action.guidance}`));
+    const generations = openGeneration(requeued, { at: this.iso(), reason: action.guidance });
+    writeTicket(this.root, { ...requeued, generations });
+  }
+
+  /** After an in-run approval the closed generation reopens for the re-verify. */
+  private reopenGeneration(id: string): void {
+    const fresh = readTicket(this.root, id);
+    const generation = currentGeneration(fresh);
+    if (generation.ended_at === undefined) return;
+    // exactOptionalTypes: rebuild without ended_at rather than destructuring
+  // into an unused binding the lint rejects.
+  const reopened = { ...generation, outcome: "in_flight" as const };
+  delete (reopened as { ended_at?: string }).ended_at;
+    writeTicket(this.root, {
+      ...fresh,
+      generations: [...fresh.generations.slice(0, -1), reopened],
+    });
+  }
+
+  private async driveOn(id: string, flakeLedger: RerunLedger, workDir: string): Promise<void> {
+    let ticket = readTicket(this.root, id);
+    while (ticket.state !== "DONE" && ticket.state !== "NEEDS_HUMAN" && ticket.state !== "BLOCKED") {
+      try {
+        ticket = await this.stage(ticket, flakeLedger, workDir);
+      } catch (err) {
+        if (err instanceof Breach || err instanceof SpendExhaustedError) {
+          ticket = this.breach(readTicket(this.root, id), (err as Error).message);
+          break;
+        }
+        throw err;
+      }
+    }
+    if (ticket.state === "DONE") {
+      this.finalize(ticket, workDir);
+      this.closeGeneration(ticket, "done");
+    } else if (ticket.state === "NEEDS_HUMAN") {
+      writeDossier(this.root, readTicket(this.root, id), lastNote(ticket) || "escalated");
+      this.closeGeneration(ticket, "needs_human");
+    } else {
+      this.closeGeneration(ticket, "blocked");
+    }
+  }
+
+  /** C-13: the five-label vocabulary; full state names live only in the journal. */
+  private resumeAnnouncement(ticket: Ticket): string {
+    const labels: Record<string, string> = {
+      DIAGNOSED: "diagnosing",
+      IN_PROGRESS: "implementing",
+      BLIND_FIX: "fixing",
+      RESEARCH: "researching the failure",
+      INFORMED_FIX: "fixing, research applied",
+      REVIEW_FIX: "addressing review findings",
+      IN_REVIEW: "in review",
+      APPROVED: "verifying",
+    };
+    return `resuming ${ticket.id} — ${labels[ticket.state] ?? "working"}`;
   }
 
   // --------------------------------------------------------------- gates
@@ -613,7 +761,9 @@ class Kernel {
       exit: result.exitCode,
       signature: verdict.signature,
       classification: verdict.patternClass,
-      output_tail: result.output.slice(-4000),
+      // SEC-4: scrubbed BEFORE write — a secret echoed by a failing gate
+      // must never land in an artifact.
+      output_tail: scrub(result.output.slice(-4000)),
     };
     const dir = runsDir(this.root, ticketId);
     mkdirSync(dir, { recursive: true });
@@ -812,27 +962,6 @@ class Kernel {
       ...fresh,
       generations: [...fresh.generations.slice(0, -1), { ...generation, outcome, ended_at: this.iso() }],
     });
-  }
-
-  private writeDossier(ticket: Ticket, reason: string): void {
-    const fresh = readTicket(this.root, ticket.id);
-    const failure = this.maybeArtifact(ticket.id, "last_failure.json") as { signature?: string } | null;
-    const dossier = dossierSchema.parse({
-      schema_version: 1,
-      ticket: ticket.id,
-      reason,
-      generations: fresh.generations.map((g) => ({ index: g.index, counters: g.counters })),
-      last_signatures: failure?.signature === undefined ? [] : [failure.signature],
-      artifact_index: [],
-      suggested_resolutions: [
-        "review the dossier and the last failure record",
-        "requeue with guidance (`detent requeue <id>`) to open a fresh generation (X-8)",
-        "or approve after a manual fix (`detent approve <id>`) — the kernel re-verifies before DONE",
-      ],
-    });
-    const dir = runsDir(this.root, ticket.id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "dossier.json"), `${JSON.stringify(dossier, null, 2)}\n`);
   }
 
   private finalize(ticket: Ticket, workDir: string): void {

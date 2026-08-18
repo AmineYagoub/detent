@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { EXIT_ERROR, run } from "../kernel/run.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
+import { makeTtyEscalation } from "./escalate.js";
 
 /**
  * T-041 — `detent run`, the second porcelain verb (C-9…C-11, D-3).
@@ -36,12 +37,17 @@ export async function main(argv: readonly string[]): Promise<number> {
   const root = positionals[0] ?? process.cwd();
   const maxTickets = values["max-tickets"] === undefined ? undefined : Number(values["max-tickets"]);
 
+  // C-10: escalations resolve inside `run` on a TTY; non-TTY exits 10 with
+  // the machine-readable summary instead.
+  const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
   const outcome = await run({
     root,
     backend: new MockBackend(),
     prompts: loadPromptSet(),
     worker: values.worker,
     worktree: values.worktree,
+    announce: (message) => process.stdout.write(`${message}\n`),
+    ...(interactive ? { escalate: makeTtyEscalation(process.env["USER"] ?? "operator") } : {}),
     ...(maxTickets === undefined || Number.isNaN(maxTickets) ? {} : { maxTickets }),
   });
 

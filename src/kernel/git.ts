@@ -196,6 +196,30 @@ export function mergeWorktree(root: string, ticketId: string): void {
   tryGit(root, "branch", "-q", "-D", `${TICKET_BRANCH_PREFIX}${ticketId}`);
 }
 
+/**
+ * B-4's risk surface: everything the run has changed relative to its base —
+ * committed diff plus untracked files, exactly the oracle's definition. Works
+ * against any base branch name (main, master, …), since the name comes from
+ * the recorded run branch, never a constant.
+ */
+export function changedFiles(root: string, baseRef: string): string[] {
+  const diff = tryGit(root, "diff", "--name-only", baseRef) ?? "";
+  const untracked = tryGit(root, "ls-files", "--others", "--exclude-standard") ?? "";
+  return [...new Set(`${diff}\n${untracked}`.split("\n").map((l) => l.trim()).filter((l) => l !== ""))];
+}
+
+/**
+ * §14's base-branch-writes metric source: the base ref's reflog. Creation is
+ * one entry; anything beyond it during a run is a write (even a reverted one
+ * — the guard's own restore is honest evidence that a write happened).
+ */
+export function baseReflogWrites(root: string, base: string): number {
+  const raw = tryGit(root, "reflog", "show", "--format=%gs", base);
+  if (raw === null) return 0;
+  const entries = raw.split("\n").filter((l) => l.trim() !== "");
+  return Math.max(0, entries.length - 1);
+}
+
 // ---------------------------------------------------------------------------
 // Crash recovery (B-5)
 

@@ -10,9 +10,9 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 
 | Status | Count |
 |---|---:|
-| green | 48 |
+| green | 51 |
 | pending-M1 | 0 |
-| pending-M2 | 3 |
+| pending-M2 | 0 |
 | pending-later | 1 |
 | **total** | **52** |
 
@@ -27,12 +27,12 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_contract.py::test_valid` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
 | `test_extra.py::test_mode1_stub_detected` | pending-later | T-060 (M3) | — | greenfield vs brownfield detection is C-1's job in the init phase machine |
 | `test_extra.py::test_research_session_gets_domain_scoped_web_tools` | green | T-046 (M2) | `tests/sessions/guard.test.ts` | composition takes the domain list as a parameter — the configured value has no F-1 home yet (PRDR-062), so the kernel passes an empty list until the PRD gives it one |
-| `test_extra.py::test_risk_detection_on_master_based_repo` | pending-M2 | T-049 (M2) | — |  |
+| `test_extra.py::test_risk_detection_on_master_based_repo` | green | T-049 (M2) | `tests/kernel/escalate.test.ts` | risk globs match against any base name — changedFiles reads the recorded run-branch base, never a hardcoded main |
 | `test_extra.py::test_smoke_mock_backend` | green | T-040 (M2) | `tests/sessions/mock.test.ts` | the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050 |
 | `test_extra.py::test_three_change_cycles_escalate` | green | T-044 (M2) | `tests/kernel/stages.test.ts` | D-6 divergence: the oracle recycled review changes into a shared fix pool (three cycles to exhaust); review has its own unit budget here, so the SECOND changes verdict escalates — the preserved property is that repeated changes reach a human |
 | `test_extra.py::test_unparsable_telemetry_is_budget_breaching` | green | T-046 (M2) | `tests/sessions/sdk.test.ts` |  |
 | `test_extra.py::test_upstream_blocks_with_linked_ticket` | green | T-045 (M2) | `tests/kernel/stages.test.ts` |  |
-| `test_extra.py::test_validate_report_approve_requeue` | pending-M2 | T-055 (M2) | — | the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset |
+| `test_extra.py::test_validate_report_approve_requeue` | green | T-055 (M2) | `tests/kernel/plumbing.test.ts` | the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset |
 | `test_gates.py::test_assertion_default` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
 | `test_gates.py::test_different_failures_differ` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
 | `test_gates.py::test_flake` | green | T-016 (M0) | `tests/oracle/classify.test.ts` |  |
@@ -55,7 +55,7 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_kernel_e2e.py::test_ladder_exhausts_to_needs_human_with_dossier` | green | T-041 (M2) | `tests/kernel/run.test.ts` | counters assert the §13 mapping (fix_sessions 2 = blind 1 + informed 1); the oracle's brief-cached assertion belongs to D-18's env-keyed cache and closes at T-045 |
 | `test_kernel_e2e.py::test_no_second_blind_fix_after_crash` | green | T-041 (M2) | `tests/kernel/run.test.ts` |  |
 | `test_kernel_e2e.py::test_research_cache_hit_skips_research_session` | green | T-045 (M2) | `tests/kernel/stages.test.ts` | the cache key is D-18's env-composite, superseding the oracle's plain signature; the ladder port's cache assertions close here as promised at T-041 |
-| `test_kernel_e2e.py::test_risk_path_requires_human_approval` | pending-M2 | T-049 (M2) | — |  |
+| `test_kernel_e2e.py::test_risk_path_requires_human_approval` | green | T-049 (M2) | `tests/kernel/escalate.test.ts` |  |
 | `test_kernel_e2e.py::test_surface_request_grant_and_deny` | green | T-046 (M2) | `tests/sessions/sdk.test.ts` |  |
 | `test_kernel_e2e.py::test_triage_unverified_blocks` | green | T-041 (M2) | `tests/kernel/run.test.ts` | triage did not survive D-10 (planning moved to init); the preserved properties split: an unapproved plan runs nothing (C-9/C-7, exit 2) and a human-gated pool exits 10 with a machine-readable summary |
 | `test_state.py::test_budget_breach_from_anywhere` | green | T-011 (M0) | `tests/oracle/state.test.ts` |  |

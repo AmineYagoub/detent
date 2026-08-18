@@ -98,6 +98,7 @@ export const PARITY: readonly ParityEntry[] = [
   {
     oracle: "test_extra.py::test_validate_report_approve_requeue",
     ticket: "T-055",
+    ts: "tests/kernel/plumbing.test.ts",
     note: "the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset",
   },
   { oracle: "test_extra.py::test_mode1_stub_detected", ticket: "T-060", note: "greenfield vs brownfield detection is C-1's job in the init phase machine" },
@@ -113,7 +114,12 @@ export const PARITY: readonly ParityEntry[] = [
     ts: "tests/sessions/guard.test.ts",
     note: "composition takes the domain list as a parameter — the configured value has no F-1 home yet (PRDR-062), so the kernel passes an empty list until the PRD gives it one",
   },
-  { oracle: "test_extra.py::test_risk_detection_on_master_based_repo", ticket: "T-049" },
+  {
+    oracle: "test_extra.py::test_risk_detection_on_master_based_repo",
+    ticket: "T-049",
+    ts: "tests/kernel/escalate.test.ts",
+    note: "risk globs match against any base name — changedFiles reads the recorded run-branch base, never a hardcoded main",
+  },
 
   // ---- test_kernel_e2e.py (11) ---------------------------------------------
   {
@@ -148,7 +154,7 @@ export const PARITY: readonly ParityEntry[] = [
   { oracle: "test_kernel_e2e.py::test_falsified_premise_recycles_to_diagnosis", ticket: "T-043", ts: "tests/kernel/stages.test.ts" },
   { oracle: "test_kernel_e2e.py::test_hypothesis_thrash_escalates", ticket: "T-043", ts: "tests/kernel/stages.test.ts" },
   { oracle: "test_kernel_e2e.py::test_surface_request_grant_and_deny", ticket: "T-046", ts: "tests/sessions/sdk.test.ts" },
-  { oracle: "test_kernel_e2e.py::test_risk_path_requires_human_approval", ticket: "T-049" },
+  { oracle: "test_kernel_e2e.py::test_risk_path_requires_human_approval", ticket: "T-049", ts: "tests/kernel/escalate.test.ts" },
   {
     oracle: "test_kernel_e2e.py::test_flake_charges_nothing_and_quarantines",
     ticket: "T-022",

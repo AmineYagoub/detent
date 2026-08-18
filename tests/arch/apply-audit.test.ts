@@ -39,17 +39,21 @@ describe("T-054 the sanctioned apply-site set (source scan)", () => {
       if (/from\s+"[^"]*\/machine\.js"|from\s+"\.\/machine\.js"/.test(body)) importers.push(rel(file));
     }
     // run.ts commits state; worstcase.ts walks table COPIES (a computation,
-    // not a state mutation). Nothing else may touch the table.
-    expect(importers.sort()).toEqual(["kernel/run.ts", "kernel/worstcase.ts"]);
+    // not a state mutation); plumbing.ts commits the two HUMAN_* events on an
+    // operator's explicit authority (C-12) through the same journaled path.
+    // Nothing else may touch the table.
+    expect(importers.sort()).toEqual(["kernel/plumbing.ts", "kernel/run.ts", "kernel/worstcase.ts"]);
   });
 
-  it("the run loop contains no raw event-name string — events arrive only through constructors", () => {
-    const body = readFileSync(path.join(SRC, "kernel/run.ts"), "utf8");
-    for (const event of EVENTS) {
-      expect(body.includes(`"${event}"`), `run.ts must not name ${event} as a string`).toBe(false);
+  it("the commit paths contain no raw event-name string — events arrive only through constructors", () => {
+    for (const file of ["kernel/run.ts", "kernel/plumbing.ts"]) {
+      const body = readFileSync(path.join(SRC, file), "utf8");
+      for (const event of EVENTS) {
+        expect(body.includes(`"${event}"`), `${file} must not name ${event} as a string`).toBe(false);
+      }
+      // And apply() appears exactly once per file — inside its commit path.
+      expect(body.match(/\bapply\(/g) ?? [], file).toHaveLength(1);
     }
-    // And apply() appears exactly once — inside commit().
-    expect(body.match(/\bapply\(/g) ?? []).toHaveLength(1);
   });
 
   it("the brand symbol is constructed in exactly one module", () => {
@@ -108,7 +112,7 @@ describe("T-054 constructors demand their justifying artifacts (type level, spot
         events.reviewChanges(review),
         events.researchDry("dry"),
         events.budgetBreach("reason"),
-        events.riskLabelRequired(),
+        events.riskRequired("label"),
       ].map((e) => e.event),
     );
     expect(constructed.size).toBeGreaterThanOrEqual(11);

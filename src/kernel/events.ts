@@ -45,6 +45,11 @@ export function humanRequeue(consent: string): KernelEvent {
   return make("HUMAN_REQUEUE", consent);
 }
 
+/** C-10/C-12: an approval is a human act; who and how are the evidence. */
+export function humanApproved(evidence: string): KernelEvent {
+  return make("HUMAN_APPROVED", evidence);
+}
+
 // ---- gate-derived -----------------------------------------------------------
 
 export function gateGreen(result: GateResult | null, qualifier = ""): KernelEvent {
@@ -107,6 +112,11 @@ export function gateDrift(halt: DriftHaltError): KernelEvent {
   return make("GATE_DRIFT", halt.halting.map((h) => h.slot).join(","));
 }
 
-export function riskLabelRequired(): KernelEvent {
-  return make("RISK_LABEL_REQUIRED", "risk gate: ticket carries risk_label (B-4)");
+/**
+ * B-4's two triggers share one X-3 event: the ticket's own label, or the
+ * diff touching risk globs — the matched files are the evidence.
+ */
+export function riskRequired(cause: "label" | { readonly globs: readonly string[]; readonly files: readonly string[] }): KernelEvent {
+  if (cause === "label") return make("RISK_LABEL_REQUIRED", "risk gate: ticket carries risk_label (B-4)");
+  return make("RISK_LABEL_REQUIRED", `risk gate: diff touches ${cause.files.join(",")} (globs: ${cause.globs.join(",")}) (B-4)`);
 }

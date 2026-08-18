@@ -34,10 +34,11 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     expect(LANDED_THROUGH).toBe("M1");
   });
 
-  it("M2 progress: 48 green — only T-049 (2) and T-055 (1) remain pending-M2", () => {
-    expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(48);
-    const pending = PARITY.filter((e) => statusOf(e) === "pending-M2");
-    expect(pending.map((e) => e.ticket).sort()).toEqual(["T-049", "T-049", "T-055"]);
+  it("M2 near-complete: 51 green, zero pending-M2 — only test_mode1_stub_detected (T-060, M3) remains", () => {
+    expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(51);
+    expect(PARITY.filter((e) => statusOf(e) === "pending-M2")).toEqual([]);
+    const later = PARITY.filter((e) => statusOf(e) === "pending-later");
+    expect(later.map((e) => e.oracle)).toEqual(["test_extra.py::test_mode1_stub_detected"]);
   });
 
   it("every green entry's TypeScript home is a test file that exists and names its ticket", () => {

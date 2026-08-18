@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.9 — T-042…T-046, T-048, T-054 landed; 48/52 oracle tests green (§7) |
+| Plan version | 1.10 — M2 feature-complete: T-049/050/052/053/055 landed; 51/52 oracle tests green (§7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -483,6 +483,23 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.10** — the last five M2 tickets landed: T-049 (escalation UX + risk gate), T-050 (doctor), T-052 (SEC red-team pack + env allowlist + scrubbing), T-053 (status/report + all eight §14 metrics), T-055 (approve/requeue plumbing). The final three oracle tests close — parity **51 / 0 / 0 / 1**, zero pending-M2; only `test_mode1_stub_detected` (T-060, M3) remains. All gates green: 465 passed / 2 skipped. A `detent` CLI dispatcher (`src/cli/index.ts`) now routes the two porcelain verbs and the documented plumbing. **M2 is feature-complete; its exit ticket T-051 — a live budgeted 3-ticket run — is the one remaining step, and it is R-10-gated on a real API key + spend cap.**
+
+What each ticket proved:
+
+- **T-049**: the C-10 escalation flow runs INSIDE `run` — approve / requeue-with-guidance / skip / quit, the loop continuing in-process — with the non-TTY path unchanged (exit 10 + JSON). Both risk oracle tests port: approve re-enters APPROVED and the kernel **re-verifies** (a test asserts the DONE transition's event is `GATE_GREEN`, not the approval — never a direct DONE), and risk globs fire against a `master`-based repo because `changedFiles` reads the recorded run-branch base, never a hardcoded name. The dossier displays cumulative totals across generations (X-8).
+- **T-050**: `doctor` reports the computed worst case beside the configured net (the computation is authoritative over any quoted figure), checks both S-5 pins, validates the WebFetch rule form so a malformed one fails loudly rather than no-opping, and runs one live smoke session only when a key is present (R-10) — keyless, it skips green.
+- **T-052**: ten evasion tickets (0 protected writes), secret scrubbing wired **before** the on-disk failure record is written (a leaked key in gate output is redacted in `last_failure.json`), the SEC-4 env allowlist (cloud credentials stripped, the PRDR-054 cache-TTL header set explicitly), the PRDR-051 hostile-settings fixture, and the §14 scope-canary corpus feeding a 100%-block metric.
+- **T-053**: all eight §14 metrics computed from artifacts alone, with an **enumeration test pinning the reporter's key set against the PRD table** — a metric added to §14 without a reporter fails CI. C-13's five-label vocabulary is total over the state set, and both `status` and resume announcements are snapshot-asserted to leak no internal state name.
+- **T-055**: `approve`/`requeue` with full C-12 claim discipline — a live claim refuses (exit 2, naming pid + age), a stale claim breaks and records the broken pid in the transition evidence without inventing an X-3 event, an unreadable claim is held-not-free (R-3). The oracle's `test_validate_report_approve_requeue` ports with X-8 generation semantics (the recorded M0 divergence from the oracle's in-place reset).
+
+Defects found by composition, fixed with regression coverage:
+
+- **A lost-update in the risk gate**: `stageCloseCheck` committed from the stale `ticket` reference after `appendNote` had already persisted the note — the commit overwrote it, so the master-based oracle test saw an empty notes array. Fixed to re-read before committing; the whole loop was audited for the same pattern (all other post-note commits already re-read).
+- **A non-idempotent fixture**: `implementRed` committed without `--allow-empty`, so a second generation replaying it crashed on "nothing to commit". The requeue and dossier tests surfaced it — a generation-2 ladder is a real scenario the M0 fixtures never hit.
+
+Also this batch: T-054's apply-site audit widened to cover `plumbing.ts` as a third sanctioned `machine.apply` importer (the two HUMAN_* events on operator authority, through the same journaled commit path with zero raw event strings); `events.ts` gained `humanApproved` and a generalized `riskRequired` (label or matched globs); `git.ts` gained `changedFiles` and `baseReflogWrites` (the §14 base-write metric source, which counts a reverted tamper honestly).
+
 **1.9** — seven tickets landed: T-042 (branch contract), T-043 (diagnosis gate), T-044 (review routing), T-045 (research cache), T-046 (SDK backend + guard), T-048 (ledger + spend backstop), T-054 (apply-site audit). Sixteen more oracle tests close — parity **48 / 0 / 3 / 1**; only T-049's two and T-055's one remain in M2. All gates green: 403 passed / 2 skipped. PRDR-062 filed (research docs domains have no F-1 home).
 
 What each ticket proved, and the divergences recorded in the parity map:
@@ -635,4 +652,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.9 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.10 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
