@@ -1,0 +1,67 @@
+# Detent v3 — Implementation Plan (the plugin re-target)
+
+Source of truth: `detent-prd-v3.md` (3.0-draft.1). This plan decomposes the MP0…MP4 milestone series of §13 into tickets `T-1##` (distinct from the v2 line's `T-0##`). It applies **PRDR-065** and depends on nothing outside the v3 PRD.
+
+## §0. Working agreements (carry from v2, unchanged)
+- **No-deviation (N-6).** A design change files a `tickets/prd-review/` PRDR **first**, the PRD amends, then this plan and code follow. PRDR evidence blocks quote the PRD verbatim and are never retro-edited.
+- **Trailers.** Commits carry `Detent-Ticket: T-1##`.
+- **Tests-before-code, where an oracle exists.** The v2 kernel *is* the referee, and its **553 passing tests are the referee's conformance floor** — MP0 may not regress one. v3's *new* surfaces (the R-* MCP boundary, the plugin, the model-driven loop) have **no oracle**; they are spec-first, tests derived from the PRD's ACs.
+- **Live-key discipline (R-10).** Any ticket that spends against the user's `ANTHROPIC_API_KEY` (marked ⚡ below) is gated on explicit per-run consent and a spend cap. Never run unprompted.
+
+## §1. What v3 reuses vs replaces
+**Reused unchanged, behind the referee's MCP boundary:** the state machine (§7), budgets (X-1), gate classifier, flake filter, checkpoints (F-4), ticket store, verification adapter (§6), and `schemas/**`. These carry their v2 tests forward verbatim.
+**Replaced:** the kernel run loop (`src/kernel/run.ts` orchestration) and the CLI verbs (`src/cli/*`) — split into a driver-agnostic **referee** (MCP tools) plus **two drivers** (headless deterministic loop; interactive model-driven loop) and the **plugin** shell.
+**The load-bearing invariant (D-27/ARCH-1):** every `machine.apply` still derives its event from a validator or gate result — now asserted at the *tool* boundary, true regardless of which driver called the tool.
+
+---
+
+## §2. Milestones & tickets
+
+### MP0 — the referee (extract the v2 kernel behind MCP; headless driver at full parity)
+The de-risking milestone: prove the kernel runs **unchanged** behind a tool boundary, with the deterministic driver reproducing today's behavior byte-for-byte. No live key anywhere in MP0 — it runs against the existing mock/fixtures.
+- **T-100** Referee MCP scaffold (R-1): tool server skeleton, tool registry, zod I/O schemas reusing `src/schemas/**`. *AC:* server lists exactly the R-1 tool set; unknown tool → structured error.
+- **T-101** `next` + `claim` tools (R-2): ready-set from the ticket store; atomic claim honoring X-3 admissibility. *AC:* two-ready fixture — either claimable; blocked-ticket claim refused naming the blocker.
+- **T-102** `record` + `transition` tools (the sole `machine.apply` path): each tool gate-/validator-derives its event; the ARCH-1 apply-site audit is **extended to the tool boundary**. *AC:* `transition` with an inadmissible event refused, no checkpoint written; audit test asserts no tool reaches `machine.apply` without a validator/gate result.
+- **T-103** `gate` tool: run + classify a bound gate via the existing adapter + flake filter (F/V reuse). *AC:* the v2 gate/flake tests pass through the tool unchanged.
+- **T-104** `attempt` tool (R-4): metered billable-session spawn wrapping the existing `SessionBackend`; ledger check-before / record-after; over-ceiling refusal routes to a human (P6). *AC:* over-budget fixture refuses and routes; ledger sums every session (mock backend).
+- **T-105** Checkpoint/resume through the referee (R-3, D-30): every admitted transition persisted to `.detent/` before the tool returns. *AC:* kill mid-`attempt`; re-drive resumes from the last admitted transition; stale claim reclaimable (C-9).
+- **T-106** The **headless driver**: re-express `run.ts`'s loop as a driver over R-* tools. *AC:* byte-identical `transitions.jsonl` vs the v2 loop on the oracle crash-resume class.
+- **T-107** **MP0 exit** — the entire v2 suite (553 tests) green with the headless driver over the referee; ARCH-2 driver-agnostic audit; parity map annotated (the oracle tests now certify the referee). *Exit gate for MP1.*
+
+### MP1 — the plugin skeleton
+- **T-110** Plugin manifest (`.claude-plugin/plugin.json`) + `marketplace.json`. *AC:* manifest validates; registers exactly two commands.
+- **T-111** The two commands (`/detent:init`, `/detent:run`) as command definitions that invoke the driver/referee. *AC:* both load in a live Claude Code session.
+- **T-112** Vendored subagents: the role prompts (diagnose/implement/review/research) → `agents/*.md`, hash-pinned (S-7). *AC:* `role@hash` resolves; runtime never fetches (SEC-2).
+- **T-113** The D-21 containment hook as a plugin hook (`hooks/hooks.json` PreToolUse) + Stop-gate hook. *AC:* the M0 guard tests pass against the plugin hook.
+- **T-114 ⚡ MP1 exit** — commands load and the hook denies an out-of-surface write in a **live** session. *Live-key gated.*
+
+### MP2 — the model-driven loop
+- **T-120** The model-driven driver: skill(s) that sequence `next → claim → attempt → record/gate → transition` over R-* tools, choosing among *legal* moves only (R-2). *AC:* the model completes a single-ticket run over the referee against a fixture backend.
+- **T-121** D-28 budget hook: deny ledger-bypassing ambient billable tools (direct `Task`/gate-running `Bash`); `attempt` is the sole billable path. *AC:* ambient spawn for Detent work hook-denied; ledger sees every attempt.
+- **T-122** D-29 / SEC-6 hook authority over loaded settings. *AC:* a repo settings file allow-listing an out-of-surface write is hook-denied; no transition recorded.
+- **T-123** Cross-driver parity harness: a multi-ticket run under the model driver yields `transitions.jsonl` byte-identical to the headless driver for the same admitted sequence (scripted/fixture backend for determinism). *AC:* parity fixture green.
+- **T-124 ⚡ MP2 exit** — a live multi-ticket model-driven run completes; budgets provably hard. *Live-key gated.*
+
+### MP3 — init as a plugin
+- **T-130** The seven init phases surfaced as command/skills; the five C-5 decisions as the plugin's presented interrupts (closed set). *AC:* interrupt set asserted at five; phase order matches C-4.1.
+- **T-131** Approval (C-7) as a plugin presented decision (the `makeTtyApproval` role, re-surfaced). *AC:* approved/declined/deferred map to the same three outcomes; approval records who/when/plan_hash.
+- **T-132 MP3 exit** — the golden-path docs test passes against the plugin surface (two commands, five decisions).
+
+### MP4 — self-build + distribution (N-7)
+- **T-140 ⚡** The headless driver self-builds v3 in CI — the permanent gate (D-16), now naming `detent-prd-v3.md`. *Live-key gated.*
+- **T-141 ⚡** Marketplace publish + install smoke test. *Live-key gated.*
+- **T-142 MP4 exit / v3 release gate** — N-7 green on the v3 document; plugin installs and runs the golden path.
+
+---
+
+## §3. Critical path
+`T-100 → 101 → 102 → 103 → 104 → 105 → 106 → 107` (MP0, the long pole — the referee must be proven at parity before anything drives it) `→ 110 → 111 → 113 → 114` (MP1) `→ 120 → 121 → 123 → 124` (MP2) `→ 130 → 132` (MP3) `→ 140 → 142` (MP4). MP0 is ~8 tickets of pure reuse-behind-a-boundary; the genuinely new risk concentrates in T-102 (apply-site invariant at the tool boundary), T-121 (budget hardness under ambient tools — OQ-A in practice), and T-123 (proving the two drivers agree).
+
+## §4. Open risks carried from PRDR-065
+- **OQ-A budget authority** is validated (or falsified) in **T-121**. If the hook cannot make budgets hard, the fallback is D-25's stated overshoot bound, documented, not silent.
+- **OQ-B unattended runs** is answered by the headless driver (MP0) surviving as the CI path — already in the plan.
+- **OQ-C D-22 replacement** is validated in **T-122/SEC-6**.
+- **OQ-D resumability** is validated in **T-105** (referee-owned checkpoints) and **T-123** (cross-driver agreement).
+
+## §5. Changelog
+**3.0-1** — plan created from `detent-prd-v3.md` (3.0-draft.1); MP0…MP4 decomposed into T-100…T-142; MP0 (referee extraction) detailed, MP1–MP4 at milestone-exit grain pending MP0 landing. Applies PRDR-065.
