@@ -106,12 +106,35 @@ const ANALYSIS_BROWNFIELD = {
   docs_read: ["PRD.md"],
 };
 
-const analysisStage =
-  (root: string, payload: object): StageFn =>
-  () => {
-    writeFileSync(analysisPath(root), `${JSON.stringify(payload)}\n`);
+/**
+ * The planner serves two phases (ANALYZE and PLAN); which artifact it must
+ * write is named in the spec, so the fixture answers the request rather than
+ * guessing from call order.
+ */
+const plannerStage =
+  (analysis: object, draft: object): StageFn =>
+  (spec) => {
+    const payload = spec.artifactOut.endsWith("plan-draft.json") ? draft : analysis;
+    writeFileSync(spec.artifactOut, `${JSON.stringify(payload)}\n`);
     return okResult();
   };
+
+const DRAFT = {
+  schema_version: 1,
+  tickets: [
+    {
+      id: "t-100",
+      type: "feature",
+      title: "Ship the thing",
+      description: "",
+      acceptance_criteria: ["the thing ships"],
+      non_goals: [],
+      surface: ["src/**"],
+      depends_on: [],
+      risk_label: false,
+    },
+  ],
+};
 
 describe("T-062 ANALYZE (C-3, D-10)", () => {
   it("greenfield is the absence of stack markers, and the planner must choose a stack", async () => {
@@ -216,7 +239,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
 
   it("the planner session runs in plan mode with no write tools (S-1)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
-    const backend = new MockBackend({ planner: analysisStage(root, ANALYSIS_BROWNFIELD) });
+    const backend = new MockBackend({ planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
     const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 

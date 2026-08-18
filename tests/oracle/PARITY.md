@@ -10,10 +10,10 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 
 | Status | Count |
 |---|---:|
-| green | 51 |
+| green | 52 |
 | pending-M1 | 0 |
 | pending-M2 | 0 |
-| pending-later | 1 |
+| pending-later | 0 |
 | **total** | **52** |
 
 | Oracle test | Status | Closes at | TypeScript home | Note |
@@ -25,7 +25,7 @@ threshold (R-2) rather than one global count. Landed through **M1**.
 | `test_contract.py::test_missing_and_unknown_keys` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
 | `test_contract.py::test_unknown_budget_rejected` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
 | `test_contract.py::test_valid` | green | T-014 (M0) | `tests/oracle/worstcase.test.ts` |  |
-| `test_extra.py::test_mode1_stub_detected` | pending-later | T-060 (M3) | — | greenfield vs brownfield detection is C-1's job in the init phase machine |
+| `test_extra.py::test_mode1_stub_detected` | green | T-060 (M3) | `tests/cli/init.test.ts` | the oracle read git-presence as the greenfield signal; Detent splits C-1 (git root required) from D-10 (greenfield = no stack markers, decided in ANALYZE), but a PRD-only non-git folder still returns 2 |
 | `test_extra.py::test_research_session_gets_domain_scoped_web_tools` | green | T-046 (M2) | `tests/sessions/guard.test.ts` | composition takes the domain list as a parameter — the configured value has no F-1 home yet (PRDR-062), so the kernel passes an empty list until the PRD gives it one |
 | `test_extra.py::test_risk_detection_on_master_based_repo` | green | T-049 (M2) | `tests/kernel/escalate.test.ts` | risk globs match against any base name — changedFiles reads the recorded run-branch base, never a hardcoded main |
 | `test_extra.py::test_smoke_mock_backend` | green | T-040 (M2) | `tests/sessions/mock.test.ts` | the oracle smoked via a CLI verb; the backend-level property (default success, parsed telemetry) ports here — the CLI smoke is doctor's, T-050 |

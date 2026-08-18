@@ -67,6 +67,8 @@ export interface NewTicket {
   readonly title: string;
   readonly acceptance_criteria: readonly string[];
   readonly description?: string;
+  /** A-1: non-goals are part of a ticket, and the reviewer reads them (A-5 scope). */
+  readonly non_goals?: readonly string[];
   readonly surface?: readonly string[];
   readonly blockers?: readonly string[];
   readonly priority?: number;
@@ -87,7 +89,7 @@ export function createTicket(root: string, input: NewTicket, at = new Date().toI
     title: input.title,
     description: input.description ?? "",
     acceptance_criteria: [...input.acceptance_criteria],
-    non_goals: [],
+    non_goals: [...(input.non_goals ?? [])],
     surface: [...(input.surface ?? [])],
     blockers: [...(input.blockers ?? [])],
     links: [],

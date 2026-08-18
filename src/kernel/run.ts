@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import picomatch from "picomatch";
 import { discover } from "../adapter/discover/index.js";
-import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
+import { DriftHaltError, assertNoDrift, readBindings, writeBindings } from "../adapter/drift.js";
 import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { approvalSchema, hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
+import { approvalSchema, hypothesisSchema, type Binding, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
 import type { GateSlot } from "../schemas/gates.js";
 import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { State } from "../schemas/states.js";
@@ -52,6 +52,7 @@ import {
   type RunBranch,
 } from "./git.js";
 import { RunJournal, runsDir } from "./journal.js";
+import { finalizeBootstrap } from "../init/plan.js";
 import { SpendExhaustedError, SpendLedger } from "./ledger.js";
 import { apply, type GuardContext } from "./machine.js";
 import { scrub } from "./scrub.js";
@@ -965,6 +966,14 @@ class Kernel {
   }
 
   private finalize(ticket: Ticket, workDir: string): void {
+    // C-4: bootstrap #1's gates just passed, so greenfield's provisional
+    // bindings become the baseline. A no-op for every other ticket.
+    finalizeBootstrap(this.root, ticket.id, {
+      readBindings: () => readBindings(this.root),
+      writeBindings: (file) => writeBindings(this.root, file as { bindings: Binding[]; skips: never[] }),
+      rediscover: () => discover(this.root).candidates,
+      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
+    });
     git(workDir, "add", "-A");
     const dirty = git(workDir, "status", "--porcelain").trim();
     if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);

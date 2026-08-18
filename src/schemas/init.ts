@@ -134,3 +134,33 @@ export function requireLocalSearchBeforeWeb(
     });
   }
 }
+
+// ---------------------------------------------------------------------------
+// PLAN's session output (C-4)
+
+/**
+ * What the PLAN session emits: ticket drafts, before Detent turns them into
+ * A-1 tickets. The bootstrap ticket is NOT drafted here — C-4 makes it
+ * Detent's own construction, so a planner cannot forget it, misname it, or
+ * write one whose criteria do not actually prove the gates green.
+ */
+export const planDraftSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  tickets: z
+    .array(
+      z.strictObject({
+        id: nonEmptyString,
+        type: z.enum(["feature", "bug"]),
+        title: nonEmptyString,
+        description: z.string().default(""),
+        acceptance_criteria: z.array(nonEmptyString).min(1),
+        non_goals: z.array(z.string()).default([]),
+        surface: z.array(z.string()).default([]),
+        /** Ticket ids this one depends on; becomes A-1 `blockers`. */
+        depends_on: z.array(nonEmptyString).default([]),
+        risk_label: z.boolean().default(false),
+      }),
+    )
+    .min(1),
+});
+export type PlanDraft = z.infer<typeof planDraftSchema>;

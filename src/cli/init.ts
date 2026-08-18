@@ -7,8 +7,9 @@ import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { CEILINGS } from "../schemas/budgets.js";
 import type { Budgets } from "../schemas/budgets.js";
-import { MockBackend } from "../sessions/mock.js";
+import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { loadPromptSet } from "../sessions/prompts.js";
+import { makeTtyApproval } from "./approve.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -20,6 +21,7 @@ import { loadPromptSet } from "../sessions/prompts.js";
  */
 
 export const EXIT_OK = 0;
+export const EXIT_ERROR = 1;
 export const EXIT_NOT_READY = 2;
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -46,15 +48,41 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT_NOT_READY;
   }
 
+  // `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
+  // and a mock that writes nothing produces no analysis. Unlike `run`, which
+  // has a genuine fixture path, init needs a live backend — so say so plainly
+  // rather than failing three phases later with a confusing artifact error.
+  if (process.env["ANTHROPIC_API_KEY"] === undefined) {
+    process.stderr.write(
+      "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
+        "Set ANTHROPIC_API_KEY and re-run. (`detent run` has a mock path for fixtures; init does not.)\n",
+    );
+    return EXIT_NOT_READY;
+  }
+
+  const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
   const handlers = buildPipeline({
     root,
-    backend: new MockBackend(),
+    backend: new ClaudeCodeBackend({
+      policy: { surface: ["**"], protectedGlobs: [".detent/**"], workRoot: root },
+    }),
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
+    print: (text) => process.stdout.write(`${text}\n`),
+    // C-7: approval is offered inline on a TTY, deferred to `run` otherwise.
+    ...(interactive ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") } : {}),
   });
 
-  const result = await runInit(root, handlers, { replan: values.replan });
+  let result;
+  try {
+    result = await runInit(root, handlers, { replan: values.replan });
+  } catch (err) {
+    // A phase that could not complete is an error (C-11's `1`), not an
+    // interrupt — there is nothing for the user to answer.
+    process.stderr.write(`init failed: ${(err as Error).message}\n`);
+    return EXIT_ERROR;
+  }
 
   for (const message of result.messages) process.stdout.write(`${message}\n`);
   if (result.reused.length > 0) process.stdout.write(`reused: ${result.reused.join(", ")}\n`);

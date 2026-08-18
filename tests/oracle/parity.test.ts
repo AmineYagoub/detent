@@ -34,11 +34,12 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     expect(LANDED_THROUGH).toBe("M1");
   });
 
-  it("M2 near-complete: 51 green, zero pending-M2 — only test_mode1_stub_detected (T-060, M3) remains", () => {
-    expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(51);
-    expect(PARITY.filter((e) => statusOf(e) === "pending-M2")).toEqual([]);
-    const later = PARITY.filter((e) => statusOf(e) === "pending-later");
-    expect(later.map((e) => e.oracle)).toEqual(["test_extra.py::test_mode1_stub_detected"]);
+  it("the full oracle suite is ported — all 52 green, zero pending (mode-1 closed with the M3 back half)", () => {
+    // The last pending entry, test_mode1_stub_detected (T-060), went green when
+    // the init back half (T-064..T-068) made greenfield detection meaningful:
+    // a PRD-only non-git folder is caught and `detent init` returns 2.
+    expect(PARITY.filter((e) => statusOf(e) === "green")).toHaveLength(ORACLE_TEST_COUNT);
+    expect(PARITY.filter((e) => statusOf(e) !== "green")).toEqual([]);
   });
 
   it("every green entry's TypeScript home is a test file that exists and names its ticket", () => {
@@ -50,11 +51,13 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     }
   });
 
-  it("the status vocabulary needs four values — one oracle test closes after M2", () => {
+  it("the status vocabulary needed four values — mode-1 closes in M3, past the {green,M1,M2} range", () => {
     // R-2 assumed {green, pending-M1, pending-M2}. test_mode1_stub_detected maps
-    // to greenfield/brownfield detection, which is C-1's job at T-060 (M3).
-    const later = PARITY.filter((e) => statusOf(e) === "pending-later");
-    expect(later.map((e) => e.oracle)).toEqual(["test_extra.py::test_mode1_stub_detected"]);
+    // to greenfield/brownfield detection, whose closing ticket T-060 is M3 — so
+    // a three-value vocabulary could never have labelled it while it was still
+    // pending. The entry is green now, but that structural fact is permanent.
+    const mode1 = PARITY.find((e) => e.oracle === "test_extra.py::test_mode1_stub_detected");
+    expect(mode1?.ticket).toBe("T-060");
     expect(milestoneOf("T-060")).toBe("M3");
   });
 

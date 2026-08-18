@@ -40,12 +40,20 @@ function unwrap(id: string, result: SchemaCheck<Ticket>): Ticket {
   throw new TicketInvalidError(id, result.issues.join("; "));
 }
 
+/**
+ * Files in `plan/` that are not tickets. F-1 enumerates the directory as
+ * "tickets `*.json`, `approval.json`" and A-2's plan artifact has no named
+ * home, so this list has now grown twice by accident — once for the approval
+ * record, once for the plan. PRDR-064 asks F-1 to say what a ticket file is
+ * rather than leaving readers to maintain an exclusion list.
+ */
+const NON_TICKET_FILES: ReadonlySet<string> = new Set(["approval.json", "plan.json"]);
+
 export function allTickets(root: string): Ticket[] {
   const dir = ticketsDir(root);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
-    // F-1 keeps one non-ticket file in plan/: the C-7 approval record.
-    .filter((f) => f.endsWith(".json") && f !== "approval.json")
+    .filter((f) => f.endsWith(".json") && !NON_TICKET_FILES.has(f))
     .map((f) => readTicket(root, f.slice(0, -".json".length)))
     .sort((a, b) => (b.priority - a.priority) || a.id.localeCompare(b.id));
 }

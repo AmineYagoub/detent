@@ -4,7 +4,15 @@ import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
-import { analysisPath, analyzeStage } from "./analyze.js";
+import { analysisFromOutputs, analysisPath, analyzeStage } from "./analyze.js";
+import { determineVerification } from "./bind.js";
+import { prepareAgents } from "./agents.js";
+import { planDraftPath, planStage } from "./plan.js";
+import { presentStage, type ApprovalDecision } from "./present.js";
+import { readBindings } from "../adapter/drift.js";
+import { allTickets } from "../kernel/tickets/readers.js";
+import type { Binding } from "../schemas/records.js";
+import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession } from "./session.js";
@@ -24,10 +32,21 @@ export interface PipelineDeps {
   readonly budgets: Budgets;
   readonly docsDomains?: readonly string[];
   readonly note?: (text: string) => void;
+  /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
+  readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
+  readonly print?: (text: string) => void;
 }
 
 export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
-  return [initFsPhase(deps), discoverPhase(deps), analyzePhase(deps)];
+  return [
+    initFsPhase(deps),
+    discoverPhase(deps),
+    analyzePhase(deps),
+    determinePhase(deps),
+    planPhase(deps),
+    prepareAgentsPhase(deps),
+    presentPhase(deps),
+  ];
 }
 
 /** Phases with no handler yet, in pipeline order — the honest gap list. */
@@ -150,6 +169,94 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
             return { brief, toolCalls: Math.max(1, result.turns) };
           },
         },
+      });
+    },
+  };
+}
+
+
+function determinePhase(deps: PipelineDeps): PhaseHandler {
+  return {
+    phase: "DETERMINE_VERIFICATION",
+    /**
+     * The CONTENTS of the files that define candidate commands: a changed
+     * `scripts.test` must re-bind, which is the same region V-3 watches.
+     */
+    digest: (ctx) => {
+      const markers = (ctx.outputs["DISCOVER"]?.["stack_markers"] as string[] | undefined) ?? [];
+      return `${contentsDigest(deps.root, markers)}|${valueDigest(ctx.outputs["ANALYZE"]?.["greenfield"] ?? null)}`;
+    },
+    run: async (ctx) =>
+      await determineVerification({
+        root: deps.root,
+        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
+        analysis: analysisFromOutputs(ctx.outputs),
+      }),
+  };
+}
+
+function planPhase(deps: PipelineDeps): PhaseHandler {
+  return {
+    phase: "PLAN",
+    // Chained: PLAN re-runs whenever analysis or the bindings moved.
+    digest: (ctx) => valueDigest([ctx.outputs["ANALYZE"]?.["analysis"] ?? null, ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null]),
+    run: async (ctx) => {
+      const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
+      return await planStage({
+        root: deps.root,
+        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
+        analysis: analysisFromOutputs(ctx.outputs),
+        docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
+        boundSlots: bindings.map((b) => b.slot),
+        ...(deps.note === undefined ? {} : { note: deps.note }),
+        launch: async (inputs) => {
+          await launchInitSession(
+            {
+              root: deps.root,
+              backend: deps.backend,
+              prompts: deps.prompts,
+              maxTurns: deps.budgets.turns_per_stage,
+              ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
+            },
+            { role: "planner", inputs, artifactOut: planDraftPath(deps.root) },
+          );
+        },
+      });
+    },
+  };
+}
+
+function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {
+  return {
+    phase: "PREPARE_AGENTS",
+    // The vendored prompt hashes plus the ticket set: a re-vendored prompt
+    // must re-assign, because `role@hash` would otherwise name a stale build.
+    digest: (ctx) => valueDigest([deps.prompts.hashes, ctx.outputs["PLAN"]?.["tickets"] ?? null]),
+    run: async () =>
+      prepareAgents({
+        root: deps.root,
+        tickets: allTickets(deps.root),
+        prompts: deps.prompts,
+        ...(deps.note === undefined ? {} : { note: deps.note }),
+      }),
+  };
+}
+
+function presentPhase(deps: PipelineDeps): PhaseHandler {
+  return {
+    phase: "PRESENT",
+    digest: (ctx) => valueDigest([ctx.outputs["PLAN"]?.["tickets"] ?? null, ctx.outputs["PREPARE_AGENTS"]?.["assignments"] ?? null]),
+    run: async (ctx) => {
+      const stored = readBindings(deps.root);
+      return await presentStage({
+        root: deps.root,
+        tickets: allTickets(deps.root),
+        bindings: stored.bindings,
+        skips: stored.skips as unknown as Skip[],
+        bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
+        assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
+        ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
+        ...(deps.print === undefined ? {} : { print: deps.print }),
       });
     },
   };

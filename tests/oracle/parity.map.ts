@@ -101,7 +101,12 @@ export const PARITY: readonly ParityEntry[] = [
     ts: "tests/kernel/plumbing.test.ts",
     note: "the unmappable test that forced T-055 into existence; requeue asserts X-8 generations, not the oracle's attempts reset",
   },
-  { oracle: "test_extra.py::test_mode1_stub_detected", ticket: "T-060", note: "greenfield vs brownfield detection is C-1's job in the init phase machine" },
+  {
+    oracle: "test_extra.py::test_mode1_stub_detected",
+    ticket: "T-060",
+    ts: "tests/cli/init.test.ts",
+    note: "the oracle read git-presence as the greenfield signal; Detent splits C-1 (git root required) from D-10 (greenfield = no stack markers, decided in ANALYZE), but a PRD-only non-git folder still returns 2",
+  },
   {
     oracle: "test_extra.py::test_smoke_mock_backend",
     ticket: "T-040",
