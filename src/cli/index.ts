@@ -1,4 +1,5 @@
 import { main as initMain } from "./init.js";
+import { main as refereeMain } from "./referee.js";
 import { main as runMain } from "./run.js";
 import { main as statusMain } from "./status.js";
 import { main as reportMain } from "./report.js";
@@ -25,6 +26,7 @@ const VERBS: Record<string, Verb> = {
   approve: approveMain,
   requeue: requeueMain,
   init: initMain,
+  referee: refereeMain,
 };
 
 const USAGE = `detent <command>
@@ -36,6 +38,7 @@ const USAGE = `detent <command>
   doctor [root]        check pins, config, and one live smoke session
   approve <id>         re-enter APPROVED for kernel re-verification (plumbing)
   requeue <id>         open a fresh attempt generation (plumbing)
+  referee --root <p>   serve the R-1 tool set over MCP stdio (plumbing, MP1's plugin entry)
 `;
 
 export async function main(argv: readonly string[]): Promise<number> {

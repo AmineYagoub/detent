@@ -1,99 +1,38 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import picomatch from "picomatch";
-import { discover } from "../adapter/discover/index.js";
-import { DriftHaltError, assertNoDrift, readBindings, writeBindings } from "../adapter/drift.js";
-import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
-import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { approvalSchema, hypothesisSchema, type Binding, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
-import type { GateSlot } from "../schemas/gates.js";
-import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
+import { approvalSchema } from "../schemas/records.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
-import {
-  prefixHash,
-  stablePrefix,
-  type PromptSet,
-  type SessionBackend,
-  type SessionSpec,
-} from "../sessions/backend.js";
-import {
-  budgetBreach,
-  claimed,
-  gateDrift,
-  gateGreen,
-  gateRed,
-  humanApproved,
-  humanRequeue,
-  premiseFalsified,
-  riskRequired,
-  type KernelEvent,
-} from "./events.js";
-import { writeDossier } from "./dossier.js";
-import { RerunLedger, filterFlake, ledgerFor, quarantineTicket } from "./flake.js";
-import { classify } from "./classify.js";
-import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
-import {
-  changedFiles,
-  clearCurrentTicket,
-  ensureRunBranch,
-  ensureWorktree,
-  enforceBaseGuard,
-  git,
-  installTrailerHook,
-  markCurrentTicket,
-  mergeWorktree,
-  resetDirtyTracked,
-  resolveBaseRef,
-  snapshotRefs,
-  type RefSnapshot,
-  type RunBranch,
-} from "./git.js";
-import { RunJournal, runsDir } from "./journal.js";
-import { finalizeBootstrap } from "../init/plan.js";
-import { SpendExhaustedError, SpendLedger } from "./ledger.js";
-import { apply, type GuardContext } from "./machine.js";
-import { scrub } from "./scrub.js";
-import { diagnoseStage } from "./stages/diagnose.js";
-import { reviewStage } from "./stages/review.js";
-import { researchStage } from "./stages/research.js";
-import { allTickets, isClaimed, readTicket, ready } from "./tickets/readers.js";
-import { claim, release, writeTicket, appendNote, linkDiscovered } from "./tickets/mutations.js";
+import type { PromptSet, SessionBackend } from "../sessions/backend.js";
+import { callTool, isToolError, type RefereeToolError } from "../referee/registry.js";
+import { ensureRunBranch, installTrailerHook } from "./git.js";
+import { RunJournal } from "./journal.js";
+import { RefereeCore, type PendingEntry } from "./referee.js";
+import { readTicket } from "./tickets/readers.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
 
 /**
- * T-041 — the kernel run loop (C-9, C-11, B-5, X-1 enforcement, V-3/D-23),
- * composed at this batch with T-042 (branch contract), T-043 (diagnosis gate),
- * T-044 (review routing), T-045 (research cache), T-048 (spend backstop).
+ * T-106 — the HEADLESS DRIVER (C-9, C-10, C-11, D-26/D-27).
  *
- * The loop launches sessions and runs gates; it never decides an outcome a
- * validator or a gate did not establish (P2, ARCH-1) — mechanically, its
- * commit path accepts only the evidence-carrying events of `events.ts`
- * (T-054), so a bare event string cannot reach `machine.apply`.
+ * v2's run loop, re-expressed as a driver over the R-1 tool registry: this
+ * module SEQUENCES — which ticket, which stage, when to stop — and holds no
+ * legality of its own. Every move goes through `callTool`; the referee
+ * validates, meters, journals, and admits. The public surface (`run`,
+ * `runWithConfig`, the exit codes, the escalation types) is v2's, unchanged —
+ * the entire v2 suite runs through this driver, which is MP0's exit claim.
  *
- * Remaining boundaries: real SDK transport is exercised under R-10's key gate
- * (doctor smoke, M2 exit); escalation UX is T-049; stale-claim breaking is
- * T-055's plumbing.
+ * Mechanically load-bearing: this file imports neither the machine nor the
+ * event constructors. The only event names it ever sees are strings in
+ * transition RESULTS. A driver that wanted to cheat has nothing to cheat
+ * with — that is D-27, enforced by the import graph.
  */
 
 export const EXIT_OK = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_NOT_READY = 2;
 export const EXIT_HUMAN_GATED = 10;
-
-/** States the pool resumes (C-9). Human-gated and terminal states are not in-flight. */
-const RESUMABLE: readonly State[] = [
-  "DIAGNOSED",
-  "IN_PROGRESS",
-  "BLIND_FIX",
-  "RESEARCH",
-  "INFORMED_FIX",
-  "REVIEW_FIX",
-  "IN_REVIEW",
-  "APPROVED",
-];
 
 export interface RunOptions {
   readonly root: string;
@@ -108,7 +47,7 @@ export interface RunOptions {
   /**
    * The vendored, hash-verified prompt set. Required, not defaulted: loading
    * lives in the sessions layer (`loadPromptSet`), and ARCH-1 forbids the
-   * kernel reaching past the backend seam to fetch it.
+   * referee reaching past the backend seam to fetch it.
    */
   readonly prompts: PromptSet;
   /**
@@ -134,11 +73,7 @@ export type EscalationAction =
   | { readonly kind: "skip"; readonly by: string }
   | { readonly kind: "quit" };
 
-export interface PendingEntry {
-  readonly id: string;
-  readonly state: State;
-  readonly reason: string;
-}
+export type { PendingEntry };
 
 export interface RunOutcome {
   readonly exitCode: 0 | 1 | 2 | 10;
@@ -151,14 +86,9 @@ export interface RunOutcome {
   };
 }
 
-class Breach extends Error {}
-
-class KernelBoundaryError extends Error {
-  constructor(detail: string) {
-    super(detail);
-    this.name = "KernelBoundaryError";
-  }
-}
+/** The two structured-error routes a driver handles; everything else is a defect. */
+class DriverBreach extends Error {}
+class DriverDriftHalt extends Error {}
 
 /** C-9/C-7: `run` executes only an approved plan; R-9: config loads or nothing runs. */
 export async function run(opts: RunOptions): Promise<RunOutcome> {
@@ -195,8 +125,21 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   try {
     const runBranch = ensureRunBranch(root, opts.runId ?? `${process.pid}-${Date.now().toString(36)}`);
     installTrailerHook(root);
-    const kernel = new Kernel(opts, loaded, journal, runBranch);
-    return await kernel.loop();
+    const core = new RefereeCore(
+      {
+        root,
+        backend: opts.backend,
+        prompts: opts.prompts,
+        ...(opts.worker !== undefined ? { worker: opts.worker } : {}),
+        ...(opts.now !== undefined ? { now: opts.now } : {}),
+        ...(opts.worktree !== undefined ? { worktree: opts.worktree } : {}),
+      },
+      loaded,
+      journal,
+      runBranch,
+    );
+    const driver = new Driver(opts, loaded, core);
+    return await driver.loop();
   } catch (err) {
     return {
       exitCode: EXIT_ERROR,
@@ -221,442 +164,247 @@ function readApproval(root: string): string {
   return "ok";
 }
 
-/** Thrown to unwind to the top when V-3 halts the run (SEC-5, D-23). */
-class DriftHaltSignal extends Error {
-  constructor(readonly halt: DriftHaltError) {
-    super(halt.message);
-    this.name = "DriftHaltSignal";
-  }
-}
+const TERMINAL: readonly string[] = ["DONE", "NEEDS_HUMAN", "BLOCKED"];
 
-class Kernel {
-  private readonly worker: string;
+class Driver {
   private readonly now: () => number;
-  private readonly prompts: PromptSet;
-  private readonly rulesText: string;
-  private readonly bindingsPreamble: string;
-  private readonly spend: SpendLedger;
-  private readonly refs: RefSnapshot;
-  private readonly baseRef: string | null;
   private processed = 0;
   private quitting = false;
 
   constructor(
     private readonly opts: RunOptions,
     private readonly loaded: LoadedConfig,
-    private readonly journal: RunJournal,
-    private readonly runBranch: RunBranch,
+    private readonly core: RefereeCore,
   ) {
-    this.worker = opts.worker ?? "w1";
     this.now = opts.now ?? (() => Date.now());
-    this.prompts = opts.prompts;
-    this.rulesText = this.readRules();
-    const bindings = readBindings(opts.root).bindings;
-    this.bindingsPreamble = JSON.stringify(
-      {
-        bindings: Object.fromEntries(bindings.map((b) => [b.slot, b.resolved])),
-        protected: this.loaded.config.protected,
-        non_negotiables: "Only artifacts and exit codes count (P2).",
-      },
-      null,
-      2,
-    );
-    this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd);
-    // P7: every ref except the run branch is protected ground for this run.
-    this.refs = snapshotRefs(opts.root);
-    // V-5: the run's baseline, resolved once; null falls back to root commands.
-    this.baseRef = resolveBaseRef(opts.root, runBranch);
   }
 
-  private get root(): string {
-    return this.opts.root;
+  /** One registry call; structured errors become the driver's two routes. */
+  private async tool<T = Record<string, unknown>>(name: string, input: unknown): Promise<T> {
+    const result = await callTool(this.core, name, input);
+    if (isToolError(result)) {
+      const { code, message } = (result as RefereeToolError).error;
+      if (code === "BREACH") throw new DriverBreach(message);
+      if (code === "DRIFT_HALT") throw new DriverDriftHalt(message);
+      // ILLEGAL_TRANSITION / BAD_EVIDENCE / INVALID_INPUT / UNKNOWN_TOOL from
+      // the deterministic driver are driver defects, not run outcomes.
+      throw new Error(`referee refused ${name}: ${code}: ${message}`);
+    }
+    return result as T;
   }
 
-  private get budgets() {
-    return this.loaded.config.budgets;
+  private async transition(id: string, ref: string): Promise<State> {
+    const result = await this.tool<{ to: State }>("transition", { ticket_id: id, ref });
+    return result.to;
   }
 
   // ------------------------------------------------------------- the loop
 
   async loop(): Promise<RunOutcome> {
-    this.requeueDriftBlocked();
-
     for (;;) {
-      if (this.quitting) return this.finish();
-      const pool = this.claimables();
-      if (pool.length === 0) return this.finish();
+      if (this.quitting) return await this.finish();
+      const { pool } = await this.tool<{ pool: { id: string; state: State }[] }>("next", {});
+      if (pool.length === 0) return await this.finish();
 
-      const ticket = pool[0] as Ticket;
-      if (!claim(this.root, ticket.id, this.worker)) continue;
-      markCurrentTicket(this.root, ticket.id);
+      const id = (pool[0] as { id: string }).id;
+      const acquired = await this.tool<{
+        ok: boolean;
+        claimed_ref?: string;
+        resume?: { state: State; reset: string[] };
+      }>("claim", { op: "acquire", ticket_id: id });
+      if (!acquired.ok) continue;
+
       try {
-        await this.processTicket(ticket.id);
+        await this.processTicket(id, acquired);
       } catch (err) {
-        if (err instanceof DriftHaltSignal) return this.haltForDrift(err.halt);
+        if (err instanceof DriverDriftHalt) {
+          const { reason } = await this.tool<{ reason: string }>("record", { kind: "drift_halt" });
+          return {
+            exitCode: EXIT_NOT_READY,
+            summary: { schema_version: 1, exit: EXIT_NOT_READY, pending: [], reason },
+          };
+        }
         throw err;
       } finally {
-        clearCurrentTicket(this.root);
-        release(this.root, ticket.id);
+        await this.tool("claim", { op: "release", ticket_id: id });
       }
 
       this.processed += 1;
-      if (this.opts.maxTickets !== undefined && this.processed >= this.opts.maxTickets) return this.finish();
+      if (this.opts.maxTickets !== undefined && this.processed >= this.opts.maxTickets) return await this.finish();
     }
   }
 
-  private claimables(): Ticket[] {
-    const readyPool = ready(this.root);
-    // A claimed in-flight ticket is skipped, exactly as the oracle skipped
-    // them: retrying a claim that cannot succeed would spin forever. Breaking
-    // a STALE claim (owner dead) is plumbing's job under C-12's discipline
-    // (T-055); the loop never guesses about another process's liveness.
-    const resumable = allTickets(this.root).filter(
-      (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
-    );
-    return [...readyPool, ...resumable];
-  }
-
-  private finish(): RunOutcome {
-    const pending: PendingEntry[] = allTickets(this.root)
-      .filter((t) => t.state === "NEEDS_HUMAN" || t.state === "BLOCKED")
-      .map((t) => ({ id: t.id, state: t.state, reason: lastNote(t) }));
+  private async finish(): Promise<RunOutcome> {
+    const { pending } = await this.tool<{ pending: PendingEntry[] }>("status", {});
     if (pending.length > 0) {
       return { exitCode: EXIT_HUMAN_GATED, summary: { schema_version: 1, exit: EXIT_HUMAN_GATED, pending } };
     }
     return { exitCode: EXIT_OK, summary: { schema_version: 1, exit: EXIT_OK, pending: [] } };
   }
 
-  // -------------------------------------------------- drift (V-3, D-23)
-
-  private requeueDriftBlocked(): void {
-    const bindings = readBindings(this.root).bindings;
-    if (bindings.length === 0) return;
-    try {
-      assertNoDrift(bindings, discover(this.root));
-    } catch {
-      return;
-    }
-    for (const ticket of allTickets(this.root)) {
-      if (ticket.state !== "BLOCKED" || !lastNote(ticket).startsWith("drift-blocked:")) continue;
-      const requeued = this.commit(ticket, humanRequeue("verify-sync-rebaseline"));
-      const generations = openGeneration(requeued, {
-        at: new Date(this.now()).toISOString(),
-        reason: `gate drift re-baselined via verify sync; ${lastNote(ticket)}`,
-      });
-      writeTicket(this.root, { ...requeued, generations });
-      appendNote(this.root, ticket.id, { author: "kernel", text: "requeued after drift re-baseline (V-3/X-8)" });
-    }
-  }
-
-  private haltForDrift(halt: DriftHaltError): RunOutcome {
-    for (const ticket of allTickets(this.root)) {
-      // Draft.7's V-3: GATE_DRIFT applies to every non-terminal CLAIMED ticket.
-      if (ticket.state === "DONE" || ticket.state === "BLOCKED") continue;
-      if (!isClaimed(this.root, ticket.id)) continue;
-      const blocked = this.commit(ticket, gateDrift(halt));
-      this.closeGeneration(blocked, "blocked");
-      appendNote(this.root, ticket.id, {
-        author: "kernel",
-        text: `drift-blocked: ${halt.halting.map((h) => h.message).join(" | ")}`,
-      });
-      release(this.root, ticket.id);
-    }
-    return {
-      exitCode: EXIT_NOT_READY,
-      summary: {
-        schema_version: 1,
-        exit: EXIT_NOT_READY,
-        pending: [],
-        reason: `verification changed — re-baseline (V-3): ${halt.halting.map((h) => h.message).join(" | ")}`,
-      },
-    };
-  }
-
   // ------------------------------------------------------ ticket driving
 
-  private async processTicket(id: string): Promise<void> {
-    let ticket = readTicket(this.root, id);
+  private async processTicket(
+    id: string,
+    acquired: { claimed_ref?: string; resume?: { state: State; reset: string[] } },
+  ): Promise<void> {
     const startedAt = this.now();
-    const flakeLedger = ledgerFor(this.budgets);
-    const workDir = this.opts.worktree === true ? ensureWorktree(this.root, id) : this.root;
-
-    if (ticket.state === "READY") {
-      ticket = this.commit(ticket, claimed());
+    let state: State;
+    if (acquired.claimed_ref !== undefined) {
+      state = await this.transition(id, acquired.claimed_ref);
     } else {
+      state = acquired.resume?.state ?? "IN_PROGRESS";
       // C-13: resume always announces itself, in the five-label vocabulary —
       // the caller renders it; internal state names never reach a terminal.
-      this.opts.announce?.(this.resumeAnnouncement(ticket));
-      // B-5: uncommitted tracked changes at resume are reset to the last
-      // ticket commit; untracked files stay — the gate judges the tree as-is.
-      const reset = resetDirtyTracked(workDir);
-      if (reset.length > 0) {
-        appendNote(this.root, id, { author: "kernel", text: `B-5 resume reset: ${reset.join(", ")}` });
-      }
+      this.opts.announce?.(this.resumeAnnouncement(id, state));
     }
 
-    while (ticket.state !== "DONE" && ticket.state !== "NEEDS_HUMAN" && ticket.state !== "BLOCKED") {
-      if (this.now() - startedAt > this.budgets.ticket_wall_clock_ms) {
-        ticket = this.breach(ticket, "ticket wall clock ceiling (X-1)");
+    while (!TERMINAL.includes(state)) {
+      if (this.now() - startedAt > this.loaded.config.budgets.ticket_wall_clock_ms) {
+        state = await this.breach(id, "ticket wall clock ceiling (X-1)");
         break;
       }
       try {
-        ticket = await this.stage(ticket, flakeLedger, workDir);
+        state = await this.stage(id, state);
       } catch (err) {
-        if (err instanceof Breach || err instanceof SpendExhaustedError) {
-          ticket = this.breach(readTicket(this.root, id), (err as Error).message);
+        if (err instanceof DriverBreach) {
+          state = await this.breach(id, err.message);
           break;
         }
         throw err;
       }
     }
 
-    if (ticket.state === "NEEDS_HUMAN") {
-      const reason = lastNote(ticket) || "escalated";
-      writeDossier(this.root, readTicket(this.root, id), reason);
-      this.closeGeneration(ticket, "needs_human");
-      await this.offerEscalation(id, reason, flakeLedger, workDir);
-    } else if (ticket.state === "BLOCKED") {
-      this.closeGeneration(ticket, "blocked");
-    } else if (ticket.state === "DONE") {
-      this.finalize(ticket, workDir);
-      this.closeGeneration(ticket, "done");
+    if (state === "NEEDS_HUMAN") {
+      const reason = await this.pendingReason(id);
+      const { summary } = await this.tool<{ summary: string }>("record", { kind: "dossier", ticket_id: id, reason });
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "needs_human" });
+      await this.offerEscalation(id, reason, summary);
+    } else if (state === "BLOCKED") {
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "blocked" });
+    } else if (state === "DONE") {
+      await this.tool("record", { kind: "finalize", ticket_id: id });
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
     }
   }
 
-  private async stage(ticket: Ticket, flakeLedger: RerunLedger, workDir: string): Promise<Ticket> {
-    switch (ticket.state) {
+  private async stage(id: string, state: State): Promise<State> {
+    switch (state) {
       case "IN_PROGRESS": {
-        await this.session(ticket, "IN_PROGRESS", { ticket: publicTicket(ticket) }, workDir);
-        const falsified = this.consumeFalsifiedSignal(ticket.id);
-        if (falsified !== null) {
-          return this.commit(readTicket(this.root, ticket.id), premiseFalsified(falsified));
-        }
-        return await this.evaluateGate(ticket, flakeLedger, workDir);
+        const result = await this.tool<{ falsified_ref?: string }>("attempt", { ticket_id: id, state });
+        if (result.falsified_ref !== undefined) return await this.transition(id, result.falsified_ref);
+        return await this.gateTo(id);
       }
       case "BLIND_FIX":
-        await this.session(ticket, "BLIND_FIX", this.fixInputs(ticket, workDir), workDir);
-        return await this.evaluateGate(ticket, flakeLedger, workDir);
-      case "INFORMED_FIX":
-        await this.session(
-          ticket,
-          "INFORMED_FIX",
-          { ...this.fixInputs(ticket, workDir), research: this.maybeArtifact(ticket.id, "research.json") },
-          workDir,
-        );
-        return await this.evaluateGate(ticket, flakeLedger, workDir, "informed fix failed — the ladder cannot reopen (D-13)");
       case "REVIEW_FIX":
-        await this.session(
-          ticket,
-          "REVIEW_FIX",
-          { ...this.fixInputs(ticket, workDir), review: this.maybeArtifact(ticket.id, "review.json") },
-          workDir,
-        );
-        return await this.evaluateGate(ticket, flakeLedger, workDir);
+        await this.tool("attempt", { ticket_id: id, state });
+        return await this.gateTo(id);
+      case "INFORMED_FIX":
+        await this.tool("attempt", { ticket_id: id, state });
+        return await this.gateTo(id, { escalate_reason: "informed fix failed — the ladder cannot reopen (D-13)" });
       case "RESEARCH":
-        return await this.stageResearch(ticket, workDir);
+        return await this.stageRecord(id, "research");
       case "IN_REVIEW":
-        return await this.stageReview(ticket, workDir);
-      case "APPROVED":
-        return await this.stageCloseCheck(ticket, flakeLedger, workDir);
+        return await this.stageRecord(id, "review");
       case "DIAGNOSED":
-        return await this.stageDiagnose(ticket, workDir);
+        return await this.stageRecord(id, "diagnose");
+      case "APPROVED":
+        return await this.gateTo(id, { close_check: true });
       default:
-        throw new KernelBoundaryError(`kernel has no handler for state ${ticket.state}`);
+        throw new Error(`driver has no handler for state ${state}`);
     }
   }
 
-  // ---- T-043: the diagnosis gate ------------------------------------------
-
-  private async stageDiagnose(ticket: Ticket, workDir: string): Promise<Ticket> {
-    const artifactPath = path.join(runsDir(this.root, ticket.id), "hypothesis.json");
-    const outcome = await diagnoseStage({
-      launch: async () => {
-        await this.session(ticket, "DIAGNOSED", { ticket: publicTicket(ticket) }, workDir);
-      },
-      readArtifact: () => this.maybeArtifact(ticket.id, "hypothesis.json"),
-      writeArtifact: (h: Hypothesis) => {
-        mkdirSync(path.dirname(artifactPath), { recursive: true });
-        writeFileSync(artifactPath, `${JSON.stringify(h, null, 2)}\n`);
-      },
-      executeRepro: (command) =>
-        runGate({ command, cwd: workDir, slot: "test", timeoutMs: this.budgets.gate_timeout_ms, env: CI_ENV }),
-      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
-    });
-    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  private async gateTo(id: string, opts: { close_check?: boolean; escalate_reason?: string } = {}): Promise<State> {
+    const { ref } = await this.tool<{ ref: string }>("gate", { ticket_id: id, ...opts });
+    return await this.transition(id, ref);
   }
 
-  // ---- T-044: review consumption ------------------------------------------
-
-  private async stageReview(ticket: Ticket, workDir: string): Promise<Ticket> {
-    const hypothesisRaw = this.maybeArtifact(ticket.id, "hypothesis.json");
-    const hypothesisParsed = hypothesisRaw === null ? null : parseArtifact(hypothesisSchema, hypothesisRaw);
-    const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
-    const outcome = await reviewStage(ticket, this.diff(workDir), hypothesis, {
-      launch: async (inputs) => {
-        await this.session(ticket, "IN_REVIEW", inputs, workDir);
-      },
-      readArtifact: () => this.maybeArtifact(ticket.id, "review.json"),
-      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
-    });
-    if (outcome.kind === "breaker") throw new Breach(outcome.reason);
-    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  private async stageRecord(id: string, stage: "diagnose" | "review" | "research"): Promise<State> {
+    const { ref } = await this.tool<{ ref: string }>("record", { kind: "stage", ticket_id: id, stage });
+    return await this.transition(id, ref);
   }
 
-  // ---- T-045: research with the env-keyed cache ---------------------------
-
-  private async stageResearch(ticket: Ticket, workDir: string): Promise<Ticket> {
-    const outcome = await researchStage({
-      root: this.root,
-      launch: async (inputs) => {
-        await this.session(ticket, "RESEARCH", inputs, workDir);
-      },
-      readArtifact: () => this.maybeArtifact(ticket.id, "research.json"),
-      readFailureSignature: () => {
-        const failure = this.maybeArtifact(ticket.id, "last_failure.json") as { signature?: string } | null;
-        return failure?.signature ?? null;
-      },
-      toolCallCeiling: this.budgets.failure_research_tool_calls,
-      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
-      ticketInputs: {
-        ticket: publicTicket(ticket),
-        failure: this.maybeArtifact(ticket.id, "last_failure.json"),
-      },
-    });
-    if (outcome.upstream !== undefined) {
-      this.linkUpstream(ticket, outcome.upstream);
-    }
-    return this.commit(readTicket(this.root, ticket.id), outcome.event);
+  private async breach(id: string, reason: string): Promise<State> {
+    const { ref } = await this.tool<{ ref: string }>("record", { kind: "breach", ticket_id: id, reason });
+    return await this.transition(id, ref);
   }
 
-  private linkUpstream(ticket: Ticket, brief: ResearchBrief): void {
-    const source = brief.evidence[0]?.source ?? "unknown";
-    linkDiscovered(
-      this.root,
-      ticket.id,
-      {
-        id: `${ticket.id}-upstream`,
-        type: "bug",
-        title: `Upstream bug blocking ${ticket.id}`,
-        description: `See ${source}. ${brief.upstream_bug ?? ""}`,
-        acceptance_criteria: ["upstream fix released, or an approved workaround chosen"],
-      },
-      "related",
-    );
-  }
-
-  // ---- close-check ---------------------------------------------------------
-
-  private async stageCloseCheck(ticket: Ticket, flakeLedger: RerunLedger, workDir: string): Promise<Ticket> {
-    // B-4: the ticket's own label, or the diff touching risk globs — both
-    // require a human before finalize. A recorded human approval covers the
-    // risk once; the kernel still re-verifies the gates below (X-3).
-    const approved = ticket.notes.some((n) => n.text.startsWith("human-approved:"));
-    if (!approved) {
-      if (ticket.risk_label) {
-        appendNote(this.root, ticket.id, { author: "kernel", text: "risk-labelled change requires human approval (B-4)" });
-        // Fresh read: committing from the stale reference would overwrite the
-        // note appendNote just persisted (the lost-update this loop must never do).
-        return this.commit(readTicket(this.root, ticket.id), riskRequired("label"));
-      }
-      const globs = this.loaded.config.risk;
-      if (globs.length > 0) {
-        const touched = changedFiles(workDir, this.baseRef ?? this.runBranch.base).filter((f) =>
-          picomatch.isMatch(f, [...globs], { dot: true }),
-        );
-        if (touched.length > 0) {
-          appendNote(this.root, ticket.id, {
-            author: "kernel",
-            text: `risk-path change requires human approval (B-4): ${touched.join(", ")}`,
-          });
-          return this.commit(readTicket(this.root, ticket.id), riskRequired({ globs, files: touched }));
-        }
-      }
-    }
-    return await this.evaluateGate(ticket, flakeLedger, workDir, undefined, ["lint", "typecheck", "test", "build", "e2e"]);
+  private async pendingReason(id: string): Promise<string> {
+    const { pending } = await this.tool<{ pending: PendingEntry[] }>("status", {});
+    const reason = pending.find((p) => p.id === id)?.reason;
+    return reason === undefined || reason === "" ? "escalated" : reason;
   }
 
   // ---- escalation (C-10, T-049) -------------------------------------------
 
   /**
-   * The in-run escalation flow. Approve applies HUMAN_APPROVED (the kernel
+   * The in-run escalation flow. Approve applies HUMAN_APPROVED (the referee
    * re-verifies from APPROVED — never a direct DONE); requeue opens a fresh
    * generation carrying the guidance (X-8); skip leaves the ticket pending;
    * quit stops the run. The human act is the answer itself.
    */
-  private async offerEscalation(id: string, reason: string, flakeLedger: RerunLedger, workDir: string): Promise<void> {
+  private async offerEscalation(id: string, reason: string, summary: string): Promise<void> {
     if (this.opts.escalate === undefined || this.quitting) return;
-    const fresh = readTicket(this.root, id);
-    const { dossierSummary, buildDossier } = await import("./dossier.js");
-    const action = await this.opts.escalate({
-      ticket: fresh,
-      reason,
-      summary: dossierSummary(fresh, buildDossier(this.root, fresh, reason)),
-    });
+    const action = await this.opts.escalate({ ticket: readTicket(this.opts.root, id), reason, summary });
 
     if (action.kind === "quit") {
       this.quitting = true;
       return;
     }
     if (action.kind === "skip") {
-      appendNote(this.root, id, { author: action.by, text: `skipped at escalation (C-10)` });
+      await this.tool("record", { kind: "note", ticket_id: id, author: action.by, text: `skipped at escalation (C-10)` });
       return;
     }
     if (action.kind === "approve") {
-      appendNote(this.root, id, { author: action.by, text: `human-approved: by ${action.by} at escalation (C-10)` });
-      const approvedTicket = this.commit(readTicket(this.root, id), humanApproved(`approved in-run by ${action.by} (C-10)`));
-      this.reopenGeneration(id);
-      // The kernel re-verifies: drive the ticket onward from APPROVED now.
-      await this.driveOn(approvedTicket.id, flakeLedger, workDir);
+      const { ref } = await this.tool<{ ref: string }>("record", {
+        kind: "human",
+        ticket_id: id,
+        action: { kind: "approve", by: action.by },
+      });
+      await this.transition(id, ref);
+      await this.tool("record", { kind: "reopen_generation", ticket_id: id });
+      // The referee re-verifies: drive the ticket onward from APPROVED now.
+      await this.driveOn(id, "APPROVED");
       return;
     }
     // requeue with guidance
-    appendNote(this.root, id, { author: action.by, text: `requeued with guidance (C-10): ${action.guidance}` });
-    const requeued = this.commit(readTicket(this.root, id), humanRequeue(`requeue by ${action.by}: ${action.guidance}`));
-    const generations = openGeneration(requeued, { at: this.iso(), reason: action.guidance });
-    writeTicket(this.root, { ...requeued, generations });
-  }
-
-  /** After an in-run approval the closed generation reopens for the re-verify. */
-  private reopenGeneration(id: string): void {
-    const fresh = readTicket(this.root, id);
-    const generation = currentGeneration(fresh);
-    if (generation.ended_at === undefined) return;
-    // exactOptionalTypes: rebuild without ended_at rather than destructuring
-  // into an unused binding the lint rejects.
-  const reopened = { ...generation, outcome: "in_flight" as const };
-  delete (reopened as { ended_at?: string }).ended_at;
-    writeTicket(this.root, {
-      ...fresh,
-      generations: [...fresh.generations.slice(0, -1), reopened],
+    const { ref } = await this.tool<{ ref: string }>("record", {
+      kind: "human",
+      ticket_id: id,
+      action: { kind: "requeue", by: action.by, guidance: action.guidance },
     });
+    await this.transition(id, ref);
+    await this.tool("record", { kind: "open_generation", ticket_id: id, reason: action.guidance });
   }
 
-  private async driveOn(id: string, flakeLedger: RerunLedger, workDir: string): Promise<void> {
-    let ticket = readTicket(this.root, id);
-    while (ticket.state !== "DONE" && ticket.state !== "NEEDS_HUMAN" && ticket.state !== "BLOCKED") {
+  private async driveOn(id: string, from: State): Promise<void> {
+    let state = from;
+    while (!TERMINAL.includes(state)) {
       try {
-        ticket = await this.stage(ticket, flakeLedger, workDir);
+        state = await this.stage(id, state);
       } catch (err) {
-        if (err instanceof Breach || err instanceof SpendExhaustedError) {
-          ticket = this.breach(readTicket(this.root, id), (err as Error).message);
+        if (err instanceof DriverBreach) {
+          state = await this.breach(id, err.message);
           break;
         }
         throw err;
       }
     }
-    if (ticket.state === "DONE") {
-      this.finalize(ticket, workDir);
-      this.closeGeneration(ticket, "done");
-    } else if (ticket.state === "NEEDS_HUMAN") {
-      writeDossier(this.root, readTicket(this.root, id), lastNote(ticket) || "escalated");
-      this.closeGeneration(ticket, "needs_human");
+    if (state === "DONE") {
+      await this.tool("record", { kind: "finalize", ticket_id: id });
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
+    } else if (state === "NEEDS_HUMAN") {
+      const reason = await this.pendingReason(id);
+      await this.tool("record", { kind: "dossier", ticket_id: id, reason });
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "needs_human" });
     } else {
-      this.closeGeneration(ticket, "blocked");
+      await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "blocked" });
     }
   }
 
   /** C-13: the five-label vocabulary; full state names live only in the journal. */
-  private resumeAnnouncement(ticket: Ticket): string {
+  private resumeAnnouncement(id: string, state: State): string {
     const labels: Record<string, string> = {
       DIAGNOSED: "diagnosing",
       IN_PROGRESS: "implementing",
@@ -667,381 +415,6 @@ class Kernel {
       IN_REVIEW: "in review",
       APPROVED: "verifying",
     };
-    return `resuming ${ticket.id} — ${labels[ticket.state] ?? "working"}`;
+    return `resuming ${id} — ${labels[state] ?? "working"}`;
   }
-
-  // --------------------------------------------------------------- gates
-
-  private async evaluateGate(
-    ticket: Ticket,
-    flakeLedger: RerunLedger,
-    workDir: string,
-    escalateReason?: string,
-    slots: readonly GateSlot[] = ["lint", "typecheck", "test"],
-  ): Promise<Ticket> {
-    const bindings = readBindings(this.root).bindings;
-    try {
-      assertNoDrift(bindings, discover(workDir));
-    } catch (err) {
-      if (err instanceof DriftHaltError) throw new DriftHaltSignal(err);
-      throw err;
-    }
-
-    const result = await this.runScopedGates(bindings, slots, workDir);
-    if (result === null || result.green) {
-      return this.commit(readTicket(this.root, ticket.id), gateGreen(result));
-    }
-
-    // X-5: one isolated rerun for a suspected flake, through T-022's filter.
-    // Isolation prefers the test_single binding; a `BASE` template resolves
-    // against the run's merge-base, or falls back to the failing command when
-    // the baseline is unresolvable (V-5).
-    const single = bindings.find((b) => b.slot === "test_single");
-    let isolationCmd = result.command;
-    if (single !== undefined) {
-      if (!needsBaseRef(single.resolved)) isolationCmd = single.resolved;
-      else if (this.baseRef !== null) isolationCmd = substituteBase(single.resolved, this.baseRef);
-    }
-    const decision = await filterFlake({
-      first: result,
-      rerunInIsolation: () => this.gate(isolationCmd, result.slot ?? "test", workDir),
-      ledger: flakeLedger,
-    });
-
-    if (decision.kind === "quarantine") {
-      const fresh = readTicket(this.root, ticket.id);
-      const quarantineId = `${ticket.id}-flake-${fresh.links.filter((l) => l.rel === "quarantines").length + 1}`;
-      quarantineTicket(this.root, ticket.id, decision, { id: quarantineId });
-      appendNote(this.root, ticket.id, {
-        author: "kernel",
-        text: `flaky gate quarantined as ${quarantineId}; nothing charged (X-5)`,
-      });
-      return this.commit(readTicket(this.root, ticket.id), gateGreen(decision.result, "flake-filtered"));
-    }
-
-    this.recordFailure(ticket.id, decision.result);
-    if (escalateReason !== undefined) {
-      appendNote(this.root, ticket.id, { author: "kernel", text: escalateReason });
-    }
-    return this.commit(readTicket(this.root, ticket.id), gateRed(decision.result));
-  }
-
-  private async runScopedGates(
-    bindings: ReturnType<typeof readBindings>["bindings"],
-    slots: readonly GateSlot[],
-    workDir: string,
-  ): Promise<GateResult | null> {
-    let last: GateResult | null = null;
-    for (const slot of slots) {
-      const binding = bindings.find((b) => b.slot === slot);
-      if (binding === undefined) continue;
-      last = await this.gate(binding.resolved, slot, workDir);
-      if (!last.green) return last;
-    }
-    return last;
-  }
-
-  private async gate(command: string, slot: GateSlot, workDir: string): Promise<GateResult> {
-    const result = await runGate({
-      command,
-      cwd: workDir,
-      slot,
-      timeoutMs: this.budgets.gate_timeout_ms,
-      env: CI_ENV,
-    });
-    if (result.outcome === "not-found" || !runnable(result)) {
-      throw new Breach(`gate ${slot} is not runnable: \`${command}\` (exit ${result.normalizedExit})`);
-    }
-    return result;
-  }
-
-  private recordFailure(ticketId: string, result: GateResult): void {
-    const verdict = classify(result.output, result.exitCode);
-    const record = {
-      cmd: result.command,
-      exit: result.exitCode,
-      signature: verdict.signature,
-      classification: verdict.patternClass,
-      // SEC-4: scrubbed BEFORE write — a secret echoed by a failing gate
-      // must never land in an artifact.
-      output_tail: scrub(result.output.slice(-4000)),
-    };
-    const dir = runsDir(this.root, ticketId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "last_failure.json"), `${JSON.stringify(record, null, 2)}\n`);
-  }
-
-  // ------------------------------------------------------------ sessions
-
-  private async session(
-    ticket: Ticket,
-    state: SessionState,
-    inputs: Record<string, unknown>,
-    workDir: string,
-  ): Promise<void> {
-    const role = roleForState(state);
-    const id = ticket.id;
-    if (this.journal.unfinished(id, role)) {
-      this.journal.appendTicketEvent(id, { stage: role, event: "skipped_after_crash", at: this.iso() });
-      return;
-    }
-
-    // D-25: the spend ceiling is a launch gate, evaluated here and never
-    // mid-flight — overshoot is bounded by the one session in flight.
-    this.spend.assertLaunchAllowed();
-
-    let current = readTicket(this.root, id);
-    const counters = currentCounters(current);
-    if (counters.sessions >= this.budgets.sessions) {
-      throw new Breach("net session ceiling (X-1) — backstop against a kernel accounting defect");
-    }
-    const generation = currentGeneration(current);
-    current = {
-      ...current,
-      generations: withCurrentCounters(current.generations, generation.index, {
-        ...counters,
-        sessions: counters.sessions + 1,
-      }),
-    };
-    writeTicket(this.root, current);
-
-    const artifactOut = path.join(runsDir(this.root, id), artifactNameFor(role));
-    mkdirSync(path.dirname(artifactOut), { recursive: true });
-    const spec: SessionSpec = {
-      role,
-      ticketId: id,
-      promptPrefix: this.prefixFor(role),
-      promptVariable: JSON.stringify(
-        {
-          inputs,
-          artifact_out: artifactOut,
-          falsified_out: path.join(runsDir(this.root, id), "falsified.json"),
-          surface_request_out: path.join(runsDir(this.root, id), "surface_request.json"),
-        },
-        null,
-        2,
-      ),
-      cwd: workDir,
-      artifactOut,
-      allowedTools: this.toolsFor(role),
-      permissionMode: READ_ONLY_ROLES.has(role) ? "plan" : "",
-      model: this.loaded.config.model_routing[role] ?? "",
-      maxTurns: this.budgets.turns_per_stage,
-    };
-
-    this.journal.appendTicketEvent(id, { stage: role, event: "start", at: this.iso() });
-    const result = await this.opts.backend.run(spec);
-    const generationNow = currentGeneration(readTicket(this.root, id));
-    this.spend.record(id, generationNow.index, role, result, this.iso());
-    this.journal.appendTicketEvent(id, {
-      stage: role,
-      event: "end",
-      at: this.iso(),
-      ok: result.ok,
-      cost: result.costEstimateUsd,
-    });
-    this.rememberPrefix(role, spec);
-
-    // P7: a session is Detent's act, and Detent never writes the base branch.
-    // The S-2 hook prevents; this is the kernel's independent line (P2) — any
-    // moved non-run ref is restored and the ticket escalates.
-    const violations = enforceBaseGuard(this.root, this.refs, this.runBranch.branch);
-    if (violations.length > 0) {
-      const detail = violations.map((v) => `${v.ref}: ${v.was} -> ${v.became ?? "(deleted)"}`).join("; ");
-      appendNote(this.root, id, { author: "kernel", text: `base-branch write detected and reverted (B-3/P7): ${detail}` });
-      throw new Breach(`base-branch write detected and reverted (B-3/P7): ${detail}`);
-    }
-
-    if (!READ_ONLY_ROLES.has(role)) this.handleSurfaceRequest(id);
-    if (!result.telemetryParsed) throw new Breach("telemetry unparsable (S-4 circuit breaker)");
-  }
-
-  /**
-   * SEC-3's lever: the hook denies and points here; the KERNEL decides.
-   * Granting appends to the ticket surface (logged); protected paths and a
-   * grant budget of three are hard limits.
-   */
-  private handleSurfaceRequest(ticketId: string): void {
-    const file = path.join(runsDir(this.root, ticketId), "surface_request.json");
-    if (!existsSync(file)) return;
-    let request: { path?: string; justification?: string };
-    try {
-      request = JSON.parse(readFileSync(file, "utf8")) as typeof request;
-    } catch {
-      request = {};
-    }
-    rmSync(file, { force: true });
-    const target = (request.path ?? "").trim();
-    const why = (request.justification ?? "").slice(0, 200);
-    const ticket = readTicket(this.root, ticketId);
-    const grants = ticket.notes.filter((n) => n.text.startsWith("surface granted:")).length;
-
-    const isProtected = target !== "" && picomatch.isMatch(target, [...this.loaded.config.protected], { dot: true });
-    if (target === "" || isProtected || grants >= 3) {
-      appendNote(this.root, ticketId, { author: "kernel", text: `surface DENIED: ${target} (${why}) (SEC-3)` });
-      return;
-    }
-    writeTicket(this.root, { ...ticket, surface: [...ticket.surface, target] });
-    appendNote(this.root, ticketId, { author: "kernel", text: `surface granted: ${target} — ${why} (SEC-3)` });
-  }
-
-  private consumeFalsifiedSignal(ticketId: string): string | null {
-    const file = path.join(runsDir(this.root, ticketId), "falsified.json");
-    if (!existsSync(file)) return null;
-    let note = "premise falsified";
-    try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: string };
-      if (typeof parsed.note === "string" && parsed.note !== "") note = parsed.note;
-    } catch {
-      /* the signal's existence is the event; the note is best-effort */
-    }
-    rmSync(file, { force: true });
-    appendNote(this.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${note}` });
-    return note;
-  }
-
-  private readonly prefixSeen = new Map<string, string>();
-
-  private rememberPrefix(role: string, spec: SessionSpec): void {
-    const seen = this.prefixSeen.get(role);
-    const hash = prefixHash(spec);
-    if (seen !== undefined && seen !== hash) {
-      throw new KernelBoundaryError(`S-6 violated: role ${role} prefix hash moved within a run`);
-    }
-    this.prefixSeen.set(role, hash);
-  }
-
-  private prefixFor(role: RoleId): string {
-    return stablePrefix(this.prompts.prompts[role], this.rulesText, this.bindingsPreamble);
-  }
-
-  private toolsFor(role: RoleId): readonly string[] {
-    // The kernel's advisory copy; the SDK backend composes the enforced set
-    // (sessions/guard.ts), including domain-scoped WebFetch once PRDR-062
-    // gives docs domains a config home.
-    if (READ_ONLY_ROLES.has(role)) {
-      return role === "research" ? ["Read", "Grep", "Glob", "WebSearch"] : ["Read", "Grep", "Glob"];
-    }
-    return ["Read", "Grep", "Glob", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"];
-  }
-
-  // ------------------------------------------------------------- commits
-
-  private commit(ticket: Ticket, kernelEvent: KernelEvent): Ticket {
-    const counters = currentCounters(ticket);
-    const ctx: GuardContext = { ticket: { type: ticket.type }, budgets: this.budgets };
-    const result = apply(ticket.state, kernelEvent.event, counters, ctx);
-    const generation = currentGeneration(ticket);
-    this.journal.appendTransition({
-      at: this.iso(),
-      ticket: ticket.id,
-      generation: generation.index,
-      from: result.from,
-      event: kernelEvent.event,
-      to: result.to,
-      evidence: kernelEvent.evidence,
-      counters: result.counters,
-    });
-    const updated: Ticket = {
-      ...ticket,
-      state: result.to,
-      generations: withCurrentCounters(ticket.generations, generation.index, result.counters),
-    };
-    return writeTicket(this.root, updated);
-  }
-
-  private breach(ticket: Ticket, reason: string): Ticket {
-    appendNote(this.root, ticket.id, { author: "kernel", text: reason });
-    return this.commit(readTicket(this.root, ticket.id), budgetBreach(reason));
-  }
-
-  private closeGeneration(ticket: Ticket, outcome: "done" | "blocked" | "needs_human"): void {
-    const fresh = readTicket(this.root, ticket.id);
-    const generation = currentGeneration(fresh);
-    if (generation.ended_at !== undefined) return;
-    writeTicket(this.root, {
-      ...fresh,
-      generations: [...fresh.generations.slice(0, -1), { ...generation, outcome, ended_at: this.iso() }],
-    });
-  }
-
-  private finalize(ticket: Ticket, workDir: string): void {
-    // C-4: bootstrap #1's gates just passed, so greenfield's provisional
-    // bindings become the baseline. A no-op for every other ticket.
-    finalizeBootstrap(this.root, ticket.id, {
-      readBindings: () => readBindings(this.root),
-      writeBindings: (file) => writeBindings(this.root, file as { bindings: Binding[]; skips: never[] }),
-      rediscover: () => discover(this.root).candidates,
-      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
-    });
-    git(workDir, "add", "-A");
-    const dirty = git(workDir, "status", "--porcelain").trim();
-    if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
-    // B-2: worktree mode merges --no-ff into the RUN branch — never the base.
-    if (this.opts.worktree === true) mergeWorktree(this.root, ticket.id);
-  }
-
-  // -------------------------------------------------------------- helpers
-
-  private fixInputs(ticket: Ticket, workDir: string): Record<string, unknown> {
-    return {
-      ticket: publicTicket(ticket),
-      failure: this.maybeArtifact(ticket.id, "last_failure.json"),
-      hypothesis: this.maybeArtifact(ticket.id, "hypothesis.json"),
-      diff: this.diff(workDir),
-    };
-  }
-
-  private diff(workDir: string): string {
-    try {
-      return git(workDir, "diff", "HEAD").slice(-8000);
-    } catch {
-      return "";
-    }
-  }
-
-  private maybeArtifact(ticketId: string, name: string): unknown {
-    const file = path.join(runsDir(this.root, ticketId), name);
-    if (!existsSync(file)) return null;
-    try {
-      return JSON.parse(readFileSync(file, "utf8"));
-    } catch {
-      return null;
-    }
-  }
-
-  private iso(): string {
-    return new Date(this.now()).toISOString();
-  }
-
-  private readRules(): string {
-    for (const name of ["AGENTS.md", "CLAUDE.md"]) {
-      const file = path.join(this.root, name);
-      if (existsSync(file)) return readFileSync(file, "utf8");
-    }
-    return "(no rules file)";
-  }
-}
-
-function publicTicket(ticket: Ticket): Record<string, unknown> {
-  return {
-    id: ticket.id,
-    type: ticket.type,
-    title: ticket.title,
-    description: ticket.description,
-    acceptance_criteria: ticket.acceptance_criteria,
-    non_goals: ticket.non_goals,
-    surface: ticket.surface,
-  };
-}
-
-function artifactNameFor(role: string): string {
-  if (role === "diagnose") return "hypothesis.json";
-  if (role === "research") return "research.json";
-  if (role === "review") return "review.json";
-  return `${role}.json`;
-}
-
-function lastNote(ticket: Ticket): string {
-  return ticket.notes.at(-1)?.text ?? "";
 }

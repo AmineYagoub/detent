@@ -73,7 +73,10 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/kernel/**/*.ts"],
+    // MP0 (v3): `src/referee/**` — the tool boundary — sits with the kernel on
+    // the sealed side of ARCH-1: same rules, same seam. The MCP transport SDK
+    // is infrastructure, not the session backend, and stays permitted.
+    files: ["src/kernel/**/*.ts", "src/referee/**/*.ts"],
     rules: {
       "no-restricted-imports": ["error", { patterns: KERNEL_FORBIDDEN }],
     },

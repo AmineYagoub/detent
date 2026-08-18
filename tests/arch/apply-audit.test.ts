@@ -43,21 +43,39 @@ describe("T-054 the sanctioned apply-site set (source scan)", () => {
         importers.push(rel(file));
       }
     }
-    // run.ts commits state; worstcase.ts walks table COPIES (a computation,
-    // not a state mutation); plumbing.ts commits the two HUMAN_* events on an
-    // operator's explicit authority (C-12) through the same journaled path.
-    // Nothing else may touch the table.
-    expect(importers.sort()).toEqual(["kernel/plumbing.ts", "kernel/run.ts", "kernel/worstcase.ts"]);
+    // referee.ts commits state (MP0 moved the commit path out of the run loop
+    // — the loop is a DRIVER now, D-27); worstcase.ts walks table COPIES (a
+    // computation, not a state mutation); plumbing.ts commits the two HUMAN_*
+    // events on an operator's explicit authority (C-12) through the same
+    // journaled path. Nothing else may touch the table.
+    expect(importers.sort()).toEqual(["kernel/plumbing.ts", "kernel/referee.ts", "kernel/worstcase.ts"]);
   });
 
   it("the commit paths contain no raw event-name string — events arrive only through constructors", () => {
-    for (const file of ["kernel/run.ts", "kernel/plumbing.ts"]) {
+    for (const file of ["kernel/referee.ts", "kernel/plumbing.ts"]) {
       const body = readFileSync(path.join(SRC, file), "utf8");
       for (const event of EVENTS) {
         expect(body.includes(`"${event}"`), `${file} must not name ${event} as a string`).toBe(false);
       }
       // And apply() appears exactly once per file — inside its commit path.
       expect(body.match(/\bapply\(/g) ?? [], file).toHaveLength(1);
+    }
+  });
+
+  it("T-102: the drivers hold NOTHING — no apply, no event constructors, no event names (D-27)", () => {
+    // The headless driver and the tool registry sit on the driver-facing side
+    // of the boundary. Neither may apply an event, import a constructor, or
+    // even NAME an event: the only path to a transition is an evidence ref a
+    // validator or gate minted. This is ARCH-1's audit extended to the tool
+    // boundary — true regardless of which driver calls.
+    for (const file of ["kernel/run.ts", "referee/registry.ts"]) {
+      const body = readFileSync(path.join(SRC, file), "utf8");
+      expect(body.match(/\bapply\(/g) ?? [], `${file} must not apply`).toHaveLength(0);
+      expect(body, `${file} must not import the machine`).not.toMatch(/from\s+"[^"]*kernel\/machine\.js"/);
+      expect(body, `${file} must not import event constructors`).not.toMatch(/from\s+"[^"]*kernel\/events\.js"/);
+      for (const event of EVENTS) {
+        expect(body.includes(`"${event}"`), `${file} must not name ${event} as a string`).toBe(false);
+      }
     }
   });
 

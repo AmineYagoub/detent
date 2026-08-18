@@ -8,6 +8,11 @@
  * R-2: M0 translates all 52 against interfaces; those needing a later layer sit
  * as `pending-M1` or `pending-M2` until their ticket lands. Each milestone exit
  * asserts its own threshold rather than one global count.
+ *
+ * MP0 (v3, T-107): the run loop is now a DRIVER over the referee's R-1 tool
+ * registry — every kernel-path test below reaches `machine.apply` through the
+ * tool boundary, so from T-100 onward these oracle tests certify the REFEREE,
+ * not a standalone loop. No mapping changed; the ground under it did.
  */
 
 export interface ParityEntry {
