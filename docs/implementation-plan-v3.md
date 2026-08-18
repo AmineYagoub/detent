@@ -25,20 +25,20 @@ The de-risking milestone: prove the kernel runs **unchanged** behind a tool boun
 - **T-103** `gate` tool: run + classify a bound gate via the existing adapter + flake filter (F/V reuse). *AC:* the v2 gate/flake tests pass through the tool unchanged.
 - **T-104** `attempt` tool (R-4): metered billable-session spawn wrapping the existing `SessionBackend`; ledger check-before / record-after; over-ceiling refusal routes to a human (P6). *AC:* over-budget fixture refuses and routes; ledger sums every session (mock backend).
 - **T-105** Checkpoint/resume through the referee (R-3, D-30): every admitted transition persisted to `.detent/` before the tool returns. *AC:* kill mid-`attempt`; re-drive resumes from the last admitted transition; stale claim reclaimable (C-9).
-- **T-106** The **headless driver**: re-express `run.ts`'s loop as a driver over R-* tools. *AC:* byte-identical `transitions.jsonl` vs the v2 loop on the oracle crash-resume class.
+- **T-106** The **headless driver**: re-express `run.ts`'s loop as a driver over R-* tools — implemented as an Agent SDK program loading **the same plugin directory** (`options.plugins: [{type:"local", path}]`), so one artifact serves both drivers. *AC:* byte-identical `transitions.jsonl` vs the v2 loop on the oracle crash-resume class; the fixture doubles as proof that plugin-bundled MCP + hooks behave identically under SDK load.
 - **T-107** **MP0 exit** — the entire v2 suite (553 tests) green with the headless driver over the referee; ARCH-2 driver-agnostic audit; parity map annotated (the oracle tests now certify the referee). *Exit gate for MP1.*
 
 ### MP1 — the plugin skeleton
-- **T-110** Plugin manifest (`.claude-plugin/plugin.json`) + `marketplace.json`. *AC:* manifest validates; registers exactly two commands.
-- **T-111** The two commands (`/detent:init`, `/detent:run`) as command definitions that invoke the driver/referee. *AC:* both load in a live Claude Code session.
-- **T-112** Vendored subagents: the role prompts (diagnose/implement/review/research) → `agents/*.md`, hash-pinned (S-7). *AC:* `role@hash` resolves; runtime never fetches (SEC-2).
-- **T-113** The D-21 containment hook as a plugin hook (`hooks/hooks.json` PreToolUse) + Stop-gate hook. *AC:* the M0 guard tests pass against the plugin hook.
-- **T-114 ⚡ MP1 exit** — commands load and the hook denies an out-of-surface write in a **live** session. *Live-key gated.*
+- **T-110** Plugin manifest (`.claude-plugin/plugin.json`) + `marketplace.json`. Component dirs live at plugin **root** (only `plugin.json` inside `.claude-plugin/`); `version` pinned explicitly (SEC-2); `userConfig` weighed as the home for spend cap + docs-domains (candidate resolution for PRDR-062). *AC:* `claude plugin validate --strict` passes; registers exactly two commands.
+- **T-111** The two commands (`/detent:init`, `/detent:run`) as **skills** — `skills/init/SKILL.md`, `skills/run/SKILL.md` (directory form; `commands/` is legacy), `$ARGUMENTS` carrying flags like `--replan`. *AC:* both load in a live Claude Code session.
+- **T-112** Vendored subagents: the role prompts (diagnose/implement/review/research) → `agents/*.md`, hash-pinned (S-7), using per-role `tools`/`disallowedTools`/`permissionMode`/`maxTurns` frontmatter for S-3′ surfaces. *AC:* `role@hash` resolves; runtime never fetches (SEC-2).
+- **T-113** The D-21 containment hook as a plugin hook (`hooks/hooks.json` PreToolUse) + Stop-gate hook. Deterministic hook types only (`command` or `mcp_tool` calling a referee `guard.check` tool — one legality implementation, ARCH-2); the platform's `prompt`/`agent` hook types are P2-forbidden for containment. *AC:* the M0 guard tests pass against the plugin hook.
+- **T-114 ⚡ MP1 exit** — via `claude --plugin-dir` (no marketplace needed): commands load and the hook denies an out-of-surface write in a **live** session. *Live-key gated.*
 
 ### MP2 — the model-driven loop
-- **T-120** The model-driven driver: skill(s) that sequence `next → claim → attempt → record/gate → transition` over R-* tools, choosing among *legal* moves only (R-2). *AC:* the model completes a single-ticket run over the referee against a fixture backend.
-- **T-121** D-28 budget hook: deny ledger-bypassing ambient billable tools (direct `Task`/gate-running `Bash`); `attempt` is the sole billable path. *AC:* ambient spawn for Detent work hook-denied; ledger sees every attempt.
-- **T-122** D-29 / SEC-6 hook authority over loaded settings. *AC:* a repo settings file allow-listing an out-of-surface write is hook-denied; no transition recorded.
+- **T-120** The model-driven driver: skill(s) that sequence `next → claim → attempt → record/gate → transition` over R-* tools, choosing among *legal* moves only (R-2). Loop persistence may use the **Stop-hook re-feed** pattern (officially shipped precedent: ralph-wiggum) rather than trusting the model to continue — it coexists with the S-2 stop-gate, since Stop hooks combine. *AC:* the model completes a single-ticket run over the referee against a fixture backend.
+- **T-121** D-28 budget hook: deny ledger-bypassing ambient billable tools (direct `Task`/gate-running `Bash`); `attempt` is the sole billable path; the platform's native subagent budget caps layer underneath as defense in depth (Detent's ledger stays the source of record). *AC:* ambient spawn for Detent work hook-denied; ledger sees every attempt.
+- **T-122** D-29 / SEC-6 hook authority over loaded settings — confirming the documented combination rule ("most restrictive applies: `deny` > `defer` > `ask` > `allow`"; hook-allow never bypasses denies) by execution, per P4. *AC:* a repo settings file allow-listing an out-of-surface write is hook-denied; a repo-authored *hook* answering "allow" does not preempt the guard's deny; no transition recorded in either case.
 - **T-123** Cross-driver parity harness: a multi-ticket run under the model driver yields `transitions.jsonl` byte-identical to the headless driver for the same admitted sequence (scripted/fixture backend for determinism). *AC:* parity fixture green.
 - **T-124 ⚡ MP2 exit** — a live multi-ticket model-driven run completes; budgets provably hard. *Live-key gated.*
 
@@ -49,7 +49,7 @@ The de-risking milestone: prove the kernel runs **unchanged** behind a tool boun
 
 ### MP4 — self-build + distribution (N-7)
 - **T-140 ⚡** The headless driver self-builds v3 in CI — the permanent gate (D-16), now naming `detent-prd-v3.md`. *Live-key gated.*
-- **T-141 ⚡** Marketplace publish + install smoke test. *Live-key gated.*
+- **T-141 ⚡** Marketplace publish + install smoke test — three channels in order: own marketplace repo (immediate; any git repo serves), submission to the reviewed community marketplace (security-scan queue), claude.com/plugins listing. Positioning per research C.2: lead with the four unclaimed axes; frame methodology tools (spec-kit, Superpowers, BMAD) as complementary upstream. *Live-key gated.*
 - **T-142 MP4 exit / v3 release gate** — N-7 green on the v3 document; plugin installs and runs the golden path.
 
 ---
@@ -64,4 +64,6 @@ The de-risking milestone: prove the kernel runs **unchanged** behind a tool boun
 - **OQ-D resumability** is validated in **T-105** (referee-owned checkpoints) and **T-123** (cross-driver agreement).
 
 ## §5. Changelog
+**3.0-2** — platform + landscape research applied (`docs/research/plugin-platform-and-landscape.md`). Every load-bearing v3 assumption confirmed against official docs — hook deny (v2.1.195+), referee bundling, headless/SDK plugin loading, marketplace schema, and the D-29 crux (documented hook combination rule: most restrictive wins, `deny` > `defer` > `ask` > `allow`; hook-allow cannot bypass denies) — zero PRDRs forced. Refinements folded into T-106 (SDK loads the same plugin dir — one artifact, two drivers), T-110 (root layout, explicit version, `userConfig` as PRDR-062 candidate), T-111 (commands are skills), T-112 (richer role frontmatter), T-113 (guard as `command`/`mcp_tool` calling referee `guard.check`; `prompt`/`agent` hook types P2-forbidden), T-114 (`--plugin-dir`, no marketplace), T-120 (Stop-hook re-feed option, ralph-wiggum precedent), T-121 (platform budget caps as defense in depth), T-122 (hostile-hook fixture now confirms a documented rule), T-141 (three-channel distribution + positioning). Landscape: the enforcement layer is unclaimed at scale (closest analogues 24★/588★/7★); the methodology giants are complementary upstream; platform absorption commoditizes bare loop+budgets, leaving exactly Detent's core as the moat.
+
 **3.0-1** — plan created from `detent-prd-v3.md` (3.0-draft.1); MP0…MP4 decomposed into T-100…T-142; MP0 (referee extraction) detailed, MP1–MP4 at milestone-exit grain pending MP0 landing. Applies PRDR-065.
