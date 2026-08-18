@@ -1,0 +1,5 @@
+[project]
+name = "py-service"
+version = "0.1.0"
+description = "Fixture: a small Python service whose tasks live in a Makefile."
+requires-python = ">=3.9"

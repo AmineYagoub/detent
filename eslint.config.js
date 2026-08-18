@@ -41,7 +41,17 @@ const SESSIONS_FORBIDDEN = [
 ];
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "tests/arch/fixtures/**"] },
+  {
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "tests/arch/fixtures/**",
+      // T-030's fixture repositories are other projects' code, not Detent's.
+      "tests/fixtures/ts-service/**",
+      "tests/fixtures/py-service/**",
+      "tests/fixtures/go-cli/**",
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

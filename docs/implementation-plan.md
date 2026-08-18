@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Source of truth | `detent-prd-v2.md` (2.0-draft.6) — no redesign, no simplification, no additions |
-| Plan version | 1.5 — M1 adapter + filesystem implemented, T-020…T-029 (§7) |
+| Plan version | 1.6 — T-030 landed; **M1 exited** (§6, §7) |
 | Date | 2026-08-17 |
 | Shape | 56 tickets, dependency-ordered, A-1-compatible — usable as the N-7 self-build seed |
 
@@ -477,6 +477,25 @@ Each exit asserts its own parity threshold rather than deferring to a single glo
 
 ## 7. Changelog
 
+**1.6** — T-030 landed; **M1 is exited**. §6's criteria, measured: three ecosystems e2e green (`tests/fixtures/{ts-service,py-service,go-cli}` through one driver with zero per-ecosystem branches), kernel-diff empty (mechanized below), `pending-M1` == 0 (reached at 1.5). No PRD semantics changed; no ticket rescoped.
+
+What each leg exercises is deliberately different, so the matrix covers V-1's whole decision surface rather than the same happy path three times:
+
+| Fixture | Discovery shape | Approve path | Drift → re-baseline |
+|---|---|---|---|
+| ts-service | package.json scripts + npm from the lockfile | C-3b auto (`approved_by: "auto"`) | edit `scripts.test` → halt → `verify sync` consent → clean |
+| py-service | Makefile at rank 0 **outranks** the pyproject pytest fallback at rank 1 — a preference, not an ambiguity | auto | edit the recipe → halt → sync → clean |
+| go-cli | `make test` and `go test ./...` both at rank 0 — a real two-candidate ambiguity | choice interrupt, resolved by "dev"; vet and build auto | edit the recipe → halt → **sync refuses** (the ambiguity persists, and V-1 forbids guessing — asserted as correct behaviour, not tolerated as a limitation) → human re-resolves → clean |
+
+Toolchain policy, recorded honestly: the e2e executes real gates (node, python3+make, go). A host without go skips the go leg **loudly**; on CI (`CI` set) a missing toolchain is a hard failure at collection, never a skip — an exit gate that can silently skip is not a gate. The dev machine this landed from has no go toolchain, so the go leg was arbitrated by CI on a PR branch before reaching main; ubuntu runners provide go. Two consequences worth keeping visible: `go-cli` carries no `go.sum` (a zero-dependency module), so R-7's manifest-hash fallback with `lockfile: none` is exercised by a real fixture; and T-001's "fresh clone `npm ci && npm test` green" now assumes go on the host — true of CI images and most dev machines, and loudly skipped elsewhere.
+
+Two scans landed with the e2e:
+
+- The oracle's `test_kernel_contains_no_stack_strings` is reinstated **literally** (banned toolchain strings over `src/kernel/**`, assembled from pieces exactly as the reference did). The parity map had recorded it as "generalized into ARCH-1's dependency lint" at T-003; the literal form is stronger and now also holds.
+- The no-kernel-import rule for the layers below the kernel (adapter, fs, cli, schemas) — held by hand-run grep since 1.5 — is mechanized as a source scan in the e2e, as interim enforcement until PRDR-059 amends ARCH-1 and it becomes a lint zone.
+
+One 1.5 statement is corrected by this release rather than by editing it: `LANDED_THROUGH = "M1"` was set at 1.5, whose doc comment reads "the last milestone whose tickets are all written" — with T-030 unwritten, that was one ticket ahead of itself (harmless to the assertions, which only consult oracle-closing tickets, but the comment overstated). With T-030 in, the statement is literally true.
+
 **1.5** — M1's ten tickets implemented (T-020…T-029); no PRD semantics changed and no ticket rescoped. T-030, M1's exit ticket, is **not** included, so M1 is not exited — but its parity half is met: T-020 and T-022 close all five `pending-M1` oracle tests, so the count reaches 0 ahead of the exit review.
 
 | Plan | 1.4 | 1.5 |
@@ -551,4 +570,4 @@ Findings that turned out to be draft.1 artifacts — C-4's AC, counter naming, t
 
 ---
 
-*Plan 1.5 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
+*Plan 1.6 — deviations from this plan that imply PRD changes require a `prd-review` ticket first (Working Agreement 2). This document is deliberately A-1-shaped so it can be replayed as the N-7 self-build seed.*
