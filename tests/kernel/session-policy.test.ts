@@ -87,7 +87,7 @@ describe("T-140 buildOptions prefers the spec's policy (S-2′)", () => {
     const options = buildOptions(spec, { policy: constructorPolicy });
     const hook = options.hooks?.["PreToolUse"]?.[0]?.hooks?.[0];
     if (hook === undefined) throw new Error("no PreToolUse hook built");
-    const output = (await hook({ tool_input: { file_path: filePath } } as never, undefined, {} as never)) as {
+    const output = (await hook({ tool_name: "Write", tool_input: { file_path: filePath } } as never, undefined, {} as never)) as {
       hookSpecificOutput?: { permissionDecision?: string };
     };
     return output.hookSpecificOutput?.permissionDecision ?? "none";

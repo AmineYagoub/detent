@@ -34,8 +34,12 @@ export function buildPreToolUseHook(policy: GuardPolicy): NonNullable<Options["h
       {
         hooks: [
           async (input) => {
-            const toolInput = (input as { tool_input?: unknown }).tool_input;
-            const decision = guardToolUse(toolInput, policy);
+            const payload = input as { tool_name?: unknown; tool_input?: unknown };
+            const decision = guardToolUse(
+              typeof payload.tool_name === "string" ? payload.tool_name : "",
+              payload.tool_input,
+              policy,
+            );
             return {
               hookSpecificOutput: {
                 hookEventName: "PreToolUse" as const,

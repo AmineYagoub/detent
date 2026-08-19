@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0-draft.4 |
+| Version | 3.0-draft.5 |
 | Date | 2026-08-18 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
@@ -106,6 +106,13 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   Read-only-ness is the allowlist plus the D-21 hook, not a mode that contradicts P2's
   artifact interface. Found by T-140's first live read-only session.
 - **S-2′/D-21** Containment is the `PreToolUse` hook under **both** drivers — the headless driver wires it when constructing sessions; the plugin ships it as a plugin hook. It denies outside `surface[]`, denies protected globs, preserves the surface-expansion lever, and (D-28) denies ledger-bypassing ambient billable tools. A hook deny binds over every allow rule and permission mode.
+- **S-2″ (draft.5, PRDR-068).** The D-21 surface check governs MUTATION: the mutating
+  tools (Write/Edit/MultiEdit/NotebookEdit) are denied outside `surface[]` and denied on
+  protected globs (SEC-3 is immutability, not unreadability); non-mutating path'd calls
+  are allowed anywhere INSIDE the worktree, and the outside-worktree boundary (P7) holds
+  for every tool. Found by T-140: a worker denied READING the PRD's §10 — its own
+  specification — shipped an empty diff that only the D-6 review layer caught. Driver-mode
+  policy unchanged (D-27: the driver neither reads nor writes files).
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
 

@@ -140,7 +140,7 @@ export function decidePreToolUse(payload: HookPayload, nowMs: number): string | 
     );
   }
 
-  const decision = guardToolUse(payload.tool_input, {
+  const decision = guardToolUse(tool, payload.tool_input, {
     surface: strings(cfg?.surface),
     protectedGlobs: strings(cfg?.protected),
     workRoot: cwd,

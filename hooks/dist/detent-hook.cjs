@@ -1576,12 +1576,16 @@ function pathOf(toolInput) {
   const candidate = record["file_path"] ?? record["path"] ?? record["notebook_path"];
   return typeof candidate === "string" && candidate !== "" ? candidate : null;
 }
-function guardToolUse(toolInput, policy) {
+var MUTATING_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+function guardToolUse(toolName, toolInput, policy) {
   const target = pathOf(toolInput);
   if (target === null) return { decision: "allow", reason: "no path in tool input" };
   const rel = import_node_path.default.relative(import_node_path.default.resolve(policy.workRoot), import_node_path.default.resolve(policy.workRoot, target));
   if (rel.startsWith("..") || import_node_path.default.isAbsolute(rel)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
+  }
+  if (!MUTATING_TOOLS.has(toolName)) {
+    return { decision: "allow", reason: `${rel} read inside the worktree (S-2\u2033)` };
   }
   if (matchAny(rel, policy.protectedGlobs)) {
     return {
@@ -1678,7 +1682,7 @@ function decidePreToolUse(payload, nowMs) {
       "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens through referee-admitted sessions, and state flows through referee tools alone."
     );
   }
-  const decision = guardToolUse(payload.tool_input, {
+  const decision = guardToolUse(tool, payload.tool_input, {
     surface: strings(cfg?.surface),
     protectedGlobs: strings(cfg?.protected),
     workRoot: cwd

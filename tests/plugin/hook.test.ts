@@ -85,6 +85,12 @@ describe("T-113 PreToolUse over the bundle (T-046 oracle ports)", () => {
     expect(denyReason(pre(cwd, { file_path: "../secrets.txt" }).out)).toContain("outside the worktree");
   });
 
+  it("S-2″ (PRDR-068): a worker-policy READ outside the surface is silence — reads are worktree-bounded", () => {
+    const cwd = work({ ".detent/active_surface.json": SURFACE });
+    expect(tool(cwd, "Read", { file_path: path.join(cwd, "README.md") })).toEqual({ out: "", code: 0 });
+    expect(denyReason(tool(cwd, "Read", { file_path: "/etc/hosts" }).out)).toContain("outside the worktree");
+  });
+
   it("a tool call naming no path is allowed — the referee re-verifies regardless (P2)", () => {
     const cwd = work({ ".detent/active_surface.json": SURFACE });
     expect(pre(cwd, { command: "git status" })).toEqual({ out: "", code: 0 });

@@ -55,12 +55,12 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   ];
 
   it.each(EVASIONS)("denies: %s", (_label, target) => {
-    const decision = guardToolUse({ file_path: target }, POLICY);
+    const decision = guardToolUse("Write", { file_path: target }, POLICY);
     expect(decision.decision).toBe("deny");
   });
 
   it("all ten are denied — zero protected writes reach the tree", () => {
-    const allowed = EVASIONS.filter(([, t]) => guardToolUse({ file_path: t }, POLICY).decision === "allow");
+    const allowed = EVASIONS.filter(([, t]) => guardToolUse("Write", { file_path: t }, POLICY).decision === "allow");
     expect(allowed).toEqual([]);
   });
 
@@ -69,7 +69,7 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
      * The guard allows path-less calls (bricking gains nothing); containment
      * of what Bash *does* is the allowlist plus the kernel's own gate re-run.
      */
-    expect(guardToolUse({ command: "cat /etc/passwd" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Bash", { command: "cat /etc/passwd" }, POLICY).decision).toBe("allow");
   });
 });
 
@@ -214,6 +214,7 @@ describe("T-052 scope-canary corpus (SEC-3, §14)", () => {
 
     /** Simulate the guard decision the SDK hook would make for this write. */
     const decision = guardToolUse(
+      "Edit",
       { file_path: path.join(root, "AGENTS.md") },
       { surface: ["src/**"], protectedGlobs: ["AGENTS.md"], workRoot: root },
     );

@@ -23,7 +23,7 @@ const POLICY: GuardPolicy = {
   workRoot: "/wt",
 };
 
-const edit = (file: string) => guardToolUse({ file_path: file }, POLICY);
+const edit = (file: string) => guardToolUse("Edit", { file_path: file }, POLICY);
 
 describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
   it("test_allows_in_surface", () => {
@@ -48,16 +48,26 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
   });
 
   it("test_denies_outside_worktree", () => {
-    const outside = guardToolUse({ file_path: "/etc/hosts" }, POLICY);
+    const outside = guardToolUse("Edit", { file_path: "/etc/hosts" }, POLICY);
     expect(outside.decision).toBe("deny");
     expect(outside.reason).toContain("outside the worktree");
-    expect(guardToolUse({ file_path: "../secrets.txt" }, POLICY).decision).toBe("deny");
+    expect(guardToolUse("Read", { file_path: "../secrets.txt" }, POLICY).decision).toBe("deny");
   });
 
   it("a tool call naming no path is allowed — the kernel re-verifies regardless (P2)", () => {
-    expect(guardToolUse({}, POLICY).decision).toBe("allow");
-    expect(guardToolUse(null, POLICY).decision).toBe("allow");
-    expect(guardToolUse({ command: "git status" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Bash", {}, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Write", null, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Bash", { command: "git status" }, POLICY).decision).toBe("allow");
+  });
+
+  it("S-2″ (PRDR-068): reads are worktree-bounded, not surface-bounded — a session can read its spec", () => {
+    /** T-140's empty-diff lesson: a worker denied READING the PRD cannot implement it. */
+    expect(guardToolUse("Read", { file_path: "/wt/detent-prd-v3.md" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Grep", { path: "/wt/README.md" }, POLICY).decision).toBe("allow");
+    /** SEC-3 is immutability, not unreadability. */
+    expect(guardToolUse("Read", { file_path: "/wt/AGENTS.md" }, POLICY).decision).toBe("allow");
+    /** P7: the worktree bounds every tool, reads included. */
+    expect(guardToolUse("Read", { file_path: "/etc/hosts" }, POLICY).decision).toBe("deny");
   });
 
   it("matchAny keeps the oracle's directory conveniences", () => {

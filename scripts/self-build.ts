@@ -43,7 +43,14 @@ export async function selfBuild(opts: {
 }): Promise<SelfBuildResult> {
   const dir = opts.dir ?? mkdtempSync(path.join(tmpdir(), "detent-n7-"));
   mkdirSync(dir, { recursive: true });
+  /*
+   * The PRD's CLOSURE, not just the file: v3 inherits §5/§6/§7/§9/§10
+   * verbatim from the v2 document it names as its reference, so "a folder
+   * containing only this PRD" means both — T-140's tenth firing watched a
+   * worker fail t-100 because §10 was literally not in the folder.
+   */
   copyFileSync(path.join(REPO, "detent-prd-v3.md"), path.join(dir, "detent-prd-v3.md"));
+  copyFileSync(path.join(REPO, "detent-prd-v2.md"), path.join(dir, "detent-prd-v2.md"));
   gitInit(dir);
   git(dir, "add", "-A");
   /* --allow-empty: a re-fired harness resumes an existing folder (C-8) with nothing new to commit. */

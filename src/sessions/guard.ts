@@ -52,11 +52,21 @@ export function pathOf(toolInput: unknown): string | null {
 }
 
 /**
- * The PreToolUse decision (oracle `pretooluse_guard.py`). Deny-by-default
- * outside the declared surface; protected always denies; surface expansion is
- * a KERNEL decision — the guard only points at the lever (SEC-3).
+ * S-2″ (PRDR-068): the tools whose path'd calls MUTATE. Surface and protected
+ * containment governs exactly these; everything else with a path is a read,
+ * bounded by the worktree alone — a session that cannot read its own
+ * specification cannot implement it (T-140's empty-diff lesson).
  */
-export function guardToolUse(toolInput: unknown, policy: GuardPolicy): GuardDecision {
+export const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * The PreToolUse decision (oracle `pretooluse_guard.py`, S-2″). Deny-by-default
+ * outside the declared surface FOR MUTATION; protected denies mutation always
+ * (SEC-3 is immutability, not unreadability); the worktree bounds every tool,
+ * reads included (P7). Surface expansion is a KERNEL decision — the guard only
+ * points at the lever (SEC-3).
+ */
+export function guardToolUse(toolName: string, toolInput: unknown, policy: GuardPolicy): GuardDecision {
   const target = pathOf(toolInput);
   /**
    * A tool call naming no path (or a malformed one) is allowed here: bricking
@@ -67,6 +77,9 @@ export function guardToolUse(toolInput: unknown, policy: GuardPolicy): GuardDeci
   const rel = path.relative(path.resolve(policy.workRoot), path.resolve(policy.workRoot, target));
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
+  }
+  if (!MUTATING_TOOLS.has(toolName)) {
+    return { decision: "allow", reason: `${rel} read inside the worktree (S-2″)` };
   }
   if (matchAny(rel, policy.protectedGlobs)) {
     return {
