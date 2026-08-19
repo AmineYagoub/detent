@@ -210,12 +210,30 @@ export class ClaudeCodeBackend implements SessionBackend {
 
   async run(spec: SessionSpec): Promise<SessionResult> {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
-    const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
     let result: SessionResult | null = null;
-    for await (const message of stream) {
-      if ((message as { type?: string }).type === "result") {
-        result = parseResultMessage(message);
+    try {
+      const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
+      for await (const message of stream) {
+        if ((message as { type?: string }).type === "result") {
+          result = parseResultMessage(message);
+        }
       }
+    } catch (err) {
+      /*
+       * PRDR-053: an SDK throw (max-turns, transport death) is a CRASHED
+       * session, not a run-killing exception — zeroed telemetry recorded as a
+       * flagged lower bound, `ok: false`, and the kernel's own gates judge
+       * the tree from here (T-140: the live t-100 session hit `maxTurns` and
+       * the raw throw took the whole run down as exit 1).
+       */
+      return parseResultMessage({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        total_cost_usd: 0,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        result: (err as Error).message,
+      });
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
     return result ?? parseResultMessage({});
