@@ -2,12 +2,12 @@
   "schema_version": 1,
   "roles": {
     "planner": "f4be9d2c948a4bc845fe8c295e726826cd54641203a065284e6cd53fba8502bb",
-    "diagnose": "99c6b377d305d191c5808433378e167b33490d57f372cd8d98ceba0defebea1f",
+    "diagnose": "3de48705eabbc9acaa68960ebf5d8a5e1d4da10dafd318ffe04a93c827d0cdb3",
     "implement": "9fc83b2f30807c44c33d77fea2a3e3078210ad38d951d8fbef8f0435ef22cb8b",
     "blind_fix": "448f15caddfbc5113ea87dc9086c84c08f0c84967b3c6ed6fdc083abb163acb1",
     "informed_fix": "8164b7b1985ec656e9e073a35546c6bdd95fd99bc7596304f6c99243c6a3814b",
     "review_fix": "1e17365360baf66193f39bc57ecd06fa1fef1849938e8d3057036728d2b350e3",
-    "research": "bb0ab246daba97e842f2e37788fe6a2094ada65569c95ffa77f37fedffad1538",
-    "review": "66fed929746bfd9e962ee41d22731dab6864bab5c04085fa2e7f4e3b1d074fa1"
+    "research": "11a2b8f460e3ae04a50434e00a4929bfaea412215713307b144618a35ae61a0b",
+    "review": "e694972807b0dcac7f30233c2f50b31719a5e3f9c29000a760f77b2cd21a83da"
   }
 }

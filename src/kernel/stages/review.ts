@@ -15,9 +15,20 @@ import { reviewApprove, reviewChanges, type KernelEvent } from "../events.js";
  * is a BREAKER — a malformed reviewer must never be partially accepted (A-*).
  */
 
-/** The closed input set, asserted by T-044's input-set test. */
-export const REVIEWER_INPUT_KEYS = ["ticket", "diff", "hypothesis"] as const;
+/**
+ * The closed input set, asserted by T-044's input-set test. The two
+ * `expected_output*` keys are T-140's addition — the OUTPUT contract, not
+ * evidence: the live bootstrap reviewer wrote a correct verdict minus
+ * `schema_version` and the strict validator refused it (SEC-3's evidence
+ * closure is unchanged: diff + criteria + rules + hypothesis).
+ */
+export const REVIEWER_INPUT_KEYS = ["ticket", "diff", "hypothesis", "expected_output", "expected_output_note"] as const;
 export const REVIEWER_TICKET_KEYS = ["id", "title", "acceptance_criteria", "non_goals"] as const;
+
+/** A-5's exact shape; skeletons.test parses it through `reviewSchema`. */
+export function reviewSkeleton(): Record<string, unknown> {
+  return { schema_version: 1, verdict: "approve", changes: [] };
+}
 
 export function buildReviewerInputs(
   ticket: Ticket,
@@ -31,6 +42,9 @@ export function buildReviewerInputs(
       acceptance_criteria: ticket.acceptance_criteria,
       non_goals: ticket.non_goals,
     },
+    expected_output: reviewSkeleton(),
+    expected_output_note:
+      'verdict "changes" requires at least one {tag: correctness|requirement|scope|rules, finding, file?} entry; the validator is strict — no extra keys, and schema_version is required.',
     diff,
     hypothesis,
   };

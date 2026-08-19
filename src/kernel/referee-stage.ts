@@ -22,6 +22,41 @@ import { appendNote, linkDiscovered } from "./tickets/mutations.js";
  * review breaker surfaces as a `Breach` for the driver's breach path; the
  * returned event reaches `apply` only through the core's escrow.
  */
+/**
+ * T-140 — the expected_output skeletons for the three artifact-writing
+ * worker roles. The live bootstrap review wrote a perfectly good verdict
+ * minus `schema_version` and the strict validator refused it: prose
+ * contracts drift, skeletons do not. Drift-locked by tests that parse each
+ * skeleton through its own schema.
+ */
+export function hypothesisSkeleton(): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    claim: "<the single root-cause claim — required>",
+    evidence: [{ file: "src/example.ts", line: 1, what: "<what this line shows — required>" }],
+    repro_test: "<command or test that reproduces the failure — required>",
+    predicted_failure: "<what fails if the claim holds — required>",
+    status: "proposed",
+  };
+}
+
+export { reviewSkeleton } from "./stages/review.js";
+
+export function researchBriefSkeleton(): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    failure_signature: "<the failure signature from your inputs>",
+    cache_key: "0".repeat(64),
+    root_cause: { claim: "<root cause — required>", confidence: "medium" },
+    evidence: [{ source: "<doc/code consulted>", claim: "<what it establishes>" }],
+    version_facts: {},
+    recommended_fix: { strategy: "<the fix strategy — required>" },
+    what_would_falsify: "<an observation that would falsify the claim — required>",
+    sources_consulted: [{ tier: 1, ref: "<what was consulted>" }],
+    local_search: { docs_checked: ["<paths searched>"], code_checked: ["<paths searched>"] },
+  };
+}
+
 export async function runRefereeStage(
   kind: "diagnose" | "review" | "research",
   id: string,
@@ -40,7 +75,12 @@ async function diagnose(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
   const artifactPath = path.join(runsDir(ctx.root, id), "hypothesis.json");
   const outcome = await diagnoseStage({
     launch: async () => {
-      await sessions.launch(ticket, "DIAGNOSED", { ticket: publicTicket(ticket) }, workDir);
+      await sessions.launch(
+        ticket,
+        "DIAGNOSED",
+        { ticket: publicTicket(ticket), expected_output: hypothesisSkeleton() },
+        workDir,
+      );
     },
     readArtifact: () => ctx.maybeArtifact(id, "hypothesis.json"),
     writeArtifact: (h: Hypothesis) => {
@@ -87,6 +127,7 @@ async function research(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
     ticketInputs: {
       ticket: publicTicket(ticket),
       failure: ctx.maybeArtifact(id, "last_failure.json"),
+      expected_output: researchBriefSkeleton(),
     },
   });
   if (outcome.upstream !== undefined) {
