@@ -50,6 +50,31 @@ export function isGreenfield(stackMarkers: readonly string[]): boolean {
   return stackMarkers.length === 0;
 }
 
+/**
+ * The EXACT artifact shape ANALYZE must write, handed to the session as
+ * `expected_output` — T-140's live firing proved a prose contract is not
+ * enough (the model produced a plan-shaped mega-document; the strict
+ * validator refused it). A test parses this skeleton through
+ * `analysisSchema`, so the contract cannot drift from the schema.
+ */
+export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    summary: "<one-paragraph summary of what is being built — required, non-empty>",
+    stack: greenfield
+      ? {
+          language: "<chosen language — required>",
+          runtime: "<runtime or empty string>",
+          test_framework: "<test framework or empty string>",
+          rationale: "<why this stack — may be empty>",
+        }
+      : null,
+    questions: [{ id: "q1", question: "<a question ONLY the user can answer — omit entry if none>", blocking: true }],
+    assumptions: [{ claim: "<assumption made>", evidence: "<why it is safe — may be empty>" }],
+    docs_read: ["<repo-relative path actually read>"],
+  };
+}
+
 export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const greenfield = isGreenfield(deps.stackMarkers);
 
@@ -57,9 +82,13 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     docs: deps.docs,
     stack_markers: deps.stackMarkers,
     greenfield,
-    instruction: greenfield
-      ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object."
-      : "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen.",
+    expected_output: analysisSkeleton(greenfield),
+    instruction:
+      `${
+        greenfield
+          ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object."
+          : "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen."
+      } Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone.`,
   });
 
   const raw = readAnalysis(deps.root);

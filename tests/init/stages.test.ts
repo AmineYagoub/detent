@@ -2,7 +2,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
-import { analysisPath, analyzeStage, isGreenfield } from "../../src/init/analyze.js";
+import { analysisPath, analysisSkeleton, analyzeStage, isGreenfield } from "../../src/init/analyze.js";
+import { planDraftSkeleton } from "../../src/init/plan.js";
+import { analysisSchema, planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
@@ -75,6 +77,17 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
       "dist/README.md": "# built\n",
     });
     expect(discoverDocs(root).docs).toEqual(["PRD.md"]);
+  });
+
+  it("T-140: the expected_output skeletons parse through their own schemas — the contract cannot drift", () => {
+    /**
+     * The live ANALYZE session followed its prompt into a plan-shaped
+     * mega-document the strict validator refused. The skeletons ARE the
+     * contract the session sees; these parses pin them to the schemas.
+     */
+    expect(analysisSchema.parse(analysisSkeleton(true)).stack?.language).toBeTruthy();
+    expect(analysisSchema.parse(analysisSkeleton(false)).stack).toBeNull();
+    expect(planDraftSchema.parse(planDraftSkeleton()).tickets).toHaveLength(1);
   });
 
   it("C-2′ (PRDR-066): an infix prd document is a planning document — N-7's own filename discovers", () => {

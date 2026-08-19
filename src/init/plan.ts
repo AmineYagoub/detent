@@ -48,15 +48,42 @@ export interface PlanDeps {
   readonly note?: (text: string) => void;
 }
 
+/**
+ * The EXACT artifact shape PLAN must write (PRDR-067's sibling lesson from
+ * T-140: prose contracts drift; `expected_output` plus a strict validator
+ * does not). A test parses this skeleton through `planDraftSchema`.
+ */
+export function planDraftSkeleton(): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    tickets: [
+      {
+        id: "t-100",
+        type: "feature",
+        title: "<short imperative title — required>",
+        description: "<what and why — may be empty>",
+        acceptance_criteria: ["<testable criterion — at least one, non-empty>"],
+        non_goals: ["<explicitly out of scope — may be empty list>"],
+        surface: ["src/**", "tests/**"],
+        depends_on: [],
+        risk_label: false,
+      },
+    ],
+  };
+}
+
 export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   await deps.launch({
     analysis: deps.analysis,
     docs: deps.docs,
     greenfield: deps.greenfield,
     bound_slots: deps.boundSlots,
-    instruction: deps.greenfield
-      ? "Draft the feature tickets. Do NOT draft a scaffolding or setup ticket — Detent adds the bootstrap ticket itself and blocks everything on it."
-      : "Draft the tickets. Each needs non-empty, testable acceptance criteria and an explicit surface.",
+    expected_output: planDraftSkeleton(),
+    instruction: `${
+      deps.greenfield
+        ? "Draft the feature tickets. Do NOT draft a scaffolding or setup ticket — Detent adds the bootstrap ticket itself and blocks everything on it."
+        : "Draft the tickets. Each needs non-empty, testable acceptance criteria and an explicit surface."
+    } Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).`,
   });
 
   const raw = readDraft(deps.root);
