@@ -91,6 +91,8 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "node_modules/**",
+      // T-113's generated hook bundle (scripts/build-plugin.ts output).
+      "hooks/dist/**",
       "tests/arch/fixtures/**",
       // T-030's fixture repositories are other projects' code, not Detent's.
       "tests/fixtures/ts-service/**",
@@ -140,7 +142,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/sessions/**/*.ts"],
+    // src/plugin/** is the D-21 hook's plugin skin — it sits with sessions on
+    // the accelerant side of ARCH-1 and may never reach kernel mutators.
+    files: ["src/sessions/**/*.ts", "src/plugin/**/*.ts"],
     rules: {
       "no-restricted-imports": ["error", { patterns: SESSIONS_FORBIDDEN }],
     },

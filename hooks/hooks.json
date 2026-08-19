@@ -1,0 +1,26 @@
+{
+  "description": "Detent containment (S-2′/D-21, SEC-6): deny-by-default outside the active ticket surface, on every tool call; stop-gate accelerant for write stages. Deterministic command hooks only — prompt/agent hook types are P2-forbidden for containment.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/detent-hook.cjs\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/detent-hook.cjs\"",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}

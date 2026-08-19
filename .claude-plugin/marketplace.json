@@ -1,0 +1,15 @@
+{
+  "name": "detent",
+  "description": "Detent's own marketplace: the Detent plugin — state-driven autonomous engineering over a deterministic referee.",
+  "owner": {
+    "name": "Amine Yagoub",
+    "email": "yagoub.2.amine@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "detent",
+      "source": "./",
+      "description": "The referee under the methodology layer: auditable, budgeted, contained autonomous engineering runs — whichever way the plan was written."
+    }
+  ]
+}

@@ -20,9 +20,16 @@ import { TOOL_DESCRIPTIONS, TOOL_INPUTS, TOOL_NAMES, callTool, isToolError } fro
  * holds for the transport too.
  */
 
+/**
+ * The one deliberate version string for the v3 surface (SEC-2): the MCP server
+ * declares it, and the plugin manifest must carry the same value — a T-110
+ * test pins the two together so neither can drift alone.
+ */
+export const REFEREE_VERSION = "3.0.0";
+
 export function buildServer(core: RefereeCore): Server {
   const server = new Server(
-    { name: "detent-referee", version: "3.0.0" },
+    { name: "detent-referee", version: REFEREE_VERSION },
     { capabilities: { tools: {} } },
   );
 

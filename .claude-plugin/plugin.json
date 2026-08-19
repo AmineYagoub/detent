@@ -1,0 +1,19 @@
+{
+  "name": "detent",
+  "version": "3.0.0",
+  "description": "State-driven autonomous engineering: a deterministic referee that admits every move — auditable state machine, hard per-ticket budgets, verification binding with drift halts, per-ticket write containment.",
+  "author": {
+    "name": "Amine Yagoub",
+    "email": "yagoub.2.amine@gmail.com",
+    "url": "https://github.com/AmineYagoub"
+  },
+  "homepage": "https://github.com/AmineYagoub/detent",
+  "repository": "https://github.com/AmineYagoub/detent",
+  "keywords": ["autonomous-engineering", "state-machine", "budgets", "verification", "containment"],
+  "mcpServers": {
+    "referee": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/node_modules/.bin/tsx",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/cli/referee.ts"]
+    }
+  }
+}
