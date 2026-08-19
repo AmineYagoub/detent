@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { INTERRUPTS } from "../../src/schemas/init.js";
+import { INIT_PHASES, INTERRUPTS, INTERRUPT_PHASE } from "../../src/schemas/init.js";
 
 /**
  * T-069 — the porcelain freeze (C-14, N-6).
@@ -73,6 +73,42 @@ describe("T-069 C-5: the interrupt set is frozen at five", () => {
       if (/readline|\bprompt\s*\(/.test(body)) offenders.push(rel);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("T-130/T-132 C-14′: the plugin surface carries the same freeze (MP3 exit)", () => {
+  const SKILLS = fileURLToPath(new URL("../../skills", import.meta.url));
+  const initSkill = readFileSync(path.join(SKILLS, "init", "SKILL.md"), "utf8");
+
+  it("the plugin's commands are exactly the two workflows", () => {
+    expect(readdirSync(SKILLS).sort()).toEqual(["init", "run"]);
+  });
+
+  it("the init skill presents the five decisions and not a sixth (C-5 closed set)", () => {
+    const named = new Set([...initSkill.matchAll(/AWAIT_[A-Z_]+/g)].map((m) => m[0]));
+    expect([...named].sort()).toEqual([...INTERRUPTS].sort());
+  });
+
+  it("T-130: the seven phases appear in C-4.1 order", () => {
+    const positions = INIT_PHASES.map((phase) => initSkill.indexOf(`\`${phase}\``));
+    for (const [i, at] of positions.entries()) {
+      expect(at, `${INIT_PHASES[i]} missing from the init skill`).toBeGreaterThan(-1);
+      if (i > 0) expect(at, `${INIT_PHASES[i]} out of order`).toBeGreaterThan(positions[i - 1]!);
+    }
+  });
+
+  it("T-130: each decision is documented at its bracketed phase (C-4.1 positions)", () => {
+    for (const [interrupt, phase] of Object.entries(INTERRUPT_PHASE)) {
+      const block = initSkill.slice(initSkill.indexOf(`\`${interrupt}\``));
+      expect(block.slice(0, 200), interrupt).toContain(`raised at \`${phase}\``);
+    }
+  });
+
+  it("T-131: the approval decision names its three outcomes and the relay flags", () => {
+    for (const token of ["approve", "decline", "defer", "--approve", "--decline", "--defer", "--by"]) {
+      expect(initSkill, token).toContain(token);
+    }
+    expect(initSkill).toContain("who, when, and the hash");
   });
 });
 

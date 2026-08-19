@@ -9,7 +9,7 @@ import { CEILINGS } from "../schemas/budgets.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { loadPromptSet } from "../sessions/prompts.js";
-import { makeTtyApproval } from "./approve.js";
+import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -28,9 +28,23 @@ export async function main(argv: readonly string[]): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     allowPositionals: true,
-    options: { replan: { type: "boolean", default: false } },
+    options: {
+      replan: { type: "boolean", default: false },
+      approve: { type: "boolean", default: false },
+      decline: { type: "boolean", default: false },
+      defer: { type: "boolean", default: false },
+      by: { type: "string" },
+    },
   });
   const root = positionals[0] ?? process.cwd();
+
+  /** T-131: at most one relayed answer to the AWAIT_APPROVAL decision. */
+  const flags = (["approve", "decline", "defer"] as const).filter((f) => values[f] === true);
+  if (flags.length > 1) {
+    process.stderr.write("pass at most one of --approve / --decline / --defer\n");
+    return EXIT_ERROR;
+  }
+  const approvalFlag: ApprovalFlag | undefined = flags[0];
 
   /** C-1: root-only, with the root path hinted — and no `.detent/` created. */
   const where = checkRoot(root);
@@ -74,8 +88,16 @@ export async function main(argv: readonly string[]): Promise<number> {
     budgets: budgetsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
-    /* C-7: approval is offered inline on a TTY, deferred to `run` otherwise. */
-    ...(interactive ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") } : {}),
+    /*
+     * C-7: a relayed flag answer wins (T-131 — the plugin path, where the
+     * model presented and the human answered in chat); otherwise approval is
+     * offered inline on a TTY and deferred to `run` everywhere else.
+     */
+    ...(approvalFlag !== undefined
+      ? { askApproval: makeFlagApproval(approvalFlag, values.by ?? process.env["USER"] ?? "operator") }
+      : interactive
+        ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") }
+        : {}),
   });
 
   let result;
