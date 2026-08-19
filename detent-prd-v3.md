@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0-draft.1 |
+| Version | 3.0-draft.2 |
 | Date | 2026-08-18 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
@@ -80,6 +80,12 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
 ---
 
 ## 4. Command Contract (C, v3)
+- **C-2′ (draft.2, PRDR-066).** C-2's discovery families gain an infix prd family —
+  `*prd*.md` / `*prd*.txt`, case-insensitive on the token — so a `<product>-prd*.md`
+  planning document is discoverable. Found by T-140's first live firing: N-7 names
+  `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
+  toward the contract, the document keeps the name D-20 fixed.
+
 The `init` pipeline (§4.1 of v2) is **inherited unchanged** in its phases and interrupts — `INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_APPROVAL] → READY` — and re-surfaced as plugin commands and skills. C-1…C-8 hold verbatim (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
 - **C-1′** `init` and `run` are the plugin's two commands (`/detent:init`, `/detent:run`), and Detent registers skills so the model invokes the right phase from natural intent ("plan this repo", "keep going"). The headless driver exposes the same two as the retained CLI verbs. C-1's git-root rule and the five C-5 interrupts are unchanged; interrupts are surfaced as the plugin's **presented decisions**, still a closed set of five.

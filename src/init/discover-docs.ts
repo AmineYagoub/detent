@@ -12,10 +12,20 @@ import picomatch from "picomatch";
  * misnamed or their directory is wrong.
  */
 
-/** C-2's named heuristics. Extending this list changes what `init` accepts. */
+/**
+ * C-2's named heuristics. Extending this list changes what `init` accepts.
+ * The infix prd family is C-2′ (PRDR-066), found by T-140's first live
+ * firing: N-7 names `detent-prd-v3.md`, which the prefix-only families could
+ * not see — the gate's own document has to be discoverable by the pipeline
+ * the gate runs.
+ */
 export const DOC_PATTERNS: readonly string[] = [
   "PRD*.md",
   "PRD*.txt",
+  "*prd*.md",
+  "*prd*.txt",
+  "*PRD*.md",
+  "*PRD*.txt",
   "SRS*.md",
   "SRS*.txt",
   "README*.md",

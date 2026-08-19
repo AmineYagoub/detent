@@ -77,6 +77,12 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
     expect(discoverDocs(root).docs).toEqual(["PRD.md"]);
   });
 
+  it("C-2′ (PRDR-066): an infix prd document is a planning document — N-7's own filename discovers", () => {
+    /** Found by T-140's first live firing: the gate names detent-prd-v3.md. */
+    const root = repo({ "detent-prd-v3.md": "# the prd\n", "acme-PRD-draft.md": "# theirs\n" });
+    expect(discoverDocs(root).docs).toEqual(["acme-PRD-draft.md", "detent-prd-v3.md"]);
+  });
+
   it("no docs → the message lists EXACTLY what was looked for (C-2's AC)", () => {
     const root = repo({ "src/main.ts": "export {}\n" });
     const found = discoverDocs(root);
