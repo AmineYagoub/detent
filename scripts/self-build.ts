@@ -46,7 +46,8 @@ export async function selfBuild(opts: {
   copyFileSync(path.join(REPO, "detent-prd-v3.md"), path.join(dir, "detent-prd-v3.md"));
   gitInit(dir);
   git(dir, "add", "-A");
-  git(dir, "commit", "-q", "-m", "n7: the PRD, and nothing else");
+  /* --allow-empty: a re-fired harness resumes an existing folder (C-8) with nothing new to commit. */
+  git(dir, "commit", "-q", "--allow-empty", "-m", "n7: the PRD, and nothing else");
 
   if (opts.dryRun === true) {
     /*
