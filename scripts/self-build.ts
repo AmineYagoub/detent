@@ -78,15 +78,24 @@ export async function selfBuild(opts: {
     return { ok: false, phase: "init", detail: `R-10: no live backend auth — ${LIVE_AUTH_HINT}`, dir };
   }
 
-  /* 2 = an interrupt (AWAIT_APPROVAL expected; any other prints itself and reds out below). */
-  const initCode = await initMain([dir, "--spend-cap-usd", String(opts.capUsd)]);
-  if (initCode !== 2 && initCode !== 0) {
-    return { ok: false, phase: "init", detail: `init exited ${initCode} before PRESENT`, dir };
-  }
+  /*
+   * Run-only resume (C-9): once a plan is approved, work resumes through
+   * `run` alone — re-invoking init on a tree the build itself keeps changing
+   * would re-derive ANALYZE/PLAN every firing (C-8 doing its job, at a price
+   * the resume path never pays).
+   */
+  const approved = existsSync(path.join(stateDir(dir), "plan", "approval.json"));
+  if (!approved) {
+    /* 2 = an interrupt (AWAIT_APPROVAL expected; any other prints itself and reds out below). */
+    const initCode = await initMain([dir, "--spend-cap-usd", String(opts.capUsd)]);
+    if (initCode !== 2 && initCode !== 0) {
+      return { ok: false, phase: "init", detail: `init exited ${initCode} before PRESENT`, dir };
+    }
 
-  const approveCode = await initMain([dir, "--approve", "--by", "n7-self-build"]);
-  if (approveCode !== 0) {
-    return { ok: false, phase: "approve", detail: `approval replay exited ${approveCode}`, dir };
+    const approveCode = await initMain([dir, "--approve", "--by", "n7-self-build"]);
+    if (approveCode !== 0) {
+      return { ok: false, phase: "approve", detail: `approval replay exited ${approveCode}`, dir };
+    }
   }
 
   const outcome = await run({

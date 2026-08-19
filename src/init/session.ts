@@ -76,5 +76,16 @@ export function initSessionSpec(deps: InitSessionDeps, request: InitSessionReque
 
 export async function launchInitSession(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   mkdirSync(path.dirname(request.artifactOut), { recursive: true });
-  return await deps.backend.run(initSessionSpec(deps, request));
+  const result = await deps.backend.run(initSessionSpec(deps, request));
+  if (!result.ok) {
+    /*
+     * T-140: a failed session must fail its phase WITH the reason — before
+     * this, a crashed analyst (PRDR-053 wrap) surfaced as the misleading
+     * "produced no analysis artifact".
+     */
+    throw new Error(
+      `${request.role} session failed${result.rawTail === "" ? "" : `: ${result.rawTail.slice(-300)}`}`,
+    );
+  }
+  return result;
 }
