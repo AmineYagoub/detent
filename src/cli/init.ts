@@ -109,13 +109,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     root,
     backend: new ClaudeCodeBackend({
       /**
-       * PRDR-067: init sessions write analysis, plan drafts, and research
-       * briefs — `.detent/state/**` and `.detent/research/**` — and nothing
-       * else; config, tickets, and approval stay kernel-written. The old
-       * policy protected `.detent/**` wholesale, forbidding the very artifact
-       * the pipeline commands the session to write.
+       * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to
+       * every path'd tool — READS included — so a write-area-only surface
+       * blinded the analyst to the very documents it must analyze; it could
+       * only echo stale `.detent/state/` leftovers. Reads-open,
+       * writes-guarded: the surface admits the repo, the SEC-3 floor protects
+       * what sessions may never touch, and write-narrowing is the allowlist's
+       * job — an init session carries exactly one write rule, its artifact.
        */
-      policy: { surface: [".detent/state/**", ".detent/research/**"], protectedGlobs: [], workRoot: root },
+      policy: {
+        surface: ["**"],
+        protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"],
+        workRoot: root,
+      },
     }),
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),

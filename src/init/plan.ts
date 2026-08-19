@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
@@ -73,6 +73,9 @@ export function planDraftSkeleton(): Record<string, unknown> {
 }
 
 export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
+  /* A re-run derives fresh (C-8); a stale draft is an echo chamber, not an input. */
+  rmSync(planDraftPath(deps.root), { force: true });
+
   await deps.launch({
     analysis: deps.analysis,
     docs: deps.docs,

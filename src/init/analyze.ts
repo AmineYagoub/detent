@@ -1,5 +1,5 @@
 import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
 import { analysisSchema, type Analysis } from "../schemas/init.js";
@@ -77,6 +77,13 @@ export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
 
 export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const greenfield = isGreenfield(deps.stackMarkers);
+
+  /*
+   * A re-run derives fresh (C-8): a stale analysis from a prior firing is an
+   * echo chamber, not an input — T-140's sixth firing watched an analyst
+   * faithfully reproduce its predecessor's questions from this very file.
+   */
+  rmSync(analysisPath(deps.root), { force: true });
 
   await deps.launch({
     docs: deps.docs,

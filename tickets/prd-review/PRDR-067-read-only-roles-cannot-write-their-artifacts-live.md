@@ -65,3 +65,13 @@ plan drafts, and research briefs; the kernel alone writes config, tickets, and a
 
 Applied to the v3 PRD as **S-1′** (3.0-draft.3). The v2 document stays frozen; v3 carries
 the delta.
+
+## Amendment (T-140, sixth firing)
+
+The original resolution made init's HOOK surface the write areas only — but the D-21 guard
+applies to every path'd tool, READS included, so the analyst was blinded to the planning
+documents themselves and could only echo stale `.detent/state/` leftovers. Corrected:
+reads-open, writes-guarded — the hook surface admits the repository with the SEC-3 floor
+(`plan/**`, `config.json`, `bindings.json`) protected, and write-narrowing is the
+allowlist's single `Write(<artifact>)` rule, where it always belonged. ANALYZE and PLAN
+additionally delete their stale artifact before launching, so a C-8 re-run derives fresh.
