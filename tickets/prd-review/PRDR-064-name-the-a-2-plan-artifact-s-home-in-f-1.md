@@ -1,7 +1,7 @@
 ---
 id: PRDR-064
 title: "Name the A-2 plan artifact's home in F-1 — readers of plan/ maintain a growing exclusion list"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]
@@ -52,3 +52,10 @@ The fix is not to enumerate harder. It is for F-1 to state how a reader tells a 
 - Does not change what A-2 contains, nor split it across files.
 - Does not move tickets out of `plan/`.
 - Does not require a manifest file; a naming rule (e.g. a prefix, or an explicit enumeration) is sufficient.
+
+## Resolution (applied)
+
+Applied to the v3 PRD as part of **F-1′ (3.0-draft.4)**: `plan/plan.json` named as A-2's home,
+the reserved-name rule stated, the set closed. The code's `NON_TICKET_FILES` already implemented
+the rule; the PRD text now owns it. Raised back to the surface — verbatim — by the N-7 analyst
+reading the PRD during T-140's fifth firing, which is the dogfooding working as designed.
