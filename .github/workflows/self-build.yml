@@ -1,0 +1,45 @@
+# T-140 — the N-7 self-build release gate (D-16), live half.
+#
+# workflow_dispatch ONLY, deliberately: the manual click plus the repo secret
+# ARE the R-10 consent — this workflow can never fire on push or schedule, so
+# no commit spends money by itself. Regular CI proves the harness keylessly
+# via the dry-run test; this pipeline runs the real thing under the cap you
+# type when you trigger it.
+name: self-build
+on:
+  workflow_dispatch:
+    inputs:
+      spend_cap_usd:
+        description: "X-1 run spend ceiling for the self-build (USD)"
+        required: true
+        default: "15"
+
+jobs:
+  n7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: R-10 gate — refuse loudly without the key
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::R-10: add ANTHROPIC_API_KEY as a repository secret before dispatching the self-build."
+            exit 1
+          fi
+      - name: N-7 self-build (detent-prd-v3.md, walking skeleton)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npx tsx scripts/self-build.ts --cap "${{ inputs.spend_cap_usd }}" --dir "$RUNNER_TEMP/n7"
+      - name: Upload the run's ground truth
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n7-detent-state
+          path: ${{ runner.temp }}/n7/.detent/
+          if-no-files-found: warn

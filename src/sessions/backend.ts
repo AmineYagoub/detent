@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { RoleId } from "../schemas/roles.js";
+import type { GuardPolicy } from "./guard.js";
 
 /**
  * T-040 — the SessionBackend seam (ARCH-1, D-19).
@@ -32,6 +33,16 @@ export interface SessionSpec {
   readonly model: string;
   /** X-1 `turns_per_stage`. */
   readonly maxTurns: number;
+  /**
+   * S-2′/D-21: the PER-TICKET containment policy for this session's hook —
+   * the ticket's declared surface plus the artifact area, resolved against
+   * this session's work root. Absent (init sessions, fixtures), the backend
+   * falls back to its construction-time policy. Found missing by T-140's
+   * self-build preparation: without it every live worker session ran under
+   * the backend's one fixed policy, and D-21's per-ticket surface never
+   * reached the hook.
+   */
+  readonly policy?: GuardPolicy;
 }
 
 export function fullPrompt(spec: SessionSpec): string {

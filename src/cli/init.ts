@@ -9,6 +9,7 @@ import { CEILINGS } from "../schemas/budgets.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { loadPromptSet } from "../sessions/prompts.js";
+import { ensureConfig } from "../init/config.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 
 /**
@@ -34,6 +35,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       decline: { type: "boolean", default: false },
       defer: { type: "boolean", default: false },
       by: { type: "string" },
+      "spend-cap-usd": { type: "string" },
     },
   });
   const root = positionals[0] ?? process.cwd();
@@ -76,6 +78,27 @@ export async function main(argv: readonly string[]): Promise<number> {
         "Set ANTHROPIC_API_KEY and re-run. (`detent run` has a mock path for fixtures; init does not.)\n",
     );
     return EXIT_NOT_READY;
+  }
+
+  /**
+   * T-140/X-1: a first init must write config, and `run_spend_usd` has no
+   * defensible universal default — the ceiling is the user's own number.
+   */
+  const capRaw = values["spend-cap-usd"];
+  const cap = capRaw === undefined ? undefined : Number(capRaw);
+  if (cap !== undefined && (!Number.isFinite(cap) || cap <= 0)) {
+    process.stderr.write("--spend-cap-usd must be a positive number\n");
+    return EXIT_ERROR;
+  }
+  const ensured = ensureConfig(root, cap);
+  if (ensured === "missing-cap") {
+    process.stderr.write(
+      "first `detent init` needs `--spend-cap-usd <usd>`: X-1 declines a universal spend default — the run ceiling is yours to set.\n",
+    );
+    return EXIT_NOT_READY;
+  }
+  if (ensured === "exists" && cap !== undefined) {
+    process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
   }
 
   const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;

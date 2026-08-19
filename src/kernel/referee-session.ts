@@ -100,6 +100,25 @@ export class SessionArm {
       permissionMode: READ_ONLY_ROLES.has(role) ? "plan" : "",
       model: ctx.loaded.config.model_routing[role] ?? "",
       maxTurns: ctx.budgets.turns_per_stage,
+      /**
+       * S-2′/D-21: the per-ticket hook policy. Surface = the ticket's declared
+       * surface plus ONLY the runs area, where artifact/falsified/surface-
+       * request outs live — never `.detent/**` broadly. Protected = the
+       * project's globs plus a STRUCTURAL floor (SEC-3): tickets, config,
+       * bindings, and the plan are immutable to sessions even if a config
+       * under-declares its protected set.
+       */
+      policy: {
+        surface: [...ticket.surface, ".detent/runs/**"],
+        protectedGlobs: [
+          ...ctx.loaded.config.protected,
+          ".detent/tickets/**",
+          ".detent/config.json",
+          ".detent/bindings.json",
+          ".detent/plan/**",
+        ],
+        workRoot: workDir,
+      },
     };
 
     ctx.journal.appendTicketEvent(id, { stage: role, event: "start", at: ctx.iso() });

@@ -92,7 +92,8 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
     maxTurns: spec.maxTurns,
     ...(spec.model === "" ? {} : { model: spec.model }),
     hooks: {
-      ...buildPreToolUseHook(config.policy),
+      /** S-2′: the per-ticket policy wins; construction policy is the fallback. */
+      ...buildPreToolUseHook(spec.policy ?? config.policy),
       ...buildStopHook(config, spec.role),
     },
   };

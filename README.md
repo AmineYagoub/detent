@@ -1,7 +1,48 @@
 # Detent
 
 Detent turns planning documents into merged, reviewed, test-gated code using
-fresh, single-purpose Claude Code sessions driven by a deterministic kernel.
+fresh, single-purpose Claude Code sessions whose every consequential move is
+admitted by a deterministic referee.
+
+## Why Detent
+
+The methodology layer is crowded and good — spec-kit, Superpowers, BMAD and
+their peers produce excellent planning documents. Those documents are
+Detent's *input*. Detent is the referee underneath that layer: the part that
+makes an autonomous run auditable, budgeted, and contained, whichever way the
+plan was written.
+
+- **An auditable state machine.** Every ticket moves through a deterministic
+  ~20-state machine, and every admitted transition is journaled to
+  `transitions.jsonl` — the run's ground truth, not a chat log.
+- **Hard budgets that route to a human.** Per-ticket attempt and spend
+  ceilings, a run-level spend cap you set yourself, and a metered single
+  billable path — a ceiling never auto-retries; it presents a decision.
+- **Verification bound to your project, with drift halts.** Detent binds to
+  the repo's own test/lint/build commands by executing them, and halts for
+  re-baselining if they change mid-run.
+- **Per-ticket write containment.** A deny-enforced hook holds every session
+  inside its ticket's declared surface — allow-rules cannot shadow it.
+
+Detent maintains itself under the same rules: the N-7 self-build gate —
+Detent building its own walking skeleton from its own PRD — is a permanent
+release requirement, not a demo.
+
+## Install
+
+As a Claude Code plugin (interactive driver, hooks, and the bundled referee):
+
+```bash
+claude plugin marketplace add AmineYagoub/detent
+```
+
+```bash
+claude plugin install detent@detent
+```
+
+For development, load the checkout directly with
+`claude --plugin-dir /path/to/detent`. The headless driver below is the same
+referee under a deterministic loop — for CI and unattended runs.
 
 ## The golden path
 
