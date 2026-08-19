@@ -62,7 +62,7 @@ describe("T-120/T-121 claim-scoped surface policy", () => {
     expect(policy["driver"]).toBe(true);
     expect(policy["ticket_id"]).toBe("t-1");
     expect(policy["surface"]).toEqual([]);
-    expect(policy["deny_tools"]).toEqual(["Task"]);
+    expect(policy["deny_tools"]).toEqual(["Task", "Agent", "TaskCreate"]);
     const bound = readBindings(root).bindings.map((b) => b.resolved);
     expect(bound.length).toBeGreaterThan(0);
     expect(policy["deny_bash_containing"]).toEqual(bound);

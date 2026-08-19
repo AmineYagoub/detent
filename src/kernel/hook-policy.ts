@@ -27,6 +27,16 @@ export interface ClaimPolicyInput {
   readonly expiresAtMs: number;
 }
 
+/**
+ * D-28's ambient billable spawn tools, by every name the platform has shipped
+ * them under: `Task` (classic subagent launcher), `Agent` (its successor),
+ * `TaskCreate` (background-task spawn). T-124's live leg found a build whose
+ * print-mode sessions expose only the newer names — an exact-match list
+ * pinned to "Task" alone guarded yesterday's platform. Reads/controls
+ * (TaskGet/TaskOutput/TaskStop) spawn nothing and stay allowed.
+ */
+export const BILLABLE_SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+
 /** The one-shot Stop nudge (T-120's re-feed; official precedent: ralph-wiggum). */
 export const RUN_REFEED_TEXT =
   "Detent run in flight: tickets are still claimable or claimed. Continue the loop — " +
@@ -41,7 +51,7 @@ export function publishClaimPolicy(root: string, input: ClaimPolicyInput): void 
     driver: true,
     surface: [],
     protected: [...input.protectedGlobs],
-    deny_tools: ["Task"],
+    deny_tools: [...BILLABLE_SPAWN_TOOLS],
     deny_bash_containing: [...input.gateCommands],
     expires_at_ms: input.expiresAtMs,
   });
