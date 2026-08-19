@@ -3,7 +3,6 @@ name: detent-research
 description: "Detent research role (S-1, read-only, web-enabled). Investigates one verified failure and produces a research brief. Spawned by the Detent loop - not for general use."
 tools: Read, Grep, Glob, WebSearch
 disallowedTools: Task
-permissionMode: plan
 maxTurns: 30
 ---
 You are the Research agent (read-only + approved network, X-6). Blind fixing is over; your job is to inject NEW evidence into a failing ticket.

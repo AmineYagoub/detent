@@ -4,7 +4,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PLUGIN_AGENT_ROLES, renderAgent } from "../../scripts/build-plugin.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
-import { READ_ONLY_ROLES } from "../../src/schemas/roles.js";
 import { toolsForRole } from "../../src/sessions/guard.js";
 import { loadPromptSet, resolveAssignment } from "../../src/sessions/prompts.js";
 
@@ -78,10 +77,10 @@ describe("T-112 role surfaces in frontmatter (S-3′)", () => {
     }
   });
 
-  it("read-only roles run permissionMode plan; implement runs default (S-1)", () => {
+  it("no permissionMode key ships — T-114 proved the platform ignores it for plugin agents", () => {
+    /** The read-only surface rides the `tools` allowlist; dead config does not ship. */
     for (const role of PLUGIN_AGENT_ROLES) {
-      const fm = frontmatterOf(agentFile(role));
-      expect(fm.get("permissionMode"), role).toBe(READ_ONLY_ROLES.has(role) ? "plan" : "default");
+      expect(frontmatterOf(agentFile(role)).has("permissionMode"), role).toBe(false);
     }
   });
 

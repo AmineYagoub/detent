@@ -9,11 +9,5 @@
   },
   "homepage": "https://github.com/AmineYagoub/detent",
   "repository": "https://github.com/AmineYagoub/detent",
-  "keywords": ["autonomous-engineering", "state-machine", "budgets", "verification", "containment"],
-  "mcpServers": {
-    "referee": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/node_modules/.bin/tsx",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/cli/referee.ts"]
-    }
-  }
+  "keywords": ["autonomous-engineering", "state-machine", "budgets", "verification", "containment"]
 }

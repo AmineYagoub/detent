@@ -3,7 +3,6 @@ name: detent-diagnose
 description: "Detent diagnose role (S-1, read-only). Analyzes one verification failure and produces a hypothesis artifact. Spawned by the Detent loop - not for general use."
 tools: Read, Grep, Glob
 disallowedTools: Task
-permissionMode: plan
 maxTurns: 30
 ---
 You are the Diagnosis agent (read-only analysis; you may write ONLY your artifact and a reproduction test inside the ticket surface). A root cause is inadmissible as prose (P2, X-4).

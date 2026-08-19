@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
 import { CEILINGS } from "../src/schemas/budgets.js";
-import { READ_ONLY_ROLES, type RoleId } from "../src/schemas/roles.js";
+import { type RoleId } from "../src/schemas/roles.js";
 import { toolsForRole } from "../src/sessions/guard.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
 
@@ -53,6 +53,11 @@ const DESCRIPTIONS: Record<PluginAgentRole, string> = {
  * frontmatter ships the domain-less surface (WebSearch only). Narrower than
  * the SDK path can grant, never wider; the frontmatter widens when PRDR-062
  * lands a home.
+ *
+ * No `permissionMode` key: T-114's live load proved the platform IGNORES it
+ * for plugin agents (a WARN per file per session) — the read-only surface for
+ * `READ_ONLY_ROLES` rides the `tools` allowlist alone here, and the SDK path
+ * still sets the real permission mode (sdk.ts). Dead config does not ship.
  */
 export function renderAgent(role: PluginAgentRole, prompt: string): string {
   const header = [
@@ -61,7 +66,6 @@ export function renderAgent(role: PluginAgentRole, prompt: string): string {
     `description: "${DESCRIPTIONS[role]}"`,
     `tools: ${toolsForRole(role, []).join(", ")}`,
     "disallowedTools: Task",
-    `permissionMode: ${READ_ONLY_ROLES.has(role) ? "plan" : "default"}`,
     `maxTurns: ${CEILINGS.turns_per_stage.default}`,
     "---",
     "",

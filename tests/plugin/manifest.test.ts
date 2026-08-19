@@ -20,6 +20,8 @@ const read = (...parts: string[]): string => readFileSync(path.join(ROOT, ...par
 interface PluginManifest {
   readonly name?: unknown;
   readonly version?: unknown;
+}
+interface McpConfig {
   readonly mcpServers?: Record<string, { command?: unknown; args?: unknown }>;
 }
 interface Marketplace {
@@ -50,7 +52,12 @@ describe("T-110 plugin manifest (SEC-2, layout law)", () => {
   });
 
   it("bundles the referee as the `referee` MCP server via ${CLAUDE_PLUGIN_ROOT} (R-1)", () => {
-    const referee = manifest.mcpServers?.["referee"];
+    /**
+     * In `.mcp.json` at plugin root, NOT inline in the manifest: T-114's live
+     * exit proved the runtime ignores the inline form entirely, while the
+     * root file connects (`plugin:detent:referee`, cwd = the user's project).
+     */
+    const referee = (JSON.parse(read(".mcp.json")) as McpConfig).mcpServers?.["referee"];
     expect(referee).toBeDefined();
     expect(String(referee?.command)).toContain("${CLAUDE_PLUGIN_ROOT}");
     const args = (referee?.args ?? []) as readonly unknown[];
