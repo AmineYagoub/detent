@@ -168,6 +168,7 @@ export class RefereeCore {
     this.ctx.setWorkDir(id, workDir);
     /** T-120/T-121: publish the driver-session containment for this claim (D-21). */
     this.ctx.publishHookPolicy(id);
+    this.ctx.recordClaimBase(id, workDir);
 
     const ticket = readTicket(this.root, id);
     if (ticket.state === "READY") {

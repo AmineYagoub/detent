@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readBindings } from "../adapter/drift.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
@@ -156,9 +156,40 @@ export class RefereeContext {
     }
   }
 
-  diff(workDir: string): string {
+  /**
+   * T-140 (eleventh firing): implement sessions COMMIT their work, so a
+   * `git diff HEAD` review basis sees only the kernel's uncommitted
+   * bookkeeping — the live reviewer judged 1200 lines of real work as an
+   * empty diff, accurately, off the wrong input. The ticket's claim base —
+   * HEAD at the FIRST acquire, persisted so later generations and resumes
+   * judge the whole ticket — is the honest basis.
+   */
+  recordClaimBase(id: string, workDir: string): void {
+    const file = path.join(runsDir(this.root, id), "claim_base.json");
+    if (existsSync(file)) return;
     try {
-      return git(workDir, "diff", "HEAD").slice(-8000);
+      const sha = git(workDir, "rev-parse", "HEAD").trim();
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, `${JSON.stringify({ schema_version: 1, sha }, null, 2)}\n`);
+    } catch {
+      /* No HEAD yet (empty repo): diff falls back to HEAD-relative below. */
+    }
+  }
+
+  claimBase(id: string): string | null {
+    const file = path.join(runsDir(this.root, id), "claim_base.json");
+    if (!existsSync(file)) return null;
+    try {
+      const sha = (JSON.parse(readFileSync(file, "utf8")) as { sha?: unknown }).sha;
+      return typeof sha === "string" ? sha : null;
+    } catch {
+      return null;
+    }
+  }
+
+  diff(workDir: string, base?: string | null): string {
+    try {
+      return git(workDir, "diff", base ?? "HEAD").slice(-8000);
     } catch {
       return "";
     }
