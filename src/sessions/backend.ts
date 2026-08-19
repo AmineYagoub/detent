@@ -45,6 +45,18 @@ export interface SessionSpec {
   readonly policy?: GuardPolicy;
 }
 
+/**
+ * S-1′ (PRDR-067): the ONE write rule an artifact-producing read-only session
+ * gets — its own `artifact_out`, in the backend's gitignore-style specifier
+ * syntax (`//` = absolute path). S-3's mechanism, S-3's arbiter: a backend
+ * that stops recognizing the form is a `doctor` failure, never a silent
+ * no-op. Composed here on the kernel-visible seam so both spec builders
+ * (init and the referee's session arm) share one spelling.
+ */
+export function artifactWriteRule(absArtifactPath: string): string {
+  return `Write(/${absArtifactPath})`;
+}
+
 export function fullPrompt(spec: SessionSpec): string {
   return `${spec.promptPrefix}\n\n${spec.promptVariable}`;
 }

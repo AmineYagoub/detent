@@ -108,7 +108,14 @@ export async function main(argv: readonly string[]): Promise<number> {
   const handlers = buildPipeline({
     root,
     backend: new ClaudeCodeBackend({
-      policy: { surface: ["**"], protectedGlobs: [".detent/**"], workRoot: root },
+      /**
+       * PRDR-067: init sessions write analysis, plan drafts, and research
+       * briefs — `.detent/state/**` and `.detent/research/**` — and nothing
+       * else; config, tickets, and approval stay kernel-written. The old
+       * policy protected `.detent/**` wholesale, forbidding the very artifact
+       * the pipeline commands the session to write.
+       */
+      policy: { surface: [".detent/state/**", ".detent/research/**"], protectedGlobs: [], workRoot: root },
     }),
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),

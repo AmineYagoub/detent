@@ -250,7 +250,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     ).rejects.toThrow(/invalid analysis|no analysis artifact/);
   });
 
-  it("the planner session runs in plan mode with no write tools (S-1)", async () => {
+  it("the planner session gets the read-only surface plus ONE scoped write — its artifact (S-1′, PRDR-067)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
     const backend = new MockBackend({ planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
     const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
@@ -258,10 +258,19 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
 
     const call = backend.calls.find((c) => c.role === "planner");
     expect(call).toBeDefined();
-    expect(call!.spec.permissionMode).toBe("plan");
-    expect(call!.spec.allowedTools).toEqual(["Read", "Grep", "Glob"]);
+    /**
+     * Plan mode would deny the very write C-3 demands — T-140's first live
+     * read-only session proved it in seconds. Default mode; read-only-ness is
+     * the allowlist (no general write tool) plus the D-21 hook.
+     */
+    expect(call!.spec.permissionMode).toBe("");
+    expect(call!.spec.allowedTools.slice(0, 3)).toEqual(["Read", "Grep", "Glob"]);
     expect(call!.spec.allowedTools).not.toContain("Write");
     expect(call!.spec.allowedTools).not.toContain("Edit");
+    const writeRules = call!.spec.allowedTools.filter((t) => t.startsWith("Write("));
+    expect(writeRules).toHaveLength(1);
+    expect(writeRules[0]).toBe(`Write(/${call!.spec.artifactOut})`);
+    expect(writeRules[0]).toContain(".detent/state/analysis.json");
   });
 });
 

@@ -1,7 +1,14 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { READ_ONLY_ROLES, type RoleId } from "../schemas/roles.js";
-import { stablePrefix, type PromptSet, type SessionBackend, type SessionResult, type SessionSpec } from "../sessions/backend.js";
+import { type RoleId } from "../schemas/roles.js";
+import {
+  artifactWriteRule,
+  stablePrefix,
+  type PromptSet,
+  type SessionBackend,
+  type SessionResult,
+  type SessionSpec,
+} from "../sessions/backend.js";
 import { toolsForRole } from "../sessions/guard.js";
 
 /**
@@ -50,15 +57,18 @@ export function initSessionSpec(deps: InitSessionDeps, request: InitSessionReque
     promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactOut }, null, 2),
     cwd: deps.root,
     artifactOut: request.artifactOut,
-    allowedTools:
-      request.withWeb === true
-        ? toolsForRole("research", deps.docsDomains ?? [])
-        : toolsForRole(request.role, deps.docsDomains ?? []),
-    /*
-     * S-1: the read-only set runs in plan mode. `planner` is in that set, so
-     * an init session cannot write anything but its own artifact.
+    /**
+     * S-1′ (PRDR-067): the read-only surface plus exactly one write rule —
+     * the session's own artifact. Plan mode would deny the write the
+     * C-3/A-contract demands; read-only-ness is the allowlist plus the hook.
      */
-    permissionMode: READ_ONLY_ROLES.has(request.role) ? "plan" : "",
+    allowedTools: [
+      ...(request.withWeb === true
+        ? toolsForRole("research", deps.docsDomains ?? [])
+        : toolsForRole(request.role, deps.docsDomains ?? [])),
+      artifactWriteRule(request.artifactOut),
+    ],
+    permissionMode: "",
     model: "",
     maxTurns: deps.maxTurns,
   };

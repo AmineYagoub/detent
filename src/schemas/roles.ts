@@ -25,7 +25,12 @@ export const ROLE_IDS = [
 
 export type RoleId = (typeof ROLE_IDS)[number];
 
-/** S-1: the read-only set runs `permissionMode: 'plan'`. */
+/**
+ * S-1's read-only set. Since S-1′ (PRDR-067) these roles run DEFAULT mode
+ * with the read-only tool surface plus one scoped write rule for their own
+ * artifact — plan mode blocks the write the A-contract demands and survives
+ * only for artifact-less sessions (doctor's smoke).
+ */
 export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "planner",
   "diagnose",

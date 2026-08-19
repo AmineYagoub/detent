@@ -3,7 +3,7 @@ import path from "node:path";
 import picomatch from "picomatch";
 import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
-import { prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
+import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
 import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
 import { currentCounters, currentGeneration, withCurrentCounters } from "./generations.js";
@@ -96,8 +96,15 @@ export class SessionArm {
       ),
       cwd: workDir,
       artifactOut,
-      allowedTools: this.toolsFor(role),
-      permissionMode: READ_ONLY_ROLES.has(role) ? "plan" : "",
+      /**
+       * S-1′ (PRDR-067): a read-only role writes exactly its artifact —
+       * default mode plus one scoped rule; plan mode would block the write
+       * the A-contract demands.
+       */
+      allowedTools: READ_ONLY_ROLES.has(role)
+        ? [...this.toolsFor(role), artifactWriteRule(artifactOut)]
+        : this.toolsFor(role),
+      permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
       maxTurns: ctx.budgets.turns_per_stage,
       /**

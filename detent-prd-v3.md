@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0-draft.2 |
+| Version | 3.0-draft.3 |
 | Date | 2026-08-18 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
@@ -99,6 +99,12 @@ The `init` pipeline (§4.1 of v2) is **inherited unchanged** in its phases and i
 
 ## 8. Sessions & Agent SDK Integration (S, v3)
 S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
+- **S-1′ (draft.3, PRDR-067).** An artifact-producing read-only session runs
+  `permissionMode: "default"` with its read-only tool surface plus exactly one scoped
+  write rule, `Write(//<artifact_out>)` (S-3's specifier mechanism; `doctor` arbitrates an
+  unrecognized form). Plan mode remains for artifact-less sessions (doctor's smoke).
+  Read-only-ness is the allowlist plus the D-21 hook, not a mode that contradicts P2's
+  artifact interface. Found by T-140's first live read-only session.
 - **S-2′/D-21** Containment is the `PreToolUse` hook under **both** drivers — the headless driver wires it when constructing sessions; the plugin ships it as a plugin hook. It denies outside `surface[]`, denies protected globs, preserves the surface-expansion lever, and (D-28) denies ledger-bypassing ambient billable tools. A hook deny binds over every allow rule and permission mode.
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
