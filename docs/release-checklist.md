@@ -20,8 +20,11 @@ this file exists to make unskippable.
 5. **N-7 self-build green (D-16) — the permanent gate.** Dispatch the
    `self-build` workflow with a spend cap: `detent init && detent run` on a
    folder containing only `detent-prd-v3.md` must reach DONE on the walking
-   skeleton. No green, no release — every version bump and every S-5 backend
-   upgrade re-runs it.
+   skeleton. Credentials: `ANTHROPIC_API_KEY` or, on a subscription plan,
+   `CLAUDE_CODE_OAUTH_TOKEN` minted with `claude setup-token` — either as a
+   repo secret. Locally, a logged-in claude CLI suffices.
+   No green, no release — every version bump and every S-5 backend upgrade
+   re-runs it.
 6. **Version pins coherent (SEC-2/S-5).** `plugin.json` version equals
    `REFEREE_VERSION`; `pinned.agent_sdk` equals package.json's exact
    dependency; the backend pin is deliberate.

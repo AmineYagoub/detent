@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { main as initMain } from "../src/cli/init.js";
 import { stateDir } from "../src/fs/layout.js";
 import { run } from "../src/kernel/run.js";
-import { buildLiveBackend } from "../src/sessions/live.js";
+import { LIVE_AUTH_HINT, buildLiveBackend, hasLiveBackendAuth } from "../src/sessions/live.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
 import { git, gitInit } from "../tests/helpers.js";
 
@@ -49,9 +49,13 @@ export async function selfBuild(opts: {
   git(dir, "commit", "-q", "-m", "n7: the PRD, and nothing else");
 
   if (opts.dryRun === true) {
-    /* Withhold the key even if the environment has one: dry-run NEVER spends. */
-    const saved = process.env["ANTHROPIC_API_KEY"];
-    delete process.env["ANTHROPIC_API_KEY"];
+    /*
+     * DETENT_NO_LIVE forces the auth gate shut even on a logged-in machine
+     * (subscription auth lives in the OS keychain, which no env deletion can
+     * hide): a dry run NEVER spends, by construction.
+     */
+    const saved = process.env["DETENT_NO_LIVE"];
+    process.env["DETENT_NO_LIVE"] = "1";
     try {
       const code = await initMain([dir, "--spend-cap-usd", String(opts.capUsd)]);
       const refused = code === 2 && !existsSync(path.join(stateDir(dir), "config.json"));
@@ -59,17 +63,18 @@ export async function selfBuild(opts: {
         ok: refused,
         phase: "dry-run",
         detail: refused
-          ? "harness wired end-to-end up to the R-10 key gate; nothing written, nothing spent"
-          : `expected the keyless refusal before any write; got exit ${code}`,
+          ? "harness wired end-to-end up to the R-10 auth gate; nothing written, nothing spent"
+          : `expected the no-auth refusal before any write; got exit ${code}`,
         dir,
       };
     } finally {
-      if (saved !== undefined) process.env["ANTHROPIC_API_KEY"] = saved;
+      if (saved === undefined) delete process.env["DETENT_NO_LIVE"];
+      else process.env["DETENT_NO_LIVE"] = saved;
     }
   }
 
-  if (process.env["ANTHROPIC_API_KEY"] === undefined) {
-    return { ok: false, phase: "init", detail: "R-10: ANTHROPIC_API_KEY is required for the live self-build", dir };
+  if (!hasLiveBackendAuth()) {
+    return { ok: false, phase: "init", detail: `R-10: no live backend auth — ${LIVE_AUTH_HINT}`, dir };
   }
 
   /* 2 = an interrupt (AWAIT_APPROVAL expected; any other prints itself and reds out below). */

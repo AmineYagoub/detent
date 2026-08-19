@@ -10,6 +10,7 @@ import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig } from "../init/config.js";
+import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 
 /**
@@ -71,11 +72,13 @@ export async function main(argv: readonly string[]): Promise<number> {
    * and a mock that writes nothing produces no analysis. Unlike `run`, which
    * has a genuine fixture path, init needs a live backend — so say so plainly
    * rather than failing three phases later with a confusing artifact error.
+   * T-140 broadened the transports: a subscription login or an OAuth token is
+   * as live as an API key.
    */
-  if (process.env["ANTHROPIC_API_KEY"] === undefined) {
+  if (!hasLiveBackendAuth()) {
     process.stderr.write(
       "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
-        "Set ANTHROPIC_API_KEY and re-run. (`detent run` has a mock path for fixtures; init does not.)\n",
+        `To fix, ${LIVE_AUTH_HINT}\n(\`detent run\` has a mock path for fixtures; init does not.)\n`,
     );
     return EXIT_NOT_READY;
   }

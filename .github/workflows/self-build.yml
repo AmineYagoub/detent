@@ -24,17 +24,22 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: R-10 gate — refuse loudly without the key
+      # Either credential serves (T-140): ANTHROPIC_API_KEY (API billing) or
+      # CLAUDE_CODE_OAUTH_TOKEN — the subscription path, minted once with
+      # `claude setup-token` in your terminal and stored as a repo secret.
+      - name: R-10 gate — refuse loudly without a credential
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         run: |
-          if [ "$HAS_KEY" != "true" ]; then
-            echo "::error::R-10: add ANTHROPIC_API_KEY as a repository secret before dispatching the self-build."
+          if [ "$HAS_KEY" != "true" ] && [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::R-10: add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) as a repository secret before dispatching."
             exit 1
           fi
       - name: N-7 self-build (detent-prd-v3.md, walking skeleton)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npx tsx scripts/self-build.ts --cap "${{ inputs.spend_cap_usd }}" --dir "$RUNNER_TEMP/n7"
       - name: Upload the run's ground truth
         if: always()

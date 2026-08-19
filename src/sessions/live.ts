@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readBindings } from "../adapter/drift.js";
 import { CEILINGS } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "./sdk.js";
@@ -18,6 +18,43 @@ import { ClaudeCodeBackend } from "./sdk.js";
  * stale "lands at T-046" message — the v2 live exits never ran, so the lie
  * never surfaced. Found and closed by T-140's preparation.
  */
+
+/**
+ * T-140 — is a live backend reachable? The v2 line assumed the API key was
+ * the only transport; the platform grew two more, and the SDK's bundled
+ * runtime honors all three (proven by execution on a Max-plan machine with
+ * no key at all): `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from
+ * `claude setup-token` — the subscription CI path), and the claude CLI's own
+ * login. `DETENT_NO_LIVE=1` forces "no" — the seam that keeps the harness's
+ * dry run spend-free even on a logged-in machine. R-10's GATE (consent plus
+ * a cap) is unchanged; only the auth transport broadened.
+ */
+export function hasLiveBackendAuth(
+  env: NodeJS.ProcessEnv = process.env,
+  probe: () => boolean = cliLoggedIn,
+): boolean {
+  if (env["DETENT_NO_LIVE"] === "1") return false;
+  if (env["ANTHROPIC_API_KEY"] !== undefined || env["CLAUDE_CODE_OAUTH_TOKEN"] !== undefined) return true;
+  return probe();
+}
+
+/** The three transports a refusal should name, in one place. */
+export const LIVE_AUTH_HINT =
+  "provide one of: a logged-in claude CLI (subscription — run `claude` and `/login`), " +
+  "CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`, for CI), or ANTHROPIC_API_KEY.";
+
+function cliLoggedIn(): boolean {
+  try {
+    const raw = execFileSync("claude", ["auth", "status"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 10_000,
+    });
+    return raw.includes('"loggedIn": true');
+  } catch {
+    return false;
+  }
+}
 
 export function buildLiveBackend(root: string): ClaudeCodeBackend {
   const gateCmd = readBindings(root).bindings.find((b) => b.slot === "test")?.resolved ?? null;
