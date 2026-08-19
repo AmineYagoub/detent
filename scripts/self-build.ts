@@ -53,8 +53,10 @@ export async function selfBuild(opts: {
   copyFileSync(path.join(REPO, "detent-prd-v2.md"), path.join(dir, "detent-prd-v2.md"));
   gitInit(dir);
   git(dir, "add", "-A");
-  /* --allow-empty: a re-fired harness resumes an existing folder (C-8) with nothing new to commit. */
-  git(dir, "commit", "-q", "--allow-empty", "-m", "n7: the PRD, and nothing else");
+  /* Commit only when the scaffold actually changed: a re-fired harness must not stack empty commits over ticket work (they polluted claim bases at T-140's twelfth firing). */
+  if (git(dir, "status", "--porcelain").trim() !== "") {
+    git(dir, "commit", "-q", "-m", "n7: the PRD, and nothing else");
+  }
 
   if (opts.dryRun === true) {
     /*
