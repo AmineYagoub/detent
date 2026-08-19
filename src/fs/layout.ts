@@ -38,15 +38,15 @@ export interface LayoutEntry {
 }
 
 /**
- * T-120/T-121 — the D-21 hook policy files, run-level local state with the
- * oracle's `.orchestrator/` names: the referee writes them per claim (surface)
- * and per pool refresh (stage/re-feed); the plugin hook reads them at the
- * session cwd. Named here so the writer (kernel/hook-policy.ts) and the
- * reader (src/plugin/hook.ts) share one spelling without the hook importing
- * kernel code.
+ * T-120/T-121 — the D-21 hook policy files, run-level local state: the
+ * referee writes them per claim (surface) and per pool refresh (stage/
+ * re-feed); the plugin hook reads them at the session cwd. Their names live
+ * in the dependency-free `hook-files.ts` so the hook bundle can share the
+ * spelling without pulling this module's schema imports; re-exported here as
+ * the kernel-side import surface.
  */
-export const HOOK_SURFACE_FILE = "active_surface.json";
-export const HOOK_STAGE_FILE = "stage.json";
+export { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "./hook-files.js";
+import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "./hook-files.js";
 
 export const LAYOUT: readonly LayoutEntry[] = [
   { rel: "config.json", kind: "file", tracking: "committed", ownership: "repository", stamped: true },

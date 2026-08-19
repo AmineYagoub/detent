@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/layout.js";
+import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/hook-files.js";
 import { guardToolUse, pathOf, stopGate } from "../sessions/guard.js";
 
 /**
