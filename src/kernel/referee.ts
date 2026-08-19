@@ -30,7 +30,7 @@ import {
 import { GateArm } from "./referee-gate.js";
 import { SessionArm } from "./referee-session.js";
 import { runRefereeStage } from "./referee-stage.js";
-import { allTickets, isClaimed, readTicket, ready } from "./tickets/readers.js";
+import { allTickets, claimRefusal, isClaimed, readTicket, ready } from "./tickets/readers.js";
 import { appendNote, claim, release, writeTicket } from "./tickets/mutations.js";
 import type { LoadedConfig } from "./worstcase.js";
 
@@ -148,14 +148,17 @@ export class RefereeCore {
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );
-    return [...readyPool, ...resumable].map((t) => ({ id: t.id, state: t.state }));
+    const pool = [...readyPool, ...resumable].map((t) => ({ id: t.id, state: t.state }));
+    /** T-120 loop persistence: the re-feed stands while work remains anywhere. */
+    this.ctx.refreshRunRefeed(pool.length > 0 || allTickets(this.root).some((t) => isClaimed(this.root, t.id)));
+    return pool;
   }
 
   /** R-2: an atomic claim the machine admits — a refused claim names why. */
   acquire(id: string): AcquireResult {
     const pool = this.pool();
     if (!pool.some((p) => p.id === id)) {
-      return { ok: false, reason: this.claimRefusal(id) };
+      return { ok: false, reason: claimRefusal(this.root, id) };
     }
     if (!claim(this.root, id, this.ctx.worker)) {
       return { ok: false, reason: `claimed by another worker` };
@@ -163,6 +166,8 @@ export class RefereeCore {
     markCurrentTicket(this.root, id);
     const workDir = this.ctx.worktree ? ensureWorktree(this.root, id) : this.root;
     this.ctx.setWorkDir(id, workDir);
+    /** T-120/T-121: publish the driver-session containment for this claim (D-21). */
+    this.ctx.publishHookPolicy(id);
 
     const ticket = readTicket(this.root, id);
     if (ticket.state === "READY") {
@@ -179,20 +184,11 @@ export class RefereeCore {
     return { ok: true, resume: { state: ticket.state, reset } };
   }
 
-  private claimRefusal(id: string): string {
-    const tickets = allTickets(this.root);
-    const ticket = tickets.find((t) => t.id === id);
-    if (ticket === undefined) return `no such ticket: ${id}`;
-    if (isClaimed(this.root, id)) return `claimed by another worker`;
-    const unmet = ticket.blockers.filter((dep) => tickets.find((t) => t.id === dep)?.state !== "DONE");
-    if (unmet.length > 0) return `blocked on ${unmet.join(", ")} (state ${ticket.state})`;
-    return `not claimable from state ${ticket.state}`;
-  }
-
   releaseTicket(id: string): void {
     clearCurrentTicket(this.root);
     release(this.root, id);
     this.ctx.clearWorkDir(id);
+    this.ctx.clearHookPolicy();
     this.gates.clearTicket(id);
   }
 
@@ -236,6 +232,9 @@ export class RefereeCore {
       });
       release(this.root, ticket.id);
     }
+    /** The run unwinds here: no claim survives, so no policy may either. */
+    this.ctx.clearHookPolicy();
+    this.ctx.refreshRunRefeed(false);
     return `verification changed — re-baseline (V-3): ${halt.halting.map((h) => h.message).join(" | ")}`;
   }
 

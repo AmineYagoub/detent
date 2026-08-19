@@ -255,10 +255,21 @@ describe("T-041 X-1 enforcement fixtures", () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
-    /** First reading arms the clock; every later reading is past the ceiling. */
-    let calls = 0;
-    const now = () => (calls++ === 0 ? 0 : 4_000_000);
-    const backend = new MockBackend({ implement: implementGreen });
+    /**
+     * The implement attempt consumes the ceiling: the clock reads 0 until the
+     * stage runs and past-the-ceiling after. Armed by the stage rather than by
+     * call order, so referee-internal clock reads (the T-120 hook-policy TTLs)
+     * cannot shift the timeline; BUDGET_BREACH is legal from every non-DONE
+     * state, so the breach lands wherever the check next runs.
+     */
+    let t = 0;
+    const now = () => t;
+    const backend = new MockBackend({
+      implement: (spec) => {
+        t = 4_000_000;
+        return implementGreen(spec);
+      },
+    });
     const outcome = await run(opts(root, backend, { now }));
 
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);

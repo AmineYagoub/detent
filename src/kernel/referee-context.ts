@@ -5,6 +5,7 @@ import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
+import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { SpendLedger } from "./ledger.js";
 import type { Budgets } from "../schemas/budgets.js";
@@ -124,6 +125,25 @@ export class RefereeContext {
 
   workDirFor(id: string): string {
     return this.workDirs.get(id) ?? this.root;
+  }
+
+  /* ---- D-21 hook policy (T-120/T-121): the referee is the only writer ---- */
+
+  publishHookPolicy(ticketId: string): void {
+    publishClaimPolicy(this.root, {
+      ticketId,
+      protectedGlobs: this.loaded.config.protected,
+      gateCommands: readBindings(this.root).bindings.map((b) => b.resolved),
+      expiresAtMs: this.now() + this.budgets.ticket_wall_clock_ms,
+    });
+  }
+
+  clearHookPolicy(): void {
+    clearClaimPolicy(this.root);
+  }
+
+  refreshRunRefeed(active: boolean): void {
+    refreshRunRefeed(this.root, active, this.now() + this.budgets.ticket_wall_clock_ms);
   }
 
   maybeArtifact(ticketId: string, name: string): unknown {

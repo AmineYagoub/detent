@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { guardToolUse, stopGate } from "../sessions/guard.js";
+import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/layout.js";
+import { guardToolUse, pathOf, stopGate } from "../sessions/guard.js";
 
 /**
  * T-113 — the D-21 containment hook in plugin form (S-2′, SEC-6, D-29).
@@ -41,14 +42,11 @@ import { guardToolUse, stopGate } from "../sessions/guard.js";
 
 export interface HookPayload {
   readonly hook_event_name?: unknown;
+  readonly tool_name?: unknown;
   readonly tool_input?: unknown;
   readonly cwd?: unknown;
   readonly stop_hook_active?: unknown;
 }
-
-/** F-1 state names, unchanged from the oracle's `.orchestrator/` files. */
-export const SURFACE_FILE = "active_surface.json";
-export const STAGE_FILE = "stage.json";
 
 /**
  * The oracle's 900 s stop-gate timeout — equal to `gate_timeout_ms`'s X-1
@@ -76,24 +74,72 @@ function denyJson(reason: string): string {
   });
 }
 
+/** An `expires_at_ms` in the past makes a policy file ABSENT, not broken (crash hygiene). */
+function expired(doc: { expires_at_ms?: unknown } | null, nowMs: number): boolean {
+  return typeof doc?.expires_at_ms === "number" && nowMs > doc.expires_at_ms;
+}
+
+function commandOf(toolInput: unknown): string {
+  if (typeof toolInput !== "object" || toolInput === null) return "";
+  const command = (toolInput as Record<string, unknown>)["command"];
+  return typeof command === "string" ? command : "";
+}
+
+interface SurfaceDoc {
+  readonly driver?: unknown;
+  readonly surface?: unknown;
+  readonly protected?: unknown;
+  readonly deny_tools?: unknown;
+  readonly deny_bash_containing?: unknown;
+  readonly expires_at_ms?: unknown;
+}
+
 /** The PreToolUse decision; `null` means silence (no opinion — never an explicit allow). */
-export function decidePreToolUse(payload: HookPayload): string | null {
+export function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
   const cwd = payloadCwd(payload);
   let raw: string;
   try {
-    raw = readFileSync(path.join(cwd, ".detent", SURFACE_FILE), "utf8");
+    raw = readFileSync(path.join(cwd, ".detent", HOOK_SURFACE_FILE), "utf8");
   } catch {
     /* Absent surface: no Detent attempt in flight — the ambient hook stays silent. */
     return null;
   }
-  let cfg: { surface?: unknown; protected?: unknown } | null;
+  let cfg: SurfaceDoc | null;
   try {
-    cfg = JSON.parse(raw) as typeof cfg;
+    cfg = JSON.parse(raw) as SurfaceDoc | null;
   } catch {
     return denyJson(
-      `DENY: ${path.join(".detent", SURFACE_FILE)} exists but is unreadable — a declared surface that cannot be honored fails closed (P5).`,
+      `DENY: ${path.join(".detent", HOOK_SURFACE_FILE)} exists but is unreadable — a declared surface that cannot be honored fails closed (P5).`,
     );
   }
+  if (expired(cfg, nowMs)) return null;
+
+  /** T-121 (D-28): ambient billable/verification bypasses, denied by tool. */
+  const tool = typeof payload.tool_name === "string" ? payload.tool_name : "";
+  if (strings(cfg?.deny_tools).includes(tool)) {
+    return denyJson(
+      `DENY: ${tool} is denied while a Detent run is active — \`attempt\` is the sole billable path; an ambient spawn bypasses the ledger (D-28).`,
+    );
+  }
+  if (tool === "Bash") {
+    const command = commandOf(payload.tool_input);
+    const hit = strings(cfg?.deny_bash_containing).find((entry) => entry !== "" && command.includes(entry));
+    if (hit !== undefined) {
+      return denyJson(
+        `DENY: this command matches the bound verification command \`${hit}\`. Gates run only through the referee's gate tool — classification and flake filtering live there (D-28/V-2).`,
+      );
+    }
+  }
+
+  /** T-120 (D-27): a driver policy denies every path'd call — sequencing only. */
+  if (cfg?.driver === true) {
+    if (pathOf(payload.tool_input) === null) return null;
+    return denyJson(
+      "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens " +
+        "through referee-admitted sessions, and state flows through referee tools alone.",
+    );
+  }
+
   const decision = guardToolUse(payload.tool_input, {
     surface: strings(cfg?.surface),
     protectedGlobs: strings(cfg?.protected),
@@ -122,24 +168,31 @@ export function runScopedGate(command: string, cwd: string): { green: boolean; o
  * proven green) without risk of a loop: `stop_hook_active` breaks the second
  * pass.
  */
-export async function decideStop(payload: HookPayload): Promise<string | null> {
+export async function decideStop(payload: HookPayload, nowMs: number): Promise<string | null> {
   const cwd = payloadCwd(payload);
   let stage = "";
   let gateCmd: string | null = null;
+  let refeed = "";
+  let parsed: { stage?: unknown; gate_cmd?: unknown; run_refeed?: unknown; expires_at_ms?: unknown } | null;
   try {
-    const parsed = JSON.parse(readFileSync(path.join(cwd, ".detent", STAGE_FILE), "utf8")) as {
-      stage?: unknown;
-      gate_cmd?: unknown;
-    } | null;
+    parsed = JSON.parse(readFileSync(path.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8")) as typeof parsed;
     stage = typeof parsed?.stage === "string" ? parsed.stage : "";
     gateCmd = typeof parsed?.gate_cmd === "string" ? parsed.gate_cmd : null;
+    refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";
   } catch {
     return null;
   }
-  const decision = await stopGate(
-    { stage, gateCmd, stopHookActive: Boolean(payload.stop_hook_active) },
-    async (command) => runScopedGate(command, cwd),
-  );
+  if (expired(parsed, nowMs)) return null;
+  const stopHookActive = Boolean(payload.stop_hook_active);
+  /**
+   * T-120 loop persistence: while the referee says work remains, ending the
+   * session gets one deterministic nudge back into the loop (the re-feed
+   * pattern; `stop_hook_active` bounds it to a single firing).
+   */
+  if (refeed !== "" && !stopHookActive) {
+    return JSON.stringify({ decision: "block", reason: refeed });
+  }
+  const decision = await stopGate({ stage, gateCmd, stopHookActive }, async (command) => runScopedGate(command, cwd));
   return decision.decision === "allow" ? null : JSON.stringify({ decision: "block", reason: decision.reason });
 }
 
@@ -148,7 +201,7 @@ export async function decideStop(payload: HookPayload): Promise<string | null> {
  * Malformed input is silence, mirroring the oracle — bricking the session
  * gains nothing and the referee re-verifies regardless (P2).
  */
-export async function handleHookInput(raw: string): Promise<string | null> {
+export async function handleHookInput(raw: string, nowMs: number = Date.now()): Promise<string | null> {
   let payload: HookPayload;
   try {
     payload = JSON.parse(raw) as HookPayload;
@@ -156,7 +209,7 @@ export async function handleHookInput(raw: string): Promise<string | null> {
     return null;
   }
   if (payload === null || typeof payload !== "object") return null;
-  if (payload.hook_event_name === "PreToolUse") return decidePreToolUse(payload);
-  if (payload.hook_event_name === "Stop") return decideStop(payload);
+  if (payload.hook_event_name === "PreToolUse") return decidePreToolUse(payload, nowMs);
+  if (payload.hook_event_name === "Stop") return decideStop(payload, nowMs);
   return null;
 }

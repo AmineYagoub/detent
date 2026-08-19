@@ -85,6 +85,21 @@ export function resumable(root: string): Ticket[] {
   return allTickets(root).filter((t) => t.state !== "DONE" && t.state !== "READY");
 }
 
+/**
+ * R-2: why a claim on this ticket would be refused, named for the driver.
+ * A pure read — the refusal message never mutates and never decides; the
+ * core's `acquire` is what actually admits or refuses.
+ */
+export function claimRefusal(root: string, id: string): string {
+  const tickets = allTickets(root);
+  const ticket = tickets.find((t) => t.id === id);
+  if (ticket === undefined) return `no such ticket: ${id}`;
+  if (isClaimed(root, id)) return `claimed by another worker`;
+  const unmet = ticket.blockers.filter((dep) => tickets.find((t) => t.id === dep)?.state !== "DONE");
+  if (unmet.length > 0) return `blocked on ${unmet.join(", ")} (state ${ticket.state})`;
+  return `not claimable from state ${ticket.state}`;
+}
+
 export function countsByState(root: string): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const t of allTickets(root)) counts[t.state] = (counts[t.state] ?? 0) + 1;

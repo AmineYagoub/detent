@@ -48,13 +48,16 @@ describe("T-023 F-1 split", () => {
     expect(COMMITTED.map((e) => e.rel).sort()).toEqual(
       [".gitignore", "agents", "bindings.json", "config.json", "plan", "research/failures", "research/planning"],
     );
+    /** T-120/T-121 added the two D-21 hook-policy files to the local set. */
     expect(LOCAL.map((e) => e.rel).sort()).toEqual(
-      ["claims", "ledger.jsonl", "logs", "runs", "state", "transitions.jsonl", "worktrees"],
+      ["active_surface.json", "claims", "ledger.jsonl", "logs", "runs", "stage.json", "state", "transitions.jsonl", "worktrees"],
     );
   });
 
-  it("encodes draft.5's ownership split — only the two journals are run-level", () => {
-    expect(RUN_LEVEL.map((e) => e.rel).sort()).toEqual(["ledger.jsonl", "logs", "transitions.jsonl"]);
+  it("encodes draft.5's ownership split — journals and hook policy are run-level, single-writer", () => {
+    expect(RUN_LEVEL.map((e) => e.rel).sort()).toEqual(
+      ["active_surface.json", "ledger.jsonl", "logs", "stage.json", "transitions.jsonl"],
+    );
     expect(LOCAL.filter((e) => e.ownership === "per-ticket").map((e) => e.rel).sort()).toEqual(
       ["claims", "runs", "state", "worktrees"],
     );

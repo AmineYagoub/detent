@@ -116,6 +116,64 @@ describe("T-113 PreToolUse over the bundle (T-046 oracle ports)", () => {
   });
 });
 
+const FUTURE = 99_999_999_999_999;
+
+/** The referee-written driver policy (T-120/T-121) as the hook sees it. */
+const DRIVER_POLICY = JSON.stringify({
+  schema_version: 1,
+  ticket_id: "t-1",
+  driver: true,
+  surface: [],
+  protected: ["AGENTS.md"],
+  deny_tools: ["Task"],
+  deny_bash_containing: ["sh scripts/test.sh"],
+  expires_at_ms: FUTURE,
+});
+
+const tool = (cwd: string, name: string, toolInput: unknown): { readonly out: string; readonly code: number } =>
+  run({ hook_event_name: "PreToolUse", tool_name: name, tool_input: toolInput, cwd });
+
+describe("T-121 D-28 ambient-bypass denies over the bundle", () => {
+  it("a direct Task spawn is denied while a run is active — attempt is the sole billable path", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    const reason = denyReason(tool(cwd, "Task", { prompt: "do detent work ambiently" }).out);
+    expect(reason).toContain("D-28");
+    expect(reason).toContain("attempt");
+  });
+
+  it("a Bash command containing a bound verification command is denied — gates run through the referee", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    const reason = denyReason(tool(cwd, "Bash", { command: "cd /tmp && sh scripts/test.sh --fast" }).out);
+    expect(reason).toContain("sh scripts/test.sh");
+    expect(reason).toContain("gate tool");
+  });
+
+  it("benign Bash and path-less tool calls stay silent", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    expect(tool(cwd, "Bash", { command: "git status" })).toEqual({ out: "", code: 0 });
+    expect(tool(cwd, "mcp__plugin_detent_referee__next", {})).toEqual({ out: "", code: 0 });
+  });
+
+  it("T-120 (D-27): under a driver policy EVERY path'd call is denied — the driver sequences, never edits", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    for (const [name, input] of [
+      ["Write", { file_path: path.join(cwd, "src", "a.ts") }],
+      ["Read", { file_path: path.join(cwd, "src", "a.ts") }],
+    ] as const) {
+      const reason = denyReason(tool(cwd, name, input).out);
+      expect(reason, name).toContain("D-27");
+      expect(reason, name).toContain("sequences");
+    }
+  });
+
+  it("an EXPIRED policy is absent, not broken — crashed drivers cannot brick a repo (TTL)", () => {
+    const expiredPolicy = DRIVER_POLICY.replace(String(FUTURE), "1000");
+    const cwd = work({ ".detent/active_surface.json": expiredPolicy });
+    expect(tool(cwd, "Task", { prompt: "x" })).toEqual({ out: "", code: 0 });
+    expect(tool(cwd, "Write", { file_path: path.join(cwd, "README.md") })).toEqual({ out: "", code: 0 });
+  });
+});
+
 const stop = (cwd: string, active = false): { readonly out: string; readonly code: number } =>
   run({ hook_event_name: "Stop", stop_hook_active: active, cwd });
 
@@ -151,6 +209,32 @@ describe("T-113 Stop gate over the bundle (T-046 oracle ports)", () => {
 
   it("no stage file means no stop gate — accelerant, never the authority (P2)", () => {
     expect(stop(work())).toEqual({ out: "", code: 0 });
+  });
+
+  it("T-120 re-feed: a standing run blocks the stop ONCE and names the loop", () => {
+    const stageDoc = JSON.stringify({
+      schema_version: 1,
+      stage: "driver",
+      gate_cmd: null,
+      run_refeed: "Detent run in flight: call the referee's `next` tool and continue.",
+      expires_at_ms: FUTURE,
+    });
+    const cwd = work({ ".detent/stage.json": stageDoc });
+
+    const blocked = stop(cwd, false);
+    const parsed = JSON.parse(blocked.out) as { decision: string; reason: string };
+    expect(parsed.decision).toBe("block");
+    expect(parsed.reason).toContain("run in flight");
+
+    /** stop_hook_active bounds the nudge to a single firing */
+    expect(stop(cwd, true)).toEqual({ out: "", code: 0 });
+  });
+
+  it("T-120 re-feed: an expired stage file is silence", () => {
+    const cwd = work({
+      ".detent/stage.json": JSON.stringify({ stage: "driver", gate_cmd: null, run_refeed: "x", expires_at_ms: 1000 }),
+    });
+    expect(stop(cwd, false)).toEqual({ out: "", code: 0 });
   });
 });
 

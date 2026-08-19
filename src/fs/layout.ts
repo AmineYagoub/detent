@@ -37,6 +37,17 @@ export interface LayoutEntry {
   readonly stamped: boolean;
 }
 
+/**
+ * T-120/T-121 — the D-21 hook policy files, run-level local state with the
+ * oracle's `.orchestrator/` names: the referee writes them per claim (surface)
+ * and per pool refresh (stage/re-feed); the plugin hook reads them at the
+ * session cwd. Named here so the writer (kernel/hook-policy.ts) and the
+ * reader (src/plugin/hook.ts) share one spelling without the hook importing
+ * kernel code.
+ */
+export const HOOK_SURFACE_FILE = "active_surface.json";
+export const HOOK_STAGE_FILE = "stage.json";
+
 export const LAYOUT: readonly LayoutEntry[] = [
   { rel: "config.json", kind: "file", tracking: "committed", ownership: "repository", stamped: true },
   { rel: "bindings.json", kind: "file", tracking: "committed", ownership: "repository", stamped: true },
@@ -53,6 +64,8 @@ export const LAYOUT: readonly LayoutEntry[] = [
   { rel: "logs", kind: "dir", tracking: "local", ownership: "run-level", stamped: false },
   { rel: "ledger.jsonl", kind: "file", tracking: "local", ownership: "run-level", stamped: false },
   { rel: "transitions.jsonl", kind: "file", tracking: "local", ownership: "run-level", stamped: false },
+  { rel: HOOK_SURFACE_FILE, kind: "file", tracking: "local", ownership: "run-level", stamped: true },
+  { rel: HOOK_STAGE_FILE, kind: "file", tracking: "local", ownership: "run-level", stamped: true },
 ];
 
 export const COMMITTED = LAYOUT.filter((e) => e.tracking === "committed");

@@ -74,13 +74,24 @@ describe("T-054 the sanctioned apply-site set (source scan)", () => {
      * validator or gate minted. This is ARCH-1's audit extended to the tool
      * boundary — true regardless of which driver calls.
      */
-    for (const file of ["kernel/run.ts", "kernel/driver.ts", "referee/registry.ts"]) {
-      const body = readFileSync(path.join(SRC, file), "utf8");
-      expect(body.match(/\bapply\(/g) ?? [], `${file} must not apply`).toHaveLength(0);
-      expect(body, `${file} must not import the machine`).not.toMatch(/from\s+"[^"]*kernel\/machine\.js"/);
-      expect(body, `${file} must not import event constructors`).not.toMatch(/from\s+"[^"]*kernel\/events\.js"/);
+    /**
+     * `tests/plugin/skill-driver.ts` is in the scan on purpose: the scripted
+     * model driver is a DRIVER (T-120/T-123), and the parity proof would be
+     * worthless if the harness could cheat with a constructor or event name.
+     */
+    for (const file of [
+      path.join(SRC, "kernel/run.ts"),
+      path.join(SRC, "kernel/driver.ts"),
+      path.join(SRC, "referee/registry.ts"),
+      path.join(SRC, "..", "tests", "plugin", "skill-driver.ts"),
+    ]) {
+      const body = readFileSync(file, "utf8");
+      const label = path.basename(file);
+      expect(body.match(/\bapply\(/g) ?? [], `${label} must not apply`).toHaveLength(0);
+      expect(body, `${label} must not import the machine`).not.toMatch(/from\s+"[^"]*kernel\/machine\.js"/);
+      expect(body, `${label} must not import event constructors`).not.toMatch(/from\s+"[^"]*kernel\/events\.js"/);
       for (const event of EVENTS) {
-        expect(body.includes(`"${event}"`), `${file} must not name ${event} as a string`).toBe(false);
+        expect(body.includes(`"${event}"`), `${label} must not name ${event} as a string`).toBe(false);
       }
     }
   });
