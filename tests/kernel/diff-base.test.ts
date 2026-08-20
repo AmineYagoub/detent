@@ -81,5 +81,56 @@ describe("T-140 review diff spans committed work from the claim base", () => {
     expect(inputs.diff).toContain("untracked-marker");
     expect(inputs.diff).toContain("forgotten = true");
     expect(inputs.diff).not.toContain("untracked-foreign");
+    /* PRDR-071: a small span arrives whole, no truncation banner. */
+    expect(inputs.diff).not.toContain("[diff truncated");
+  });
+
+  it("an over-cap span truncates LOUDLY: banner plus the complete file list", { timeout: 60_000 }, async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+
+    /*
+     * PRDR-071: four live verdicts judged "the two test files" while the
+     * criterion's test sat silently sliced off the FRONT of an 8000-char
+     * tail window. The head file must stay visible in the file list even
+     * when its body is clipped.
+     */
+    const bigBody = Array.from({ length: 2000 }, (_, i) => `export const filler_${i} = ${i};`).join("\n");
+    const backend = new MockBackend({
+      implement: (spec) => {
+        writeTree(spec.cwd, {
+          "src/aaa-head-marker.ts": "export const clippedButListed = true;\n",
+          "src/big-filler.ts": `${bigBody}\n`,
+          "src/zzz-tail-marker.ts": "export const insideTailWindow = true;\n",
+        });
+        git(spec.cwd, "add", "-A");
+        git(spec.cwd, "commit", "-q", "-m", "t-1: implement");
+        return okResult();
+      },
+      review: writeArtifactStage({ schema_version: 1, verdict: "approve" }),
+    });
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "diff-cap"),
+    );
+    installTrailerHook(repo.root);
+
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    await core.recordStage("t-1", "review");
+
+    const reviewCall = backend.calls.find((c) => c.role === "review");
+    expect(reviewCall).toBeDefined();
+    const inputs = (JSON.parse(reviewCall!.spec.promptVariable) as { inputs: { diff: string } }).inputs;
+    expect(inputs.diff).toContain("[diff truncated");
+    /* The clipped head file still appears in the complete file list. */
+    expect(inputs.diff).toContain("aaa-head-marker.ts");
+    expect(inputs.diff).toContain("zzz-tail-marker.ts");
   });
 });

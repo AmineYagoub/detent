@@ -37,6 +37,9 @@ export const RESUMABLE: readonly State[] = [
  * the validator that justifies their event lives. */
 export const ATTEMPT_STATES = ["IN_PROGRESS", "BLIND_FIX", "INFORMED_FIX", "REVIEW_FIX"] as const;
 
+/** PRDR-071: review-basis body cap — 8000 dated from the uncommitted-only era. */
+export const DIFF_BODY_CAP = 32_000;
+
 export class Breach extends Error {}
 
 export class KernelBoundaryError extends Error {
@@ -199,7 +202,24 @@ export class RefereeContext {
     const scope = (surface ?? []).map((glob) => `:(glob)${glob}`);
     const spec = scope.length > 0 ? ["--", ...scope] : [];
     try {
-      return (git(workDir, "diff", base ?? "HEAD", ...spec) + untrackedAsDiff(workDir, spec)).slice(-8000);
+      const untracked = untrackedNames(workDir, spec);
+      const full = git(workDir, "diff", base ?? "HEAD", ...spec) + untrackedAsDiff(workDir, untracked);
+      if (full.length <= DIFF_BODY_CAP) return full;
+      /**
+       * T-140 (PRDR-071): a silent `.slice(-8000)` fed reviewers the TAIL of
+       * the span — four verdicts judged "the two test files" while the
+       * criterion's test sat truncated at the front. Never truncate silently:
+       * the complete file list always arrives, bodies clip with a banner, and
+       * the reviewer (reads-open, S-2″) is told where the rest lives.
+       */
+      const stat =
+        git(workDir, "diff", "--stat", base ?? "HEAD", ...spec) +
+        untracked.map((name) => ` ${name} (untracked)\n`).join("");
+      return (
+        `[diff truncated: ${full.length} chars total, body clipped to the last ${DIFF_BODY_CAP}. ` +
+        `The complete changed-file list follows; read files in the worktree for full content.]\n` +
+        `${stat}\n${full.slice(-DIFF_BODY_CAP)}`
+      );
     } catch {
       return "";
     }
@@ -214,10 +234,13 @@ export class RefereeContext {
  * the scope render as new-file pseudo-diffs. Unreadable (binary) files
  * degrade to their header line.
  */
-function untrackedAsDiff(workDir: string, spec: readonly string[]): string {
-  const names = git(workDir, "ls-files", "--others", "--exclude-standard", ...spec)
+function untrackedNames(workDir: string, spec: readonly string[]): string[] {
+  return git(workDir, "ls-files", "--others", "--exclude-standard", ...spec)
     .split("\n")
     .filter((name) => name !== "");
+}
+
+function untrackedAsDiff(workDir: string, names: readonly string[]): string {
   let out = "";
   for (const name of names) {
     out += `\n--- /dev/null\n+++ b/${name} (untracked)\n`;
