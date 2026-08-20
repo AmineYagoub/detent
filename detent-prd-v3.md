@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0-draft.5 |
+| Version | 3.0-draft.6 |
 | Date | 2026-08-18 |
 | Status | Draft for review |
 | Implementation | TypeScript (public, open source) |
@@ -113,6 +113,11 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   for every tool. Found by T-140: a worker denied READING the PRD's §10 — its own
   specification — shipped an empty diff that only the D-6 review layer caught. Driver-mode
   policy unchanged (D-27: the driver neither reads nor writes files).
+- **OQ-2 resolved (draft.6, PRDR-074).** The license is **MIT** — chosen by the user
+  2026-08-20 during T-141 publish preparation. v2 posed MIT vs Apache-2.0 as the sole
+  M4 blocker; MIT matches the header's "public, open source" delivery and the plugin
+  ecosystem's norm. `LICENSE` at the repo root is the operative text; the v2 document
+  stays frozen with the question as it stood.
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
 

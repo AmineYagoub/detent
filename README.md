@@ -1,5 +1,11 @@
 # Detent
 
+[![ci](https://github.com/AmineYagoub/detent/actions/workflows/ci.yml/badge.svg)](https://github.com/AmineYagoub/detent/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/AmineYagoub/detent?display_name=tag&sort=semver)](https://github.com/AmineYagoub/detent/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen.svg)](.github/workflows/ci.yml)
+[![N-7 self-build: green](https://img.shields.io/badge/N--7_self--build-green-success.svg)](docs/release-checklist.md)
+
 Detent turns planning documents into merged, reviewed, test-gated code using
 fresh, single-purpose Claude Code sessions whose every consequential move is
 admitted by a deterministic referee.
@@ -105,4 +111,4 @@ Documented, scriptable, and never required on the golden path:
 
 ## License
 
-Not yet chosen — see OQ-2 in `detent-prd-v2.md`.
+[MIT](LICENSE).

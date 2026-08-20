@@ -1,0 +1,61 @@
+# T-141 — auto tag + GitHub Release when the plugin version lands on main.
+#
+# Spends nothing by construction: no model credential is available here —
+# R-10's spending consent lives only in self-build.yml's manual dispatch.
+# The version source of record is `.claude-plugin/plugin.json` (pinned equal
+# to REFEREE_VERSION by the suite), so a release happens exactly when a
+# version-bump commit reaches main, and re-runs are no-ops once the tag
+# exists. "No green, no release" (T-142): the gates run in this job before
+# any tag is pushed; ci.yml's node matrix covers the second Node line on the
+# same commit.
+name: release
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read the plugin version
+        id: version
+        run: echo "version=$(node -p "require('./.claude-plugin/plugin.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Skip when the tag already exists
+        id: tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.tag.outputs.exists == 'false'
+        with:
+          node-version: "22"
+          cache: npm
+      - if: steps.tag.outputs.exists == 'false'
+        run: npm ci
+      - name: No green, no release
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          npm run parity:check
+          npm run prompts:check
+          npm run lint
+          npm run typecheck
+          npm test
+      - name: Tag and publish
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --title "detent v${{ steps.version.outputs.version }}" \
+            --generate-notes
