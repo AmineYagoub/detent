@@ -48,3 +48,12 @@ write (`rmSync(artifactOut)`), so no-write sessions of any cause yield "no artif
 breakers instead of replayed verdicts; the B-5 crashed-resume skip path deliberately
 keeps its artifact. The ANALYZE/PLAN stages already derived fresh (PRDR-067
 amendment); this closes the same hole for every worker and stage session.
+
+## Amendment (T-140, next firing)
+
+The first live firing of the halt caught the wrong prey: a maxTurns crash arrived as
+`crashed, turns: 0` because the PRDR-053 wrap zeroed telemetry it never had — thirty
+real turns of work misread as a refusal. The wrap now reports the OBSERVED
+assistant-turn count from the stream it was already consuming, zeroing only what it
+truly lost (cost, tokens). maxTurns crashes march with their real turns; a session
+that died before its first assistant turn is the only thing that reads as refused.

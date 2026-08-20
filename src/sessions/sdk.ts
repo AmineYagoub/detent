@@ -215,9 +215,11 @@ export class ClaudeCodeBackend implements SessionBackend {
   async run(spec: SessionSpec): Promise<SessionResult> {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
     let result: SessionResult | null = null;
+    let observedTurns = 0;
     try {
       const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
       for await (const message of stream) {
+        if ((message as { type?: string }).type === "assistant") observedTurns += 1;
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);
         }
@@ -229,11 +231,18 @@ export class ClaudeCodeBackend implements SessionBackend {
        * flagged lower bound, `ok: false`, and the kernel's own gates judge
        * the tree from here (T-140: the live t-100 session hit `maxTurns` and
        * the raw throw took the whole run down as exit 1).
+       *
+       * PRDR-072 amendment: `num_turns` carries the OBSERVED assistant-turn
+       * count from the stream — the wrap zeroes only what it truly lost
+       * (cost, tokens). A maxTurns crash thus reports its real turns and
+       * marches; only a session that died before its first assistant turn
+       * reads as a refusal, and the referee halts the run on those alone.
        */
       return parseResultMessage({
         type: "result",
         subtype: "error_during_execution",
         is_error: true,
+        num_turns: observedTurns,
         total_cost_usd: 0,
         usage: { input_tokens: 0, output_tokens: 0 },
         result: (err as Error).message,

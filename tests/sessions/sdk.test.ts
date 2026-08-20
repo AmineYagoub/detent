@@ -138,6 +138,19 @@ describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
     expect(parsed.telemetryParsed).toBe(true);
     expect(parsed.crashed).toBe(true);
   });
+
+  it("a crash keeps its OBSERVED turns — maxTurns marches, only true refusals read as zero (PRDR-072)", () => {
+    const parsed = parseResultMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      num_turns: 30,
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
+    expect(parsed.crashed).toBe(true);
+    expect(parsed.turns).toBe(30);
+  });
 });
 
 describe("T-046 surface requests through the loop (oracle test_surface_request_grant_and_deny)", () => {
