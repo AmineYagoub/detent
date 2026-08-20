@@ -99,7 +99,7 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
   const hypothesisRaw = ctx.maybeArtifact(id, "hypothesis.json");
   const hypothesisParsed = hypothesisRaw === null ? null : parseArtifact(hypothesisSchema, hypothesisRaw);
   const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
-  const outcome = await reviewStage(ticket, ctx.diff(workDir, ctx.claimBase(id)), hypothesis, {
+  const outcome = await reviewStage(ticket, ctx.diff(workDir, ctx.claimBase(id), ticket.surface), hypothesis, {
     launch: async (inputs) => {
       await sessions.launch(ticket, "IN_REVIEW", inputs, workDir);
     },

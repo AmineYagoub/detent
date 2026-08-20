@@ -187,9 +187,18 @@ export class RefereeContext {
     }
   }
 
-  diff(workDir: string, base?: string | null): string {
+  /**
+   * T-140 (PRDR-069): the claim base survives resumes BY DESIGN, so other
+   * tickets' finalized commits can sit between the base and HEAD — a run
+   * that stops and resumes interleaves tickets. The reviewer judges the
+   * TICKET's diff (SEC-3), so the surface pathspec — disjoint across
+   * tickets by the plan's own contract — filters the span down to the
+   * ticket's ownership. Unscoped callers keep the whole-tree diff.
+   */
+  diff(workDir: string, base?: string | null, surface?: readonly string[]): string {
+    const scope = (surface ?? []).map((glob) => `:(glob)${glob}`);
     try {
-      return git(workDir, "diff", base ?? "HEAD").slice(-8000);
+      return git(workDir, "diff", base ?? "HEAD", ...(scope.length > 0 ? ["--", ...scope] : [])).slice(-8000);
     } catch {
       return "";
     }

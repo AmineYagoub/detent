@@ -35,6 +35,14 @@ describe("T-140 review diff spans committed work from the claim base", () => {
         writeTree(spec.cwd, { "src/committed-marker.ts": "export const built = true;\n" });
         git(spec.cwd, "add", "-A");
         git(spec.cwd, "commit", "-q", "-m", "t-1: implement");
+        /*
+         * PRDR-069: an interleaved ticket's finalize lands ABOVE the claim
+         * base whenever a stopped run resumes — outside t-1's surface, so
+         * the surface-scoped review basis must exclude it.
+         */
+        writeTree(spec.cwd, { "docs/foreign-ticket-work.md": "another ticket's finalize\n" });
+        git(spec.cwd, "add", "-A");
+        git(spec.cwd, "commit", "-q", "-m", "t-9: foreign finalize");
         return okResult();
       },
       review: writeArtifactStage({ schema_version: 1, verdict: "approve" }),
@@ -58,5 +66,7 @@ describe("T-140 review diff spans committed work from the claim base", () => {
     expect(reviewCall).toBeDefined();
     const inputs = (JSON.parse(reviewCall!.spec.promptVariable) as { inputs: { diff: string } }).inputs;
     expect(inputs.diff).toContain("committed-marker");
+    /* PRDR-069: the basis spans the claim base but stays inside the surface. */
+    expect(inputs.diff).not.toContain("foreign-ticket-work");
   });
 });
