@@ -116,7 +116,7 @@ describe("T-048 field discipline (S-4, PRDR-052/053)", () => {
     }
   });
 
-  it("a crashed session's zeroed telemetry is a flagged lower bound — partial: crash, never free and never the breaker", async () => {
+  it("a crashed session's zeroed telemetry is a flagged lower bound — and a zero-turn crash halts as a refusal (PRDR-072)", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
@@ -131,13 +131,15 @@ describe("T-048 field discipline (S-4, PRDR-052/053)", () => {
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "crash" });
 
     /**
-     * Not the S-4 breaker: the run continues (gate judges the tree, red, ladder…)
-     * — what matters here is the LEDGER ROW.
+     * The LEDGER ROW comes first and survives the halt: a flagged $0 lower
+     * bound, never free work and never the S-4 telemetry breaker. Zero turns
+     * means the session never started, so the run then stops as a
+     * SessionRefusal (PRDR-072) — the reason names the refusal, not S-4.
      */
     const crashRow = rows(root).find((r) => r.partial === "crash");
     expect(crashRow).toBeDefined();
     expect(crashRow!.cost_estimate_usd).toBe(0);
-    expect(outcome.exitCode).not.toBe(1);
+    expect((outcome.summary as { reason?: string }).reason).toMatch(/refused implement session for t1/);
   });
 
   it("every row validates against the ledger schema — malformed money cannot land", async () => {

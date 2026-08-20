@@ -7,7 +7,7 @@ import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from ".
 import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
 import { currentCounters, currentGeneration, withCurrentCounters } from "./generations.js";
-import { Breach, KernelBoundaryError, publicTicket, type RefereeContext } from "./referee-context.js";
+import { Breach, KernelBoundaryError, SessionRefusal, publicTicket, type RefereeContext } from "./referee-context.js";
 import { readTicket } from "./tickets/readers.js";
 import { appendNote, writeTicket } from "./tickets/mutations.js";
 
@@ -128,6 +128,14 @@ export class SessionArm {
       },
     };
 
+    /**
+     * T-140 (PRDR-072): a stale artifact from an earlier round must never
+     * impersonate this session's output — a refused reviewer replayed the
+     * previous verdict live. Freshly launched means freshly derived; the
+     * crashed-resume skip above deliberately KEEPS its artifact (B-5 judges
+     * what the half-done session left).
+     */
+    rmSync(artifactOut, { force: true });
     ctx.journal.appendTicketEvent(id, { stage: role, event: "start", at: ctx.iso() });
     const result = await ctx.backend.run(spec);
     const generationNow = currentGeneration(readTicket(ctx.root, id));
@@ -139,6 +147,20 @@ export class SessionArm {
       ok: result.ok,
       cost: result.costEstimateUsd,
     });
+    /**
+     * T-140 (PRDR-072): crashed with ZERO turns = the backend refused the
+     * session (auth outage, usage limit, spawn failure) — an infrastructure
+     * failure, not an attempt. Marching on converts an outage into fake
+     * history: gates re-green unchanged trees, ladder slots burn, reviews of
+     * never-run work escalate tickets. The ledger keeps its honest $0 row
+     * (recorded above); the run halts. A crash WITH turns keeps PRDR-053's
+     * behavior — real partial work exists and the tree is judged as-is.
+     */
+    if (result.crashed === true && result.turns === 0) {
+      throw new SessionRefusal(
+        `backend refused ${role} session for ${id} (crashed, zero turns): ${result.rawTail.slice(-300)}`,
+      );
+    }
     this.rememberPrefix(role, spec);
 
     /**

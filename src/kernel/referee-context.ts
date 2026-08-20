@@ -42,6 +42,19 @@ export const DIFF_BODY_CAP = 32_000;
 
 export class Breach extends Error {}
 
+/**
+ * T-140 (PRDR-072): a session the backend refused outright — crashed with
+ * zero turns (auth outage, usage limit, spawn failure). NOT a Breach: the
+ * work never happened, so no protocol was breached; the run halts and the
+ * operator re-fires when the backend is back.
+ */
+export class SessionRefusal extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = "SessionRefusal";
+  }
+}
+
 export class KernelBoundaryError extends Error {
   constructor(detail: string) {
     super(detail);
