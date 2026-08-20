@@ -197,12 +197,42 @@ export class RefereeContext {
    */
   diff(workDir: string, base?: string | null, surface?: readonly string[]): string {
     const scope = (surface ?? []).map((glob) => `:(glob)${glob}`);
+    const spec = scope.length > 0 ? ["--", ...scope] : [];
     try {
-      return git(workDir, "diff", base ?? "HEAD", ...(scope.length > 0 ? ["--", ...scope] : [])).slice(-8000);
+      return (git(workDir, "diff", base ?? "HEAD", ...spec) + untrackedAsDiff(workDir, spec)).slice(-8000);
     } catch {
       return "";
     }
   }
+}
+
+/**
+ * T-140 (PRDR-070): B-5 lets the GATE judge untracked files ("the tree
+ * as-is") but `git diff` never shows them — a worker who writes without
+ * `git add` produces work the gate greens and the reviewer cannot see.
+ * The review basis must equal the gate's basis, so untracked files inside
+ * the scope render as new-file pseudo-diffs. Unreadable (binary) files
+ * degrade to their header line.
+ */
+function untrackedAsDiff(workDir: string, spec: readonly string[]): string {
+  const names = git(workDir, "ls-files", "--others", "--exclude-standard", ...spec)
+    .split("\n")
+    .filter((name) => name !== "");
+  let out = "";
+  for (const name of names) {
+    out += `\n--- /dev/null\n+++ b/${name} (untracked)\n`;
+    try {
+      const body = readFileSync(path.join(workDir, name), "utf8");
+      out += body
+        .split("\n")
+        .map((line) => `+${line}`)
+        .join("\n");
+      out += "\n";
+    } catch {
+      /* header alone: the reviewer still learns the file exists. */
+    }
+  }
+  return out;
 }
 
 export function publicTicket(ticket: Ticket): Record<string, unknown> {

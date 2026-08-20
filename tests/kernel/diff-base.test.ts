@@ -43,6 +43,15 @@ describe("T-140 review diff spans committed work from the claim base", () => {
         writeTree(spec.cwd, { "docs/foreign-ticket-work.md": "another ticket's finalize\n" });
         git(spec.cwd, "add", "-A");
         git(spec.cwd, "commit", "-q", "-m", "t-9: foreign finalize");
+        /*
+         * PRDR-070: work the worker forgot to `git add` — the gate judges
+         * the tree as-is (B-5), so the review basis must see it too; the
+         * untracked file OUTSIDE the surface stays invisible.
+         */
+        writeTree(spec.cwd, {
+          "src/untracked-marker.ts": "export const forgotten = true;\n",
+          "docs/untracked-foreign.md": "outside the surface\n",
+        });
         return okResult();
       },
       review: writeArtifactStage({ schema_version: 1, verdict: "approve" }),
@@ -68,5 +77,9 @@ describe("T-140 review diff spans committed work from the claim base", () => {
     expect(inputs.diff).toContain("committed-marker");
     /* PRDR-069: the basis spans the claim base but stays inside the surface. */
     expect(inputs.diff).not.toContain("foreign-ticket-work");
+    /* PRDR-070: the basis equals the gate's basis — untracked work shows. */
+    expect(inputs.diff).toContain("untracked-marker");
+    expect(inputs.diff).toContain("forgotten = true");
+    expect(inputs.diff).not.toContain("untracked-foreign");
   });
 });
