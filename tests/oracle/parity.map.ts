@@ -193,7 +193,7 @@ export function milestoneOf(ticket: string): Milestone {
 export type ParityStatus = "green" | "pending-M1" | "pending-M2" | "pending-later";
 
 /** Milestones in order, so "has this landed yet?" is a comparison. */
-export const MILESTONE_ORDER = ["P0", "M0", "M1", "M2", "M3", "M4"] as const;
+const MILESTONE_ORDER = ["P0", "M0", "M1", "M2", "M3", "M4"] as const;
 export type Milestone = (typeof MILESTONE_ORDER)[number];
 
 /**

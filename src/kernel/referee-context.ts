@@ -38,7 +38,7 @@ export const RESUMABLE: readonly State[] = [
 export const ATTEMPT_STATES = ["IN_PROGRESS", "BLIND_FIX", "INFORMED_FIX", "REVIEW_FIX"] as const;
 
 /** PRDR-071: review-basis body cap — 8000 dated from the uncommitted-only era. */
-export const DIFF_BODY_CAP = 32_000;
+const DIFF_BODY_CAP = 32_000;
 
 export class Breach extends Error {}
 

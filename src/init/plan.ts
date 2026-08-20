@@ -5,7 +5,7 @@ import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
 import { planDraftSchema, type Analysis } from "../schemas/init.js";
 import { planSchema, type Binding, type Plan } from "../schemas/records.js";
-import { createTicket, writeTicket } from "../kernel/tickets/mutations.js";
+import { createTicket } from "../kernel/tickets/mutations.js";
 import { readTicket } from "../kernel/tickets/readers.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PhaseOutcome } from "./machine.js";
@@ -301,4 +301,3 @@ function hashFile(abs: string): string {
   return createHash("sha256").update(readFileSync(abs)).digest("hex");
 }
 
-export { writeTicket };

@@ -64,4 +64,3 @@ export const RESOLVER_CALLER_STATES = [
   "APPROVED",
 ] as const satisfies readonly State[];
 
-export type ResolverCallerState = (typeof RESOLVER_CALLER_STATES)[number];

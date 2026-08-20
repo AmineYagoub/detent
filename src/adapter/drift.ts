@@ -18,9 +18,9 @@ import type { GateSlot } from "./run.js";
  * the command, so editing a neighbouring script is not a halting event.
  */
 
-export const BINDINGS_FILE = "bindings.json";
+const BINDINGS_FILE = "bindings.json";
 
-export function bindingsPath(root: string): string {
+function bindingsPath(root: string): string {
   return path.join(stateDir(root), BINDINGS_FILE);
 }
 
@@ -40,7 +40,7 @@ export function writeBindings(root: string, file: Omit<BindingsFile, "schema_ver
   writeArtifact(root, BINDINGS_FILE, file);
 }
 
-export type DriftStatus = "clean" | "drifted" | "exempt" | "vanished";
+type DriftStatus = "clean" | "drifted" | "exempt" | "vanished";
 
 export interface DriftCheck {
   readonly slot: GateSlot;

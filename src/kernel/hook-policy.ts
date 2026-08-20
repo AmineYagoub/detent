@@ -35,7 +35,7 @@ export interface ClaimPolicyInput {
  * pinned to "Task" alone guarded yesterday's platform. Reads/controls
  * (TaskGet/TaskOutput/TaskStop) spawn nothing and stay allowed.
  */
-export const BILLABLE_SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+const BILLABLE_SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
 
 /** The one-shot Stop nudge (T-120's re-feed; official precedent: ralph-wiggum). */
 export const RUN_REFEED_TEXT =

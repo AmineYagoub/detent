@@ -28,12 +28,12 @@ export interface GuardContext {
   readonly budgets: Budgets;
 }
 
-export interface GuardOutcome {
+interface GuardOutcome {
   readonly next: State;
   readonly counters: Counters;
 }
 
-export type GuardName =
+type GuardName =
   | "claimed"
   | "reproWrong"
   | "premiseFalsified"

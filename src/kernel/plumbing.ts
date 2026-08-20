@@ -26,8 +26,8 @@ import { loadConfig, type LoadedConfig } from "./worstcase.js";
  * from the oracle's in-place reset).
  */
 
-export const PLUMBING_EXIT_OK = 0;
-export const PLUMBING_EXIT_REFUSED = 2;
+const PLUMBING_EXIT_OK = 0;
+const PLUMBING_EXIT_REFUSED = 2;
 
 export interface PlumbingResult {
   readonly exitCode: 0 | 2;

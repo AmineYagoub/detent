@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
@@ -102,7 +101,7 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
 }
 
 /** C-7: approval is recorded with who, when, and the hash of what was approved. */
-export function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
+function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
   const approval = approvalSchema.parse({
     schema_version: 1,
     approved_by: approvedBy,
@@ -111,9 +110,4 @@ export function recordApproval(root: string, approvedBy: string, nowMs: number):
   });
   writeFileSync(approvalPath(root), `${JSON.stringify(approval, null, 2)}\n`);
   return approval;
-}
-
-/** The hash a presentation covers, for callers that want it without writing. */
-export function presentationHash(presentation: string): string {
-  return createHash("sha256").update(presentation).digest("hex");
 }

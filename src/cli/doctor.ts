@@ -18,7 +18,7 @@ import { researchTools } from "../sessions/guard.js";
  * end to end.
  */
 
-export interface DoctorCheck {
+interface DoctorCheck {
   readonly name: string;
   readonly ok: boolean;
   readonly detail: string;

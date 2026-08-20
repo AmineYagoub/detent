@@ -6,7 +6,7 @@ import { z } from "zod";
  */
 export const SCHEMA_VERSION = 1;
 
-export const schemaVersioned = z.object({
+const schemaVersioned = z.object({
   schema_version: z.number().int().positive(),
 });
 

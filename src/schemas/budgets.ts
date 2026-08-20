@@ -8,31 +8,27 @@ import { z } from "zod";
  * generation, `turns_per_stage` is per session, and `run_spend_usd` is the
  * only run-scoped ceiling — the cross-generation financial backstop of X-8.
  */
-export const BUDGET_SCOPES = [
-  "ticket/generation",
-  "session",
-  "research-session",
-  "init",
-  "red-gate",
-  "gate-execution",
-  "binding-probe",
-  "run",
-] as const;
-export type BudgetScope = (typeof BUDGET_SCOPES)[number];
+type BudgetScope =
+  | "ticket/generation"
+  | "session"
+  | "research-session"
+  | "init"
+  | "red-gate"
+  | "gate-execution"
+  | "binding-probe"
+  | "run";
 
 /**
  * The breach target a ceiling declares. Most emit BUDGET_BREACH, but three do
  * not, and encoding that here keeps T-012's coverage test honest (PRDR-043).
  */
-export const BREACH_TARGETS = [
-  "BUDGET_BREACH",
-  "RESEARCH_DRY",
-  "AWAIT_INFO_BATCH",
-  "LADDER_ENTRY",
-  "RED_GATE_NO_EXIT",
-  "REJECTED_CANDIDATE",
-] as const;
-export type BreachTarget = (typeof BREACH_TARGETS)[number];
+export type BreachTarget =
+  | "BUDGET_BREACH"
+  | "RESEARCH_DRY"
+  | "AWAIT_INFO_BATCH"
+  | "LADDER_ENTRY"
+  | "RED_GATE_NO_EXIT"
+  | "REJECTED_CANDIDATE";
 
 export interface CeilingSpec {
   readonly scope: BudgetScope;

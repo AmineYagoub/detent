@@ -55,9 +55,6 @@ export {
   ATTEMPT_STATES,
   Breach,
   EscrowError,
-  KernelBoundaryError,
-  RESUMABLE,
-  lastNote,
   type CoreOptions,
 } from "./referee-context.js";
 export { DriftHaltSignal } from "./referee-gate.js";

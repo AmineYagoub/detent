@@ -22,9 +22,9 @@ import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.
  * picks up at the same phase from its checkpoints (C-8).
  */
 
-export const EXIT_OK = 0;
-export const EXIT_ERROR = 1;
-export const EXIT_NOT_READY = 2;
+const EXIT_OK = 0;
+const EXIT_ERROR = 1;
+const EXIT_NOT_READY = 2;
 
 export async function main(argv: readonly string[]): Promise<number> {
   const { values, positionals } = parseArgs({

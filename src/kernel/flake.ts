@@ -20,17 +20,17 @@ import { linkDiscovered } from "./tickets/mutations.js";
  */
 
 /** Why a red gate is being handed to the ladder. Recorded, never inferred. */
-export type LadderReason =
+type LadderReason =
   | "not-suspected"
   | "rerun-red"
   | "rerun-budget-exhausted";
 
-export interface GreenDecision {
+interface GreenDecision {
   readonly kind: "green";
   readonly result: GateResult;
 }
 
-export interface LadderDecision {
+interface LadderDecision {
   readonly kind: "ladder";
   /** The result the kernel acts on — the rerun's when there was one. */
   readonly result: GateResult;

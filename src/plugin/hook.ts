@@ -40,7 +40,7 @@ import { guardToolUse, pathOf, stopGate } from "../sessions/guard.js";
  * wiring, T-120/T-121).
  */
 
-export interface HookPayload {
+interface HookPayload {
   readonly hook_event_name?: unknown;
   readonly tool_name?: unknown;
   readonly tool_input?: unknown;
@@ -95,7 +95,7 @@ interface SurfaceDoc {
 }
 
 /** The PreToolUse decision; `null` means silence (no opinion — never an explicit allow). */
-export function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
+function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
   const cwd = payloadCwd(payload);
   let raw: string;
   try {
@@ -149,7 +149,7 @@ export function decidePreToolUse(payload: HookPayload, nowMs: number): string | 
 }
 
 /** Executes the scoped gate for the Stop decision (the oracle's `subprocess.run`). */
-export function runScopedGate(command: string, cwd: string): { green: boolean; outputTail: string } {
+function runScopedGate(command: string, cwd: string): { green: boolean; outputTail: string } {
   const result = spawnSync(command, {
     shell: true,
     cwd,
@@ -168,7 +168,7 @@ export function runScopedGate(command: string, cwd: string): { green: boolean; o
  * proven green) without risk of a loop: `stop_hook_active` breaks the second
  * pass.
  */
-export async function decideStop(payload: HookPayload, nowMs: number): Promise<string | null> {
+async function decideStop(payload: HookPayload, nowMs: number): Promise<string | null> {
   const cwd = payloadCwd(payload);
   let stage = "";
   let gateCmd: string | null = null;

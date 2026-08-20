@@ -17,7 +17,7 @@ export const STATE_DIR = ".detent";
 
 export const stateDir = (root: string): string => path.join(root, STATE_DIR);
 
-export type Tracking = "committed" | "local";
+type Tracking = "committed" | "local";
 
 /**
  * Draft.5's ownership split. `per-ticket` entries are serialized by the C-9
@@ -25,7 +25,7 @@ export type Tracking = "committed" | "local";
  * claim does not serialize them — a claim scopes a ticket, not the journal.
  * T-041 discharges F-1's single-writer AC, since no writer exists until then.
  */
-export type Ownership = "repository" | "per-ticket" | "run-level";
+type Ownership = "repository" | "per-ticket" | "run-level";
 
 export interface LayoutEntry {
   /** Relative to `.detent/`, POSIX. */
@@ -221,7 +221,7 @@ function walk(dir: string, prefix = ""): string[] {
  * F-3 stamping
  */
 
-export class UnstampedArtifactError extends Error {
+class UnstampedArtifactError extends Error {
   constructor(readonly rel: string) {
     super(`${rel} is a committed artifact and must carry schema_version (F-3)`);
     this.name = "UnstampedArtifactError";

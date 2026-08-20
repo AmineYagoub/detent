@@ -27,7 +27,7 @@ export function consentLogPath(root: string): string {
   return path.join(stateDir(root), "logs", "consent.jsonl");
 }
 
-export interface ConsentRecord {
+interface ConsentRecord {
   readonly at: string;
   readonly actor: string;
   readonly kind: "command" | "config-create" | "config-refused" | "off-list";
@@ -38,13 +38,13 @@ export interface ConsentRecord {
 }
 
 /** SEC-1: every consent decision is history, granted or not. */
-export function logConsent(root: string, record: ConsentRecord): void {
+function logConsent(root: string, record: ConsentRecord): void {
   const file = consentLogPath(root);
   mkdirSync(path.dirname(file), { recursive: true });
   appendFileSync(file, `${JSON.stringify(record)}\n`);
 }
 
-export type ConsentPrompt = (presentation: string) => Promise<boolean>;
+type ConsentPrompt = (presentation: string) => Promise<boolean>;
 
 export interface ConsentDeps {
   readonly root: string;

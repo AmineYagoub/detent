@@ -30,7 +30,7 @@ export function reviewSkeleton(): Record<string, unknown> {
   return { schema_version: 1, verdict: "approve", changes: [] };
 }
 
-export function buildReviewerInputs(
+function buildReviewerInputs(
   ticket: Ticket,
   diff: string,
   hypothesis: Hypothesis | null,

@@ -13,7 +13,7 @@
  * rule forbids outright.
  */
 
-export type AllowlistCategory = "repository" | "dependency-install" | "config-create";
+type AllowlistCategory = "repository" | "dependency-install" | "config-create";
 
 export interface CommandTemplate {
   readonly id: string;

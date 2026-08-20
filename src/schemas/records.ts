@@ -221,10 +221,9 @@ export type BindingsFile = z.infer<typeof bindingsFileSchema>;
  * an unknown role or hash — that check lives in `sessions/prompts.ts`, since
  * the schema cannot see the manifest.
  */
-export const assignmentRef = z.string().regex(/^[a-z_]+@[0-9a-f]{64}$/, "expected role@sha256");
+const assignmentRef = z.string().regex(/^[a-z_]+@[0-9a-f]{64}$/, "expected role@sha256");
 
 export const assignmentsFileSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   assignments: z.record(nonEmptyString, assignmentRef).default({}),
 });
-export type AssignmentsFile = z.infer<typeof assignmentsFileSchema>;

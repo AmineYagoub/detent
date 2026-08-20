@@ -29,7 +29,7 @@ export function planningBriefPath(root: string, hash: string): string {
   return path.join(stateDir(root), "research", "planning", `${hash}.json`);
 }
 
-export interface ResearchOneResult {
+interface ResearchOneResult {
   /** The brief the session produced, unvalidated. */
   readonly brief: unknown;
   /** Tool calls the session actually spent — charged against the ceiling. */

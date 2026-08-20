@@ -10,13 +10,13 @@ import path from "node:path";
  * of the kernel calls these helpers and never spells `git` itself.
  */
 
-export const RUN_BRANCH_PREFIX = "detent/run-";
-export const TICKET_BRANCH_PREFIX = "ticket/";
+const RUN_BRANCH_PREFIX = "detent/run-";
+const TICKET_BRANCH_PREFIX = "ticket/";
 
 /** B-1: the current trailer form. Never written in the legacy form. */
-export const TICKET_TRAILER = "Detent-Ticket";
+const TICKET_TRAILER = "Detent-Ticket";
 /** B-1/D-20: history written before the rename keeps its trailer; readers accept both, permanently. */
-export const LEGACY_TICKET_TRAILER = "Foreman-Ticket";
+const LEGACY_TICKET_TRAILER = "Foreman-Ticket";
 
 export function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });

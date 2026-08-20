@@ -23,9 +23,9 @@ import { CEILINGS } from "../schemas/budgets.js";
  *  timeout: a probe asks "does this terminate at all" (PRDR-061). */
 export const DEFAULT_PROBE_TIMEOUT_MS: number = CEILINGS.binding_probe_timeout_ms.default;
 
-export type RejectReason = "watch-mode" | "unrunnable";
+type RejectReason = "watch-mode" | "unrunnable";
 
-export interface BoundOutcome {
+interface BoundOutcome {
   readonly kind: "bound";
   readonly slot: GateSlot;
   readonly binding: Binding;
@@ -39,7 +39,7 @@ export interface ChoiceRequiredOutcome {
   readonly candidates: readonly Candidate[];
 }
 
-export interface RejectedOutcome {
+interface RejectedOutcome {
   readonly kind: "rejected";
   readonly slot: GateSlot;
   readonly candidate: Candidate;
@@ -48,7 +48,7 @@ export interface RejectedOutcome {
   readonly result: GateResult;
 }
 
-export interface UnboundOutcome {
+interface UnboundOutcome {
   readonly kind: "unbound";
   readonly slot: GateSlot;
 }

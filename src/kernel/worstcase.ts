@@ -126,7 +126,7 @@ export function maxPossibleSessions(
   return walk("READY", zeroCounters, new Map<string, number>(), 0);
 }
 
-export const configSchema = z.strictObject({
+const configSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   budgets: budgetsSchema,
   protected: z.array(glob).default([]),
@@ -143,7 +143,7 @@ export const configSchema = z.strictObject({
    */
   setting_sources: z.array(z.never()).default([]),
 });
-export type Config = z.infer<typeof configSchema>;
+type Config = z.infer<typeof configSchema>;
 
 export class ConfigRejectedError extends Error {
   constructor(

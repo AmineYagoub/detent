@@ -57,7 +57,7 @@ export function pathOf(toolInput: unknown): string | null {
  * bounded by the worktree alone — a session that cannot read its own
  * specification cannot implement it (T-140's empty-diff lesson).
  */
-export const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
 /**
  * The PreToolUse decision (oracle `pretooluse_guard.py`, S-2″). Deny-by-default
@@ -147,8 +147,8 @@ export async function stopGate(
  * Tool surfaces per role (S-3): the surface, never the containment.
  */
 
-export const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"] as const;
-export const WRITE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;
+const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"] as const;
+const WRITE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;
 
 /**
  * X-6/S-3: research adds WebSearch plus a domain-scoped WebFetch rule per

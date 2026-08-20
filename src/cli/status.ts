@@ -29,11 +29,11 @@ export const LABEL_FOR_STATE: Record<State, UserLabel> = {
   NEEDS_HUMAN: "waiting on you",
 };
 
-export function labelOf(state: State): UserLabel {
+function labelOf(state: State): UserLabel {
   return LABEL_FOR_STATE[state];
 }
 
-export interface StatusLine {
+interface StatusLine {
   readonly id: string;
   readonly title: string;
   readonly label: UserLabel;
@@ -41,7 +41,7 @@ export interface StatusLine {
   readonly sessions: number;
 }
 
-export function statusLines(tickets: readonly Ticket[]): StatusLine[] {
+function statusLines(tickets: readonly Ticket[]): StatusLine[] {
   return tickets.map((t) => ({
     id: t.id,
     title: t.title,

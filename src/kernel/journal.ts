@@ -20,7 +20,7 @@ import { ledgerRowSchema, transitionLineSchema, type LedgerRow, type TransitionL
 
 const OPEN_ROOTS = new Set<string>();
 
-export class JournalContendedError extends Error {
+class JournalContendedError extends Error {
   constructor(readonly root: string) {
     super(
       `a run journal is already open for ${root} — ledger.jsonl and transitions.jsonl are single-writer ` +

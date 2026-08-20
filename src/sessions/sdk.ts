@@ -54,7 +54,7 @@ export function buildPreToolUseHook(policy: GuardPolicy): NonNullable<Options["h
   };
 }
 
-export function buildStopHook(config: SdkBackendConfig, role: string): NonNullable<Options["hooks"]> {
+function buildStopHook(config: SdkBackendConfig, role: string): NonNullable<Options["hooks"]> {
   const runScopedGate = config.runScopedGate;
   if (runScopedGate === undefined) return {};
   return {

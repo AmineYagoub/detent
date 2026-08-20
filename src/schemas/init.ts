@@ -169,4 +169,3 @@ export const planDraftSchema = z.strictObject({
     )
     .min(1),
 });
-export type PlanDraft = z.infer<typeof planDraftSchema>;

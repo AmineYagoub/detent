@@ -19,10 +19,10 @@ import { stateDir, writeArtifact } from "../fs/layout.js";
  * alone.
  */
 
-export const DEFAULT_PROTECTED = ["tickets/**", ".detent/tickets/**", "AGENTS.md", "CLAUDE.md"] as const;
+const DEFAULT_PROTECTED = ["tickets/**", ".detent/tickets/**", "AGENTS.md", "CLAUDE.md"] as const;
 
 /** S-5: the agent-sdk pin mirrors package.json's exact dependency. */
-export const PINNED_AGENT_SDK = "0.3.191";
+const PINNED_AGENT_SDK = "0.3.191";
 
 /**
  * S-5's backend pin is "the version this project initialized against":
@@ -30,7 +30,7 @@ export const PINNED_AGENT_SDK = "0.3.191";
  * An unreadable CLI records "unknown", which doctor then flags — honest, not
  * silent.
  */
-export function installedClaudeVersion(): string {
+function installedClaudeVersion(): string {
   try {
     const raw = execFileSync("claude", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return raw.trim().split(/\s+/)[0] ?? "unknown";
@@ -39,7 +39,7 @@ export function installedClaudeVersion(): string {
   }
 }
 
-export function configFilePath(root: string): string {
+function configFilePath(root: string): string {
   return path.join(stateDir(root), "config.json");
 }
 

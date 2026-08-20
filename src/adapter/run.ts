@@ -27,10 +27,10 @@ export const TIMEOUT_EXIT = 124;
 export const NOT_FOUND_EXIT = 127;
 
 /** X-1's `gate_timeout_ms` default — the table is the single source (PRDR-061). */
-export const DEFAULT_TIMEOUT_MS: number = CEILINGS.gate_timeout_ms.default;
-export const DEFAULT_TAIL_BYTES = 64 * 1024;
+const DEFAULT_TIMEOUT_MS: number = CEILINGS.gate_timeout_ms.default;
+const DEFAULT_TAIL_BYTES = 64 * 1024;
 /** How long a killed process group gets before SIGKILL. */
-export const DEFAULT_KILL_GRACE_MS = 2_000;
+const DEFAULT_KILL_GRACE_MS = 2_000;
 
 export interface GateSpec {
   /** The literal command Detent runs — V-2's `resolved`, verbatim. */
@@ -49,7 +49,7 @@ export interface GateSpec {
  * ways a command yields no exit status of its own, and V-1 treats them very
  * differently — the first is a broken binding, the second is watch-mode.
  */
-export type GateOutcome = "exited" | "timed-out" | "not-found";
+type GateOutcome = "exited" | "timed-out" | "not-found";
 
 export interface GateResult {
   readonly slot: GateSlot | null;

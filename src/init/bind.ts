@@ -70,7 +70,7 @@ const GREENFIELD_COMMANDS: Readonly<Record<string, Partial<Record<GateSlot, stri
  * V-1's execute-before-approve is not weakened here. It is deferred, and the
  * `provisional` status is the record that it has not happened yet.
  */
-export function provisionalBindingsFor(analysis: Analysis | null, at: string): Binding[] {
+function provisionalBindingsFor(analysis: Analysis | null, at: string): Binding[] {
   const language = analysis?.stack?.language.toLowerCase() ?? "";
   const commands = GREENFIELD_COMMANDS[language];
   if (commands === undefined) return [];
@@ -85,12 +85,6 @@ export function provisionalBindingsFor(analysis: Analysis | null, at: string): B
     approved_by: "auto",
     status: "provisional" as const,
   }));
-}
-
-export interface DetermineOutputs {
-  readonly bindings: readonly Binding[];
-  readonly skips: readonly Skip[];
-  readonly status: Binding["status"];
 }
 
 export async function determineVerification(deps: DetermineDeps): Promise<PhaseOutcome> {

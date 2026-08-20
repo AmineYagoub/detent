@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline/promises";
 import { discover } from "../adapter/discover/index.js";
 import { bindAll, type BindOptions, type BindReport } from "../adapter/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
@@ -17,13 +16,13 @@ import type { Binding } from "../schemas/records.js";
 export const EXIT_OK = 0;
 export const EXIT_NOT_READY = 2;
 
-export interface SyncSummary {
+interface SyncSummary {
   readonly drift: readonly DriftCheck[];
   readonly proposed: readonly Binding[];
   readonly stored: readonly Binding[];
 }
 
-export type ConsentPrompt = (summary: SyncSummary) => Promise<boolean>;
+type ConsentPrompt = (summary: SyncSummary) => Promise<boolean>;
 
 export interface VerifySyncDeps {
   readonly consent: ConsentPrompt;
@@ -86,21 +85,4 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   }
   messages.push(`re-baselined ${report.bindings.length} binding(s).`);
   return { exitCode: EXIT_OK, summary, rebaselined: true, messages };
-}
-
-/** R-6: TTY prompts via `node:readline/promises`. */
-export async function ttyConsent(summary: SyncSummary): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    for (const check of summary.drift) {
-      if (check.status === "drifted" || check.status === "vanished") process.stdout.write(`${check.message}\n`);
-    }
-    for (const binding of summary.proposed) {
-      process.stdout.write(`  ${binding.slot}: ${binding.resolved}\n`);
-    }
-    const answer = await rl.question("Accept these bindings as the new baseline? [y/N] ");
-    return /^y(es)?$/i.test(answer.trim());
-  } finally {
-    rl.close();
-  }
 }

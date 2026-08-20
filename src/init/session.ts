@@ -43,7 +43,7 @@ export interface InitSessionRequest {
   readonly withWeb?: boolean;
 }
 
-export function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
+function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
   const preamble = JSON.stringify(
     { phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below (P2)." },
     null,

@@ -23,7 +23,7 @@ export interface Invocation {
  * invocation time, with the run's baseline — the merge-base of the run branch
  * and the base branch it was created from (resolved once per run, T-042).
  */
-export const BASE_PLACEHOLDER = /\bBASE\b/g;
+const BASE_PLACEHOLDER = /\bBASE\b/g;
 
 export function needsBaseRef(command: string): boolean {
   BASE_PLACEHOLDER.lastIndex = 0;
@@ -64,7 +64,7 @@ interface RunnerRule {
 }
 
 /** The matrix. One row per runner that watches unless told otherwise. */
-export const RUNNER_RULES: readonly RunnerRule[] = [
+const RUNNER_RULES: readonly RunnerRule[] = [
   { runner: /\bvitest\b/, satisfied: /\bvitest\s+run\b|--run\b/, flags: ["--run"] },
   { runner: /\bjest\b/, satisfied: /--watchAll=false|--ci\b/, flags: ["--watchAll=false", "--ci"] },
   { runner: /\bkarma\s+start\b/, satisfied: /--single-run/, flags: ["--single-run"] },

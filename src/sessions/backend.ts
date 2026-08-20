@@ -71,7 +71,7 @@ export function prefixHash(spec: SessionSpec): string {
  * client-side estimate, named accordingly (PRDR-052). `telemetryParsed: false`
  * is the S-4 circuit breaker — the kernel treats it as budget-breaching.
  */
-export interface ModelTokenUsage {
+interface ModelTokenUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadInputTokens: number;

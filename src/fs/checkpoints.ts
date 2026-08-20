@@ -18,7 +18,7 @@ import { stateDir } from "./layout.js";
  * into arithmetic instead of a rule someone has to apply.
  */
 
-export interface PhaseSpec {
+interface PhaseSpec {
   /** Filesystem-safe; it names the checkpoint file. */
   readonly phase: string;
   /** Repo-relative POSIX paths this phase reads. */
@@ -29,7 +29,7 @@ export type Pipeline = readonly PhaseSpec[];
 
 const PHASE_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
-export class UnknownPhaseError extends Error {
+class UnknownPhaseError extends Error {
   constructor(readonly phase: string) {
     super(`no such phase in the pipeline: ${phase}`);
     this.name = "UnknownPhaseError";
@@ -124,9 +124,9 @@ export function writeCheckpoint(
   return checkpoint;
 }
 
-export type PhaseDisposition = "reuse" | "execute";
+type PhaseDisposition = "reuse" | "execute";
 
-export interface PhasePlan {
+interface PhasePlan {
   readonly phase: string;
   readonly disposition: PhaseDisposition;
   readonly hash: string;

@@ -22,9 +22,9 @@ export const countersSchema = z.strictObject({
 });
 export type Counters = z.infer<typeof countersSchema>;
 
-export const generationOutcomes = ["in_flight", "done", "blocked", "needs_human", "requeued"] as const;
+const generationOutcomes = ["in_flight", "done", "blocked", "needs_human", "requeued"] as const;
 
-export const generationSchema = z.strictObject({
+const generationSchema = z.strictObject({
   index: z.number().int().nonnegative(),
   counters: countersSchema,
   outcome: z.enum(generationOutcomes),

@@ -16,8 +16,7 @@ import { runGate, type GateResult, type GateSpec } from "./run.js";
  * Stack strings live here by design — the adapter is where V-4 puts them.
  */
 
-export const ECOSYSTEMS = ["node", "python", "go", "rust"] as const;
-export type Ecosystem = (typeof ECOSYSTEMS)[number];
+type Ecosystem = "node" | "python" | "go" | "rust";
 
 interface EcosystemSpec {
   readonly name: Ecosystem;
@@ -90,7 +89,7 @@ export interface EnvFingerprint {
 }
 
 /** Injectable so tests neither shell out nor depend on what is installed. */
-export type RuntimeProbe = (command: string, cwd: string) => Promise<string>;
+type RuntimeProbe = (command: string, cwd: string) => Promise<string>;
 
 export interface FingerprintOptions {
   readonly probe?: RuntimeProbe;

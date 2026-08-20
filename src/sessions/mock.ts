@@ -1,4 +1,4 @@
-import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
+import { type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
 
 /**
  * T-040 — the deterministic mock backend, porting the oracle's semantics.
@@ -68,4 +68,3 @@ export class MockBackend implements SessionBackend {
 }
 
 /** The spec is data the mock may inspect; exported for test convenience. */
-export { fullPrompt };

@@ -39,7 +39,7 @@ const TOOLCHAIN_PATTERNS: readonly RegExp[] = [
  * Informational only. No consumer may branch on this to skip the ladder — that
  * is what `suspectedFlake` plus a green rerun is for.
  */
-export type PatternClass = "flake-pattern" | "toolchain" | "assertion";
+type PatternClass = "flake-pattern" | "toolchain" | "assertion";
 
 export interface Classification {
   /**

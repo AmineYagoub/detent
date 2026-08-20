@@ -16,16 +16,14 @@ import type { GateSlot } from "./run.js";
  * and nothing else. Workspace scoping is a named v2 migration.
  */
 
-export const WORKSPACE_KINDS = [
-  "turbo",
-  "nx",
-  "pnpm",
-  "npm-workspaces",
-  "lerna",
-  "go-work",
-  "cargo-workspace",
-] as const;
-export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+type WorkspaceKind =
+  | "turbo"
+  | "nx"
+  | "pnpm"
+  | "npm-workspaces"
+  | "lerna"
+  | "go-work"
+  | "cargo-workspace";
 
 export interface Workspace {
   readonly kind: WorkspaceKind;

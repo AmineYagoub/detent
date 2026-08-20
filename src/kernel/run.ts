@@ -71,7 +71,6 @@ export type EscalationAction =
   | { readonly kind: "skip"; readonly by: string }
   | { readonly kind: "quit" };
 
-export type { PendingEntry };
 
 export interface RunOutcome {
   readonly exitCode: 0 | 1 | 2 | 10;

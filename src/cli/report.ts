@@ -24,9 +24,9 @@ export const METRIC_KEYS = [
   "self_build_gate",
 ] as const;
 
-export type MetricKey = (typeof METRIC_KEYS)[number];
+type MetricKey = (typeof METRIC_KEYS)[number];
 
-export interface MetricValue {
+interface MetricValue {
   readonly value: number | string | null;
   readonly numerator?: number;
   readonly denominator?: number;

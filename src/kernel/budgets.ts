@@ -71,11 +71,6 @@ export function consumeSlot(counters: Counters, slot: UnitSlot): Counters {
   return { ...counters, [slot]: counters[slot] + 1 };
 }
 
-/** A launched session, counted against the per-generation net ceiling. */
-export function countSession(counters: Counters): Counters {
-  return { ...counters, sessions: counters.sessions + 1 };
-}
-
 export function countHypothesis(counters: Counters): Counters {
   return { ...counters, hypotheses: counters.hypotheses + 1 };
 }

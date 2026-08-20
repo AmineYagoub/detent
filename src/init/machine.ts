@@ -34,7 +34,7 @@ export type PhaseOutcome =
       readonly items?: readonly string[];
     };
 
-export interface InitContext {
+interface InitContext {
   readonly root: string;
   /** Outputs of every completed phase, by phase name — the pipeline's bus. */
   readonly outputs: Readonly<Record<string, Record<string, unknown>>>;
@@ -101,14 +101,6 @@ export function valueDigest(value: unknown): string {
  * ---------------------------------------------------------------------------
  * C-1 — root-only
  */
-
-export class NotAtGitRootError extends Error {
-  readonly exitCode = 2;
-  constructor(readonly root: string) {
-    super(`\`detent init\` runs only at the git root — run it from ${root}`);
-    this.name = "NotAtGitRootError";
-  }
-}
 
 /**
  * C-1: init runs only at the git root; elsewhere it errors with the root path

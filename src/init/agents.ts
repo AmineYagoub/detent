@@ -21,7 +21,7 @@ import type { PhaseOutcome } from "./machine.js";
  * fixes every role after that.
  */
 
-export function assignmentsPath(root: string): string {
+function assignmentsPath(root: string): string {
   return path.join(stateDir(root), "agents", "assignments.json");
 }
 

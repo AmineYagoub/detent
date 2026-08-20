@@ -37,11 +37,6 @@ export interface AnalyzeDeps {
   readonly note?: (text: string) => void;
 }
 
-export interface AnalyzeSuccess {
-  readonly analysis: Analysis;
-  readonly research: PlanResearchResult | null;
-}
-
 /**
  * Greenfield is the absence of stack markers, not a flag: a directory holding
  * only planning documents has nothing to bind against yet (C-1/D-10).
@@ -156,7 +151,7 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   };
 }
 
-export function readAnalysis(root: string): unknown {
+function readAnalysis(root: string): unknown {
   const file = analysisPath(root);
   if (!existsSync(file)) return null;
   try {
