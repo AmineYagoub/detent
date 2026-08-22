@@ -39,12 +39,15 @@ export function substituteBase(command: string, baseRef: string): string {
 export const CI_ENV: Readonly<Record<string, string>> = { CI: "1" };
 
 /**
- * How each package manager forwards extra arguments to a script. npm and pnpm
- * need the `--` separator; yarn (classic) and bun pass them through.
+ * How each package manager forwards extra arguments to a script. Only npm
+ * needs the `--` separator; pnpm (v7+), yarn (classic), and bun pass args
+ * through — and pnpm forwards a literal `--` INTO the script's argv, which
+ * corrupted a vitest run-once probe live (PRDR-077: `vitest -- --run` treats
+ * `--run` as a filter and the tree never exits).
  */
 const ARG_SEPARATOR: Record<PackageManager, string> = {
   npm: " -- ",
-  pnpm: " -- ",
+  pnpm: " ",
   yarn: " ",
   bun: " ",
 };

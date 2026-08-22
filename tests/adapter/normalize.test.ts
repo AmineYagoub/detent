@@ -56,7 +56,7 @@ describe("T-028 CI-mode flags", () => {
 describe("T-028 package-manager selection happens at call time (V-4)", () => {
   it.each([
     ["package-lock.json", "npm", "npm run test -- --run"],
-    ["pnpm-lock.yaml", "pnpm", "pnpm run test -- --run"],
+    ["pnpm-lock.yaml", "pnpm", "pnpm run test --run"],
     ["yarn.lock", "yarn", "yarn run test --run"],
     ["bun.lockb", "bun", "bun run test --run"],
   ])("%s ⇒ %s, with that manager's argument separator", (lock, pm, expected) => {
