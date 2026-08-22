@@ -98,6 +98,34 @@ describe("T-026 watch-mode rejection (V-1)", () => {
     expect(outcome.reason).toBe("unrunnable");
     expect(outcome.explanation).toContain("could not be executed");
   });
+
+  it("interpreter-wrapped absence is unrunnable, not a red gate (PRDR-076)", async () => {
+    const root = tree(pkg({ test: "python -m build" }));
+    const outcome = await bindSlot("test", discover(root).candidates, {
+      root,
+      timeoutMs: 5_000,
+      now: NOW,
+      normalize: () => ({
+        command: `sh -c 'echo "/usr/bin/python3: No module named build" >&2; exit 1'`,
+        env: {},
+      }),
+    });
+    expect(outcome.kind).toBe("rejected");
+    if (outcome.kind !== "rejected") throw new Error("unreachable");
+    expect(outcome.reason).toBe("unrunnable");
+    expect(outcome.explanation).toContain("tooling absent");
+  });
+
+  it("a red gate that merely PRINTS an absence phrase still binds (green guard)", async () => {
+    const root = tree(pkg({ test: "vitest run" }));
+    const outcome = await bindSlot("test", discover(root).candidates, {
+      root,
+      timeoutMs: 5_000,
+      now: NOW,
+      normalize: () => ({ command: `sh -c 'echo "docs mention No module named foo"; exit 0'`, env: {} }),
+    });
+    expect(outcome.kind).toBe("bound");
+  });
 });
 
 describe("T-026 ambiguity is an interrupt, never a guess (V-1)", () => {

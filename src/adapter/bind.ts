@@ -25,6 +25,21 @@ export const DEFAULT_PROBE_TIMEOUT_MS: number = CEILINGS.binding_probe_timeout_m
 
 type RejectReason = "watch-mode" | "unrunnable";
 
+/**
+ * V-1 (PRDR-076, found by field test 2): interpreter-wrapped absence.
+ * `python -m build` with no `build` package EXECUTES — the interpreter runs,
+ * prints the absence, exits 1 — so the oracle's 127-based `runnable` reads a
+ * missing tool as a red-but-valid gate. A PROBE that sees the interpreter's
+ * own absence message is binding a gate whose tool does not exist; the same
+ * text at live gate time stays with the ladder, which can research and say so.
+ * The exit guard keeps a green command that merely PRINTS the phrase bindable.
+ */
+const TOOLING_ABSENT_PATTERNS = [/No module named/i, /Cannot find module/];
+
+function toolingAbsent(result: GateResult): boolean {
+  return result.exitCode !== 0 && TOOLING_ABSENT_PATTERNS.some((pattern) => pattern.test(result.output));
+}
+
 interface BoundOutcome {
   readonly kind: "bound";
   readonly slot: GateSlot;
@@ -134,6 +149,19 @@ export async function bindSlot(
       reason: "unrunnable",
       explanation:
         `\`${invocation.command}\` could not be executed (exit ${result.normalizedExit}). ` +
+        `A binding Detent cannot run is not a gate. Install the tooling or bind a different command (V-1).`,
+      result,
+    };
+  }
+
+  if (toolingAbsent(result)) {
+    return {
+      kind: "rejected",
+      slot,
+      candidate,
+      reason: "unrunnable",
+      explanation:
+        `\`${invocation.command}\` executed but reported its tooling absent (exit ${result.normalizedExit}). ` +
         `A binding Detent cannot run is not a gate. Install the tooling or bind a different command (V-1).`,
       result,
     };
