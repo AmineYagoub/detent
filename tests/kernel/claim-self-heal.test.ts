@@ -8,7 +8,7 @@ import { RefereeCore } from "../../src/kernel/referee.js";
 import { claimPath } from "../../src/kernel/tickets/paths.js";
 import { readTicket, isClaimed } from "../../src/kernel/tickets/readers.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
-import { MockBackend, okResult } from "../../src/sessions/mock.js";
+import { MockBackend } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, makeRunRepo } from "./run-fixture.js";
@@ -30,7 +30,7 @@ async function crashedRepo(): Promise<string> {
   const repo = await makeRunRepo();
   cleanups.push(() => removeTree(repo.root));
   addTicket(repo.root, { id: "t-1" });
-  const backend = new MockBackend({ implement: () => okResult() });
+  const backend = new MockBackend({});
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
   const journal = RunJournal.open(repo.root);
   const core = new RefereeCore(
@@ -40,16 +40,24 @@ async function crashedRepo(): Promise<string> {
     ensureRunBranch(repo.root, "self-heal"),
   );
   installTrailerHook(repo.root);
-  expect(core.acquire("t-1").ok).toBe(true);
-  await core.attempt("t-1", "IN_PROGRESS");
+  const acquired = core.acquire("t-1");
+  expect(acquired.ok).toBe(true);
+  /**
+   * Apply the CLAIMED escrow exactly as a driver would — acquire only MINTS
+   * the event (found the hard way: without the admit, the ticket stays READY,
+   * the heal correctly skips a non-resumable state, and every assertion here
+   * is vacuous).
+   */
+  core.admit("t-1", (acquired as { claimedRef?: string }).claimedRef as string);
   journal.close();
   /* The claim is still held and the ticket is in flight — the crash shape. */
+  expect(readTicket(repo.root, "t-1").state).toBe("IN_PROGRESS");
   expect(isClaimed(repo.root, "t-1")).toBe(true);
   return repo.root;
 }
 
 function resumedCore(root: string, isAlive: (pid: number) => boolean): RefereeCore {
-  const backend = new MockBackend({ implement: () => okResult() });
+  const backend = new MockBackend({});
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(root), "config.json"), "utf8")));
   const journal = RunJournal.open(root);
   cleanups.push(() => journal.close());
