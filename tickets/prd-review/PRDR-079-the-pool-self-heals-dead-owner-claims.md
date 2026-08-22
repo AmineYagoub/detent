@@ -44,3 +44,11 @@ ever trusted on the machine that can check it (closing the cross-machine
 hole PRDR-078 recorded); one shared `claimBreakable` predicate now serves
 the pool, `unclaim`, and approve/requeue, so no two breakers can disagree.
 D-30's sentence is finally true without an operator standing next to it.
+
+## Amendment (CI, the first red on main)
+
+Both liveness probes treated EVERY signal-0 failure as death. EPERM means the
+opposite — the process exists and you may not signal it (pid 1 on a CI runner
+answers exactly this) — so privileged live processes read as stale to every
+breaker. One shared `pidAlive` now answers EPERM as alive and serves the
+context default and the plumbing guard alike.

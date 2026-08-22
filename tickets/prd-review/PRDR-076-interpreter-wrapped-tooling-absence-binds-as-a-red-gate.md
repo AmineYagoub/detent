@@ -57,3 +57,14 @@ reality recorded, not fixed: slots can carry build-order dependencies (this
 repo's typecheck is red until its build has run once) — V-1 probes slots in
 isolation and binds such a slot red; preparing the tree is the operator's
 setup act.
+
+## Second amendment (CI, the first red on main)
+
+The Linux CI runner surfaced the pattern's remaining over-reach: a RED SUITE's
+own output can quote `Cannot find module './something'` — user code failing,
+which is a perfectly good red binding — and the bare pattern rejected it.
+Absence must NAME THE INVOCATION: only a match whose captured module name
+appears in the probed command itself reads as absence (`python -m build` ↔
+"No module named build"); everything else binds red, the pre-refinement
+behavior. The standalone MODULE_NOT_FOUND pattern is gone for the same
+reason — it names nothing to correlate.

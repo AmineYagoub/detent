@@ -5,6 +5,7 @@ import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
+import { pidAlive } from "./tickets/mutations.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { SpendLedger } from "./ledger.js";
@@ -107,16 +108,7 @@ export class RefereeContext {
     this.prompts = opts.prompts;
     this.worker = opts.worker ?? "w1";
     this.now = opts.now ?? (() => Date.now());
-    this.isAlive =
-      opts.isAlive ??
-      ((pid: number): boolean => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      });
+    this.isAlive = opts.isAlive ?? pidAlive;
     this.worktree = opts.worktree === true;
     this.rulesText = readRules(opts.root);
     const bindings = readBindings(opts.root).bindings;

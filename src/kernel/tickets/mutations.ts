@@ -26,6 +26,21 @@ export interface ClaimInfo {
  * recorded. Shared by `unclaim`, approve/requeue's guard, and the pool's
  * crash-resume self-heal, so every breaker answers identically.
  */
+/**
+ * PRDR-079 amendment: EPERM answers "exists". Signal-0 to a process you may
+ * not signal (pid 1 on a CI runner) throws EPERM — the process is ALIVE.
+ * Treating any throw as death made both breakers see privileged live
+ * processes as stale.
+ */
+export function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export function claimBreakable(info: ClaimInfo, isAlive: (pid: number) => boolean, thisHost: string): boolean {
   if (info.host !== undefined && info.host !== thisHost) return false;
   return !isAlive(info.pid);

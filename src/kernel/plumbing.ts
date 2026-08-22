@@ -9,7 +9,7 @@ import { RunJournal } from "./journal.js";
 import { apply } from "./machine.js";
 import { allTickets, readTicket, isClaimed } from "./tickets/readers.js";
 import { claimsDir } from "./tickets/paths.js";
-import { claimBreakable, readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
+import { claimBreakable, pidAlive, readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
 
 /**
@@ -49,20 +49,13 @@ export interface PlumbingDeps {
   readonly now?: () => number;
 }
 
-function defaultAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+
 
 /** C-12's claim discipline, shared by both verbs. */
 function guardClaim(root: string, id: string, deps: PlumbingDeps): ClaimGuard {
   if (!isClaimed(root, id)) return { ok: true };
   const info = readClaim(root, id);
-  const alive = deps.isAlive ?? defaultAlive;
+  const alive = deps.isAlive ?? pidAlive;
   /** An unreadable claim file is held-by-someone until proven stale (R-3). */
   if (info === null) return { ok: false, refusal: `ticket ${id} is claimed (claim unreadable — treat as held)` };
   if (!claimBreakable(info, alive, hostname())) {

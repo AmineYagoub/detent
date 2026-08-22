@@ -130,6 +130,21 @@ describe("T-026 watch-mode rejection (V-1)", () => {
     expect(outcome.kind).toBe("bound");
   });
 
+  it("a red suite quoting an internal module binds — absence must name the invocation (PRDR-076, 2nd amendment)", async () => {
+    const root = tree(pkg({ test: "node --test test/" }));
+    /** The pattern MATCHES ('./helpers.js' is captured) but the module is not
+     *  named by the command — user code failing, a perfectly good red gate. */
+    const runner: GateRunner = async (spec) => ({
+      ...okResult(spec.command),
+      green: false,
+      exitCode: 1,
+      normalizedExit: 1,
+      output: "Error: Cannot find module './helpers.js'\nRequire stack:\n- /svc/test/service.test.js",
+    });
+    const outcome = await bindSlot("test", discover(root).candidates, { root, runner, now: NOW });
+    expect(outcome.kind).toBe("bound");
+  });
+
   it("a red gate that merely PRINTS an absence phrase still binds (green guard)", async () => {
     const root = tree(pkg({ test: "vitest run" }));
     const outcome = await bindSlot("test", discover(root).candidates, {

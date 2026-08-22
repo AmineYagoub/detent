@@ -413,10 +413,15 @@ describe("T-041 stale claims never spin the loop (C-9/C-12)", () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
     addTicket(root, { id: "t2" });
-    /** t1 sits mid-flight under another worker's claim (e.g. a kill -9 left it). */
+    /**
+     * t1 sits mid-flight under ANOTHER LIVE worker's claim (this process's
+     * own pid — unambiguously alive on every OS). C-9′/PRDR-079: only a
+     * verifiably DEAD owner's claim self-heals (tested in
+     * claim-self-heal.test.ts); a live peer's claim is never guessed about.
+     */
     const t1 = readTicket(root, "t1");
     writeFileSync(path.join(root, ".detent/plan/t1.json"), `${JSON.stringify({ ...t1, state: "IN_PROGRESS" }, null, 2)}\n`);
-    writeFileSync(path.join(root, ".detent/claims/t1.claim"), JSON.stringify({ owner: "w9", pid: 1, at: "x" }));
+    writeFileSync(path.join(root, ".detent/claims/t1.claim"), JSON.stringify({ owner: "w9", pid: process.pid, at: "x" }));
 
     const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
     const outcome = await run(opts(root, backend));

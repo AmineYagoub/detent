@@ -40,13 +40,25 @@ type RejectReason = "watch-mode" | "unrunnable";
  * to the runtime loader's own line shape, and any `error TS####` marker
  * proves a running tool regardless of phrasing.
  */
-const TOOLING_ABSENT_PATTERNS = [/No module named/i, /(?:^|\n)Error: Cannot find module/, /MODULE_NOT_FOUND/];
+const ABSENCE_PATTERNS = [/No module named '?([A-Za-z0-9_./@-]+)'?/i, /Cannot find module '([^']+)'/];
 const TOOL_RAN_MARKERS = [/error TS\d{4}/];
 
-function toolingAbsent(result: GateResult): boolean {
+/**
+ * Second amendment (CI, first red on main): absence must NAME THE INVOCATION.
+ * A red suite's stack trace can quote "Cannot find module './helpers.js'" —
+ * user code failing, a perfectly good red gate — while `python -m build`
+ * missing its module quotes the very name the command invokes. Only a match
+ * whose captured module appears in the command itself reads as absence;
+ * everything else binds red, the pre-refinement behavior.
+ */
+function toolingAbsent(result: GateResult, command: string): boolean {
   if (result.exitCode === 0) return false;
   if (TOOL_RAN_MARKERS.some((pattern) => pattern.test(result.output))) return false;
-  return TOOLING_ABSENT_PATTERNS.some((pattern) => pattern.test(result.output));
+  for (const pattern of ABSENCE_PATTERNS) {
+    const match = pattern.exec(result.output);
+    if (match?.[1] !== undefined && command.includes(match[1])) return true;
+  }
+  return false;
 }
 
 interface BoundOutcome {
@@ -163,7 +175,7 @@ export async function bindSlot(
     };
   }
 
-  if (toolingAbsent(result)) {
+  if (toolingAbsent(result, invocation.command)) {
     return {
       kind: "rejected",
       slot,
