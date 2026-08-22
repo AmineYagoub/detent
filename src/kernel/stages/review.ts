@@ -22,13 +22,23 @@ import { reviewApprove, reviewChanges, type KernelEvent } from "../events.js";
  * `schema_version` and the strict validator refused it (SEC-3's evidence
  * closure is unchanged: diff + criteria + rules + hypothesis).
  */
-export const REVIEWER_INPUT_KEYS = ["ticket", "diff", "hypothesis", "expected_output", "expected_output_note"] as const;
+export const REVIEWER_INPUT_KEYS = ["ticket", "diff", "hypothesis", "operator_record", "expected_output", "expected_output_note"] as const;
 export const REVIEWER_TICKET_KEYS = ["id", "title", "acceptance_criteria", "non_goals"] as const;
 
 /** A-5's exact shape; skeletons.test parses it through `reviewSchema`. */
 export function reviewSkeleton(): Record<string, unknown> {
   return { schema_version: 1, verdict: "approve", changes: [] };
 }
+
+/**
+ * PRDR-080: operator acts — surface grants, requeue guidance, claim breaks —
+ * are recorded as ticket notes, and a reviewer that cannot see them reads
+ * SANCTIONED cross-surface work as scope creep forever (found live: an
+ * operator-granted test-hardening flagged as scope on every round). The
+ * reviewer receives the recent record; the review prompt tells it a recorded
+ * grant makes the granted file in-scope.
+ */
+const OPERATOR_RECORD_NOTES = 8;
 
 function buildReviewerInputs(
   ticket: Ticket,
@@ -42,6 +52,7 @@ function buildReviewerInputs(
       acceptance_criteria: ticket.acceptance_criteria,
       non_goals: ticket.non_goals,
     },
+    operator_record: ticket.notes.slice(-OPERATOR_RECORD_NOTES).map((n) => ({ author: n.author, text: n.text })),
     expected_output: reviewSkeleton(),
     expected_output_note:
       'verdict "changes" requires at least one {tag: correctness|requirement|scope|rules, finding, file?} entry; the validator is strict — no extra keys, and schema_version is required.',
