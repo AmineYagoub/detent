@@ -63,26 +63,35 @@ left off.
 
 ```mermaid
 flowchart TD
-    I["detent init — discover docs, analyze, plan"] --> A{"your approval"}
+    I["detent init"] --> A{"your approval"}
     A --> R["detent run"]
     R --> C["claim next ticket"]
-    C --> W["fresh session, contained to the ticket's surface"]
-    W --> G{"gate — your own test / lint / build"}
-    G -->|red| L["escalation ladder: blind fix → research → informed fix"]
-    L -->|green| V
-    L -->|still red| H["human decision, with dossier"]
-    G -->|green| V["independent review of the ticket's diff"]
-    V -->|changes| F["review fix"] --> G
-    V -->|approve| RG{"risk-labelled?"}
-    RG -->|yes| B4["human approval"] --> D
-    RG -->|no| D["DONE — finalized on the run branch"]
+    C --> S["fresh session<br>contained to the ticket's surface"]
+    S --> G{"your own gates<br>test · lint · build"}
+    G -- green --> V{"independent review"}
+    G -- red --> L["fix ladder<br>blind → research → informed"]
+    L --> G
+    L -- exhausted --> H["you<br>dossier in hand, requeue at will"]
+    H --> C
+    V -- changes --> S
+    V -- approve --> D["DONE<br>finalized on the run branch"]
     D --> C
-    H --> Q["requeue with guidance"] --> C
+
+    classDef you fill:#fbbf24,stroke:#b45309,color:#1f2937
+    classDef machine fill:#6366f1,stroke:#4338ca,color:#ffffff
+    classDef verify fill:#34d399,stroke:#047857,color:#1f2937
+    classDef ladder fill:#f87171,stroke:#b91c1c,color:#1f2937
+    class A,H you
+    class I,R,C,S,D machine
+    class G,V verify
+    class L ladder
 ```
 
-Every arrow above is a referee-admitted transition, journaled to
-`transitions.jsonl`. Budgets are evaluated at session launch; a breached
-ceiling routes to a human, never to a retry.
+Amber is you; indigo is the machine's moves; green is verification; red is
+the fix ladder. Every arrow is a referee-admitted transition, journaled to
+`transitions.jsonl`. Budgets are evaluated at session launch and a breached
+ceiling routes to a human, never to a retry; a risk-labelled ticket takes
+one extra stop at your approval before DONE.
 
 ## What Detent will never do
 
