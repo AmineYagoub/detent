@@ -2,9 +2,9 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0-draft.6 |
-| Date | 2026-08-18 |
-| Status | Draft for review |
+| Version | 3.0 |
+| Date | 2026-08-22 |
+| Status | Released (T-141) — draft line 3.0-draft.1…draft.6 closed by the N-7 green (T-140) |
 | Implementation | TypeScript (public, open source) |
 | Supersedes | PRD v2.0-draft.7 (the CLI line; remains the reference for every section v3 inherits unchanged) |
 
