@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -7,6 +7,7 @@ import { currentCounters, currentGeneration, openGeneration, withCurrentCounters
 import { RunJournal } from "./journal.js";
 import { apply } from "./machine.js";
 import { readTicket, isClaimed } from "./tickets/readers.js";
+import { claimsDir } from "./tickets/paths.js";
 import { readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
 
@@ -179,6 +180,43 @@ export function requeueTicket(
     message: `${id}: → READY; generation ${generations.length - 1} opened with the guidance recorded (X-8)`,
     ticket: updated,
   };
+}
+
+/**
+ * `detent unclaim <id>` / `--stale` (C-12, PRDR-078): the explicit
+ * lock-release verb for claims whose owner died in a state approve/requeue
+ * cannot legally touch — an in-flight resume blocked by a crashed run's
+ * claim was the live runs' recurring hand surgery. Releasing a lock is not
+ * an X-3 move: no transition happens, and the break is recorded as a ticket
+ * note. The C-12 guard decides exactly as it does for the other verbs: a
+ * live owner refuses naming the pid and claim age; an unreadable claim
+ * stays held-by-someone (R-3).
+ */
+export function unclaimTicket(root: string, id: string, user: string, deps: PlumbingDeps = {}): PlumbingResult {
+  if (!isClaimed(root, id)) return { exitCode: PLUMBING_EXIT_OK, message: `${id}: no claim to release` };
+  const guard = guardClaim(root, id, deps);
+  if (!guard.ok) return { exitCode: PLUMBING_EXIT_REFUSED, message: guard.refusal ?? `ticket ${id} is claimed` };
+  if (guard.brokeStale !== undefined) {
+    try {
+      appendNote(root, id, { author: user, text: `claim released: owner pid ${guard.brokeStale.pid} dead (unclaim, C-12)` });
+    } catch {
+      /* A claim for a ticket the plan no longer carries: the release stands. */
+    }
+    return { exitCode: PLUMBING_EXIT_OK, message: `${id}: released stale claim (owner pid ${guard.brokeStale.pid} dead)` };
+  }
+  return { exitCode: PLUMBING_EXIT_OK, message: `${id}: no claim to release` };
+}
+
+/** The post-crash sweep: releases every claim with a verifiably dead owner, reports the rest. */
+export function sweepStaleClaims(root: string, user: string, deps: PlumbingDeps = {}): PlumbingResult {
+  const dir = claimsDir(root);
+  if (!existsSync(dir)) return { exitCode: PLUMBING_EXIT_OK, message: "no claims held" };
+  const ids = readdirSync(dir)
+    .filter((f) => f.endsWith(".claim"))
+    .map((f) => f.slice(0, -".claim".length));
+  if (ids.length === 0) return { exitCode: PLUMBING_EXIT_OK, message: "no claims held" };
+  const lines = ids.map((id) => unclaimTicket(root, id, user, deps).message);
+  return { exitCode: PLUMBING_EXIT_OK, message: lines.join("\n") };
 }
 
 /** An in-run approval reopens the closed generation for the re-verify. */

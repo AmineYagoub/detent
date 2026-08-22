@@ -40,7 +40,7 @@ describe("T-069 C-14: the porcelain is exactly two commands", () => {
   it("plumbing is documented but explicitly OFF the golden path (C-12)", () => {
     const plumbing = README.slice(README.indexOf("## Plumbing"));
     expect(plumbing).toContain("never required on the golden path");
-    for (const verb of ["status", "report", "doctor", "approve", "requeue", "verify sync"]) {
+    for (const verb of ["status", "report", "doctor", "approve", "requeue", "unclaim", "verify sync"]) {
       expect(plumbing, verb).toContain(verb);
     }
   });

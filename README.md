@@ -135,7 +135,7 @@ release must build Detent's own walking skeleton from its own PRD.
 
 Documented, scriptable, and never required on the golden path:
 `detent status`, `detent report`, `detent doctor`, `detent approve <id>`,
-`detent requeue <id>`, `detent verify sync`.
+`detent requeue <id>`, `detent unclaim <id>`, `detent verify sync`.
 
 ## License
 

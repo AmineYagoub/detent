@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0 |
+| Version | 3.0.1 |
 | Date | 2026-08-22 |
 | Status | Released (T-141) — draft line 3.0-draft.1…draft.6 closed by the N-7 green (T-140) |
 | Implementation | TypeScript (public, open source) |
@@ -118,6 +118,12 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   M4 blocker; MIT matches the header's "public, open source" delivery and the plugin
   ecosystem's norm. `LICENSE` at the repo root is the operative text; the v2 document
   stays frozen with the question as it stood.
+- **C-12′ (3.0.1, PRDR-078).** The plumbing set gains `unclaim <id>` / `unclaim
+  --stale`: an explicit, state-independent release for claims whose owner is
+  verifiably dead — the crash-resume case approve/requeue cannot legally reach.
+  Live owners refuse with pid and age; unreadable claims stay held (R-3); the
+  break is an attributed ticket note, never a transition. Porcelain unchanged
+  (plumbing sits outside C-14's freeze).
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
 
