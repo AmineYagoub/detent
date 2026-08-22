@@ -75,6 +75,8 @@ export interface CoreOptions {
   readonly prompts: PromptSet;
   readonly worker?: string;
   readonly now?: () => number;
+  /** PRDR-079: injectable pid-liveness probe for the pool's claim self-heal. */
+  readonly isAlive?: (pid: number) => boolean;
   /** B-2: per-ticket worktrees, merged `--no-ff` into the run branch on DONE. */
   readonly worktree?: boolean;
 }
@@ -85,6 +87,7 @@ export class RefereeContext {
   readonly prompts: PromptSet;
   readonly worker: string;
   readonly now: () => number;
+  readonly isAlive: (pid: number) => boolean;
   readonly worktree: boolean;
   readonly rulesText: string;
   readonly bindingsPreamble: string;
@@ -104,6 +107,16 @@ export class RefereeContext {
     this.prompts = opts.prompts;
     this.worker = opts.worker ?? "w1";
     this.now = opts.now ?? (() => Date.now());
+    this.isAlive =
+      opts.isAlive ??
+      ((pid: number): boolean => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
     this.worktree = opts.worktree === true;
     this.rulesText = readRules(opts.root);
     const bindings = readBindings(opts.root).bindings;

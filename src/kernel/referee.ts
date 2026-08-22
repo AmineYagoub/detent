@@ -32,6 +32,7 @@ import { SessionArm } from "./referee-session.js";
 import { runRefereeStage } from "./referee-stage.js";
 import { allTickets, claimRefusal, isClaimed, readTicket, ready } from "./tickets/readers.js";
 import { appendNote, claim, release, writeTicket } from "./tickets/mutations.js";
+import { healStaleClaims } from "./plumbing.js";
 import type { LoadedConfig } from "./worstcase.js";
 
 /**
@@ -138,10 +139,16 @@ export class RefereeCore {
     }
     const readyPool = ready(this.root);
     /**
-     * A claimed in-flight ticket is skipped, exactly as the oracle skipped
-     * them: retrying a claim that cannot succeed would spin forever. Breaking
-     * a STALE claim (owner dead) is plumbing's job under C-12's discipline.
+     * PRDR-079 (C-9): a crashed run's claim on an in-flight ticket used to
+     * hide it from this pool until an operator broke the lock by hand. The
+     * pool now self-heals exactly the claims `unclaim` would release — the
+     * shared breakability predicate: verifiably dead owner, on THIS host,
+     * readable claim — and records each break as a kernel note. A live or
+     * foreign-host or unreadable claim still hides its ticket, exactly as
+     * the oracle skipped claimed work: retrying a claim that cannot succeed
+     * would spin forever.
      */
+    healStaleClaims(this.root, RESUMABLE, this.ctx.isAlive);
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );

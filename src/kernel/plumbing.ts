@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -6,9 +7,9 @@ import { humanApproved, humanRequeue, type KernelEvent } from "./events.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { RunJournal } from "./journal.js";
 import { apply } from "./machine.js";
-import { readTicket, isClaimed } from "./tickets/readers.js";
+import { allTickets, readTicket, isClaimed } from "./tickets/readers.js";
 import { claimsDir } from "./tickets/paths.js";
-import { readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
+import { claimBreakable, readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
 
 /**
@@ -64,7 +65,10 @@ function guardClaim(root: string, id: string, deps: PlumbingDeps): ClaimGuard {
   const alive = deps.isAlive ?? defaultAlive;
   /** An unreadable claim file is held-by-someone until proven stale (R-3). */
   if (info === null) return { ok: false, refusal: `ticket ${id} is claimed (claim unreadable — treat as held)` };
-  if (alive(info.pid)) {
+  if (!claimBreakable(info, alive, hostname())) {
+    if (info.host !== undefined && info.host !== hostname()) {
+      return { ok: false, refusal: `ticket ${id} is claimed on another host (${info.host}) — pid liveness cannot be checked from here (PRDR-079)` };
+    }
     const ageMs = Math.max(0, (deps.now ?? Date.now)() - Date.parse(info.at));
     return {
       ok: false,
@@ -217,6 +221,27 @@ export function sweepStaleClaims(root: string, user: string, deps: PlumbingDeps 
   if (ids.length === 0) return { exitCode: PLUMBING_EXIT_OK, message: "no claims held" };
   const lines = ids.map((id) => unclaimTicket(root, id, user, deps).message);
   return { exitCode: PLUMBING_EXIT_OK, message: lines.join("\n") };
+}
+
+/**
+ * PRDR-079 (C-9): release every RESUMABLE-state ticket's claim whose holder
+ * is verifiably dead — readable claim, this host, pid not alive — recording
+ * each break as a kernel note. The pool calls this before listing, so D-30's
+ * crash-resume sentence holds without operator surgery; anything less
+ * certain stands, preserving the oracle's never-spin rule.
+ */
+export function healStaleClaims(root: string, resumable: readonly string[], isAlive: (pid: number) => boolean): void {
+  for (const ticket of allTickets(root)) {
+    if (!resumable.includes(ticket.state) || !isClaimed(root, ticket.id)) continue;
+    const info = readClaim(root, ticket.id);
+    if (info === null) continue;
+    if (!claimBreakable(info, isAlive, hostname())) continue;
+    release(root, ticket.id);
+    appendNote(root, ticket.id, {
+      author: "kernel",
+      text: `stale claim released at resume: owner ${info.owner} pid ${info.pid} dead (C-9, PRDR-079)`,
+    });
+  }
 }
 
 /** An in-run approval reopens the closed generation for the re-verify. */

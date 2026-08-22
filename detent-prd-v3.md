@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0.1 |
+| Version | 3.0.2 |
 | Date | 2026-08-22 |
 | Status | Released (T-141) — draft line 3.0-draft.1…draft.6 closed by the N-7 green (T-140) |
 | Implementation | TypeScript (public, open source) |
@@ -124,6 +124,12 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   Live owners refuse with pid and age; unreadable claims stay held (R-3); the
   break is an attributed ticket note, never a transition. Porcelain unchanged
   (plumbing sits outside C-14's freeze).
+- **C-9′ (3.0.2, PRDR-079).** The resumable pool self-heals stale claims: a
+  claim that is readable, recorded on this host, and held by a dead pid is
+  released (kernel-noted) and its ticket rejoins the pool — D-30's crash-resume
+  sentence now holds without operator surgery. Live, foreign-host, and
+  unreadable claims stand. Claims record their host; one breakability
+  predicate serves the pool and every plumbing verb.
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
 

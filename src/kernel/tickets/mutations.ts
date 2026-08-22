@@ -1,4 +1,5 @@
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import { ticketSchema, type Generation, type Ticket } from "../../schemas/ticket.js";
 import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { ZERO_COUNTERS } from "../generations.js";
@@ -14,6 +15,20 @@ export interface ClaimInfo {
   readonly owner: string;
   readonly pid: number;
   readonly at: string;
+  /** PRDR-079: pid liveness is honest only on the pid's own machine. */
+  readonly host?: string;
+}
+
+/**
+ * PRDR-079: is this claim's holder verifiably gone? A host recorded on the
+ * claim that is not THIS host makes pid liveness a lie — never breakable. A
+ * legacy claim without a host keeps the single-machine assumption PRDR-078
+ * recorded. Shared by `unclaim`, approve/requeue's guard, and the pool's
+ * crash-resume self-heal, so every breaker answers identically.
+ */
+export function claimBreakable(info: ClaimInfo, isAlive: (pid: number) => boolean, thisHost: string): boolean {
+  if (info.host !== undefined && info.host !== thisHost) return false;
+  return !isAlive(info.pid);
 }
 
 /**
@@ -32,7 +47,7 @@ export function claim(root: string, id: string, owner: string): boolean {
     throw err;
   }
   try {
-    const info: ClaimInfo = { owner, pid: process.pid, at: new Date().toISOString() };
+    const info: ClaimInfo = { owner, pid: process.pid, at: new Date().toISOString(), host: hostname() };
     writeFileSync(fd, JSON.stringify(info));
   } finally {
     closeSync(fd);
