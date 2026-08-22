@@ -43,3 +43,17 @@ happened, routing to the same AWAIT_SETUP_CONSENT a 127 takes. Zero-exit
 results are exempt, so a green command that merely prints the phrase still
 binds. The oracle-ported `runnable` predicate and live-gate classification are
 untouched — mid-run absence remains a red for the ladder to diagnose.
+
+## Amendment (field test 3)
+
+The first firing on a monorepo caught its own over-reach: `tsc --noEmit` on an
+unbuilt pnpm workspace exits 2 with `error TS2307: Cannot find module
+'@scope/pkg'` — a compiler DIAGNOSTIC from a tool that ran and truthfully
+reported a red tree, which the bare `Cannot find module` pattern misread as
+absence. The node pattern is now pinned to the runtime loader's own shapes
+(`Error: Cannot find module` at line start; `MODULE_NOT_FOUND`), and any
+`error TS####` marker proves a running tool regardless of phrasing. Observed
+reality recorded, not fixed: slots can carry build-order dependencies (this
+repo's typecheck is red until its build has run once) — V-1 probes slots in
+isolation and binds such a slot red; preparing the tree is the operator's
+setup act.

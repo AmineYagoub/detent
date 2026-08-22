@@ -116,6 +116,20 @@ describe("T-026 watch-mode rejection (V-1)", () => {
     expect(outcome.explanation).toContain("tooling absent");
   });
 
+  it("a compiler diagnostic quoting the absence phrase still binds — the tool ran (PRDR-076 amendment)", async () => {
+    const root = tree(pkg({ test: "tsc --noEmit" }));
+    const outcome = await bindSlot("test", discover(root).candidates, {
+      root,
+      timeoutMs: 5_000,
+      now: NOW,
+      normalize: () => ({
+        command: `sh -c 'echo "src/a.ts(1,8): error TS2307: Cannot find module \\"@scope/pkg\\"."; exit 2'`,
+        env: {},
+      }),
+    });
+    expect(outcome.kind).toBe("bound");
+  });
+
   it("a red gate that merely PRINTS an absence phrase still binds (green guard)", async () => {
     const root = tree(pkg({ test: "vitest run" }));
     const outcome = await bindSlot("test", discover(root).candidates, {

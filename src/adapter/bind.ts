@@ -33,11 +33,20 @@ type RejectReason = "watch-mode" | "unrunnable";
  * own absence message is binding a gate whose tool does not exist; the same
  * text at live gate time stays with the ladder, which can research and say so.
  * The exit guard keeps a green command that merely PRINTS the phrase bindable.
+ *
+ * Amendment (field test 3): a compiler DIAGNOSTIC is not absence. tsc on an
+ * unbuilt monorepo emits `error TS2307: Cannot find module '@scope/pkg'` —
+ * the tool ran and truthfully reported a red tree. The node pattern is pinned
+ * to the runtime loader's own line shape, and any `error TS####` marker
+ * proves a running tool regardless of phrasing.
  */
-const TOOLING_ABSENT_PATTERNS = [/No module named/i, /Cannot find module/];
+const TOOLING_ABSENT_PATTERNS = [/No module named/i, /(?:^|\n)Error: Cannot find module/, /MODULE_NOT_FOUND/];
+const TOOL_RAN_MARKERS = [/error TS\d{4}/];
 
 function toolingAbsent(result: GateResult): boolean {
-  return result.exitCode !== 0 && TOOLING_ABSENT_PATTERNS.some((pattern) => pattern.test(result.output));
+  if (result.exitCode === 0) return false;
+  if (TOOL_RAN_MARKERS.some((pattern) => pattern.test(result.output))) return false;
+  return TOOLING_ABSENT_PATTERNS.some((pattern) => pattern.test(result.output));
 }
 
 interface BoundOutcome {
