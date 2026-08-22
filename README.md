@@ -93,6 +93,25 @@ the fix ladder. Every arrow is a referee-admitted transition, journaled to
 ceiling routes to a human, never to a retry; a risk-labelled ticket takes
 one extra stop at your approval before DONE.
 
+## Works with existing and new projects
+
+**Existing projects** are the primary case, however far along: Detent binds
+to the repo's own verification commands, plans from your planning documents,
+and works on a run branch — the existing code and history are read, never
+rewritten. Scope the document to the work that REMAINS; the generated
+tickets are presented for your approval before anything runs, and they are
+editable — prune any the codebase already satisfies. If a stale ticket
+slips through, the session discovers the premise is already met, signals it,
+and stops rather than writing duplicate code. Start from a green suite:
+gates run your own commands, and pre-existing failures would be blamed on
+the first ticket. Plan increment by increment — an approved plan stays
+frozen, and `detent init --replan` starts the next one.
+
+**New projects** need only a folder containing the planning document —
+Detent derives the stack, scaffolds through its own bootstrap ticket, and
+builds from nothing. That path is the permanent release gate: every Detent
+release must build Detent's own walking skeleton from its own PRD.
+
 ## What Detent will never do
 
 - Write to your base branch — work happens on a `detent/run-<id>` branch.
