@@ -1,6 +1,6 @@
 {
   "name": "detent",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "State-driven autonomous engineering: a deterministic referee that admits every move — auditable state machine, hard per-ticket budgets, verification binding with drift halts, per-ticket write containment.",
   "author": {
     "name": "Amine Yagoub",
