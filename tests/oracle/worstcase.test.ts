@@ -108,8 +108,8 @@ describe("T-014 maxPossibleSessions (X-1)", () => {
     }
   });
 
-  it("refuses a budgets object omitting run_spend_usd — X-1 gives it no default", () => {
-    expect(() => loadConfig({ ...validConfig(), budgets: {} })).toThrow();
+  it("a budgets object omitting run_spend_usd loads with the X-1′ default (PRDR-083)", () => {
+    expect(loadConfig({ ...validConfig(), budgets: {} }).config.budgets.run_spend_usd).toBe(100);
   });
 
   it("refuses unknown config keys", () => {

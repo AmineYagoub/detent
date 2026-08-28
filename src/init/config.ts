@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir, writeArtifact } from "../fs/layout.js";
+import { CEILINGS } from "../schemas/budgets.js";
 
 /**
  * T-140 — `init` writes the project config (R-9, X-1, S-5).
@@ -43,19 +44,20 @@ function configFilePath(root: string): string {
   return path.join(stateDir(root), "config.json");
 }
 
-export type EnsureConfigResult = "exists" | "written" | "missing-cap";
+export type EnsureConfigResult = "exists" | "written" | "written-default";
 
 /** Idempotent: an existing config is the project's own and is never rewritten. */
 export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigResult {
   if (existsSync(configFilePath(root))) return "exists";
-  if (spendCapUsd === undefined) return "missing-cap";
+  /* X-1′ (PRDR-083): an unstated ceiling defaults and is announced, never demanded. */
+  const cap = spendCapUsd ?? CEILINGS.run_spend_usd.default;
   mkdirSync(stateDir(root), { recursive: true });
   writeArtifact(root, "config.json", {
-    budgets: { run_spend_usd: spendCapUsd },
+    budgets: { run_spend_usd: cap },
     protected: [...DEFAULT_PROTECTED],
     risk: [],
     model_routing: {},
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });
-  return "written";
+  return spendCapUsd === undefined ? "written-default" : "written";
 }

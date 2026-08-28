@@ -94,11 +94,11 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT_ERROR;
   }
   const ensured = ensureConfig(root, cap);
-  if (ensured === "missing-cap") {
-    process.stderr.write(
-      "first `detent init` needs `--spend-cap-usd <usd>`: X-1 declines a universal spend default — the run ceiling is yours to set.\n",
+  if (ensured === "written-default") {
+    process.stdout.write(
+      `run spend ceiling defaulted to $${CEILINGS.run_spend_usd.default} (X-1′) — ` +
+        "pass --spend-cap-usd on a first init, or edit .detent/config.json, to change it\n",
     );
-    return EXIT_NOT_READY;
   }
   if (ensured === "exists" && cap !== undefined) {
     process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
@@ -182,7 +182,6 @@ function budgetsFor(root: string): Budgets {
       /* a config init has not written yet is not an error here */
     }
   }
-  return Object.fromEntries(
-    Object.entries(CEILINGS).map(([key, spec]) => [key, "default" in spec ? (spec as { default: number }).default : 25]),
-  ) as Budgets;
+  /* X-1′: every ceiling has a default now, including the spend cap. */
+  return Object.fromEntries(Object.entries(CEILINGS).map(([key, spec]) => [key, spec.default])) as Budgets;
 }

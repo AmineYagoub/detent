@@ -86,6 +86,15 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **X-1′ (3.0.3, PRDR-083).** `run_spend_usd` carries a default (100) like every
+  other ceiling in the table, and a first `init` without `--spend-cap-usd` writes it
+  and announces it rather than refusing. v2's "no defensible universal figure" rule
+  made the first init of every project a required spend decision the user cannot
+  calibrate before a ticket has ever run — and on subscription auth the figure is a
+  client-side ESTIMATE against quota (PRDR-052), not a bill. The ceiling is unchanged:
+  a launch gate with D-25's one-session overshoot bound, cumulative across restarts,
+  routing to a human on breach (P6). The demand is deleted; the ceiling is not.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

@@ -62,10 +62,16 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
   });
 
-  it("run_spend_usd is the only run-scoped ceiling and the only one without a default", () => {
+  it("run_spend_usd is the only run-scoped ceiling, and EVERY ceiling has a default (X-1′)", () => {
     const runScoped = ALL_CEILING_KEYS.filter((k) => CEILINGS[k].scope === "run");
     expect(runScoped).toEqual(["run_spend_usd"]);
+    /**
+     * PRDR-083: the spend cap was the lone defaultless ceiling, which made the
+     * first init of every project a required spend decision. It defaults now;
+     * the ceiling still routes to a human (P6), it just is not demanded.
+     */
     const noDefault = ALL_CEILING_KEYS.filter((k) => !("default" in CEILINGS[k]));
-    expect(noDefault).toEqual(["run_spend_usd"]);
+    expect(noDefault).toEqual([]);
+    expect(CEILINGS.run_spend_usd.default).toBe(100);
   });
 });

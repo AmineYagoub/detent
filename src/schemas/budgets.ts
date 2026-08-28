@@ -33,8 +33,8 @@ export type BreachTarget =
 export interface CeilingSpec {
   readonly scope: BudgetScope;
   readonly breachTarget: BreachTarget;
-  /** Absent where the PRD deliberately declines to set one (`run_spend_usd`). */
-  readonly default?: number;
+  /** Every ceiling carries one (X-1′, PRDR-083). */
+  readonly default: number;
 }
 
 /** The complete X-1 table, as data. */
@@ -52,7 +52,7 @@ export const CEILINGS = {
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
   gate_timeout_ms: { scope: "gate-execution", breachTarget: "RED_GATE_NO_EXIT", default: 900_000 },
   binding_probe_timeout_ms: { scope: "binding-probe", breachTarget: "REJECTED_CANDIDATE", default: 120_000 },
-  run_spend_usd: { scope: "run", breachTarget: "BUDGET_BREACH" },
+  run_spend_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 100 },
 } as const satisfies Record<string, CeilingSpec>;
 
 export type CeilingKey = keyof typeof CEILINGS;
@@ -73,12 +73,15 @@ const structural = (key: (typeof LADDER_CEILING_KEYS)[number]) =>
     .default(1);
 
 /**
- * `run_spend_usd` has no default: X-1 states there is no defensible universal
- * figure, so `init` must write one explicitly and config load refuses a budgets
- * object that omits it.
+ * X-1′ (PRDR-083): `run_spend_usd` now carries a default like every other
+ * ceiling. The old "no defensible universal figure" rule made the FIRST init
+ * of every project a required spend decision — and on subscription auth the
+ * figure is a client-side ESTIMATE against quota (PRDR-052), not a bill, so
+ * the decision bought friction rather than protection. The ceiling itself is
+ * unchanged and still routes to a human (P6); only the upfront demand is gone,
+ * and `init` announces the figure it wrote.
  */
-const withDefault = (key: Exclude<CeilingKey, "run_spend_usd">) =>
-  z.number().positive().default(CEILINGS[key].default);
+const withDefault = (key: CeilingKey) => z.number().positive().default(CEILINGS[key].default);
 
 export const budgetsSchema = z
   .strictObject({
@@ -95,8 +98,7 @@ export const budgetsSchema = z
     flake_reruns: withDefault("flake_reruns"),
     gate_timeout_ms: withDefault("gate_timeout_ms"),
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),
-    /* No default by design (X-1): `init` writes an explicit figure. */
-    run_spend_usd: z.number().positive(),
+    run_spend_usd: withDefault("run_spend_usd"),
   })
   .describe("X-1 ceilings");
 
