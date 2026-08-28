@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Budgets } from "../schemas/budgets.js";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
@@ -44,6 +45,8 @@ export interface PlanDeps {
   readonly docs: readonly string[];
   /** Slots that actually bound, for the bootstrap ticket's criteria. */
   readonly boundSlots: readonly string[];
+  /** PRDR-081: the budget a ticket must fit — the planner sizes against it. */
+  readonly budgets: Budgets;
   readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
   readonly note?: (text: string) => void;
 }
@@ -81,12 +84,23 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     docs: deps.docs,
     greenfield: deps.greenfield,
     bound_slots: deps.boundSlots,
+    /**
+     * PRDR-081: the planner sizes tickets against the budget that will
+     * actually execute them. Without it the plan mirrors its documents'
+     * altitude — a PRD in, PRD-sized epics out, each far past what one
+     * session can finish or a gate can verify.
+     */
+    session_budget: {
+      implement_turns: deps.budgets.turns_per_stage,
+      ticket_wall_clock_minutes: Math.round(deps.budgets.ticket_wall_clock_ms / 60_000),
+      sessions_per_generation: deps.budgets.sessions,
+    },
     expected_output: planDraftSkeleton(),
     instruction: `${
       deps.greenfield
         ? "Draft the feature tickets. Do NOT draft a scaffolding or setup ticket — Detent adds the bootstrap ticket itself and blocks everything on it."
         : "Draft the tickets. Each needs non-empty, testable acceptance criteria and an explicit surface."
-    } Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).`,
+    } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).`,
   });
 
   const raw = readDraft(deps.root);

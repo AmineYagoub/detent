@@ -2,7 +2,7 @@
 | | |
 |---|---|
 | Product | Detent: state-driven autonomous engineering, delivered as a Claude Code plugin |
-| Version | 3.0.2 |
+| Version | 3.0.3 |
 | Date | 2026-08-22 |
 | Status | Released (T-141) — draft line 3.0-draft.1…draft.6 closed by the N-7 green (T-140) |
 | Implementation | TypeScript (public, open source) |
@@ -85,6 +85,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   planning document is discoverable. Found by T-140's first live firing: N-7 names
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
+
+- **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
+  heading: a ticket is ONE implement session's work inside X-1's budget, and a
+  requirement larger than that decomposes into dependent tickets. PLAN receives
+  `session_budget` (implement turns, ticket wall clock, per-generation sessions) so the
+  planner sizes against the budget that will execute it. The plan is ordered as vertical
+  slices — walking skeleton first, through the riskiest integration — not as
+  infrastructure layers completed ahead of the first end-to-end path. Found by the first
+  live init against a large specification: 27 documents produced 32 epic-grained tickets,
+  each far past one session, with the first end-to-end path at ticket twenty-two. Size
+  remains planning judgment, deliberately unvalidated (A-1 is unchanged): a numeric
+  ceiling would refuse honest atomic work.
 
 The `init` pipeline (§4.1 of v2) is **inherited unchanged** in its phases and interrupts — `INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_APPROVAL] → READY` — and re-surfaced as plugin commands and skills. C-1…C-8 hold verbatim (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

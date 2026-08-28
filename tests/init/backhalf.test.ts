@@ -330,6 +330,26 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
  * T-066 / T-067 / T-068 — through the whole pipeline
  */
 
+describe("PRDR-081 the planner sizes against the budget that will execute it", () => {
+  it("PLAN receives session_budget: the implement turns, wall clock, and generation ceiling", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const planCall = backend.calls.find((c) => {
+      const variable = JSON.parse(c.spec.promptVariable) as { inputs?: Record<string, unknown> };
+      return variable.inputs?.["expected_output"] !== undefined && variable.inputs?.["bound_slots"] !== undefined;
+    });
+    expect(planCall, "no PLAN session launched").toBeDefined();
+    const inputs = (JSON.parse(planCall!.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
+    expect(inputs["session_budget"]).toEqual({
+      implement_turns: BUDGETS.turns_per_stage,
+      ticket_wall_clock_minutes: Math.round(BUDGETS.ticket_wall_clock_ms / 60_000),
+      sessions_per_generation: BUDGETS.sessions,
+    });
+  });
+});
+
 describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("brownfield: no bootstrap ticket, bindings approved at init", async () => {
     const root = repo(LONE_CANDIDATE);

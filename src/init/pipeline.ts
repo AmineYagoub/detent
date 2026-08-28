@@ -212,6 +212,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         analysis: analysisFromOutputs(ctx.outputs),
         docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
         boundSlots: bindings.map((b) => b.slot),
+        budgets: deps.budgets,
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
           await launchInitSession(
