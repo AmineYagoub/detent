@@ -59,6 +59,16 @@ export interface PhaseHandler {
 const REPLAN_FROM: InitPhase = "ANALYZE";
 
 /**
+ * PRDR-087: a stale approval means the PRESENTATION is out of date, not the
+ * plan. Re-deriving from phase one would hand the human a plan they never
+ * reviewed — the approval gate's whole job is that you approve what you were
+ * shown — and would re-run ANALYZE and PLAN, whose digests are fresh, at full
+ * model cost. Forcing PRESENT alone re-presents the diff, which is what C-8
+ * says and what the old comment claimed to do.
+ */
+const STALE_APPROVAL_FROM: InitPhase = "PRESENT";
+
+/**
  * PRDR-085: tickets a replan must not pull the ground out from under. Read
  * defensively — an unparseable ticket file is a problem, but it is not
  * evidence of a live session, and this guard must not be the thing that
@@ -253,7 +263,10 @@ export async function runInit(
   const reused: InitPhase[] = [];
   let replayedFrom: InitPhase | null = null;
   let carried = "";
-  let replaying = approval.approved && approval.stale;
+  /** The phase that must re-execute regardless of its digest, if any. */
+  const forceFrom: InitPhase | null =
+    opts.replan === true ? REPLAN_FROM : approval.approved && approval.stale ? STALE_APPROVAL_FROM : null;
+  let replaying = false;
 
   for (const phase of INIT_PHASES) {
     const handler = handlers.find((h) => h.phase === phase);
@@ -263,8 +276,8 @@ export async function runInit(
     const hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
     carried = hash;
 
-    /* PRDR-085: a replan re-derives every planning phase, digests notwithstanding. */
-    if (!replaying && opts.replan === true && phase === REPLAN_FROM) {
+    /* PRDR-085/087: forced re-execution starts exactly here, not at phase one. */
+    if (!replaying && phase === forceFrom) {
       replaying = true;
       replayedFrom = phase;
     }

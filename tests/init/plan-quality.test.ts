@@ -1,4 +1,7 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { stateDir } from "../../src/fs/layout.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
@@ -103,6 +106,36 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
     expect(drafts).toHaveLength(2);
     expect(drafts[0]?.["review_findings"], "the first draft has no findings yet").toBeUndefined();
     expect(drafts[1]?.["review_findings"]).toEqual(changes.findings);
+  });
+});
+
+describe("PRDR-087 a stale approval re-presents; it does not re-plan", () => {
+  it("hand-edited tickets re-run PRESENT only — ANALYZE and PLAN are reused", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const deps = { root, backend, prompts: PROMPTS, budgets: BUDGETS };
+
+    await runInit(root, buildPipeline(deps));
+    writeFileSync(
+      path.join(stateDir(root), "plan", "approval.json"),
+      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-28T00:00:00.000Z", plan_hash: "stale" }),
+    );
+
+    const before = backend.calls.length;
+    const again = await runInit(root, buildPipeline(deps));
+
+    /**
+     * The whole point: approving must not silently derive a DIFFERENT plan
+     * from the one presented. Planning is a model act, so a re-derivation is
+     * a new plan — and no model session may run here at all.
+     */
+    expect(backend.calls.length, "no planner session may re-run").toBe(before);
+    expect(again.reused).toEqual(expect.arrayContaining(["ANALYZE", "PLAN"]));
+    /* PRESENT ran and interrupted at AWAIT_APPROVAL — an interrupted phase is
+     * deliberately not checkpointed, so it reports as the replay point rather
+     * than as executed. */
+    expect(again.replayedFrom).toBe("PRESENT");
+    expect(again.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
   });
 });
 

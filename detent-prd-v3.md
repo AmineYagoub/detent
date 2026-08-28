@@ -86,6 +86,13 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **C-7′ (3.0.3, PRDR-087).** A stale approval forces **PRESENT** to re-execute and
+  nothing earlier. C-7's gate rests on approving the plan you were shown; the stale
+  flag started the pipeline at phase one, so ANALYZE and PLAN re-ran and — planning
+  being a model act — a DIFFERENT plan reached approval. Observed: eleven reviewed
+  tickets, fourteen approved. Forced re-execution now names its entry phase, shared
+  with `--replan`'s (PRDR-085), so re-presenting costs nothing and derives nothing.
+
 - **C-2″ (3.0.3, PRDR-086).** `config.plan_docs` narrows C-2 discovery to the documents
   the current increment plans from; empty (the default) keeps the full family discovery.
   Without it, planning a large product slice by slice — the workflow the README
