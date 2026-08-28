@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { planDraftSchema, type Analysis } from "../schemas/init.js";
+import { planDraftSchema, planReviewSchema, type Analysis, type PlanDraftTicket, type PlanReview } from "../schemas/init.js";
 import { planSchema, type Binding, type Plan } from "../schemas/records.js";
 import { createTicket } from "../kernel/tickets/mutations.js";
 import { readTicket } from "../kernel/tickets/readers.js";
@@ -47,7 +47,8 @@ export interface PlanDeps {
   readonly boundSlots: readonly string[];
   /** PRDR-081: the budget a ticket must fit — the planner sizes against it. */
   readonly budgets: Budgets;
-  readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
+  /** PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN a verdict. */
+  readonly launch: (inputs: Record<string, unknown>, artifactOut?: string) => Promise<void>;
   readonly note?: (text: string) => void;
 }
 
@@ -75,11 +76,62 @@ export function planDraftSkeleton(): Record<string, unknown> {
   };
 }
 
-export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
+/** The exact artifact the REVIEW_PLAN stage writes (PRDR-084). */
+export function planReviewSkeleton(): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    verdict: "approve",
+    findings: [{ tag: "sizing", finding: "<what is wrong — required>", ticket: "t-100" }],
+  };
+}
+
+export function planReviewPath(root: string): string {
+  return path.join(stateDir(root), "state", "plan-review.json");
+}
+
+/**
+ * PRDR-084: ONE revision round, deliberately — the D-24 argument applies here
+ * too. A second bite adds cost without adding information, and a plan the
+ * reviewer still faults after a revision is a judgment the human should see at
+ * approval, not one the machine should keep grinding on.
+ */
+const PLAN_REVISIONS = 1;
+
+async function reviewPlan(deps: PlanDeps, tickets: readonly PlanDraftTicket[]): Promise<PlanReview | null> {
+  rmSync(planReviewPath(deps.root), { force: true });
+  await deps.launch({
+    stage: "REVIEW_PLAN",
+    plan: tickets,
+    docs: deps.docs,
+    session_budget: sessionBudget(deps.budgets),
+    expected_output: planReviewSkeleton(),
+    instruction:
+      "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`), " +
+      "testability (is every acceptance criterion checkable by a command or a test, not by opinion), coverage (does every requirement " +
+      "in the documents reach some ticket), shape (do the earliest tickets form a walking skeleton through the riskiest integration, " +
+      "rather than completing infrastructure layers first), and traceability (is every ticket sourced from the documents rather than " +
+      "invented). An honest `approve` is a real verdict; do not manufacture findings. Write EXACTLY the `expected_output` shape.",
+  }, planReviewPath(deps.root));
+  const raw = readJson(planReviewPath(deps.root));
+  const parsed = raw === null ? null : parseArtifact(planReviewSchema, raw);
+  return parsed !== null && parsed.ok ? parsed.value : null;
+}
+
+function sessionBudget(budgets: Budgets): Record<string, number> {
+  return {
+    implement_turns: budgets.turns_per_stage,
+    ticket_wall_clock_minutes: Math.round(budgets.ticket_wall_clock_ms / 60_000),
+    sessions_per_generation: budgets.sessions,
+  };
+}
+
+/** One drafting launch. Called again with findings when the review asks (PRDR-084). */
+async function draftPlan(deps: PlanDeps, findings?: PlanReview["findings"]): Promise<void> {
   /* A re-run derives fresh (C-8); a stale draft is an echo chamber, not an input. */
   rmSync(planDraftPath(deps.root), { force: true });
 
   await deps.launch({
+    stage: "PLAN",
     analysis: deps.analysis,
     docs: deps.docs,
     greenfield: deps.greenfield,
@@ -90,30 +142,52 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
      * altitude — a PRD in, PRD-sized epics out, each far past what one
      * session can finish or a gate can verify.
      */
-    session_budget: {
-      implement_turns: deps.budgets.turns_per_stage,
-      ticket_wall_clock_minutes: Math.round(deps.budgets.ticket_wall_clock_ms / 60_000),
-      sessions_per_generation: deps.budgets.sessions,
-    },
+    session_budget: sessionBudget(deps.budgets),
+    ...(findings === undefined ? {} : { review_findings: findings }),
     expected_output: planDraftSkeleton(),
     instruction: `${
       deps.greenfield
         ? "Draft the feature tickets. Do NOT draft a scaffolding or setup ticket — Detent adds the bootstrap ticket itself and blocks everything on it."
         : "Draft the tickets. Each needs non-empty, testable acceptance criteria and an explicit surface."
-    } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).`,
+    } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).${
+      findings === undefined ? "" : " A previous draft drew the `review_findings` in your inputs — address every one of them in this draft."
+    }`,
   });
+}
 
-  const raw = readDraft(deps.root);
-  const parsed = raw === null ? null : parseArtifact(planDraftSchema, raw);
-  if (parsed === null || !parsed.ok) {
-    throw new Error(
-      parsed === null
-        ? "PLAN produced no draft artifact"
-        : `PLAN produced an invalid draft: ${parsed.reason === "invalid" ? parsed.issues.join("; ") : "newer schema"}`,
-    );
+export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
+  await draftPlan(deps);
+  let drafted = readValidatedDraft(deps.root);
+
+  /**
+   * PRDR-084 — the plan's own D-6. A fresh session judges the draft against
+   * the five properties a plan can be wrong about; a `changes` verdict buys
+   * exactly one revision (see PLAN_REVISIONS), and whatever the reviewer still
+   * faults after that rides to PRESENT as a note for the human, rather than
+   * the machine grinding on a judgment call.
+   */
+  const review = await reviewPlan(deps, drafted);
+  if (review === null) {
+    deps.note?.("plan review produced no artifact — the draft stands unreviewed (PRDR-084)");
+  } else if (review.verdict === "changes" && review.findings.length > 0) {
+    deps.note?.(`plan review: ${review.findings.length} finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
+    for (let round = 0; round < PLAN_REVISIONS; round += 1) {
+      await draftPlan(deps, review.findings);
+      drafted = readValidatedDraft(deps.root);
+    }
+    const second = await reviewPlan(deps, drafted);
+    if (second !== null && second.verdict === "changes" && second.findings.length > 0) {
+      deps.note?.(
+        `plan review after revision: ${second.findings.length} finding(s) remain — ` +
+          `${second.findings.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; ")}`,
+      );
+    } else {
+      deps.note?.("plan review: revision accepted");
+    }
+  } else {
+    deps.note?.("plan review: approve");
   }
 
-  const drafted = parsed.value.tickets;
   const ids = new Set(drafted.map((t) => t.id));
   if (ids.size !== drafted.length) throw new Error("PLAN drafted duplicate ticket ids");
   if (ids.has(BOOTSTRAP_TICKET_ID)) throw new Error(`PLAN drafted ${BOOTSTRAP_TICKET_ID}; the bootstrap ticket is Detent's (C-4)`);
@@ -300,8 +374,24 @@ export function bootstrapBlocks(root: string, ticketId: string): boolean {
   return readTicket(root, BOOTSTRAP_TICKET_ID).state !== "DONE";
 }
 
+function readValidatedDraft(root: string): PlanDraftTicket[] {
+  const raw = readDraft(root);
+  const parsed = raw === null ? null : parseArtifact(planDraftSchema, raw);
+  if (parsed === null || !parsed.ok) {
+    throw new Error(
+      parsed === null
+        ? "PLAN produced no draft artifact"
+        : `PLAN produced an invalid draft: ${parsed.reason === "invalid" ? parsed.issues.join("; ") : "newer schema"}`,
+    );
+  }
+  return [...parsed.value.tickets];
+}
+
 function readDraft(root: string): unknown {
-  const file = planDraftPath(root);
+  return readJson(planDraftPath(root));
+}
+
+function readJson(file: string): unknown {
   if (!existsSync(file)) return null;
   try {
     return JSON.parse(readFileSync(file, "utf8"));

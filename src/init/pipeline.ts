@@ -223,7 +223,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         boundSlots: bindings.map((b) => b.slot),
         budgets: deps.budgets,
         ...(deps.note === undefined ? {} : { note: deps.note }),
-        launch: async (inputs) => {
+        launch: async (inputs: Record<string, unknown>, artifactOut?: string) => {
           await launchInitSession(
             {
               root: deps.root,
@@ -232,7 +232,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
               maxTurns: deps.budgets.turns_per_stage,
               ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
             },
-            { role: "planner", inputs, artifactOut: planDraftPath(deps.root) },
+            { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root) },
           );
         },
       });

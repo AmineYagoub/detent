@@ -86,6 +86,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **C-4″ (3.0.3, PRDR-084).** The plan is reviewed before it is written. After PLAN
+  validates its draft, a fresh session judges it at a **REVIEW_PLAN** stage over a
+  closed tag set — `sizing`, `testability`, `coverage`, `shape`, `traceability` — and a
+  `changes` verdict buys exactly one revision carrying the findings; what survives is
+  presented to the human at approval rather than ground on (D-24's argument). D-6 held
+  that work must be judged by something that did not do it, and every implementation
+  had such a judge while the plan that determines them all had only a human reading a
+  presentation — a real check at five tickets, none at three hundred. The review
+  advises and never blocks: an absent verdict leaves the draft standing, announced.
+  No new role (the planner prompt multiplexes by stage; a new `RoleId` is an F-3
+  schema event) and no new X-1 key.
+
 - **X-1′ (3.0.3, PRDR-083).** `run_spend_usd` carries a default (100) like every
   other ceiling in the table, and a first `init` without `--spend-cap-usd` writes it
   and announces it rather than refusing. v2's "no defensible universal figure" rule

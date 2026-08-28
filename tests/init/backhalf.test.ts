@@ -69,11 +69,18 @@ const DRAFT = (ids: string[]) => ({
   })),
 });
 
-/** The planner answers whichever artifact the spec asks for. */
+/** The planner answers whichever artifact the spec asks for (three stages since PRDR-084). */
+const APPROVE_PLAN = { schema_version: 1, verdict: "approve", findings: [] };
+
 const planner =
-  (analysis: object, draft: object): StageFn =>
+  (analysis: object, draft: object, review: object = APPROVE_PLAN): StageFn =>
   (spec) => {
-    writeFileSync(spec.artifactOut, `${JSON.stringify(spec.artifactOut.endsWith("plan-draft.json") ? draft : analysis)}\n`);
+    const artifact = spec.artifactOut.endsWith("plan-draft.json")
+      ? draft
+      : spec.artifactOut.endsWith("plan-review.json")
+        ? review
+        : analysis;
+    writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
 
@@ -375,6 +382,51 @@ describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () 
     const base = digestWith({});
     expect(digestWith({ planner: "0".repeat(64) }), "planner change must re-derive").not.toBe(base);
     expect(digestWith({ review: "0".repeat(64) }), "an unrelated role must NOT re-derive").toBe(base);
+  });
+});
+
+describe("PRDR-084 the plan gets its own D-6 review", () => {
+  const inputsOf = (backend: MockBackend, artifact: string): Record<string, unknown>[] =>
+    backend.calls
+      .filter((c) => c.spec.artifactOut.endsWith(artifact))
+      .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs);
+
+  it("a drafted plan is reviewed by a fresh session against the closed criteria", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const reviews = inputsOf(backend, "plan-review.json");
+    expect(reviews, "no REVIEW_PLAN session launched").toHaveLength(1);
+    expect(reviews[0]?.["stage"]).toBe("REVIEW_PLAN");
+    expect(reviews[0]?.["plan"]).toBeDefined();
+    expect(reviews[0]?.["session_budget"]).toBeDefined();
+  });
+
+  it("approve writes the draft as-is — exactly one drafting session", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(inputsOf(backend, "plan-draft.json")).toHaveLength(1);
+    expect(allTickets(root).map((t) => t.id).sort()).toEqual(["t-100", "t-200"]);
+  });
+
+  it("changes buys exactly ONE revision, and the findings reach the redraft", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const changes = {
+      schema_version: 1,
+      verdict: "changes",
+      findings: [{ tag: "sizing", finding: "t-100 spans three subsystems", ticket: "t-100" }],
+    };
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"]), changes) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const drafts = inputsOf(backend, "plan-draft.json");
+    /** One original + one revision. Never a third: PLAN_REVISIONS is 1 (D-24's argument). */
+    expect(drafts).toHaveLength(2);
+    expect(drafts[0]?.["review_findings"], "the first draft has no findings yet").toBeUndefined();
+    expect(drafts[1]?.["review_findings"]).toEqual(changes.findings);
   });
 });
 

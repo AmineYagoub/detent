@@ -150,6 +150,32 @@ export function requireLocalSearchBeforeWeb(
  * Detent's own construction, so a planner cannot forget it, misname it, or
  * write one whose criteria do not actually prove the gates green.
  */
+/**
+ * PRDR-084 — the plan's own D-6. Every IMPLEMENTATION faces a fresh reviewer
+ * judging it against criteria; the plan that determines all of them faced only
+ * a human scrolling the presentation. This is that review's artifact: a closed
+ * finding set over the five properties a plan can be wrong about, written by a
+ * fresh planner-role session at the REVIEW_PLAN stage.
+ */
+export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability"] as const;
+
+export const planReviewSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  verdict: z.enum(["approve", "changes"]),
+  findings: z
+    .array(
+      z.strictObject({
+        tag: z.enum(PLAN_FINDING_TAGS),
+        finding: nonEmptyString,
+        /** The ticket at fault, where one is. Absent for plan-wide findings. */
+        ticket: nonEmptyString.optional(),
+      }),
+    )
+    .default([]),
+});
+
+export type PlanReview = z.infer<typeof planReviewSchema>;
+
 export const planDraftSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   tickets: z
@@ -169,3 +195,6 @@ export const planDraftSchema = z.strictObject({
     )
     .min(1),
 });
+
+export type PlanDraft = z.infer<typeof planDraftSchema>;
+export type PlanDraftTicket = PlanDraft["tickets"][number];
