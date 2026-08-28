@@ -4,6 +4,8 @@ import path from "node:path";
 import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import { git } from "../kernel/git.js";
+import { readTicket, isClaimed } from "../kernel/tickets/readers.js";
+import { ticketsDir } from "../kernel/tickets/paths.js";
 import { INIT_PHASES, type InitPhase, type Interrupt } from "../schemas/init.js";
 
 /**
@@ -51,6 +53,36 @@ export interface PhaseHandler {
    */
   digest(ctx: InitContext): string;
   run(ctx: InitContext): Promise<PhaseOutcome>;
+}
+
+/** The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans whose own digests already catch new files. */
+const REPLAN_FROM: InitPhase = "ANALYZE";
+
+/**
+ * PRDR-085: tickets a replan must not pull the ground out from under. Read
+ * defensively — an unparseable ticket file is a problem, but it is not
+ * evidence of a live session, and this guard must not be the thing that
+ * crashes on it.
+ */
+function inFlightTickets(root: string): string[] {
+  const dir = ticketsDir(root);
+  if (!existsSync(dir)) return [];
+  const found: string[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".json") || file === "plan.json" || file === "approval.json") continue;
+    const id = file.slice(0, -".json".length);
+    if (isClaimed(root, id)) {
+      found.push(`${id} (claimed)`);
+      continue;
+    }
+    try {
+      const state = readTicket(root, id).state;
+      if (state !== "DONE" && state !== "READY") found.push(`${id} (${state})`);
+    } catch {
+      /* unparseable: surfaced by the phases that actually consume it */
+    }
+  }
+  return found;
 }
 
 export interface InitOptions {
@@ -187,6 +219,28 @@ export async function runInit(
       outputs: {},
     };
   }
+  /**
+   * PRDR-085: `--replan` means a fresh planning session. Re-deriving under a
+   * ticket that is mid-ladder or claimed would pull the ground out from a
+   * running session, so the refusal comes BEFORE any model spend.
+   */
+  if (opts.replan === true) {
+    const inFlight = inFlightTickets(root);
+    if (inFlight.length > 0) {
+      return {
+        exitCode: 2,
+        reachedPhase: "PLAN",
+        replayedFrom: null,
+        executed: [],
+        reused: [],
+        messages: [
+          `--replan refused: ${inFlight.join(", ")} still in flight. ` +
+            "Let the run finish or resolve them (detent status), then replan.",
+        ],
+        outputs: {},
+      };
+    }
+  }
   if (approval.approved && approval.stale) {
     /* Hand-edited tickets invalidate the approval; PRESENT re-presents the diff. */
     messages.push("tickets were edited after approval — approval invalidated, re-presenting (C-8)");
@@ -208,6 +262,12 @@ export async function runInit(
     const ctx: InitContext = { root, outputs, now };
     const hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
     carried = hash;
+
+    /* PRDR-085: a replan re-derives every planning phase, digests notwithstanding. */
+    if (!replaying && opts.replan === true && phase === REPLAN_FROM) {
+      replaying = true;
+      replayedFrom = phase;
+    }
 
     if (!replaying) {
       const read = readCheckpoint(root, phase, hash);

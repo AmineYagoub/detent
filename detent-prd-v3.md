@@ -86,6 +86,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **C-8′ (3.0.3, PRDR-085).** `--replan` re-derives every planning phase from ANALYZE
+  regardless of checkpoint digests — the flag previously only lifted the approved-plan
+  guard, so it frequently planned nothing. PLAN then reconciles against the new plan: a
+  drafted id already DONE is preserved untouched (its code is committed; a redraft would
+  send a session to rebuild it), and tickets the new plan does not name are removed
+  rather than left READY and claimable. A replan while any ticket is claimed or
+  mid-ladder is refused by name before any session launches. `.detent/` is NOT reset:
+  the ledger is what makes the spend cap un-restartable-around, `transitions.jsonl` is
+  the audit log, `config.json` is the user's own settings, and `runs/` plus DONE tickets
+  are the record of work that exists in the code — and planning increment by increment
+  makes replanning a project with finished work the normal case.
+
 - **C-4″ (3.0.3, PRDR-084).** The plan is reviewed before it is written. After PLAN
   validates its draft, a fresh session judges it at a **REVIEW_PLAN** stage over a
   closed tag set — `sizing`, `testability`, `coverage`, `shape`, `traceability` — and a

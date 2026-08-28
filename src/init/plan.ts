@@ -4,10 +4,12 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { planDraftSchema, planReviewSchema, type Analysis, type PlanDraftTicket, type PlanReview } from "../schemas/init.js";
+import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanReview } from "../schemas/init.js";
+import { PLAN_REVISIONS, reviewPlan, sessionBudget } from "./plan-review.js";
 import { planSchema, type Binding, type Plan } from "../schemas/records.js";
 import { createTicket } from "../kernel/tickets/mutations.js";
-import { readTicket } from "../kernel/tickets/readers.js";
+import { allTickets, readTicket } from "../kernel/tickets/readers.js";
+import { ticketPath } from "../kernel/tickets/paths.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PhaseOutcome } from "./machine.js";
 
@@ -73,55 +75,6 @@ export function planDraftSkeleton(): Record<string, unknown> {
         risk_label: false,
       },
     ],
-  };
-}
-
-/** The exact artifact the REVIEW_PLAN stage writes (PRDR-084). */
-export function planReviewSkeleton(): Record<string, unknown> {
-  return {
-    schema_version: 1,
-    verdict: "approve",
-    findings: [{ tag: "sizing", finding: "<what is wrong — required>", ticket: "t-100" }],
-  };
-}
-
-export function planReviewPath(root: string): string {
-  return path.join(stateDir(root), "state", "plan-review.json");
-}
-
-/**
- * PRDR-084: ONE revision round, deliberately — the D-24 argument applies here
- * too. A second bite adds cost without adding information, and a plan the
- * reviewer still faults after a revision is a judgment the human should see at
- * approval, not one the machine should keep grinding on.
- */
-const PLAN_REVISIONS = 1;
-
-async function reviewPlan(deps: PlanDeps, tickets: readonly PlanDraftTicket[]): Promise<PlanReview | null> {
-  rmSync(planReviewPath(deps.root), { force: true });
-  await deps.launch({
-    stage: "REVIEW_PLAN",
-    plan: tickets,
-    docs: deps.docs,
-    session_budget: sessionBudget(deps.budgets),
-    expected_output: planReviewSkeleton(),
-    instruction:
-      "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`), " +
-      "testability (is every acceptance criterion checkable by a command or a test, not by opinion), coverage (does every requirement " +
-      "in the documents reach some ticket), shape (do the earliest tickets form a walking skeleton through the riskiest integration, " +
-      "rather than completing infrastructure layers first), and traceability (is every ticket sourced from the documents rather than " +
-      "invented). An honest `approve` is a real verdict; do not manufacture findings. Write EXACTLY the `expected_output` shape.",
-  }, planReviewPath(deps.root));
-  const raw = readJson(planReviewPath(deps.root));
-  const parsed = raw === null ? null : parseArtifact(planReviewSchema, raw);
-  return parsed !== null && parsed.ok ? parsed.value : null;
-}
-
-function sessionBudget(budgets: Budgets): Record<string, number> {
-  return {
-    implement_turns: budgets.turns_per_stage,
-    ticket_wall_clock_minutes: Math.round(budgets.ticket_wall_clock_ms / 60_000),
-    sessions_per_generation: budgets.sessions,
   };
 }
 
@@ -204,7 +157,18 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     deps.note?.(`bootstrap ticket ${BOOTSTRAP_TICKET_ID} created; every other ticket is blocked on it (C-4)`);
   }
 
+  /**
+   * PRDR-085: DONE work is not re-planned. Its code is committed and its
+   * record is real; a redraft reusing the id would reset it to READY and send
+   * a session to rebuild what already exists.
+   */
+  const done = new Set(allTickets(deps.root).filter((t) => t.state === "DONE").map((t) => t.id));
   for (const draft of drafted) {
+    if (done.has(draft.id)) {
+      deps.note?.(`${draft.id} is DONE — preserved, not re-planned (PRDR-085)`);
+      written.push(readTicket(deps.root, draft.id));
+      continue;
+    }
     const blockers = deps.greenfield ? [BOOTSTRAP_TICKET_ID, ...draft.depends_on] : [...draft.depends_on];
     written.push(
       createTicket(deps.root, {
@@ -218,6 +182,19 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
         risk_label: draft.risk_label,
       }),
     );
+  }
+
+  /**
+   * PRDR-085: tickets the new plan does not name are orphans — a replan that
+   * shrinks 32 tickets to 15 used to leave the other 17 on disk, READY and
+   * claimable, so `run` would build work no plan asked for. DONE tickets are
+   * never orphans: they are carried above and their record stands.
+   */
+  const planned = new Set(written.map((t) => t.id));
+  for (const existing of allTickets(deps.root)) {
+    if (planned.has(existing.id) || existing.state === "DONE") continue;
+    rmSync(ticketPath(deps.root, existing.id), { force: true });
+    deps.note?.(`${existing.id} removed — the new plan does not contain it (PRDR-085)`);
   }
 
   /** ---- A-2: the plan artifact ------------------------------------------- */
