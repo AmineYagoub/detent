@@ -121,7 +121,9 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
      */
     digest: (ctx) => {
       const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? discoverDocs(deps.root).docs;
-      return `${contentsDigest(deps.root, docs)}|${valueDigest(ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [])}`;
+      /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
+       * the phase reasons must invalidate it, exactly as an edited doc does. */
+      return `${contentsDigest(deps.root, docs)}|${valueDigest([ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [], deps.prompts.hashes.planner])}`;
     },
     run: async (ctx) => {
       const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
@@ -203,7 +205,14 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PLAN",
     /* Chained: PLAN re-runs whenever analysis or the bindings moved. */
-    digest: (ctx) => valueDigest([ctx.outputs["ANALYZE"]?.["analysis"] ?? null, ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null]),
+    digest: (ctx) =>
+      /* PRDR-082: the planner prompt joins the analysis and the bindings — the
+       * three inputs that actually determine this plan. */
+      valueDigest([
+        ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
+        ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null,
+        deps.prompts.hashes.planner,
+      ]),
     run: async (ctx) => {
       const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
       return await planStage({

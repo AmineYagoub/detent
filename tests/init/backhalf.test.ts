@@ -350,6 +350,34 @@ describe("PRDR-081 the planner sizes against the budget that will execute it", (
   });
 });
 
+describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () => {
+  it("PLAN's digest moves when the planner prompt changes, and not when another role's does", () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({});
+    const ctx = {
+      outputs: {
+        ANALYZE: { analysis: { summary: "s" } },
+        DETERMINE_VERIFICATION: { bindings: [{ slot: "test", resolved: "npm test" }] },
+      },
+    };
+    const digestWith = (hashes: Record<string, string>): string => {
+      const handlers = buildPipeline({
+        root,
+        backend,
+        prompts: { ...PROMPTS, hashes: { ...PROMPTS.hashes, ...hashes } },
+        budgets: BUDGETS,
+      });
+      const plan = handlers.find((h) => h.phase === "PLAN");
+      if (plan === undefined) throw new Error("no PLAN handler");
+      return plan.digest(ctx as never);
+    };
+
+    const base = digestWith({});
+    expect(digestWith({ planner: "0".repeat(64) }), "planner change must re-derive").not.toBe(base);
+    expect(digestWith({ review: "0".repeat(64) }), "an unrelated role must NOT re-derive").toBe(base);
+  });
+});
+
 describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("brownfield: no bootstrap ticket, bindings approved at init", async () => {
     const root = repo(LONE_CANDIDATE);
