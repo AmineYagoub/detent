@@ -65,12 +65,6 @@ detent init
 detent run
 ```
 
-`init` discovers your planning documents and verification entrypoints,
-generates an implementation plan as tickets, and obtains your approval.
-`run` executes the approved plan. Both resume from checkpoints when re-run,
-and every stop tells you exactly what it needs before picking up where it
-left off.
-
 ```mermaid
 flowchart TD
     I["detent init"] --> A{"your approval"}
