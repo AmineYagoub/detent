@@ -147,6 +147,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
               backend: deps.backend,
               prompts: deps.prompts,
               maxTurns: deps.budgets.turns_per_stage,
+              spendCeiling: deps.budgets.run_spend_usd,
               ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
             },
             { role: "planner", inputs, artifactOut: analysisPath(deps.root) },
@@ -163,6 +164,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
                 backend: deps.backend,
                 prompts: deps.prompts,
                 maxTurns: deps.budgets.turns_per_stage,
+              spendCeiling: deps.budgets.run_spend_usd,
                 ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
               },
               {
@@ -237,6 +239,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
               backend: deps.backend,
               prompts: deps.prompts,
               maxTurns: deps.budgets.turns_per_stage,
+              spendCeiling: deps.budgets.run_spend_usd,
               ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
             },
             { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root) },

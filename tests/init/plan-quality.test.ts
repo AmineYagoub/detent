@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
@@ -6,7 +6,7 @@ import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
-import { MockBackend } from "../../src/sessions/mock.js";
+import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
@@ -106,6 +106,64 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
     expect(drafts).toHaveLength(2);
     expect(drafts[0]?.["review_findings"], "the first draft has no findings yet").toBeUndefined();
     expect(drafts[1]?.["review_findings"]).toEqual(changes.findings);
+  });
+});
+
+describe("PRDR-088 init sessions are metered and leave a trail", () => {
+  const rows = (root: string): Record<string, unknown>[] => {
+    const file = path.join(stateDir(root), "ledger.jsonl");
+    if (!existsSync(file)) return [];
+    return readFileSync(file, "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+  };
+
+  it("every init session writes an S-4 ledger row against the run ceiling", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const ledger = rows(root);
+    /** ANALYZE, PLAN and REVIEW_PLAN all bill; none of them used to. */
+    expect(ledger.length, "init spend must reach the ledger").toBe(backend.calls.length);
+    expect(ledger.every((r) => r["ticket"] === "init")).toBe(true);
+    expect(ledger.map((r) => r["role"])).toContain("planner");
+  });
+
+  it("a failed init session leaves turns and the backend tail to diagnose it", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({
+      planner: () => ({ ...okResult(), ok: false, turns: 30, rawTail: "hit the turn ceiling" }),
+    });
+    await expect(
+      runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS })),
+    ).rejects.toThrow(/planner session failed/);
+
+    const journal = readFileSync(path.join(stateDir(root), "runs", "init", "journal.jsonl"), "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const end = journal.find((e) => e["event"] === "end");
+    expect(end?.["ok"]).toBe(false);
+    expect(end?.["turns"], "turn count distinguishes exhaustion from refusal").toBe(30);
+    expect(String(end?.["tail"])).toContain("turn ceiling");
+  });
+
+  it("the run ceiling gates init launches too (D-25)", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    /** A ceiling already consumed: no init session may launch. */
+    mkdirSync(stateDir(root), { recursive: true });
+    writeFileSync(
+      path.join(stateDir(root), "ledger.jsonl"),
+      `${JSON.stringify({ at: "2026-08-28T00:00:00.000Z", ticket: "init", generation: 0, role: "planner", cost_estimate_usd: 999, input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, turns: 1 })}\n`,
+    );
+
+    await expect(
+      runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS })),
+    ).rejects.toThrow(/run-spend exhaustion/);
+    expect(backend.calls, "nothing may launch past the ceiling").toHaveLength(0);
   });
 });
 

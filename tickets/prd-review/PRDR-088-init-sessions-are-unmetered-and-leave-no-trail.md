@@ -1,7 +1,7 @@
 ---
 id: PRDR-088
 title: "Init sessions are unmetered and leave no diagnostic trail — the run cap does not bound them"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-execution"]
@@ -65,3 +65,15 @@ new schema: the ledger row and the per-stage journal shape both exist and both f
 Incidental, found while reading: the same doc-block still says the planner "runs in plan
 mode with no write tools", which S-1′ (PRDR-067) replaced with default mode plus one
 scoped write rule. Correct it with this work.
+
+## Implementation note
+
+Landed with the machinery that already existed, as the resolution proposed: every
+`launchInitSession` opens the run journal, passes `SpendLedger.assertLaunchAllowed()`
+before the backend call, records an S-4 row against ticket `init`, and journals
+`start`/`end` carrying `ok`, `turns`, `cost`, the crash flag and the backend's tail.
+`run_spend_usd` now bounds init exactly as it bounds run spend — cumulative across
+invocations, so repeated re-derivations cannot spend past the ceiling unnoticed — and a
+failed phase names its turn count, which is what distinguishes ceiling exhaustion from a
+refused session. The stale doc-block claiming plan mode and "nothing to charge" is
+corrected in place.

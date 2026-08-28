@@ -86,6 +86,16 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **P6′ (3.0.3, PRDR-088).** Init sessions are metered. ANALYZE, PLAN, REVIEW_PLAN and
+  planning research are billable model sessions, and `src/init/` recorded none of them:
+  `run_spend_usd` did not bound init spend, so repeated re-derivations could pass the
+  declared ceiling with no ledger row, and a failed phase left nothing to diagnose —
+  turn-ceiling exhaustion, a refused session and an invalid artifact were
+  indistinguishable. Every init launch now passes the D-25 gate, writes an S-4 row
+  against ticket `init`, and journals its start and end with turns, cost, the crash
+  flag and the backend's tail. X-1's per-ticket counters remain out of scope here:
+  init has no ticket and no generations.
+
 - **C-7′ (3.0.3, PRDR-087).** A stale approval forces **PRESENT** to re-execute and
   nothing earlier. C-7's gate rests on approving the plan you were shown; the stale
   flag started the pipeline at phase one, so ANALYZE and PLAN re-ran and — planning
