@@ -130,6 +130,13 @@ const configSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   budgets: budgetsSchema,
   protected: z.array(glob).default([]),
+  /**
+   * C-2″ (PRDR-086): the documents THIS increment plans from. Empty means the
+   * whole C-2 discovery, which is right for a product one plan can hold; a
+   * large product plans slice by slice, and without this the next `--replan`
+   * rediscovers everything and re-plans the entire thing.
+   */
+  plan_docs: z.array(glob).default([]),
   risk: z.array(glob).default([]),
   model_routing: z.record(z.string(), nonEmptyString).default({}),
   pinned: z.strictObject({

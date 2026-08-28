@@ -30,6 +30,8 @@ export interface PipelineDeps {
   readonly backend: SessionBackend;
   readonly prompts: PromptSet;
   readonly budgets: Budgets;
+  /** PRDR-086: narrows C-2 discovery to this increment's documents. Empty = all. */
+  readonly planDocs?: readonly string[];
   readonly docsDomains?: readonly string[];
   readonly note?: (text: string) => void;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
@@ -57,6 +59,11 @@ export function pendingPhases(handlers: readonly PhaseHandler[]): InitPhase[] {
 
 /* --------------------------------------------------------------------------- */
 
+/** PRDR-086: the configured slice scope, or the full C-2 family set. */
+function docPatterns(deps: PipelineDeps): readonly string[] {
+  return deps.planDocs !== undefined && deps.planDocs.length > 0 ? deps.planDocs : DOC_PATTERNS;
+}
+
 function initFsPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "INIT_FS",
@@ -81,12 +88,12 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
      * C-2 are here — planning docs and stack facts.
      */
     digest: () => {
-      const docs = discoverDocs(deps.root).docs;
+      const docs = discoverDocs(deps.root, docPatterns(deps)).docs;
       const stack = discoverStack(deps.root);
       return listingDigest([...docs, ...stack.stack.markers.map((m) => `marker:${m}`)]);
     },
     run: async () => {
-      const docs = discoverDocs(deps.root);
+      const docs = discoverDocs(deps.root, docPatterns(deps));
       const stack = discoverStack(deps.root);
       if (docs.docs.length === 0) {
         /* C-2: no docs → AWAIT_DOCS with the exact list of what was looked for. */
@@ -101,7 +108,7 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
         kind: "complete",
         outputs: {
           docs: [...docs.docs],
-          patterns_searched: [...DOC_PATTERNS],
+          patterns_searched: [...docPatterns(deps)],
           stack_markers: [...stack.stack.markers],
           package_manager: stack.stack.pm,
           candidate_count: stack.candidates.length,
@@ -120,7 +127,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
      * re-runs analysis.
      */
     digest: (ctx) => {
-      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? discoverDocs(deps.root).docs;
+      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? discoverDocs(deps.root, docPatterns(deps)).docs;
       /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
        * the phase reasons must invalidate it, exactly as an edited doc does. */
       return `${contentsDigest(deps.root, docs)}|${valueDigest([ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [], deps.prompts.hashes.planner])}`;

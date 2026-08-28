@@ -106,6 +106,38 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
   });
 });
 
+describe("PRDR-086 plan_docs scopes planning to the increment", () => {
+  it("narrows discovery to the declared slice, leaving the rest of the docs unread", async () => {
+    const root = repo({
+      ...LONE_CANDIDATE,
+      "docs/prd/01-everything.md": "# the whole product\n",
+      "docs/design/adr-001.md": "# a decision\n",
+      "docs/slices/slice-01.md": "# just this slice\n",
+    });
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(
+      root,
+      buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planDocs: ["docs/slices/*.md"] }),
+    );
+
+    const analyze = backend.calls
+      .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs)
+      .find((i) => i["docs"] !== undefined && i["expected_output"] !== undefined);
+    expect(analyze?.["docs"], "only the slice reaches the planner").toEqual(["docs/slices/slice-01.md"]);
+  });
+
+  it("empty plan_docs keeps the full C-2 discovery", async () => {
+    const root = repo({ ...LONE_CANDIDATE, "docs/prd/01-everything.md": "# the whole product\n" });
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const analyze = backend.calls
+      .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs)
+      .find((i) => i["docs"] !== undefined && i["expected_output"] !== undefined);
+    expect(analyze?.["docs"]).toEqual(expect.arrayContaining(["PRD.md", "docs/prd/01-everything.md"]));
+  });
+});
+
 describe("PRDR-085 --replan means a fresh planning session", () => {
   it("DONE tickets are preserved, and tickets the new plan drops are removed", async () => {
     const root = repo(LONE_CANDIDATE);

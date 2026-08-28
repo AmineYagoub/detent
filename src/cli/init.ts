@@ -125,6 +125,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     }),
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),
+    planDocs: planDocsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
     /*
@@ -173,6 +174,21 @@ export async function main(argv: readonly string[]): Promise<number> {
 }
 
 /** Config budgets when one exists; X-1's defaults when init is bootstrapping. */
+/**
+ * PRDR-086: the increment's planning scope. Read straight from config so a
+ * replan plans the slice the project currently declares, not everything the
+ * repository has ever specified.
+ */
+function planDocsFor(root: string): readonly string[] {
+  const file = path.join(stateDir(root), "config.json");
+  if (!existsSync(file)) return [];
+  try {
+    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.plan_docs;
+  } catch {
+    return [];
+  }
+}
+
 function budgetsFor(root: string): Budgets {
   const file = path.join(stateDir(root), "config.json");
   if (existsSync(file)) {

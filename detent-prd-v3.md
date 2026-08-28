@@ -86,6 +86,14 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `detent-prd-v3.md`, which the prefix-only families could not see; the heuristics move
   toward the contract, the document keeps the name D-20 fixed.
 
+- **C-2″ (3.0.3, PRDR-086).** `config.plan_docs` narrows C-2 discovery to the documents
+  the current increment plans from; empty (the default) keeps the full family discovery.
+  Without it, planning a large product slice by slice — the workflow the README
+  documents — was impossible: every replan rediscovered the whole `docs/` tree and
+  re-planned the entire product. Scope is configuration beside `protected` and `risk`,
+  not a new decision or command, and because DISCOVER's digest is a listing of what it
+  found, changing the scope re-derives planning through the existing C-8 rule.
+
 - **C-8′ (3.0.3, PRDR-085).** `--replan` re-derives every planning phase from ANALYZE
   regardless of checkpoint digests — the flag previously only lifted the approved-plan
   guard, so it frequently planned nothing. PLAN then reconciles against the new plan: a

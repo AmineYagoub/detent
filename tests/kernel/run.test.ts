@@ -308,6 +308,7 @@ describe("T-041 X-1 enforcement fixtures", () => {
         model_routing: {},
         pinned: { agent_sdk: "0.3.191", claude_code: "2.1.191" },
         setting_sources: [],
+        plan_docs: [],
       },
       computedWorstCase: 14,
     };
