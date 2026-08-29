@@ -20,8 +20,12 @@ import { appendNote, writeTicket } from "./tickets/mutations.js";
  * `backend.run` call. Arms above (core, stages) launch through here; nothing
  * else in the tree may construct a `SessionSpec`.
  */
+/** PRDR-090: consecutive crashed sessions that mean "outage", not "hard ticket". */
+const CRASH_STREAK_HALT = 3;
+
 export class SessionArm {
   private readonly prefixSeen = new Map<string, string>();
+  private consecutiveCrashes = 0;
 
   constructor(private readonly ctx: RefereeContext) {}
 
@@ -167,6 +171,28 @@ export class SessionArm {
       throw new SessionRefusal(
         `backend refused ${role} session for ${id} (crashed, zero turns): ${result.rawTail.slice(-300)}`,
       );
+    }
+
+    /**
+     * PRDR-090: an outage that crashes sessions WITH turns slips past the rule
+     * above by design — PRDR-053 says partial work exists, judge the tree. One
+     * such crash is plausible. A RUN of them is a backend outage wearing the
+     * costume of work: observed live, nineteen consecutive crashed sessions at
+     * $0.00 raced nine tickets through blind fix and research into NEEDS_HUMAN
+     * in minutes, burning ladder slots on failures nobody committed. The
+     * distinguishing signal is consecutiveness, so that is what is counted; any
+     * session that returns real work resets it.
+     */
+    if (result.crashed === true) {
+      this.consecutiveCrashes += 1;
+      if (this.consecutiveCrashes >= CRASH_STREAK_HALT) {
+        throw new SessionRefusal(
+          `backend outage: ${this.consecutiveCrashes} consecutive crashed sessions (last: ${role} for ${id}) — ` +
+            `halting rather than burning ladder budget on failures no session produced`,
+        );
+      }
+    } else {
+      this.consecutiveCrashes = 0;
     }
     this.rememberPrefix(variant ?? role, spec);
 

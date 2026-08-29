@@ -63,6 +63,44 @@ describe("T-140 a refused session is an outage, not an attempt (PRDR-072)", () =
   });
 });
 
+describe("PRDR-090 a run of crashes is an outage, not work", () => {
+  it("three consecutive crashes WITH turns halt the run", { timeout: 60_000 }, async () => {
+    /**
+     * Observed live: nineteen consecutive crashed sessions at $0.00 raced nine
+     * tickets through blind fix and research into NEEDS_HUMAN in minutes.
+     * Each crash carried turns, so PRDR-072's zero-turn rule let them past and
+     * PRDR-053 correctly judged the tree — of work that never happened.
+     */
+    const backend = new MockBackend({
+      implement: () => ({ ...okResult(), ok: false, crashed: true, turns: 12 }),
+      blind_fix: () => ({ ...okResult(), ok: false, crashed: true, turns: 9 }),
+    });
+    const { core } = await makeCore(backend);
+    expect(core.acquire("t-1").ok).toBe(true);
+
+    /* Two crashes are plausible partial work; the third is an outage. */
+    await core.attempt("t-1", "IN_PROGRESS");
+    await core.attempt("t-1", "BLIND_FIX");
+    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow(/consecutive crashed sessions/);
+  });
+
+  it("a session that returns real work resets the streak", { timeout: 60_000 }, async () => {
+    let calls = 0;
+    const backend = new MockBackend({
+      implement: () => {
+        calls += 1;
+        /* crash, crash, GOOD, crash, crash — never three in a row. */
+        return calls === 3 ? okResult() : { ...okResult(), ok: false, crashed: true, turns: 5 };
+      },
+    });
+    const { core } = await makeCore(backend);
+    expect(core.acquire("t-1").ok).toBe(true);
+    for (let i = 0; i < 5; i += 1) {
+      await expect(core.attempt("t-1", "IN_PROGRESS")).resolves.not.toThrow();
+    }
+  });
+});
+
 describe("T-140 a fresh launch never inherits a stale artifact (PRDR-072)", () => {
   it("a no-write reviewer yields 'no artifact', never the previous verdict", { timeout: 60_000 }, async () => {
     const backend = new MockBackend({
