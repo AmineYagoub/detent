@@ -98,6 +98,37 @@ describe("T-042 B-3/P7: the base-write guard", () => {
     expect(t1.notes.map((n) => n.text).join(" ")).toContain("base-branch write detected and reverted");
   });
 
+  it("PRDR-091: a session that checks out the branch it created leaves a WORKING repo", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+
+    /**
+     * Observed live: a session ran `checkout -b t-102` and stayed there. The
+     * guard deleted the ref and stranded HEAD on an unborn branch, so every
+     * later git call failed with "ambiguous argument 'HEAD'" and the run died
+     * on an unreadable error rather than escalating the breach it had caught.
+     */
+    const strays: StageFn = (spec) => {
+      git(spec.cwd, "checkout", "-q", "-b", "t1");
+      writeTree(spec.cwd, { "work.txt": "on the wrong branch\n" });
+      return okResult();
+    };
+
+    const outcome = await run({
+      root,
+      backend: new MockBackend({ implement: strays }),
+      prompts: PROMPTS,
+      runId: "stray-branch",
+    });
+
+    /** The breach still escalates — that part always worked. */
+    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
+    expect(readTicket(root, "t1").state).toBe("NEEDS_HUMAN");
+    /** And the repository is still usable: HEAD resolves, git answers. */
+    expect(() => git(root, "rev-parse", "--abbrev-ref", "HEAD")).not.toThrow();
+    expect(git(root, "rev-parse", "--abbrev-ref", "HEAD").trim()).not.toBe("t1");
+  });
+
   it("a session inventing a brand-new branch is also a write — deleted and escalated", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });

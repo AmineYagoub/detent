@@ -157,6 +157,12 @@ export interface BaseWriteViolation {
  * byte-identical even against a hostile ticket. Prevention-before-the-fact is
  * the S-2 hook (T-046); this is the kernel's own independent line (P2).
  */
+/** The short ref HEAD points at, or null when detached or unreadable. */
+function headRef(root: string): string | null {
+  const raw = tryGit(root, "symbolic-ref", "--quiet", "--short", "HEAD");
+  return raw === null || raw.trim() === "" ? null : raw.trim();
+}
+
 export function enforceBaseGuard(root: string, snapshot: RefSnapshot, runBranch: string): BaseWriteViolation[] {
   const now = snapshotRefs(root);
   const violations: BaseWriteViolation[] = [];
@@ -173,6 +179,18 @@ export function enforceBaseGuard(root: string, snapshot: RefSnapshot, runBranch:
   for (const [ref] of now) {
     if (snapshot.has(ref) || ref === runBranch || ref.startsWith(TICKET_BRANCH_PREFIX)) continue;
     violations.push({ ref, was: "(absent)", became: now.get(ref) ?? null });
+    /**
+     * PRDR-091: a session that CHECKED OUT the branch it created leaves HEAD
+     * pointing at the ref about to be deleted. Deleting it strands HEAD on an
+     * unborn branch: every later git call fails with "ambiguous argument
+     * 'HEAD'", so the run dies on an unreadable error instead of escalating
+     * the breach it just caught. Found live — a routed session ran
+     * `checkout -b t-102` and bricked the repository. Re-point HEAD at the run
+     * branch BEFORE deleting, so the guard leaves a working tree behind.
+     */
+    if (headRef(root) === ref) {
+      git(root, "symbolic-ref", "HEAD", `refs/heads/${runBranch}`);
+    }
     git(root, "update-ref", "-d", `refs/heads/${ref}`);
   }
   return violations;
