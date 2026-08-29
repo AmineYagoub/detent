@@ -64,3 +64,17 @@ prompt it replaced.
 
 Whether specialization actually improves outcomes is unmeasured, and deliberately so:
 two variants exist to make the experiment possible, not because the gain is assumed.
+
+## Amendment (the A/B's first live firing)
+
+Routing tripped S-6 immediately: the run died with *"role implement prefix hash moved
+within a run"*. `rememberPrefix` keyed the prefix pin on the ROLE, and a routed run
+legitimately gives one role several prompts — base `implement` for a TypeScript ticket,
+`implement.go` for a Go one — so the guard read variation it was never designed to see
+as prompt drift and killed the run.
+
+The pin is now keyed on the PROMPT identity rather than the role, which is what S-6
+actually guarantees: a given prompt's prefix is byte-identical within a run. Each
+variant is pinned independently; a prompt file edited mid-flight is still caught. The
+control arm was unaffected, which is why only the routed arm failed — a clean
+demonstration of the A/B doing its job before measuring anything.

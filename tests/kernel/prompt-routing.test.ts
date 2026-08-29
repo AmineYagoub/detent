@@ -80,6 +80,48 @@ describe("PRDR-089 role variants are opt-in and surface-routed", () => {
     expect(prefix).not.toContain("This repository is Go");
   });
 
+  it("S-6 pins the PROMPT, not the role: one role may carry two variants in a run", async () => {
+    /**
+     * The A/B's first live firing died here — `rememberPrefix` keyed on the
+     * role, so a run whose implement sessions legitimately used two prompts
+     * read as prompt drift and was killed as an S-6 violation.
+     */
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-go", surface: ["main.go"] });
+    addTicket(repo.root, { id: "t-ts", surface: ["src/**"] });
+
+    const configPath = path.join(stateDir(repo.root), "config.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(
+      configPath,
+      `${JSON.stringify({ ...raw, prompt_routing: { implement: { go: ["*.go"] } } }, null, 2)}\n`,
+    );
+
+    const loaded = loadConfig(JSON.parse(readFileSync(configPath, "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({ implement: () => okResult() });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "s6-variants"),
+    );
+    installTrailerHook(repo.root);
+
+    expect(core.acquire("t-go").ok).toBe(true);
+    await core.attempt("t-go", "IN_PROGRESS");
+    core.releaseTicket("t-go");
+    expect(core.acquire("t-ts").ok).toBe(true);
+    /** Two prompts, one role, one run — legal. */
+    await expect(core.attempt("t-ts", "IN_PROGRESS")).resolves.not.toThrow();
+
+    const prefixes = backend.calls.map((c) => c.spec.promptPrefix);
+    expect(prefixes[0]).toContain("This repository is Go");
+    expect(prefixes[1]).not.toContain("This repository is Go");
+  });
+
   it("routing to a variant that does not exist is ignored, not fatal", async () => {
     const { prefix } = await launchWith({ implement: { cobol: ["src/**"] } }, ["src/**"]);
     expect(prefix).toContain("You are the Implementer");

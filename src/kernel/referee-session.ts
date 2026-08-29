@@ -168,7 +168,7 @@ export class SessionArm {
         `backend refused ${role} session for ${id} (crashed, zero turns): ${result.rawTail.slice(-300)}`,
       );
     }
-    this.rememberPrefix(role, spec);
+    this.rememberPrefix(variant ?? role, spec);
 
     /**
      * P7: a session is Detent's act, and Detent never writes the base branch.
@@ -233,13 +233,24 @@ export class SessionArm {
     return note;
   }
 
-  private rememberPrefix(role: string, spec: SessionSpec): void {
-    const seen = this.prefixSeen.get(role);
+  /**
+   * S-6: a prompt's prefix is byte-identical within a run — the check that
+   * catches a prompt file edited mid-flight.
+   *
+   * PRDR-089 amendment: the key is the PROMPT, not the role. With variants a
+   * single role legitimately carries several prefixes in one run — `implement`
+   * for a TypeScript ticket, `implement.go` for a Go one — and keying on the
+   * role alone read that as drift and killed the run. Found by the A/B's first
+   * live firing. Each prompt identity is still pinned to one prefix, which is
+   * what S-6 actually guarantees.
+   */
+  private rememberPrefix(promptKey: string, spec: SessionSpec): void {
+    const seen = this.prefixSeen.get(promptKey);
     const hash = prefixHash(spec);
     if (seen !== undefined && seen !== hash) {
-      throw new KernelBoundaryError(`S-6 violated: role ${role} prefix hash moved within a run`);
+      throw new KernelBoundaryError(`S-6 violated: prompt ${promptKey} prefix hash moved within a run`);
     }
-    this.prefixSeen.set(role, hash);
+    this.prefixSeen.set(promptKey, hash);
   }
 
   private prefixFor(role: RoleId, ticket: Ticket): string {
