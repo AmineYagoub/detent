@@ -83,7 +83,7 @@ export class SessionArm {
     const spec: SessionSpec = {
       role,
       ticketId: id,
-      promptPrefix: this.prefixFor(role),
+      promptPrefix: this.prefixFor(role, ticket),
       promptVariable: JSON.stringify(
         {
           inputs,
@@ -136,7 +136,14 @@ export class SessionArm {
      * what the half-done session left).
      */
     rmSync(artifactOut, { force: true });
-    ctx.journal.appendTicketEvent(id, { stage: role, event: "start", at: ctx.iso() });
+    const variant = this.variantFor(role, ticket);
+    ctx.journal.appendTicketEvent(id, {
+      stage: role,
+      event: "start",
+      at: ctx.iso(),
+      /* PRDR-089: the audit trail names the prompt that actually ran. */
+      prompt: variant === null ? `${role}@${ctx.prompts.hashes[role]}` : `${variant}@${ctx.prompts.variantHashes[variant]}`,
+    });
     const result = await ctx.backend.run(spec);
     const generationNow = currentGeneration(readTicket(ctx.root, id));
     ctx.spend.record(id, generationNow.index, role, result, ctx.iso());
@@ -235,8 +242,30 @@ export class SessionArm {
     this.prefixSeen.set(role, hash);
   }
 
-  private prefixFor(role: RoleId): string {
-    return stablePrefix(this.ctx.prompts.prompts[role], this.ctx.rulesText, this.ctx.bindingsPreamble);
+  private prefixFor(role: RoleId, ticket: Ticket): string {
+    const variant = this.variantFor(role, ticket);
+    const body = variant === null ? this.ctx.prompts.prompts[role] : (this.ctx.prompts.variants[variant] as string);
+    return stablePrefix(body, this.ctx.rulesText, this.ctx.bindingsPreamble);
+  }
+
+  /**
+   * PRDR-089: the vendored variant this ticket routes to, or null. Selection
+   * is by the ticket's DECLARED surface — the same disjoint ownership the
+   * D-21 hook enforces — so it is deterministic and reviewable before the run.
+   * First match in config order wins; an unknown variant is ignored rather
+   * than fatal, because a routing typo must not stop a run mid-ticket.
+   */
+  private variantFor(role: RoleId, ticket: Ticket): string | null {
+    const routes = this.ctx.loaded.config.prompt_routing[role];
+    if (routes === undefined) return null;
+    for (const [variant, globs] of Object.entries(routes)) {
+      const key = `${role}.${variant}`;
+      if (this.ctx.prompts.variants[key] === undefined) continue;
+      if (ticket.surface.some((s) => globs.some((g) => s === g || picomatch.isMatch(s, g, { dot: true })))) {
+        return key;
+      }
+    }
+    return null;
   }
 
   private toolsFor(role: RoleId): readonly string[] {

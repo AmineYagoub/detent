@@ -28,7 +28,7 @@ export class PromptIntegrityError extends Error {
 const DEFAULT_DIR = fileURLToPath(new URL("../../prompts", import.meta.url));
 
 export function loadPromptSet(dir: string = DEFAULT_DIR): PromptSet {
-  let manifest: { schema_version?: unknown; roles?: Record<string, unknown> };
+  let manifest: { schema_version?: unknown; roles?: Record<string, unknown>; variants?: Record<string, unknown> };
   try {
     manifest = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8")) as typeof manifest;
   } catch (err) {
@@ -54,7 +54,31 @@ export function loadPromptSet(dir: string = DEFAULT_DIR): PromptSet {
     prompts[role] = body;
     hashes[role] = actual;
   }
-  return { prompts, hashes };
+
+  /**
+   * PRDR-089: variants load under the same integrity rule as roles — pinned,
+   * hashed, verified — but they are OPTIONAL. A manifest without them (or a
+   * project that routes to none) gets exactly the eight-role set it always had.
+   */
+  const variants = {} as Record<string, string>;
+  const variantHashes = {} as Record<string, string>;
+  for (const [name, pin] of Object.entries(manifest.variants ?? {})) {
+    if (typeof pin !== "string") throw new PromptIntegrityError(`variant ${name} has no pinned hash`);
+    let body: string;
+    try {
+      body = readFileSync(path.join(dir, `${name}.md`), "utf8");
+    } catch {
+      throw new PromptIntegrityError(`variant ${name} is pinned but its prompt file is missing`);
+    }
+    const actual = createHash("sha256").update(body).digest("hex");
+    if (actual !== pin) {
+      throw new PromptIntegrityError(`variant ${name}: content hash ${actual} does not match pin ${pin}`);
+    }
+    variants[name] = body;
+    variantHashes[name] = actual;
+  }
+
+  return { prompts, hashes, variants, variantHashes };
 }
 
 /**

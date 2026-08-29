@@ -1,6 +1,6 @@
 {
   "name": "detent",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "private": true,
   "description": "State-driven autonomous engineering CLI",
   "type": "module",

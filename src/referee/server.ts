@@ -25,7 +25,7 @@ import { TOOL_DESCRIPTIONS, TOOL_INPUTS, TOOL_NAMES, callTool, isToolError } fro
  * declares it, and the plugin manifest must carry the same value — a T-110
  * test pins the two together so neither can drift alone.
  */
-export const REFEREE_VERSION = "3.0.1";
+export const REFEREE_VERSION = "3.1.0";
 
 export function buildServer(core: RefereeCore): Server {
   const server = new Server(

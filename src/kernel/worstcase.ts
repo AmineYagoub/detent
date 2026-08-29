@@ -139,6 +139,12 @@ const configSchema = z.strictObject({
   plan_docs: z.array(glob).default([]),
   risk: z.array(glob).default([]),
   model_routing: z.record(z.string(), nonEmptyString).default({}),
+  /**
+   * PRDR-089: role → variant → surface globs. A ticket whose declared surface
+   * matches any glob runs that role's vendored variant instead of its base
+   * prompt. Empty (the default) is the eight-role set, unchanged.
+   */
+  prompt_routing: z.record(z.string(), z.record(z.string(), z.array(glob))).default({}),
   pinned: z.strictObject({
     agent_sdk: nonEmptyString,
     claude_code: nonEmptyString,
