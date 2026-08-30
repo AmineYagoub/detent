@@ -87,7 +87,7 @@ export class SessionArm {
     const spec: SessionSpec = {
       role,
       ticketId: id,
-      promptPrefix: this.prefixFor(role, ticket),
+      promptPrefix: this.prefixFor(role),
       promptVariable: JSON.stringify(
         {
           inputs,
@@ -140,13 +140,12 @@ export class SessionArm {
      * what the half-done session left).
      */
     rmSync(artifactOut, { force: true });
-    const variant = this.variantFor(role, ticket);
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "start",
       at: ctx.iso(),
-      /* PRDR-089: the audit trail names the prompt that actually ran. */
-      prompt: variant === null ? `${role}@${ctx.prompts.hashes[role]}` : `${variant}@${ctx.prompts.variantHashes[variant]}`,
+      /* The audit trail names the prompt that actually ran. */
+      prompt: `${role}@${ctx.prompts.hashes[role]}`,
     });
     const result = await ctx.backend.run(spec);
     const generationNow = currentGeneration(readTicket(ctx.root, id));
@@ -194,7 +193,7 @@ export class SessionArm {
     } else {
       this.consecutiveCrashes = 0;
     }
-    this.rememberPrefix(variant ?? role, spec);
+    this.rememberPrefix(role, spec);
 
     /**
      * P7: a session is Detent's act, and Detent never writes the base branch.
@@ -260,49 +259,21 @@ export class SessionArm {
   }
 
   /**
-   * S-6: a prompt's prefix is byte-identical within a run — the check that
-   * catches a prompt file edited mid-flight.
-   *
-   * PRDR-089 amendment: the key is the PROMPT, not the role. With variants a
-   * single role legitimately carries several prefixes in one run — `implement`
-   * for a TypeScript ticket, `implement.go` for a Go one — and keying on the
-   * role alone read that as drift and killed the run. Found by the A/B's first
-   * live firing. Each prompt identity is still pinned to one prefix, which is
-   * what S-6 actually guarantees.
+   * S-6: a role's prompt prefix is byte-identical within a run — the check that
+   * catches a prompt file edited mid-flight. One prompt per role (PRDR-093
+   * removed the variant layer), so the role IS the prompt identity S-6 pins.
    */
-  private rememberPrefix(promptKey: string, spec: SessionSpec): void {
-    const seen = this.prefixSeen.get(promptKey);
+  private rememberPrefix(role: RoleId, spec: SessionSpec): void {
+    const seen = this.prefixSeen.get(role);
     const hash = prefixHash(spec);
     if (seen !== undefined && seen !== hash) {
-      throw new KernelBoundaryError(`S-6 violated: prompt ${promptKey} prefix hash moved within a run`);
+      throw new KernelBoundaryError(`S-6 violated: role ${role} prefix hash moved within a run`);
     }
-    this.prefixSeen.set(promptKey, hash);
+    this.prefixSeen.set(role, hash);
   }
 
-  private prefixFor(role: RoleId, ticket: Ticket): string {
-    const variant = this.variantFor(role, ticket);
-    const body = variant === null ? this.ctx.prompts.prompts[role] : (this.ctx.prompts.variants[variant] as string);
-    return stablePrefix(body, this.ctx.rulesText, this.ctx.bindingsPreamble);
-  }
-
-  /**
-   * PRDR-089: the vendored variant this ticket routes to, or null. Selection
-   * is by the ticket's DECLARED surface — the same disjoint ownership the
-   * D-21 hook enforces — so it is deterministic and reviewable before the run.
-   * First match in config order wins; an unknown variant is ignored rather
-   * than fatal, because a routing typo must not stop a run mid-ticket.
-   */
-  private variantFor(role: RoleId, ticket: Ticket): string | null {
-    const routes = this.ctx.loaded.config.prompt_routing[role];
-    if (routes === undefined) return null;
-    for (const [variant, globs] of Object.entries(routes)) {
-      const key = `${role}.${variant}`;
-      if (this.ctx.prompts.variants[key] === undefined) continue;
-      if (ticket.surface.some((s) => globs.some((g) => s === g || picomatch.isMatch(s, g, { dot: true })))) {
-        return key;
-      }
-    }
-    return null;
+  private prefixFor(role: RoleId): string {
+    return stablePrefix(this.ctx.prompts.prompts[role], this.ctx.rulesText, this.ctx.bindingsPreamble);
   }
 
   private toolsFor(role: RoleId): readonly string[] {

@@ -1,7 +1,7 @@
 ---
 id: PRDR-093
 title: "Remove vendored role variants — two controlled experiments measured no effect, and the capability ships inert and undocumented"
-state: READY
+state: DONE
 severity: minor
 category: decision
 labels: ["prd-review", "user-decision", "found-by-execution"]

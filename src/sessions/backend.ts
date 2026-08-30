@@ -120,9 +120,6 @@ export interface PromptSet {
   readonly prompts: Readonly<Record<RoleId, string>>;
   /** sha256 hex per role, matching prompts/manifest.json. */
   readonly hashes: Readonly<Record<RoleId, string>>;
-  /** PRDR-089: vendored `role.variant` prompts, keyed `implement.go`. */
-  readonly variants: Readonly<Record<string, string>>;
-  readonly variantHashes: Readonly<Record<string, string>>;
 }
 
 /**

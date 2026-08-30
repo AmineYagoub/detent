@@ -9,9 +9,5 @@
     "review_fix": "1e17365360baf66193f39bc57ecd06fa1fef1849938e8d3057036728d2b350e3",
     "research": "11a2b8f460e3ae04a50434e00a4929bfaea412215713307b144618a35ae61a0b",
     "review": "687a8c8aca15df0812bf0d162465d612f9d877f818a852be1ee03be3600cde2f"
-  },
-  "variants": {
-    "implement.go": "9687bc6619844351d337a56e00ae4c80cf6fd1ef4b7d9296ba6a17bc67c0beeb",
-    "implement.typescript": "58f135e7871ae0540def930ea01ecf48721a214af3c25b706804c53232156c80"
   }
 }
