@@ -75,6 +75,8 @@ export class SpendLedger {
       cache_read_input_tokens: fromBreakdown ? sum((u) => u.cacheReadInputTokens) : result.cacheReadInputTokens,
       cache_creation_input_tokens: fromBreakdown ? sum((u) => u.cacheCreationInputTokens) : result.cacheCreationInputTokens,
       turns: result.turns,
+      /* PRDR-095: the breakdown's keys ARE the model names — record them. */
+      models: Object.keys(result.perModel ?? {}).sort(),
       ...(result.crashed === true ? { partial: "crash" as const } : {}),
     });
     this.journal.appendLedger(row);

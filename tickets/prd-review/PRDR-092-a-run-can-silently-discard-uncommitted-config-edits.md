@@ -70,3 +70,36 @@ tripwire and would see only that their setting "didn't seem to do anything".
 `protected` makes the security case concrete: a user who widens the protected globs
 uncommitted, and whose edit is silently reverted, gets a run whose write containment is
 narrower than the one they configured, with nothing in the journal to show it.
+
+## Investigation (still open — cause not found)
+
+Six mechanisms are now excluded, each checked rather than reasoned about:
+
+- **B-5 crash recovery.** `resetDirtyTracked` filters `.detent/` out of the paths it
+  checks out, deliberately.
+- **`detent approve`.** Tested against a fixture carrying the key; it survives untouched.
+- **The resume path.** Two arms lost the key on a first-and-only run, never approved,
+  never resumed.
+- **Session writes.** `.detent/config.json` is in the referee's STRUCTURAL protected
+  floor, above whatever the project declares, so the D-21 hook denies it even to the
+  bootstrap ticket's `**` surface.
+- **Layout stamping / `ensureConfig`.** `run` invokes neither, and `ensureConfig` returns
+  early when the file exists.
+- **The kernel run path.** `tests/kernel/config-survives-run.test.ts` drives two tickets
+  to DONE against a tracked config carrying an uncommitted edit; the edit survives.
+
+What is established: the file's mtime moves DURING a live run, early, in every affected
+arm — and the config is loaded ONCE per run, so a mid-run change cannot affect the run
+that writes it. It affects the NEXT one. That matches the field evidence exactly: routing
+applied for run #1's two tickets, then run #2 loaded a file that no longer had it.
+
+## Partial resolution — detection, not preservation
+
+The run now journals the configuration it actually loaded (`event: "config"` on the `run`
+journal: budgets, `model_routing`, `protected`, `risk`, run branch). A setting that stops
+applying between runs is now a visible diff between two journal lines instead of silence,
+which is what made this cost an entire A/B before anyone noticed.
+
+This does NOT satisfy acceptance criterion 2, which requires the run to preserve the edit
+or refuse to start and name the file. The ticket stays open on that criterion. Detection
+is what could be built honestly without a reproduction; preservation needs the cause.

@@ -118,6 +118,22 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   try {
     const runBranch = ensureRunBranch(root, opts.runId ?? `${process.pid}-${Date.now().toString(36)}`);
     installTrailerHook(root);
+    /**
+     * PRDR-092: the run records the configuration it actually loaded. A
+     * setting that stops applying between runs — the field report this ticket
+     * exists for — is then a diff between two journal lines rather than
+     * silence. The config is read ONCE per run, so this is what governed
+     * every session below, whatever the file says afterwards.
+     */
+    journal.appendTicketEvent("run", {
+      event: "config",
+      at: new Date().toISOString(),
+      run_branch: runBranch.branch,
+      budgets: loaded.config.budgets,
+      model_routing: loaded.config.model_routing,
+      protected: loaded.config.protected,
+      risk: loaded.config.risk,
+    });
     const core = new RefereeCore(
       {
         root,

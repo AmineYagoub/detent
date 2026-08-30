@@ -138,6 +138,13 @@ export const ledgerRowSchema = z.strictObject({
   cache_read_input_tokens: z.number().int().nonnegative().default(0),
   cache_creation_input_tokens: z.number().int().nonnegative().default(0),
   turns: z.number().int().nonnegative(),
+  /**
+   * PRDR-095: the model(s) that actually served the session, from the SDK's
+   * per-model breakdown. Additive with a default, so rows written before this
+   * field read back as `[]` rather than failing (the `cache_*` precedent).
+   * Without it a green N-7 gate cannot be audited for what produced it.
+   */
+  models: z.array(nonEmptyString).default([]),
   partial: z.enum(["crash"]).optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
