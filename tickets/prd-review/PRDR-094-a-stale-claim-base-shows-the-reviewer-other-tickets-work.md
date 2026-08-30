@@ -89,3 +89,22 @@ OWN commits — rather than a range endpoint — would preserve the "whole ticke
 that the current pin exists to protect, while excluding work the ticket did not author.
 Re-recording the base at requeue is the obvious alternative and is worse: it discards
 exactly the property the original comment defends.
+
+## Resolution
+
+`ticketCommits` selects the commits whose subject begins with the ticket's id;
+`commitPatch` renders each as `sha^..sha`, so a B-2 worktree merge reports its whole
+merged change against its first parent and a root commit falls back to `show`.
+`ReferenceContext.diff` composes those with the still-uncommitted worktree diff when it is
+given a ticket id, and keeps the whole-tree diff for unscoped callers. T-140's truncation
+banner keeps its complete file list through `statFor`, since `git diff --stat` cannot
+describe a body assembled from several commits.
+
+Criteria 1–4 are met and covered by `tests/kernel/review-basis.test.ts`, which pins the
+old range behaviour as well as the new one so the regression cannot return silently.
+
+**Criterion 5 is obviated rather than implemented.** It asked the dossier to name foreign
+hunks when they drive a verdict; with the basis fixed they no longer reach the reviewer,
+so there is no such verdict to explain. Implementing the diagnostic would mean detecting a
+state that can no longer occur. If a future change reintroduces range-based review, this
+criterion returns with it.
