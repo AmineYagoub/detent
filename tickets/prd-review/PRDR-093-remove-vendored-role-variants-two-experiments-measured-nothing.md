@@ -57,10 +57,13 @@ have to clear.
 
 Of 56 blocked tickets across both conditions, **45 were `scope` findings** — the reviewer
 rejecting work as out of scope until the ladder exhausted — distributed evenly between
-control and variant. That is a planner/reviewer disagreement about sibling tickets sharing
-a surface glob (`internal/cli/**` is declared by five tickets in this plan), and it
-dominated the run's cost in both conditions. It is a real defect and it has nothing to do
-with which Implementer prompt ran. It belongs in its own ticket.
+control and variant. It dominated the run's cost in both conditions and has nothing to do
+with which Implementer prompt ran.
+
+The cause is a stale review diff basis, not the prompts and not the planner: a ticket's
+claim base is pinned at first acquire and never updated, so a ticket reviewed after other
+tickets have committed sees their work in its diff wherever their writes fall inside its
+own declared surface. Filed as PRDR-094.
 
 ## Why removal rather than keeping the seam inert
 
