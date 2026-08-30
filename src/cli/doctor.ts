@@ -38,10 +38,36 @@ export interface DoctorDeps {
   readonly installedSdkVersion?: () => string;
 }
 
+/**
+ * S-5: the installed agent-SDK version, for the pin check.
+ *
+ * PRDR-096: `require("@anthropic-ai/claude-agent-sdk/package.json")` threw —
+ * the SDK's `exports` map does not expose `./package.json`, so Node refuses
+ * the subpath and `doctor`, the command whose whole job is to report on the
+ * environment, died reporting on it. Resolve the package's own entry point
+ * instead and read the manifest beside it, which needs no exports entry. An
+ * unreadable manifest returns "unknown" — the same honest value `init` records
+ * for an unreadable CLI, and something the pin check can report rather than
+ * crash on.
+ */
 function installedSdk(): string {
   const require = createRequire(import.meta.url);
-  const manifest = require("@anthropic-ai/claude-agent-sdk/package.json") as { version: string };
-  return manifest.version;
+  try {
+    let dir = path.dirname(require.resolve("@anthropic-ai/claude-agent-sdk"));
+    for (let up = 0; up < 8; up += 1) {
+      const candidate = path.join(dir, "package.json");
+      if (existsSync(candidate)) {
+        const manifest = JSON.parse(readFileSync(candidate, "utf8")) as { name?: string; version?: string };
+        if (manifest.name === "@anthropic-ai/claude-agent-sdk" && typeof manifest.version === "string") return manifest.version;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    /* fall through to the honest unknown */
+  }
+  return "unknown";
 }
 
 /** S-3/PRDR-050: a rule form the backend cannot parse must fail HERE, loudly. */

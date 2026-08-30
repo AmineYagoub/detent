@@ -21,6 +21,26 @@ async function fixture(): Promise<string> {
 const named = (report: Awaited<ReturnType<typeof doctor>>, name: string) =>
   report.checks.find((c) => c.name === name);
 
+describe("PRDR-096 doctor reads the real installed SDK version", () => {
+  /**
+   * Every other test in this file injects `installedSdkVersion`, which is how
+   * a throwing probe shipped: `require(".../package.json")` is refused by the
+   * SDK's `exports` map, so `doctor` — the command whose job is to report on
+   * the environment — died reporting on it, and the pin check never once ran.
+   * This test deliberately omits the override.
+   */
+  it("resolves a version without throwing, and the pin check actually runs", async () => {
+    const root = await fixture();
+    const report = await doctor(root, { env: {} });
+    const check = named(report, "agent-sdk-pin");
+    expect(check).toBeDefined();
+    expect(check?.detail).not.toContain("is not defined by");
+    /* The fixture pins 0.3.191; the repo installs exactly that. */
+    expect(check?.detail).toContain("0.3.191");
+    expect(check?.ok).toBe(true);
+  });
+});
+
 describe("T-050 pin checks (S-5)", () => {
   it("a matching SDK pin passes; a mismatch fails naming BOTH versions", async () => {
     /** fixture pins agent_sdk 0.3.191 == installed */
