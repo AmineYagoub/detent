@@ -4,7 +4,7 @@ import { readBindings } from "../adapter/drift.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
-import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
+import { commitPatch, git, resolveBaseRef, snapshotRefs, ticketCommits, type RefSnapshot, type RunBranch } from "./git.js";
 import { pidAlive } from "./tickets/mutations.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
@@ -197,6 +197,18 @@ export class RefereeContext {
     }
   }
 
+  /**
+   * PRDR-094: the ticket's own committed work, oldest generation first, plus
+   * anything not yet committed. With no ticket id (or no base) this is the
+   * whole-tree diff the unscoped callers expect.
+   */
+  private reviewBody(workDir: string, base: string | null, ticketId: string | undefined, spec: readonly string[]): string {
+    if (ticketId === undefined || base === null) return git(workDir, "diff", base ?? "HEAD", ...spec);
+    const own = ticketCommits(workDir, ticketId, base);
+    const committed = own.map((sha) => commitPatch(workDir, sha, spec)).join("");
+    return committed + git(workDir, "diff", "HEAD", ...spec);
+  }
+
   claimBase(id: string): string | null {
     const file = path.join(runsDir(this.root, id), "claim_base.json");
     if (!existsSync(file)) return null;
@@ -211,17 +223,23 @@ export class RefereeContext {
   /**
    * T-140 (PRDR-069): the claim base survives resumes BY DESIGN, so other
    * tickets' finalized commits can sit between the base and HEAD — a run
-   * that stops and resumes interleaves tickets. The reviewer judges the
-   * TICKET's diff (SEC-3), so the surface pathspec — disjoint across
-   * tickets by the plan's own contract — filters the span down to the
-   * ticket's ownership. Unscoped callers keep the whole-tree diff.
+   * that stops and resumes interleaves tickets.
+   *
+   * PRDR-094: the surface pathspec was trusted to filter that span back down
+   * to the ticket, on the assumption that surfaces are disjoint across tickets.
+   * They are not, and the reviewer was shown work the ticket never wrote — a
+   * finding no fix generation could resolve, because the offending hunks belong
+   * to another ticket and are already DONE. Given a ticket id, the basis is now
+   * that ticket's OWN commits plus whatever is still uncommitted, which keeps
+   * PRDR-069's whole-ticket property without borrowing anyone else's work.
+   * Unscoped callers keep the whole-tree diff.
    */
-  diff(workDir: string, base?: string | null, surface?: readonly string[]): string {
+  diff(workDir: string, base?: string | null, surface?: readonly string[], ticketId?: string): string {
     const scope = (surface ?? []).map((glob) => `:(glob)${glob}`);
     const spec = scope.length > 0 ? ["--", ...scope] : [];
     try {
       const untracked = untrackedNames(workDir, spec);
-      const full = git(workDir, "diff", base ?? "HEAD", ...spec) + untrackedAsDiff(workDir, untracked);
+      const full = this.reviewBody(workDir, base ?? null, ticketId, spec) + untrackedAsDiff(workDir, untracked);
       if (full.length <= DIFF_BODY_CAP) return full;
       /**
        * T-140 (PRDR-071): a silent `.slice(-8000)` fed reviewers the TAIL of
@@ -230,9 +248,7 @@ export class RefereeContext {
        * the complete file list always arrives, bodies clip with a banner, and
        * the reviewer (reads-open, S-2″) is told where the rest lives.
        */
-      const stat =
-        git(workDir, "diff", "--stat", base ?? "HEAD", ...spec) +
-        untracked.map((name) => ` ${name} (untracked)\n`).join("");
+      const stat = statFor(full) + untracked.map((name) => ` ${name} (untracked)\n`).join("");
       return (
         `[diff truncated: ${full.length} chars total, body clipped to the last ${DIFF_BODY_CAP}. ` +
         `The complete changed-file list follows; read files in the worktree for full content.]\n` +
@@ -252,6 +268,21 @@ export class RefereeContext {
  * the scope render as new-file pseudo-diffs. Unreadable (binary) files
  * degrade to their header line.
  */
+/**
+ * PRDR-094: the changed-file list for a body this module assembled itself.
+ * `git diff --stat` cannot describe it — the body is a concatenation of one
+ * ticket's commits, not a single range — and T-140 requires the COMPLETE file
+ * list to survive even when bodies clip.
+ */
+function statFor(body: string): string {
+  const names = new Set<string>();
+  for (const line of body.split("\n")) {
+    const match = /^diff --git a\/(.+?) b\//.exec(line);
+    if (match?.[1] !== undefined) names.add(match[1]);
+  }
+  return [...names].map((name) => ` ${name}\n`).join("");
+}
+
 function untrackedNames(workDir: string, spec: readonly string[]): string[] {
   return git(workDir, "ls-files", "--others", "--exclude-standard", ...spec)
     .split("\n")

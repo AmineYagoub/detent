@@ -246,6 +246,45 @@ export function baseReflogWrites(root: string, base: string): number {
   return Math.max(0, entries.length - 1);
 }
 
+/**
+ * PRDR-094: the commits on the run branch that THIS ticket authored, oldest
+ * first.
+ *
+ * The claim base is pinned at first acquire (PRDR-069) so later generations
+ * judge the whole ticket rather than the last patch — correct, but it makes
+ * `base..HEAD` a span that other tickets commit into. The old code relied on
+ * the surface pathspec to filter that span back down, on the stated assumption
+ * that surfaces are "disjoint across tickets by the plan's own contract". They
+ * are not: nothing enforces disjointness, and a plan where five tickets declare
+ * `internal/cli/**` showed each of them the others' work.
+ *
+ * Every Detent commit subject is `<ticket-id>: …`, so the ticket's own work is
+ * identifiable without new bookkeeping. Empty when there is no base, no
+ * history, or the ticket has not committed yet — all of which fall back to the
+ * worktree diff.
+ */
+export function ticketCommits(cwd: string, ticketId: string, base: string | null): string[] {
+  if (base === null) return [];
+  const raw = tryGit(cwd, "log", "--reverse", "--format=%H%x1f%s", `${base}..HEAD`);
+  if (raw === null) return [];
+  const out: string[] = [];
+  for (const line of raw.split("\n")) {
+    const [sha, subject] = line.split("\x1f");
+    if (sha === undefined || subject === undefined || sha.trim() === "") continue;
+    if (subject.startsWith(`${ticketId}:`)) out.push(sha.trim());
+  }
+  return out;
+}
+
+/**
+ * One commit's own patch, scoped. `sha^..sha` is used rather than `git show`
+ * so a B-2 worktree merge reports the whole merged change against its first
+ * parent; a root commit has no parent, and falls back to `show`.
+ */
+export function commitPatch(cwd: string, sha: string, spec: readonly string[]): string {
+  return tryGit(cwd, "diff", `${sha}^`, sha, ...spec) ?? tryGit(cwd, "show", "--format=", "--patch", sha, ...spec) ?? "";
+}
+
 /*
  * ---------------------------------------------------------------------------
  * Crash recovery (B-5)

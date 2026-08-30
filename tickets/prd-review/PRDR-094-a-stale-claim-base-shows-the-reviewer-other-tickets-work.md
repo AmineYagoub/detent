@@ -1,7 +1,7 @@
 ---
 id: PRDR-094
 title: "A stale claim base shows the reviewer other tickets' work, and the fix ladder cannot resolve it"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-execution"]
