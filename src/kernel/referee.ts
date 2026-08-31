@@ -16,6 +16,7 @@ import {
 import { finalizeBootstrap } from "../init/plan.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
+import { settleWorktree } from "./worktree-park.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -175,6 +176,15 @@ export class RefereeCore {
     this.ctx.recordClaimBase(id, workDir);
 
     const ticket = readTicket(this.root, id);
+    /**
+     * PRDR-100: before this ticket is judged, restore any parked work of its
+     * own and move aside untracked residue belonging to someone else. The
+     * READY branch below returns immediately, so without this a fresh claim
+     * simply inherits whatever a terminated session left in the tree — and
+     * fails its gate on paths D-21 forbids it from touching.
+     */
+    const settled = settleWorktree(workDir, ticket.surface);
+    if (settled !== null) this.ctx.journal.appendTicketEvent(id, { event: "worktree", at: this.ctx.iso(), ...settled });
     if (ticket.state === "READY") {
       return { ok: true, claimedRef: this.mintFor(id, claimed()) };
     }

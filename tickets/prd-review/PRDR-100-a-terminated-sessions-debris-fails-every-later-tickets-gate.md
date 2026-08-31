@@ -1,7 +1,7 @@
 ---
 id: PRDR-100
 title: "A terminated session's untracked debris fails every later ticket's gate, and no fix rung can clear it"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-execution"]
@@ -91,6 +91,27 @@ is entered, which is the cheapest place either to quarantine the residue or to n
 the dossier. Deleting a terminated session's untracked output at termination is the
 blunter alternative and forfeits B-5's same-ticket resume, so it should not be reached for
 first.
+
+## Resolution
+
+`settleWorktree`, called at claim before the ticket is judged: restore the parked files
+this ticket owns, park the untracked files it does not. Nothing is deleted, so B-5's
+same-ticket resume keeps working — a ticket that crashed mid-work still finds its own
+partial output; it is only ever moved aside while somebody else holds the claim.
+
+Two placement decisions carry the fix. The park lives under `.git/detent-parked/` because
+anywhere in the worktree would be linted or tested, and `.detent/` especially so — the F-2
+boundary lint fails when project sources appear under it, which would have traded one gate
+failure for another. And `.detent/` itself is never parked: it is the kernel's own state,
+not any ticket's work.
+
+The claim path is where this belongs because a READY claim returns before
+`resetDirtyTracked` ever runs — which is exactly why a fresh ticket inherited the residue
+with no cleanup step to intercept it.
+
+Covered by `tests/kernel/parked-debris.test.ts`: foreign residue parked, the claimant's own
+untracked work untouched, the park kept out of the worktree, the owner getting its files
+back, and `.detent/` left alone.
 
 ## Aside — found while filing this
 
