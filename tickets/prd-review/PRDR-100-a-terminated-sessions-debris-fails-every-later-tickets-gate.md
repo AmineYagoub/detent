@@ -1,0 +1,80 @@
+---
+id: PRDR-100
+title: "A terminated session's untracked debris fails every later ticket's gate, and no fix rung can clear it"
+state: READY
+severity: major
+category: correctness
+labels: ["prd-review", "found-by-execution"]
+surface: ["src/kernel/git.ts", "src/kernel/referee-gate.ts", "src/kernel/referee.ts"]
+prd_refs: ["B-5", "V-1", "X-2", "P3", "D-21"]
+acceptance_criteria: ["A ticket's gate cannot be failed by uncommitted files that another ticket's terminated session left behind and that this ticket's surface forbids it from touching.", "B-5's deliberate behaviour is preserved where it is right: a ticket resuming its OWN crashed session still finds its own partial work and is still judged on the tree as-is.", "When a gate failure is caused by files outside the claiming ticket's surface, the dossier says so by name — an operator must not have to diff the worktree to discover the ticket was never at fault.", "A regression test reproduces it: terminate ticket A mid-work leaving untracked files in A's surface, claim ticket B whose surface excludes them, and assert B's gate is not failed by A's residue."]
+non_goals: ["Does not scope the gate to a surface. P3 means the gate is the project's own whole-tree command, and narrowing it would weaken verification rather than fix this.", "Does not change PRDR-097's turns-breach halt, which behaved correctly — it merely produced the first terminated session this defect could feed on.", "Does not delete a ticket's own partial work; B-5 keeps it for the resume it was written for."]
+attempts: { fix: 0, hypothesis: 0, review: 0 }
+links: ["PRDR-094", "PRDR-097"]
+depends_on: []
+---
+
+# PRDR-100 — a terminated session's debris fails every later ticket's gate
+
+**Severity:** major · **Category:** correctness · **Found by:** execution, on the N-7 gate
+
+## Problem
+
+`resetDirtyTracked` restores tracked files at resume and **deliberately leaves untracked
+files in place** — "the gate judges the tree as-is" — which is right for a ticket resuming
+its own crashed session. It is wrong for every OTHER ticket, because the gate is
+whole-tree by design (P3: the project's own commands), so one ticket's abandoned output
+becomes another ticket's gate failure.
+
+Observed end to end:
+
+1. **t-116** (`V-1 deterministic binding discovery`, surface `src/verification/discovery/**`,
+   `tests/verification/**`) breached the turns ceiling at 103 turns and was terminated
+   mid-work, leaving 21 untracked files across both directories.
+2. **t-102** (surface `src/kernel/fs/**`, `tests/fs/**`, `.detent/.gitignore`) then claimed
+   and ran its gate. The lint gate lints the whole tree:
+
+   > `tests/verification/discovery/determinism.test.ts` was not found by the project
+   > service. Consider either including it in the tsconfig.json…
+
+3. t-102 cannot fix that. The files are outside its declared surface, D-21 denies the
+   write, and they belong to a ticket that is still IN_PROGRESS.
+4. It burned its whole ladder trying anyway — implement, `blind_fix`, `research`,
+   `informed_fix`, roughly **$5.80** — and landed in NEEDS_HUMAN.
+
+Removing t-116's 21 untracked files made the lint gate pass immediately, with no change to
+t-102 whatsoever. The ticket was never at fault.
+
+## Why it is major
+
+**No rung can resolve it.** Every fix session is handed a red gate whose cause is
+unreachable from its surface, so it either flails or reports success against a tree that
+is still red. The ladder is guaranteed to exhaust, exactly as in PRDR-094 — the same
+defect shape (a ticket judged on another ticket's work) relocated from the review side to
+the gate side.
+
+**It compounds.** The debris outlives the session that made it, so every subsequent ticket
+inherits the same unfixable failure until an operator notices and clears it by hand. One
+terminated session can consume the ladder budget of every ticket after it.
+
+**It is silent about its cause.** The dossier records a lint failure and a signature.
+Nothing says the failing paths lie outside the claiming ticket's surface, so the
+operator's natural reading is that the implementer wrote bad code.
+
+## Direction (not a decision)
+
+The claiming ticket's surface is already known, and so is every other ticket's. A gate
+failure whose paths fall outside the claimant's surface is attributable before the ladder
+is entered, which is the cheapest place either to quarantine the residue or to name it in
+the dossier. Deleting a terminated session's untracked output at termination is the
+blunter alternative and forfeits B-5's same-ticket resume, so it should not be reached for
+first.
+
+## Aside — found while filing this
+
+Committing this ticket was itself denied by the D-28 hook, because the commit message text
+contained the bound gate command as a substring and `deny_bash_containing` matches the raw
+command line rather than an actual gate invocation. Any command that merely mentions the
+gate command — a commit message, a grep, an echo — is refused. Minor, and separable from
+this ticket, but it belongs on the record next to PRDR-099 as another case of a policy
+written for a session being applied to a bystander.
