@@ -98,3 +98,20 @@ been made without the field that answers it, for the entire life of the plan pip
 The prompt and tag changes below stand, but they are not what fixes this. They were treating
 a symptom that did not exist. The fix is one field on one call, plus two tests that draft a
 NON-empty list so the pass-through cannot regress into the fixture's blind spot.
+
+## The structural half — so the next field cannot go the same way
+
+Fixing `non_goals` fixes one field. The mapping that lost it is hand-written, the draft
+schema has nine fields, and an unmapped tenth would default just as silently tomorrow. The
+suite would not catch it either: the shared fixture writes defaults, and a default cannot
+be told from a dropped value.
+
+So the mapping is now total at compile time. `MappedDraftKeys` lists what the writer
+handles, `UnmappedDraftKeys` is `Exclude<keyof PlanDraftTicket, MappedDraftKeys>`, and a
+`const … : UnmappedDraftKeys extends never ? true : never` fails to build the moment a
+drafted field is left unhandled. Verified by adding a throwaway field to
+`planDraftSchema`: `src/init/plan.ts` failed to compile, and removing it went green again.
+
+The list is still hand-written — but it is now checked against the schema, and that check
+is precisely what was missing. Zero runtime cost, and the failure arrives at build time
+rather than in a plan nobody inspects.

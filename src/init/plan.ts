@@ -29,6 +29,34 @@ import type { PhaseOutcome } from "./machine.js";
  * DONE — see `finalizeBootstrap`.
  */
 
+/**
+ * PRDR-101's structural half: the draft-to-ticket mapping below is hand-written,
+ * and `non_goals` went unhandled for the life of the pipeline because an
+ * unmapped field does not fail — the ticket schema simply defaults it. Nothing
+ * catches that, least of all the suite: the shared draft fixture writes
+ * `non_goals: []`, which cannot distinguish dropped from honestly empty.
+ *
+ * So the mapping is made total at COMPILE time. Every key of a drafted ticket
+ * must appear in `MappedDraftKeys`; adding a field to `planDraftSchema` without
+ * listing it here is a type error rather than a silent default. The list is
+ * still written by hand — but now it is checked against the schema, which is
+ * the part that was missing.
+ */
+type MappedDraftKeys =
+  | "id"
+  | "type"
+  | "title"
+  | "description"
+  | "acceptance_criteria"
+  | "non_goals"
+  | "surface"
+  | "depends_on"
+  | "risk_label";
+type UnmappedDraftKeys = Exclude<keyof PlanDraftTicket, MappedDraftKeys>;
+/** Fails to compile the moment a drafted field is left unhandled. */
+const DRAFT_MAPPING_IS_TOTAL: UnmappedDraftKeys extends never ? true : never = true;
+void DRAFT_MAPPING_IS_TOTAL;
+
 export const BOOTSTRAP_TICKET_ID = "t-001-bootstrap";
 
 export function planDraftPath(root: string): string {
