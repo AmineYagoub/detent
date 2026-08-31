@@ -46,7 +46,15 @@ export const CEILINGS = {
   hypotheses: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 2 },
   sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 18 },
   ticket_wall_clock_ms: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 3_600_000 },
-  turns_per_stage: { scope: "session", breachTarget: "BUDGET_BREACH", default: 30 },
+  /**
+   * PRDR-098: 30 was below Detent's own reference workload. Measured implement
+   * turns on the N-7 gate across two models: 20, 25, 25, 27, 32, 32, 34, 39,
+   * 43 — five of nine at or above the old default. That was survivable while a
+   * breach was silently mis-recorded as a crash (PRDR-097); now that a breach
+   * HALTS the run by name, a default under the workload halts most runs. 80
+   * clears the observed maximum with room while still bounding a runaway.
+   */
+  turns_per_stage: { scope: "session", breachTarget: "BUDGET_BREACH", default: 80 },
   failure_research_tool_calls: { scope: "research-session", breachTarget: "RESEARCH_DRY", default: 8 },
   planning_research_tool_calls: { scope: "init", breachTarget: "AWAIT_INFO_BATCH", default: 16 },
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
