@@ -36,6 +36,38 @@ describe("PRDR-081 the planner sizes against the budget that will execute it", (
   });
 });
 
+describe("PRDR-101 the drafted non_goals reach the written ticket", () => {
+  /**
+   * The draft always carried `non_goals`; the createTicket call in plan.ts did
+   * not copy it, and the schema defaults it to `[]`. So every ticket in every
+   * plan reached the implementer and the reviewer with its boundaries stripped,
+   * silently, because an empty list is legal. Measured on Detent's own plan:
+   * the draft had them on 65 of 65 tickets, the written plan on 1 of 66.
+   *
+   * No test caught it because the shared fixture drafts `non_goals: []`. This
+   * one drafts a non-empty list on purpose.
+   */
+  it("a non-empty non_goals survives the draft-to-ticket write", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const draft = DRAFT(["t-100"]) as { tickets: { non_goals: string[] }[] };
+    draft.tickets[0]!.non_goals = ["not the CLI wiring — that is t-101", "no persistence"];
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), draft) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(readTicket(root, "t-100").non_goals).toEqual([
+      "not the CLI wiring — that is t-101",
+      "no persistence",
+    ]);
+  });
+
+  it("an honestly empty non_goals stays empty, not undefined", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    expect(readTicket(root, "t-100").non_goals).toEqual([]);
+  });
+});
+
 describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () => {
   it("PLAN's digest moves when the planner prompt changes, and not when another role's does", () => {
     const root = repo(LONE_CANDIDATE);

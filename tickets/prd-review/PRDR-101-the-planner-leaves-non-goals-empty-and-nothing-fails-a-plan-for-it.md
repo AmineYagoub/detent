@@ -1,9 +1,9 @@
 ---
 id: PRDR-101
-title: "The planner leaves non_goals empty on 98% of tickets, and no plan review tag fails a plan for it"
+title: "Every ticket loses its non_goals between the draft and the written plan — the writer never copied the field"
 state: DONE
 severity: major
-category: gap
+category: correctness
 labels: ["prd-review", "user-raised", "found-by-execution"]
 surface: ["prompts/planner.md", "src/schemas/init.ts", "src/init/plan-review.ts"]
 prd_refs: ["A-1", "A-2", "C-4", "D-6"]
@@ -71,3 +71,30 @@ Three files, no new role and no schema event for `ROLE_IDS`:
 The mechanism being fixed is the feedback loop, not the wording. The same prompt's SIZE and
 SHAPE rules landed hard — PRDR-081 took the plan from 14 tickets to 66 — because REVIEW_PLAN
 checks them. `non_goals` was asked for and never checked, and decayed to 2% compliance.
+
+## Amendment — the diagnosis above was wrong
+
+Filed on the premise that the planner was ignoring an instruction with no feedback loop.
+It was not. Verified after the change shipped, by replanning the same documents and
+comparing the draft to the written plan:
+
+```
+plan-draft.json      48 tickets, 0 with empty non_goals   (mean 2.04 entries)
+written t-*.json     49 tickets, 48 with empty non_goals  (mean 0.04)
+```
+
+And on the ORIGINAL gate, planned before any of this: **draft 65 tickets, 0 empty**. The
+planner has always complied. `src/init/plan.ts` builds its `createTicket` call from eight
+draft fields and `non_goals` is the one it never passed, so the ticket schema defaulted it
+to `[]`. Silent, because an empty list is legal — and invisible to the suite, because the
+shared draft fixture writes `non_goals: []` and could not distinguish dropped from empty.
+
+The consequence is larger than the original framing. `NewTicket` documents the field it was
+not being given — *"A-1: non-goals are part of a ticket, and the reviewer reads them (A-5
+scope)"* — so every ticket in every plan reached both the implementer and the reviewer with
+its boundaries stripped. The reviewer's commonest judgement, is this work in scope, has
+been made without the field that answers it, for the entire life of the plan pipeline.
+
+The prompt and tag changes below stand, but they are not what fixes this. They were treating
+a symptom that did not exist. The fix is one field on one call, plus two tests that draft a
+NON-empty list so the pass-through cannot regress into the fixture's blind spot.

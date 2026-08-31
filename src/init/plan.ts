@@ -177,6 +177,13 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
         title: draft.title,
         description: draft.description,
         acceptance_criteria: draft.acceptance_criteria,
+        /**
+         * PRDR-101: the draft always carried `non_goals` and this call did not
+         * copy it, so the schema defaulted it to `[]` and every ticket in every
+         * plan reached the implementer and the reviewer with its boundaries
+         * stripped. Silent, because an empty list is legal.
+         */
+        non_goals: draft.non_goals,
         surface: draft.surface,
         blockers,
         risk_label: draft.risk_label,
