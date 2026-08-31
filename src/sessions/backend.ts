@@ -96,6 +96,14 @@ export interface SessionResult {
    */
   readonly crashed?: boolean;
   /**
+   * PRDR-097: the session was terminated for exceeding `turns_per_stage`, not
+   * by transport death. X-1 makes a breached ceiling a human decision, so the
+   * two must not share a channel: a breach is the operator's ceiling being too
+   * low for the configured model, and it bills real money the SDK's throw has
+   * already lost.
+   */
+  readonly turnsBreached?: boolean;
+  /**
    * PRDR-052: the per-model breakdown is the token source of record — it
    * includes nested-agent tokens and the response that crossed a budget
    * ceiling, both of which the cumulative fields exclude.

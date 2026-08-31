@@ -77,7 +77,11 @@ export class SpendLedger {
       turns: result.turns,
       /* PRDR-095: the breakdown's keys ARE the model names — record them. */
       models: Object.keys(result.perModel ?? {}).sort(),
-      ...(result.crashed === true ? { partial: "crash" as const } : {}),
+      ...(result.turnsBreached === true
+        ? { partial: "turns_breach" as const }
+        : result.crashed === true
+          ? { partial: "crash" as const }
+          : {}),
     });
     this.journal.appendLedger(row);
     this.accumulated += row.cost_estimate_usd;

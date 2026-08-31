@@ -238,7 +238,13 @@ export class ClaudeCodeBackend implements SessionBackend {
        * marches; only a session that died before its first assistant turn
        * reads as a refusal, and the referee halts the run on those alone.
        */
-      return parseResultMessage({
+      /**
+       * PRDR-097: a max-turns termination is a BUDGET breach, not an outage.
+       * Detected by the observed turn count reaching the ceiling rather than
+       * by error text, so it does not depend on SDK message wording.
+       */
+      const breached = spec.maxTurns > 0 && observedTurns >= spec.maxTurns;
+      const parsed = parseResultMessage({
         type: "result",
         subtype: "error_during_execution",
         is_error: true,
@@ -247,6 +253,7 @@ export class ClaudeCodeBackend implements SessionBackend {
         usage: { input_tokens: 0, output_tokens: 0 },
         result: (err as Error).message,
       });
+      return breached ? { ...parsed, turnsBreached: true } : parsed;
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
     return result ?? parseResultMessage({});

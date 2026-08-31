@@ -145,7 +145,12 @@ export const ledgerRowSchema = z.strictObject({
    * Without it a green N-7 gate cannot be audited for what produced it.
    */
   models: z.array(nonEmptyString).default([]),
-  partial: z.enum(["crash"]).optional(),
+  /**
+   * PRDR-097: `turns_breach` is separated from `crash`. Both zero their
+   * telemetry, but one is the operator's ceiling and one is the backend, and
+   * an audit that cannot tell them apart cannot explain a $0 row that did work.
+   */
+  partial: z.enum(["crash", "turns_breach"]).optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 

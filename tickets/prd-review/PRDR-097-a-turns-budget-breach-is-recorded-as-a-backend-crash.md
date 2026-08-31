@@ -1,7 +1,7 @@
 ---
 id: PRDR-097
 title: "A turns_per_stage breach is recorded as a backend crash — it under-counts spend, and three in a row read as an outage"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-execution"]
@@ -62,3 +62,22 @@ session. The more a model breaches, the further the ledger drifts below reality.
 Opus and Sonnet finish these tickets inside 30 turns, so the ceiling is never reached and
 the misclassification never appears. It surfaced within four sessions of routing implement
 to Haiku. Every N-7 gate to date has run on a model that hides this.
+
+## Resolution
+
+`sdk.ts` distinguishes the two throws by the observed turn count reaching `spec.maxTurns`
+— not by error text, so it does not depend on SDK message wording — and flags the result
+`turnsBreached`. The referee halts on that flag with a message naming the ceiling, the
+role, and the observed turns, and does NOT count it toward PRDR-090's outage streak: the
+backend is healthy and saying otherwise sends the operator to the wrong place. The ledger
+records `partial: "turns_breach"` rather than `"crash"`, so a $0 row that did real work is
+explicable after the fact.
+
+Halting rather than laddering on is the point. A breached ceiling is a configuration fact
+— too low for the configured model — so every subsequent ticket breaches it too, and each
+one spends money the SDK's throw has already made unbillable. Stopping once, by name, is
+what X-1 means by presenting a decision.
+
+The cost of a breached session remains unrecoverable: the SDK zeroes it on throw and
+PRDR-072 already salvages the only thing left (`num_turns` from the stream). This ticket
+prevents the loss from accumulating; it cannot reprice what is gone.
