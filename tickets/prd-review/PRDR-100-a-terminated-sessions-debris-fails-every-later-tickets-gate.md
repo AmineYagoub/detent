@@ -45,6 +45,28 @@ Observed end to end:
 Removing t-116's 21 untracked files made the lint gate pass immediately, with no change to
 t-102 whatsoever. The ticket was never at fault.
 
+## It is not the planner's fault, nor the reviewer's
+
+Worth stating because both are the natural suspects, and the evidence clears both.
+
+**The surfaces were perfectly disjoint.** `t-102` declares `src/kernel/fs/**`,
+`tests/fs/**`, `.detent/.gitignore`; `t-116` declares `src/verification/discovery/**`,
+`tests/verification/**`. The debris paths are claimed by t-116 and never by t-102. This is
+precisely the condition PRDR-094's old comment ASSUMED made things safe — "disjoint across
+tickets by the plan's own contract" — and the failure occurs regardless, because surfaces
+are scoped while the gate is whole-tree. No plan can close that gap.
+
+**The reviewer never ran.** A green gate is the precondition for review, and t-102 never
+got one. Had it, the diff it judges now contains only the ticket's own commits (PRDR-094),
+so another ticket's uncommitted files would not appear in it.
+
+**No instruction to "clean up" could work.** The only role that meets the debris is the
+claiming ticket's implement session, and D-21 denies it every write outside its surface.
+SEC-3's expansion lever is not an answer either: a request to delete another IN_PROGRESS
+ticket's work is one the referee should refuse. The containment that makes Detent safe is
+exactly what makes this unfixable from inside a session — which is why it belongs to the
+kernel.
+
 ## Why it is major
 
 **No rung can resolve it.** Every fix session is handed a red gate whose cause is
