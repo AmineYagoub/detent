@@ -55,8 +55,11 @@ export async function reviewPlan(deps: ReviewDeps, tickets: readonly PlanDraftTi
       "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`), " +
       "testability (is every acceptance criterion checkable by a command or a test, not by opinion), coverage (does every requirement " +
       "in the documents reach some ticket), shape (do the earliest tickets form a walking skeleton through the riskiest integration, " +
-      "rather than completing infrastructure layers first), and traceability (is every ticket sourced from the documents rather than " +
-      "invented). An honest `approve` is a real verdict; do not manufacture findings. Write EXACTLY the `expected_output` shape.",
+      "rather than completing infrastructure layers first), traceability (is every ticket sourced from the documents rather than " +
+      "invented), and boundaries (does each ticket state what it is NOT for, in `non_goals` — the implementer and the reviewer both " +
+      "receive that field, and empty it leaves the reviewer's commonest judgement, is this in scope, with nothing to judge against). " +
+      "An honest `approve` is a real verdict; do not manufacture findings, and a ticket with genuinely no boundary worth stating is " +
+      "not a finding. Write EXACTLY the `expected_output` shape.",
   }, planReviewPath(deps.root));
   const file = planReviewPath(deps.root);
   const raw = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;

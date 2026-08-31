@@ -157,7 +157,14 @@ export function requireLocalSearchBeforeWeb(
  * finding set over the five properties a plan can be wrong about, written by a
  * fresh planner-role session at the REVIEW_PLAN stage.
  */
-export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability"] as const;
+/**
+ * PRDR-101: `boundaries` joins the closed set. A ticket that never says what
+ * it is NOT for leaves the reviewer making its commonest judgement — is this
+ * in scope — with nothing to judge against. Distinct from `sizing`: sizing is
+ * a ticket too large to finish, boundaries a ticket that never says where it
+ * stops.
+ */
+export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries"] as const;
 
 export const planReviewSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
