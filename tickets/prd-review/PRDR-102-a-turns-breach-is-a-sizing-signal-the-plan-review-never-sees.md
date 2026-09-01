@@ -62,3 +62,34 @@ cheapest useful form is for a subsequent PLAN or REVIEW_PLAN over the same docum
 receive the breaches its predecessor recorded, as evidence rather than as instruction —
 "this ticket cost 145 turns and did not finish" is a fact a sizing judgement can use, and
 one no estimate would have produced.
+
+## Measured: the text carries no size signal at all
+
+A second breach on the same gate makes the case sharper than the original filing did.
+`t-146` ("C-4/C-4' PLAN phase with greenfield bootstrap ticket #1") ran **307 turns** — three
+times the highest completed session — and committed ten files before the ceiling cut it off.
+It was building, not spinning.
+
+Turn count against the length of the acceptance criteria that produced it:
+
+```
+t-146   307 turns    62 words
+t-106   145 turns    69 words
+t-133   118 turns    74 words
+t-130   110 turns    54 words
+t-109   110 turns    52 words
+t-151   106 turns    50 words
+```
+
+The relationship is absent. t-146 has FEWER words than t-133 and took nearly three times the
+turns; t-130 and t-109 tie on turns with a 2-word gap between them.
+
+That is the whole problem in one table. PRDR-081 asks the planner to size a ticket against
+`session_budget`; PRDR-084 asks REVIEW_PLAN to check that estimate. **Both judge the text,
+and the text does not encode the work.** No amount of care at either stage recovers a signal
+that is not in the artifact they read — which is why the measurement, discarded today,
+is the only thing that could inform the next plan.
+
+It also revises this ticket's own framing. The original filing called t-106 "a milestone
+wearing a ticket's clothes", read off its criteria. That reading was wrong for t-146 and is
+suspect for t-106: neither is textually large. Oversized tickets do not look oversized.
