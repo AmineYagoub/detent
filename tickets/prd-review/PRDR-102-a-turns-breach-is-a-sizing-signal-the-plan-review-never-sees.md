@@ -93,3 +93,66 @@ is the only thing that could inform the next plan.
 It also revises this ticket's own framing. The original filing called t-106 "a milestone
 wearing a ticket's clothes", read off its criteria. That reading was wrong for t-146 and is
 suspect for t-106: neither is textually large. Oversized tickets do not look oversized.
+
+## Resolution (specified, not yet built — run-path code is frozen for the gate)
+
+The signal has to come from the session, because the session is the only actor that holds
+it. The planner estimates from the text; REVIEW_PLAN checks the estimate against the same
+text; and the table above shows the text does not encode the work. The implementer learns
+it directly, around turn 40, when the shape of what remains is visible.
+
+X-4 already establishes exactly this pattern for a different discovery:
+
+> "If mid-work you discover the ticket's premise is wrong … write the falsified signal file
+> at the path given in your inputs and END the session — a falsified premise is signal, not
+> failure (X-4)."
+
+The symmetric case is missing. **A ticket that is larger than one session is a plan-level
+flaw discovered mid-work, exactly as a false premise is** — and `machine.ts` already says
+so in as many words for the falsified case.
+
+### Shape
+
+1. **`oversized_out`** joins `falsified_out` in the session inputs
+   (`referee-session.ts`), pointing at `oversized.json` in the ticket's runs directory.
+2. **`prompts/implement.md`** gains the symmetric clause: if mid-work it becomes clear the
+   criteria cannot be met inside `session_budget`, write the signal and END — naming what
+   the ticket should be split into, one line per proposed piece. Commit what is finished
+   first, so the work survives as the ticket's own commits (PRDR-094) rather than as
+   untracked residue (PRDR-100).
+3. **The referee consumes it** where it consumes falsification
+   (`referee.ts` `attempt`), mints a transition, and routes the ticket to a human. It is
+   NOT a ladder rung: no fix session can make an oversized ticket smaller.
+4. **The artifact carries the proposal**, not just the fact. A split named by the actor
+   that just tried to build the thing is the input PLAN and REVIEW_PLAN have never had.
+
+### Why this is worth building
+
+Priced from this gate's own ledger, at $0.0649 per turn on completed sessions:
+
+```
+t-116  103 turns  ~$6.69   recorded $0.00
+t-106  145 turns  ~$9.41   recorded $0.00
+t-146  307 turns  ~$19.93  recorded $0.00
+                  ~$36 of real spend the cap never saw
+```
+
+An early stop near turn 40 costs about **$2.60** and — the part that matters — **bills
+correctly**, because a clean session end preserves telemetry where the SDK's max-turns
+throw zeroes it (PRDR-097). The saving is real but secondary; the point is that the
+run stops paying for a session that cannot finish, and the operator gets a proposal
+instead of a ceiling message.
+
+### The honest caveat
+
+It rests on the session's own judgement, and a session could claim "oversized" to avoid
+hard work. That is tolerable for the same reason falsification is tolerable: it is a
+SIGNAL, not a verdict. The operator decides, the gates still judge whatever was actually
+built, and a wrong signal costs one requeue. A ceiling breach costs $20 and tells nobody
+anything.
+
+### Sequencing
+
+Not implemented yet. It touches `prompts/implement.md` and the kernel — run-path code,
+frozen while the certification gate is live, because changing it mid-run means certifying
+a build that no longer exists. Ready to build the moment the gate lands.
