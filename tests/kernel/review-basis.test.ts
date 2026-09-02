@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { commitPatch, ticketCommits } from "../../src/kernel/git.js";
+import { reviewBasis } from "../../src/kernel/review-scope.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 
 /**
@@ -97,5 +98,57 @@ describe("PRDR-094 the reviewer sees only the ticket's own work", () => {
     git(root, "commit", "-m", "t9: the very first commit");
     const sha = git(root, "rev-parse", "HEAD").trim();
     expect(commitPatch(root, sha, ["--", ":(glob)src/**"])).toContain("src/only.ts");
+  });
+});
+
+describe("PRDR-113 the basis is scoped by Detent's matcher, not by git's pathspec", () => {
+  /**
+   * t-164's SEC-3 grant was `src/cli{.ts,/init.ts}` — a legal glob. The wiring
+   * commit every review asked for landed in `src/cli.ts`, and the third review
+   * rejected it: the basis handed the glob to git, git has no braces, and the
+   * hunk was never shown.
+   */
+  function repoWithEntryPoint(): { readonly root: string; readonly base: string } {
+    const root = tmpTree({ "src/seed.ts": "export const seed = 0;\n" });
+    roots.push(root);
+    gitInit(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-m", "seed");
+    const base = git(root, "rev-parse", "HEAD").trim();
+    writeTree(root, {
+      "src/cli.ts": "export const cli = 1;\n",
+      "src/cli/init.ts": "export const init = 1;\n",
+      "src/other.ts": "export const other = 1;\n",
+    });
+    git(root, "add", "-A");
+    git(root, "commit", "-m", "t1: wire the entry point");
+    return { root, base };
+  }
+
+  it("git's :(glob) drops a brace glob entirely — the defect being fixed", () => {
+    const { root, base } = repoWithEntryPoint();
+    expect(git(root, "diff", base, "--", ":(glob)src/cli{.ts,/init.ts}")).toBe("");
+  });
+
+  it("a brace-glob surface shows exactly the hunks it matches", () => {
+    const { root, base } = repoWithEntryPoint();
+    const { body } = reviewBasis(root, base, "t1", ["src/cli{.ts,/init.ts}"]);
+    expect(body).toContain("src/cli.ts");
+    expect(body).toContain("src/cli/init.ts");
+    expect(body).not.toContain("src/other.ts");
+  });
+
+  it("an untracked file under the glob reaches the basis; one outside it does not", () => {
+    const { root, base } = repoWithEntryPoint();
+    writeTree(root, { "src/cli/init.spec.ts": "export {};\n", "src/zzz.ts": "export {};\n" });
+    const { untracked } = reviewBasis(root, base, "t1", ["src/cli/**", "src/cli.ts"]);
+    expect(untracked).toEqual(["src/cli/init.spec.ts"]);
+  });
+
+  it("no surface is the whole tree, as the unscoped callers expect", () => {
+    const { root, base } = repoWithEntryPoint();
+    const { body } = reviewBasis(root, base, "t1", []);
+    expect(body).toContain("src/other.ts");
+    expect(body).toContain("src/cli.ts");
   });
 });

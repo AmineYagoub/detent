@@ -4,7 +4,8 @@ import { readBindings } from "../adapter/drift.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
-import { commitPatch, git, resolveBaseRef, snapshotRefs, ticketCommits, type RefSnapshot, type RunBranch } from "./git.js";
+import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
+import { reviewBasis } from "./review-scope.js";
 import { pidAlive } from "./tickets/mutations.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
@@ -197,18 +198,6 @@ export class RefereeContext {
     }
   }
 
-  /**
-   * PRDR-094: the ticket's own committed work, oldest generation first, plus
-   * anything not yet committed. With no ticket id (or no base) this is the
-   * whole-tree diff the unscoped callers expect.
-   */
-  private reviewBody(workDir: string, base: string | null, ticketId: string | undefined, spec: readonly string[]): string {
-    if (ticketId === undefined || base === null) return git(workDir, "diff", base ?? "HEAD", ...spec);
-    const own = ticketCommits(workDir, ticketId, base);
-    const committed = own.map((sha) => commitPatch(workDir, sha, spec)).join("");
-    return committed + git(workDir, "diff", "HEAD", ...spec);
-  }
-
   claimBase(id: string): string | null {
     const file = path.join(runsDir(this.root, id), "claim_base.json");
     if (!existsSync(file)) return null;
@@ -235,11 +224,14 @@ export class RefereeContext {
    * Unscoped callers keep the whole-tree diff.
    */
   diff(workDir: string, base?: string | null, surface?: readonly string[], ticketId?: string): string {
-    const scope = (surface ?? []).map((glob) => `:(glob)${glob}`);
-    const spec = scope.length > 0 ? ["--", ...scope] : [];
     try {
-      const untracked = untrackedNames(workDir, spec);
-      const full = this.reviewBody(workDir, base ?? null, ticketId, spec) + untrackedAsDiff(workDir, untracked);
+      /**
+       * PRDR-113: the surface is matched by Detent's own matcher, never handed
+       * to git as a pathspec — git's glob has no braces, and a granted
+       * `src/cli{.ts,/init.ts}` was invisible to the reviewer.
+       */
+      const { body, untracked } = reviewBasis(workDir, base ?? null, ticketId, surface ?? []);
+      const full = body + untrackedAsDiff(workDir, untracked);
       if (full.length <= DIFF_BODY_CAP) return full;
       /**
        * T-140 (PRDR-071): a silent `.slice(-8000)` fed reviewers the TAIL of
@@ -281,12 +273,6 @@ function statFor(body: string): string {
     if (match?.[1] !== undefined) names.add(match[1]);
   }
   return [...names].map((name) => ` ${name}\n`).join("");
-}
-
-function untrackedNames(workDir: string, spec: readonly string[]): string[] {
-  return git(workDir, "ls-files", "--others", "--exclude-standard", ...spec)
-    .split("\n")
-    .filter((name) => name !== "");
 }
 
 function untrackedAsDiff(workDir: string, names: readonly string[]): string {
