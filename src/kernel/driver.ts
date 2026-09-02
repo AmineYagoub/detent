@@ -119,7 +119,8 @@ export class Driver {
       this.opts.announce?.(this.resumeAnnouncement(id, state));
     }
 
-    while (!TERMINAL.includes(state)) {
+    /* X-4′: READY after a transition means the referee re-queued the ticket on a discovered dependency. */
+    while (!TERMINAL.includes(state) && state !== "READY") {
       if (this.now() - startedAt > this.loaded.config.budgets.ticket_wall_clock_ms) {
         state = await this.breach(id, "ticket wall clock ceiling (X-1)");
         break;
@@ -240,7 +241,7 @@ export class Driver {
 
   private async driveOn(id: string, from: State): Promise<void> {
     let state = from;
-    while (!TERMINAL.includes(state)) {
+    while (!TERMINAL.includes(state) && state !== "READY") {
       try {
         state = await this.stage(id, state);
       } catch (err) {
@@ -258,9 +259,10 @@ export class Driver {
       const reason = await this.pendingReason(id);
       await this.tool("record", { kind: "dossier", ticket_id: id, reason });
       await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "needs_human" });
-    } else {
+    } else if (state !== "READY") {
       await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "blocked" });
     }
+    /* READY (X-4′): the referee closed the generation and opened the next; the release returns it to the pool. */
   }
 
   /** C-13: the five-label vocabulary; full state names live only in the journal. */

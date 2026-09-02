@@ -56,6 +56,11 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
   ["DIAGNOSED", "REPRO_AS_PREDICTED", to("IN_PROGRESS")],
   ["DIAGNOSED", "REPRO_WRONG", guard("reproWrong")],
   ["IN_PROGRESS", "PREMISE_FALSIFIED", guard("premiseFalsified")],
+  /*
+   * X-4′ (PRDR-111): a falsification naming a path another ticket owns is a
+   * dependency, not a stop — the ticket returns to the pool and waits for it.
+   */
+  ["IN_PROGRESS", "DEPENDENCY_DISCOVERED", to("READY")],
 
   ["IN_PROGRESS", "GATE_GREEN", to("IN_REVIEW")],
   ["BLIND_FIX", "GATE_GREEN", to("IN_REVIEW")],

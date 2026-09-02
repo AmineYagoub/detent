@@ -38,12 +38,13 @@ export function currentCounters(ticket: Pick<Ticket, "generations">): Counters {
 /** Close the current generation and open the next with zeroed counters. */
 export function openGeneration(
   ticket: Pick<Ticket, "generations">,
-  opts: { readonly at: string; readonly reason?: string },
+  opts: { readonly at: string; readonly reason?: string; readonly outcome?: Generation["outcome"] },
 ): Generation[] {
   const closing = currentGeneration(ticket);
   const closed: Generation = {
     ...closing,
-    outcome: "requeued",
+    /** X-4′: a discovered dependency closes the generation as blocked, not requeued. */
+    outcome: opts.outcome ?? "requeued",
     ended_at: opts.at,
   };
   const opened: Generation = {

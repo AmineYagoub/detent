@@ -104,7 +104,8 @@ export async function skillDriver(core: RefereeCore): Promise<SkillDriverOutcome
       state = (acquired["resume"] as { state: string }).state;
     }
 
-    while (!TERMINAL.includes(state)) {
+    /* X-4′: READY after a transition is a discovered dependency — the referee re-queued the ticket; release and move on. */
+    while (!TERMINAL.includes(state) && state !== "READY") {
       try {
         state = await stage(id, state);
       } catch (err) {

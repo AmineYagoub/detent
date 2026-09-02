@@ -10,13 +10,13 @@ import {
   gateDrift,
   humanApproved,
   humanRequeue,
-  premiseFalsified,
   type KernelEvent,
 } from "./events.js";
 import { finalizeBootstrap } from "../init/plan.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
 import { settleWorktree } from "./worktree-park.js";
+import { resolveFalsification } from "./dependency.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -262,7 +262,8 @@ export class RefereeCore {
     await this.sessions.launch(ticket, state, this.sessions.attemptInputs(ticket, state, workDir), workDir);
     if (state === "IN_PROGRESS") {
       const falsified = this.sessions.consumeFalsifiedSignal(id);
-      if (falsified !== null) return { falsifiedRef: this.mintFor(id, premiseFalsified(falsified)) };
+      /** X-4′ (PRDR-111): a dependency when the missing paths resolve, the X-4 stop when they do not. */
+      if (falsified !== null) return { falsifiedRef: this.mintFor(id, resolveFalsification(this.root, id, falsified, this.ctx.iso())) };
     }
     return {};
   }

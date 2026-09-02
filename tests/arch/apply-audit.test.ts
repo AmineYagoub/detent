@@ -150,6 +150,7 @@ describe("T-054 constructors demand their justifying artifacts (type level, spot
         events.reproAsPredicted(gateResult),
         events.reproWrong({ invalidArtifact: "x" }),
         events.premiseFalsified("note"),
+        events.dependencyDiscovered(["t-b"], ["src/b/lib.ts"]),
         events.reviewApprove({ schema_version: 1, verdict: "approve", changes: [] }),
         events.reviewChanges(review),
         events.researchDry("dry"),

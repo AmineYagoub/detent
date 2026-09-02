@@ -112,6 +112,12 @@ describe("T-011 transition table (X-3)", () => {
     expect(apply("IN_REVIEW", "REVIEW_CHANGES", first.counters, one).to).toBe("NEEDS_HUMAN");
   });
 
+  it("a discovered dependency re-queues the ticket (X-4′, PRDR-111)", () => {
+    const step = apply("IN_PROGRESS", "DEPENDENCY_DISCOVERED", ZERO_COUNTERS, ctx());
+    expect(step.to).toBe("READY");
+    expect(step.counters).toEqual(ZERO_COUNTERS);
+  });
+
   it("dry research enters the informed attempt, not a human (X-2′, PRDR-110)", () => {
     const step = apply("RESEARCH", "RESEARCH_DRY", ZERO_COUNTERS, ctx());
     expect(step.to).toBe("INFORMED_FIX");

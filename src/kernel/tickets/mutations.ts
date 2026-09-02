@@ -122,6 +122,8 @@ export function createTicket(root: string, input: NewTicket, at = new Date().toI
     non_goals: [...(input.non_goals ?? [])],
     surface: [...(input.surface ?? [])],
     blockers: [...(input.blockers ?? [])],
+    /** X-4′: discovered at run time, never at creation. */
+    waits_on: [],
     links: [],
     priority: input.priority ?? 0,
     risk_label: input.risk_label ?? false,

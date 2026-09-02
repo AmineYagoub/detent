@@ -113,6 +113,8 @@ export function maxPossibleSessions(
        * the per-generation worst case does not traverse it.
        */
       if (event === "HUMAN_REQUEUE" || event === "HUMAN_APPROVED") continue;
+      /** X-4′: a discovered dependency re-queues into a new generation the same way. */
+      if (event === "DEPENDENCY_DISCOVERED") continue;
       /** BUDGET_BREACH and GATE_DRIFT are halts, never the worst path. */
       if (event === "BUDGET_BREACH" || event === "GATE_DRIFT") continue;
       let result;

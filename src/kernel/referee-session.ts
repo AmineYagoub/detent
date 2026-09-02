@@ -8,6 +8,7 @@ import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
 import { currentCounters, currentGeneration, withCurrentCounters } from "./generations.js";
 import { Breach, KernelBoundaryError, SessionRefusal, publicTicket, type RefereeContext } from "./referee-context.js";
+import type { FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
 import { appendNote, writeTicket } from "./tickets/mutations.js";
 
@@ -240,21 +241,30 @@ export class SessionArm {
     appendNote(ctx.root, ticketId, { author: "kernel", text: `surface granted: ${target} — ${why} (SEC-3)` });
   }
 
-  /** X-4: the session signalled falsification by writing the signal file. */
-  consumeFalsifiedSignal(ticketId: string): string | null {
+  /**
+   * X-4: the session signalled falsification by writing the signal file.
+   * X-4′ (PRDR-111): it may name the paths it is missing; the referee decides
+   * whether that is a dependency or a human's.
+   */
+  consumeFalsifiedSignal(ticketId: string): FalsifiedSignal | null {
     const ctx = this.ctx;
     const file = path.join(runsDir(ctx.root, ticketId), "falsified.json");
     if (!existsSync(file)) return null;
     let note = "premise falsified";
+    let missing: string[] = [];
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: string };
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown };
       if (typeof parsed.note === "string" && parsed.note !== "") note = parsed.note;
+      if (Array.isArray(parsed.missing)) {
+        missing = parsed.missing.filter((m): m is string => typeof m === "string" && m.trim() !== "").map((m) => m.trim());
+      }
     } catch {
       /* the signal's existence is the event; the note is best-effort */
     }
     rmSync(file, { force: true });
-    appendNote(ctx.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${note}` });
-    return note;
+    const detail = missing.length === 0 ? note : `${note} — missing: ${missing.join(", ")}`;
+    appendNote(ctx.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${detail}` });
+    return { note, missing };
   }
 
   /**

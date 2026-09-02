@@ -48,6 +48,12 @@ export const ticketSchema = z.strictObject({
   non_goals: z.array(z.string()).default([]),
   surface: z.array(glob).default([]),
   blockers: z.array(nonEmptyString).default([]),
+  /**
+   * X-4′ (PRDR-111): dependencies the RUN discovered — a falsification naming
+   * a path another ticket's surface owns. Declared structure stays in
+   * `blockers`; the pool waits on both.
+   */
+  waits_on: z.array(nonEmptyString).default([]),
   links: z
     .array(
       z.strictObject({

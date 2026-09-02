@@ -80,6 +80,11 @@ export function premiseFalsified(note: string): KernelEvent {
   return make("PREMISE_FALSIFIED", `falsified.json: ${note}`);
 }
 
+/** X-4′ (PRDR-111): the falsification named paths other tickets' surfaces own. */
+export function dependencyDiscovered(owners: readonly string[], missing: readonly string[]): KernelEvent {
+  return make("DEPENDENCY_DISCOVERED", `waits on ${owners.join(",")} for ${missing.join(",")} (X-4′)`);
+}
+
 /* ---- validator-derived ------------------------------------------------------ */
 
 export function reviewApprove(review: Review): KernelEvent {

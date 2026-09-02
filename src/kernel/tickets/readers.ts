@@ -76,7 +76,8 @@ export function ready(root: string): Ticket[] {
     (t) =>
       t.state === "READY" &&
       !isClaimed(root, t.id) &&
-      t.blockers.every((b) => byId.get(b)?.state === "DONE"),
+      /* X-4′: discovered dependencies hold a ticket exactly as declared ones do. */
+      [...t.blockers, ...t.waits_on].every((b) => byId.get(b)?.state === "DONE"),
   );
 }
 
@@ -95,7 +96,7 @@ export function claimRefusal(root: string, id: string): string {
   const ticket = tickets.find((t) => t.id === id);
   if (ticket === undefined) return `no such ticket: ${id}`;
   if (isClaimed(root, id)) return `claimed by another worker`;
-  const unmet = ticket.blockers.filter((dep) => tickets.find((t) => t.id === dep)?.state !== "DONE");
+  const unmet = [...ticket.blockers, ...ticket.waits_on].filter((dep) => tickets.find((t) => t.id === dep)?.state !== "DONE");
   if (unmet.length > 0) return `blocked on ${unmet.join(", ")} (state ${ticket.state})`;
   return `not claimable from state ${ticket.state}`;
 }

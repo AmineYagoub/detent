@@ -180,6 +180,17 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   own change. Eight of nine research sessions on the gate were dry and each became a stop.
   D-13 holds: the informed attempt's red gate is still a direct edge to a human.
 
+- **X-4′ (3.1.0, PRDR-111).** A falsification that names the code it is missing is a
+  dependency, not a stop. `falsified.json` may carry `missing` — concrete paths that do not
+  exist yet. The referee resolves them against every other ticket's surface; when an owner
+  exists that is not DONE and does not itself depend on this ticket, the ticket records it
+  in `waits_on`, closes its generation as blocked, opens the next with the reason, and
+  returns to READY through `DEPENDENCY_DISCOVERED`. The pool waits on `waits_on` exactly as
+  it waits on `blockers`, and the ticket runs when its owners finish. No owner — nobody
+  builds the path, or the only owner would deadlock — is a human stop as X-4 always was,
+  and the note says which. Three releases per ticket, then a human. The worst case does not
+  traverse the re-queue: it opens a new generation, like a human requeue (X-8).
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

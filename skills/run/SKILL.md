@@ -46,6 +46,9 @@ Repeat until the pool is empty or the user quits:
    state (`DONE`, `NEEDS_HUMAN`, `BLOCKED`):
    - `IN_PROGRESS` — call `attempt` `{ticket_id, state}`. If the result has
      `falsified_ref`, `transition` with it. Otherwise call `gate`
+     If that transition lands on `READY`, the referee found the path the session named in
+     another ticket's surface and re-queued this one behind it (X-4′): `release` the claim
+     and call `next`.
      `{ticket_id}` and `transition` with the returned `ref`.
    - `BLIND_FIX`, `REVIEW_FIX` — `attempt`, then `gate` + `transition`.
    - `INFORMED_FIX` — `attempt`, then `gate` with
