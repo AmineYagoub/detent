@@ -152,7 +152,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    */
   const review = await reviewPlan(deps, drafted);
   if (review === null) {
-    deps.note?.("plan review produced no artifact — the draft stands unreviewed (PRDR-084)");
+    deps.note?.("plan review produced no usable artifact after one relaunch — the draft stands unreviewed (PRDR-084, C-4⁗)");
   } else if (review.verdict === "changes" && review.findings.length > 0) {
     deps.note?.(`plan review: ${review.findings.length} finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
     for (let round = 0; round < PLAN_REVISIONS; round += 1) {

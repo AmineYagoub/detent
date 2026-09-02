@@ -242,6 +242,14 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   writes that field as prose as readily as a name, and an exact-match lookup refused a Go
   project whose documents named all three canonical gates.
 
+- **C-4⁗ (3.1.1, PRDR-116).** REVIEW_PLAN's verdict vocabulary stays closed, but a reviewer
+  that writes a plain synonym — `revise` for `changes`, `approved` for `approve` — has still
+  reviewed, and is read as the word it means, noted. An absent or unusable review artifact
+  buys one relaunch carrying the validator's own words, exactly as a code review does
+  (A-5′); only after that does the draft stand unreviewed, and the note names the reason.
+  Found on ksar-cloud: six real findings — three tickets oversized, two missing edges, one
+  untestable criterion — discarded over one word, and the draft written unreviewed.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives
