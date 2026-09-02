@@ -76,3 +76,23 @@ PRDR-099 is the first; the D-28 aside in PRDR-100 — a `git commit` denied beca
 message text contained the gate command as a substring — is the second. Each is individually
 minor. The pattern is that the hook surface tests the *project's* state and not *this
 session's role in it*, and that generalisation is worth stating once somewhere durable.
+
+## Amendment — the PreToolUse side does the same, and wider
+
+Same session, next morning. With the shell's cwd inside the run root, an `Edit` to the
+target's `.detent/config.json` and a `Write` to `/Users/workstation/ab2-harness/` — a
+directory with no relation to the run at all — were both denied:
+
+> DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change
+> happens through referee-admitted sessions, and state flows through referee tools alone.
+
+`publishClaimPolicy` writes `driver: true, surface: []` for the CLI driver, and the
+PreToolUse hook reads that from the cwd and denies every mutating tool everywhere — not
+outside a surface, since there is none, but unconditionally. The policy is correct for a
+plugin session that IS the driver. Applied to the operator's session it blocks the one
+actor whose job is to change the config the breach message told them to change.
+
+Moving the shell's cwd out of the run root silenced it, which is the whole finding: the
+hook keys on where the shell is standing, not on whose session it is.
+
+So the acceptance criteria above apply to both hook events, not only Stop.
