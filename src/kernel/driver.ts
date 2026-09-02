@@ -16,16 +16,24 @@ import { EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK } from "./run.js";
  * (`run`/`runWithConfig`) lives in `run.ts`; the types flow from there.
  */
 
-/** The two structured-error routes a driver handles; everything else is a defect. */
+/** The structured-error routes a driver handles; everything else is a defect. */
 class DriverBreach extends Error {}
 class DriverDriftHalt extends Error {}
+/** PRDR-112: a backend refusal or outage — back off and retry before giving up. */
+class DriverRefusal extends Error {}
+
+/** PRDR-112: 1, 5, 15 minutes; the retry itself is the probe, and a crashed retry costs $0. */
+export const OUTAGE_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000];
 
 const TERMINAL: readonly string[] = ["DONE", "NEEDS_HUMAN", "BLOCKED"];
 
 export class Driver {
   private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
   private processed = 0;
   private quitting = false;
+  /** PRDR-112: consecutive outage halts without a completed ticket in between. */
+  private outages = 0;
 
   constructor(
     private readonly opts: RunOptions,
@@ -33,6 +41,7 @@ export class Driver {
     private readonly core: RefereeCore,
   ) {
     this.now = opts.now ?? (() => Date.now());
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   /** One registry call; structured errors become the driver's two routes. */
@@ -42,6 +51,7 @@ export class Driver {
       const { code, message } = (result as RefereeToolError).error;
       if (code === "BREACH") throw new DriverBreach(message);
       if (code === "DRIFT_HALT") throw new DriverDriftHalt(message);
+      if (code === "REFUSED") throw new DriverRefusal(message);
       /*
        * ILLEGAL_TRANSITION / BAD_EVIDENCE / INVALID_INPUT / UNKNOWN_TOOL from
        * the deterministic driver are driver defects, not run outcomes.
@@ -72,6 +82,7 @@ export class Driver {
       }>("claim", { op: "acquire", ticket_id: id });
       if (!acquired.ok) continue;
 
+      let refused: DriverRefusal | null = null;
       try {
         await this.processTicket(id, acquired);
       } catch (err) {
@@ -82,11 +93,30 @@ export class Driver {
             summary: { schema_version: 1, exit: EXIT_NOT_READY, pending: [], reason },
           };
         }
-        throw err;
+        if (err instanceof DriverRefusal) refused = err;
+        else throw err;
       } finally {
         await this.tool("claim", { op: "release", ticket_id: id });
       }
+      if (refused !== null) {
+        /*
+         * PRDR-112: the referee named an outage. Exiting handed the restart to
+         * a person — eighty minutes, once. Wait, then let the pool hand the
+         * same ticket back: a session that returns real work resets the
+         * referee's streak, a crashed one re-raises this route at the next
+         * level, and after the ladder the run exits exactly as before.
+         */
+        const wait = OUTAGE_BACKOFF_MS[this.outages];
+        if (wait === undefined) throw refused;
+        this.outages += 1;
+        this.opts.announce?.(
+          `backend outage — waiting ${Math.round(wait / 60_000)} min before retrying (${this.outages}/${OUTAGE_BACKOFF_MS.length})`,
+        );
+        await this.sleep(wait);
+        continue;
+      }
 
+      this.outages = 0;
       this.processed += 1;
       if (this.opts.maxTickets !== undefined && this.processed >= this.opts.maxTickets) return await this.finish();
     }
@@ -152,8 +182,10 @@ export class Driver {
   private async stage(id: string, state: State): Promise<State> {
     switch (state) {
       case "IN_PROGRESS": {
-        const result = await this.tool<{ falsified_ref?: string }>("attempt", { ticket_id: id, state });
-        if (result.falsified_ref !== undefined) return await this.transition(id, result.falsified_ref);
+        const result = await this.tool<{ falsified_ref?: string; oversized_ref?: string }>("attempt", { ticket_id: id, state });
+        /* X-4 / X-4′ / X-4″: a signal ref is the session's own finding; the transition it admits decides where it goes. */
+        const signal = result.falsified_ref ?? result.oversized_ref;
+        if (signal !== undefined) return await this.transition(id, signal);
         return await this.gateTo(id);
       }
       case "BLIND_FIX":

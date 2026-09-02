@@ -80,6 +80,11 @@ export function premiseFalsified(note: string): KernelEvent {
   return make("PREMISE_FALSIFIED", `falsified.json: ${note}`);
 }
 
+/** X-4″ (PRDR-102): the session judged the ticket larger than one session and proposed the split. */
+export function ticketOversized(note: string, split: readonly string[]): KernelEvent {
+  return make("TICKET_OVERSIZED", `oversized.json: ${note} — split into ${split.length}: ${split.join(" | ")}`);
+}
+
 /** X-4′ (PRDR-111): the falsification named paths other tickets' surfaces own. */
 export function dependencyDiscovered(owners: readonly string[], missing: readonly string[]): KernelEvent {
   return make("DEPENDENCY_DISCOVERED", `waits on ${owners.join(",")} for ${missing.join(",")} (X-4′)`);
@@ -108,6 +113,11 @@ export function upstreamBug(brief: ResearchBrief): KernelEvent {
 }
 
 /* ---- kernel-decision events (ceiling and halt evidence) --------------------- */
+
+/** PRDR-112: the pool re-queues a ticket the outage pushed to a human; the outage note is the evidence. */
+export function outageRequeue(note: string): KernelEvent {
+  return make("OUTAGE_REQUEUE", `requeued after a backend outage: ${note}`);
+}
 
 export function budgetBreach(reason: string): KernelEvent {
   return make("BUDGET_BREACH", reason);

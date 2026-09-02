@@ -1,7 +1,7 @@
 ---
 id: PRDR-104
 title: "The Stop re-feed tells a bystander session to drive a loop a headless process already owns"
-state: READY
+state: DONE
 severity: minor
 category: correctness
 labels: ["prd-review", "found-by-execution"]
@@ -96,3 +96,13 @@ Moving the shell's cwd out of the run root silenced it, which is the whole findi
 hook keys on where the shell is standing, not on whose session it is.
 
 So the acceptance criteria above apply to both hook events, not only Stop.
+
+## Resolution
+
+The headless driver publishes no hook files: `CoreOptions.hookFiles` (default true) is
+false on the `detent run` path, and `publishHookPolicy`, `clearHookPolicy` and
+`refreshRunRefeed` are no-ops there. The plugin path — the MCP server the model session
+drives — is unchanged. Residual, recorded: a second Claude session opened in a project
+while a PLUGIN-driven run holds the claim would still read the model session's files;
+the expiry bounds it, and the claim owner check named in the acceptance criteria remains
+open for that case.

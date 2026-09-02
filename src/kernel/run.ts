@@ -57,6 +57,8 @@ export interface RunOptions {
   readonly escalate?: (input: EscalationInput) => Promise<EscalationAction>;
   /** C-13: resume announcements and similar user-facing notices. */
   readonly announce?: (message: string) => void;
+  /** PRDR-112: injectable wait for the outage backoff; real time by default. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 export interface EscalationInput {
@@ -142,6 +144,8 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
         ...(opts.worker !== undefined ? { worker: opts.worker } : {}),
         ...(opts.now !== undefined ? { now: opts.now } : {}),
         ...(opts.worktree !== undefined ? { worktree: opts.worktree } : {}),
+        /** PRDR-104: the headless loop has no model session to govern — no hook files. */
+        hookFiles: false,
       },
       loaded,
       journal,

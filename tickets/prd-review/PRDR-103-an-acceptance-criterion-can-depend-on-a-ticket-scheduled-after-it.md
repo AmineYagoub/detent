@@ -1,7 +1,7 @@
 ---
 id: PRDR-103
 title: "An acceptance criterion can depend on a sibling scheduled after it, and neither depends_on nor the surface says so"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-execution"]
@@ -79,3 +79,13 @@ judged, and cheaper than discovering it with a falsified generation.
 The tag must be its own: `shape` is about the walking skeleton's ordering, `sizing` about a
 ticket being too large, and neither expresses "this criterion cannot be met at the point
 this ticket runs".
+
+## Resolution
+
+`dependency` joins `PLAN_FINDING_TAGS`; REVIEW_PLAN's instruction defines it and asks for
+both tickets by name; the planner is told at PLAN to declare the edge or carry the path.
+The tag is enforced where the others are — the schema REVIEW_PLAN's verdict must parse
+against — and X-4′ (PRDR-111) remains the run-time recovery for the plan that still misses
+one. The dossier gap in the Problem — nothing tells the operator the criterion reaches
+outside the surface — is covered by X-4′'s note naming the owner, and is not separately
+built here.

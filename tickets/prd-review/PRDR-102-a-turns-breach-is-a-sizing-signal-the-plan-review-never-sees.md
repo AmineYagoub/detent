@@ -1,7 +1,7 @@
 ---
 id: PRDR-102
 title: "A turns breach is the sharpest sizing signal Detent produces, and REVIEW_PLAN never sees it"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review", "found-by-execution"]
@@ -156,3 +156,14 @@ anything.
 Not implemented yet. It touches `prompts/implement.md` and the kernel — run-path code,
 frozen while the certification gate is live, because changing it mid-run means certifying
 a build that no longer exists. Ready to build the moment the gate lands.
+
+## Resolution — built
+
+`oversized_out` joins the implement inputs; the prompt says when and what to write. The
+referee consumes `oversized.json` after the session, keeps the file, notes the proposal on
+the ticket, journals it, and mints `TICKET_OVERSIZED` — a direct edge to NEEDS_HUMAN,
+because no rung makes a ticket smaller. `sizingEvidence(root)` reads the ledger's completed
+implement turns (sessions, p50, p90, max) and every oversized proposal, and PLAN and
+REVIEW_PLAN receive it as `sizing_evidence` whenever a previous plan of these documents
+left any. The ceiling half of the original criteria is moot since PRDR-106: there is no
+breach to distinguish from a low ceiling; the measurement the criteria wanted is the ledger.

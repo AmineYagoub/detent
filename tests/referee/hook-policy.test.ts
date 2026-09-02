@@ -30,7 +30,7 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-async function makeCore(): Promise<{ root: string; core: RefereeCore }> {
+async function makeCore(hookFiles = true): Promise<{ root: string; core: RefereeCore }> {
   const repo = await makeRunRepo();
   cleanups.push(() => removeTree(repo.root));
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
@@ -39,7 +39,7 @@ async function makeCore(): Promise<{ root: string; core: RefereeCore }> {
   const runBranch = ensureRunBranch(repo.root, "hook-policy");
   installTrailerHook(repo.root);
   const core = new RefereeCore(
-    { root: repo.root, backend: new MockBackend(), prompts: loadPromptSet(), now: () => NOW },
+    { root: repo.root, backend: new MockBackend(), prompts: loadPromptSet(), now: () => NOW, hookFiles },
     loaded,
     journal,
     runBranch,
@@ -127,5 +127,24 @@ describe("T-120 drift unwind clears both files", () => {
     expect(String(swept["reason"])).toContain("re-baseline");
     expect(existsSync(surfacePath(root))).toBe(false);
     expect(existsSync(stagePath(root))).toBe(false);
+  });
+});
+
+describe("PRDR-104 the headless driver publishes no hook files", () => {
+  /**
+   * The files were written on both driver paths and read by whatever Claude
+   * session had the run root as its cwd: the operator monitoring a CLI run was
+   * told to drive a loop a Node process already owned, and denied every edit
+   * everywhere under D-27. The headless path has no model session to govern.
+   */
+  it("acquire and pool leave both files absent on the headless path", async () => {
+    const { root, core } = await makeCore(false);
+    addTicket(root, { id: "t1" });
+    expect(core.acquire("t1").ok).toBe(true);
+    expect(existsSync(surfacePath(root))).toBe(false);
+    core.pool();
+    expect(existsSync(stagePath(root))).toBe(false);
+    core.releaseTicket("t1");
+    expect(existsSync(surfacePath(root))).toBe(false);
   });
 });

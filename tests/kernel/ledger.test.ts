@@ -128,17 +128,29 @@ describe("T-048 field discipline (S-4, PRDR-052/053)", () => {
       implement: () =>
         okResult({ ok: false, crashed: true, costEstimateUsd: 0, inputTokens: 0, outputTokens: 0, turns: 0 }),
     });
-    const outcome = await run({ root, backend, prompts: PROMPTS, runId: "crash" });
+    /** PRDR-112: a refusal is backed off and retried before the run gives up; the wait is injected here. */
+    const sleeps: number[] = [];
+    const outcome = await run({
+      root,
+      backend,
+      prompts: PROMPTS,
+      runId: "crash",
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
 
     /**
      * The LEDGER ROW comes first and survives the halt: a flagged $0 lower
      * bound, never free work and never the S-4 telemetry breaker. Zero turns
      * means the session never started, so the run then stops as a
-     * SessionRefusal (PRDR-072) — the reason names the refusal, not S-4.
+     * SessionRefusal (PRDR-072) — the reason names the refusal, not S-4 —
+     * after PRDR-112's backoff ladder has been walked in full.
      */
     const crashRow = rows(root).find((r) => r.partial === "crash");
     expect(crashRow).toBeDefined();
     expect(crashRow!.cost_estimate_usd).toBe(0);
+    expect(sleeps).toHaveLength(3);
     expect((outcome.summary as { reason?: string }).reason).toMatch(/refused implement session for t1/);
   });
 

@@ -191,6 +191,39 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   and the note says which. Three releases per ticket, then a human. The worst case does not
   traverse the re-queue: it opens a new generation, like a human requeue (X-8).
 
+- **D-27′ (3.1.1, PRDR-104).** The plugin hook files — `active_surface.json` and
+  `stage.json` — are published only on the plugin path, where the model session that owns
+  the claim is their reader. The headless driver publishes neither: its loop is a Node
+  process no hook can nudge, and the files landed on whatever Claude session had the run
+  root as its cwd, denying the operator's edits everywhere (D-27) and telling them to drive
+  a loop already running. The hook itself is unchanged; it is simply no longer fed on a
+  path that has no session to govern.
+
+- **X-8′ (3.1.1, PRDR-112).** An outage halt keeps its detection and loses its aftermath.
+  The referee's streak halt is a structured `REFUSED` route; the headless driver backs off
+  1, 5 and 15 minutes and retries — the retry is the probe, and a crashed retry costs $0 —
+  before it exits as before. The outage names its victims: every ticket whose session
+  crashed inside the streak is noted, the run journal records the window and the sessions,
+  and a ticket the outage pushed into NEEDS_HUMAN returns to the pool by itself through
+  `OUTAGE_REQUEUE` when the run resumes, the reason recorded on the generation it opens. A
+  ticket a person has since touched is left to that person.
+
+- **C-4‴ (3.1.1, PRDR-103).** REVIEW_PLAN's closed tag set gains `dependency`: a criterion
+  that requires behaviour another ticket builds, where neither `depends_on` nor the surface
+  says so — the criterion cannot be met when the ticket runs. Distinct from `shape` and
+  `sizing`; a finding names both tickets, because the remedy is an edge or a surface and
+  either needs the pair. The planner is told the same at PLAN. X-4′ recovers a missing
+  edge at run time; this is the plan saying it first.
+
+- **X-4″ (3.1.1, PRDR-102).** A session that judges its ticket larger than one session
+  commits what is finished, writes `oversized.json` — a note and the split it proposes, one
+  line per ticket — and ends. The referee records the proposal on the ticket and takes it
+  to a human through `TICKET_OVERSIZED`: a plan-level finding like a false premise, and no
+  rung can make a ticket smaller. The file stays as evidence, and the next PLAN and
+  REVIEW_PLAN of the same documents receive `sizing_evidence` — turns per implement session
+  from the ledger, and every oversized proposal — the only measured input either stage has
+  ever had. Nothing auto-splits; the decision stays the planner's and the operator's.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

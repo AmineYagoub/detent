@@ -164,7 +164,13 @@ export function requireLocalSearchBeforeWeb(
  * a ticket too large to finish, boundaries a ticket that never says where it
  * stops.
  */
-export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries"] as const;
+/**
+ * PRDR-103 adds `dependency`: a criterion that needs behaviour another ticket
+ * builds, where neither `depends_on` nor the surface says so — distinct from
+ * `shape` (skeleton ordering) and `sizing` (too much work). A finding names
+ * both tickets, because the remedy is an edge or a surface and both need the pair.
+ */
+export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency"] as const;
 
 export const planReviewSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { sizingEvidence } from "./sizing-evidence.js";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
@@ -50,14 +51,21 @@ export async function reviewPlan(deps: ReviewDeps, tickets: readonly PlanDraftTi
     plan: tickets,
     docs: deps.docs,
     session_budget: sessionBudget(deps.budgets),
+    ...(sizingEvidence(deps.root) === null ? {} : { sizing_evidence: sizingEvidence(deps.root) }),
     expected_output: planReviewSkeleton(),
     instruction:
-      "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`), " +
+      "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`; when " +
+      "`sizing_evidence` is present it is MEASURED on a previous plan of these documents — turns per implement session, and tickets " +
+      "whose sessions reported themselves oversized with a proposed split — and outweighs any estimate from the text), " +
       "testability (is every acceptance criterion checkable by a command or a test, not by opinion), coverage (does every requirement " +
       "in the documents reach some ticket), shape (do the earliest tickets form a walking skeleton through the riskiest integration, " +
       "rather than completing infrastructure layers first), traceability (is every ticket sourced from the documents rather than " +
       "invented), and boundaries (does each ticket state what it is NOT for, in `non_goals` — the implementer and the reviewer both " +
-      "receive that field, and empty it leaves the reviewer's commonest judgement, is this in scope, with nothing to judge against). " +
+      "receive that field, and empty it leaves the reviewer's commonest judgement, is this in scope, with nothing to judge against), " +
+      "and dependency (a criterion that requires behaviour in code ANOTHER ticket builds — status output, a command, a module — " +
+      "where the ticket neither lists that ticket in `depends_on` nor carries the path in its surface: at run time the criterion " +
+      "cannot be met when the ticket runs. Name BOTH tickets in the finding — the one whose criterion reaches, and the one that " +
+      "owns what it reaches for — because the remedy is an edge or a surface and either needs the pair). " +
       "An honest `approve` is a real verdict; do not manufacture findings, and a ticket with genuinely no boundary worth stating is " +
       "not a finding. Write EXACTLY the `expected_output` shape.",
   }, planReviewPath(deps.root));

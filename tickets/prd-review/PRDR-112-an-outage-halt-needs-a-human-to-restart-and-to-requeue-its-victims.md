@@ -1,7 +1,7 @@
 ---
 id: PRDR-112
 title: "An outage halt is right to detect and wrong to leave: the run exits, and the tickets the outage crashed sit in NEEDS_HUMAN until a person requeues them with 'not a finding'"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-execution"]
@@ -52,3 +52,15 @@ Detection stays. Two consequences change:
 
 The discriminator is what already distinguishes an outage from work: zero cost, zero or
 near-zero turns, consecutiveness. A ticket that actually failed does not match it.
+
+## Resolution
+
+Detection unchanged; the aftermath is the kernel's. `SessionRefusal` reaches the driver as
+a structured `REFUSED` error; the headless driver backs off 1, 5, 15 minutes (injectable
+for tests) and lets the pool hand the ticket back — the retry is the probe, a crashed retry
+costs $0 and re-raises the route at the next level, and after the ladder the run exits as
+before. At the halt the referee journals an `outage` event (window, sessions) and notes
+every ticket in the streak; `pool()` re-queues any NEEDS_HUMAN ticket whose last note is
+that outage marker through `OUTAGE_REQUEUE`, recording the reason on the new generation.
+The doctor smoke probe named in the direction was not used: the retry itself is a cheaper
+and more honest probe.

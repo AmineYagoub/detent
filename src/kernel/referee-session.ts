@@ -27,6 +27,8 @@ const CRASH_STREAK_HALT = 3;
 export class SessionArm {
   private readonly prefixSeen = new Map<string, string>();
   private consecutiveCrashes = 0;
+  /** PRDR-112: the sessions of the current streak, so an outage can name its victims. */
+  private streak: { readonly id: string; readonly role: string; readonly at: string }[] = [];
 
   constructor(private readonly ctx: RefereeContext) {}
 
@@ -94,6 +96,7 @@ export class SessionArm {
           inputs,
           artifact_out: artifactOut,
           falsified_out: path.join(runsDir(ctx.root, id), "falsified.json"),
+          oversized_out: path.join(runsDir(ctx.root, id), "oversized.json"),
           surface_request_out: path.join(runsDir(ctx.root, id), "surface_request.json"),
         },
         null,
@@ -184,7 +187,9 @@ export class SessionArm {
      */
     if (result.crashed === true) {
       this.consecutiveCrashes += 1;
+      this.streak.push({ id, role, at: ctx.iso() });
       if (this.consecutiveCrashes >= CRASH_STREAK_HALT) {
+        this.markOutage();
         throw new SessionRefusal(
           `backend outage: ${this.consecutiveCrashes} consecutive crashed sessions (last: ${role} for ${id}) — ` +
             `halting rather than burning ladder budget on failures no session produced`,
@@ -192,6 +197,7 @@ export class SessionArm {
       }
     } else {
       this.consecutiveCrashes = 0;
+      this.streak = [];
     }
     this.rememberPrefix(role, spec);
 
@@ -239,6 +245,59 @@ export class SessionArm {
     }
     writeTicket(ctx.root, { ...ticket, surface: [...ticket.surface, target] });
     appendNote(ctx.root, ticketId, { author: "kernel", text: `surface granted: ${target} — ${why} (SEC-3)` });
+  }
+
+  /**
+   * PRDR-112: an outage names its victims. Every ticket whose session crashed
+   * inside the streak gets a note the pool's sweep recognises — a ticket the
+   * outage pushed into NEEDS_HUMAN is re-queued on resume, because "not a
+   * finding against this ticket" is a sentence the operator typed twelve
+   * times across three gates. The run journal keeps the window and the list.
+   */
+  private markOutage(): void {
+    const ctx = this.ctx;
+    const first = this.streak[0]?.at ?? ctx.iso();
+    const last = this.streak.at(-1)?.at ?? ctx.iso();
+    ctx.journal.appendTicketEvent("run", {
+      event: "outage",
+      at: ctx.iso(),
+      from: first,
+      to: last,
+      sessions: this.streak.map((s) => ({ ticket: s.id, role: s.role, at: s.at })),
+    });
+    for (const id of new Set(this.streak.map((s) => s.id))) {
+      const roles = this.streak.filter((s) => s.id === id).map((s) => s.role).join(", ");
+      appendNote(ctx.root, id, {
+        author: "kernel",
+        text: `outage: ${this.streak.length} consecutive $0 crashes between ${first} and ${last}; this ticket's ${roles} crashed inside it — not a finding against the ticket (PRDR-112)`,
+      });
+    }
+    this.streak = [];
+  }
+
+  /**
+   * X-4″ (PRDR-102): the session signalled that the ticket is larger than one
+   * session, with the split it proposes. The file STAYS — it is the evidence
+   * the next PLAN of these documents receives — and the note carries the
+   * proposal to the human the ticket goes to.
+   */
+  consumeOversizedSignal(ticketId: string): { note: string; split: string[] } | null {
+    const ctx = this.ctx;
+    const file = path.join(runsDir(ctx.root, ticketId), "oversized.json");
+    if (!existsSync(file)) return null;
+    let note = "oversized";
+    let split: string[] = [];
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; split?: unknown };
+      if (typeof parsed.note === "string" && parsed.note.trim() !== "") note = parsed.note.trim();
+      if (Array.isArray(parsed.split)) split = parsed.split.filter((p): p is string => typeof p === "string" && p.trim() !== "").map((p) => p.trim());
+    } catch {
+      /* the signal's existence is the event; the proposal is best-effort */
+    }
+    const proposal = split.length === 0 ? "no split proposed" : split.map((p, i) => `${i + 1}) ${p}`).join(" ");
+    appendNote(ctx.root, ticketId, { author: "kernel", text: `oversized (X-4″): ${note} — proposed split: ${proposal}` });
+    ctx.journal.appendTicketEvent(ticketId, { event: "oversized", at: ctx.iso(), note, split });
+    return { note, split };
   }
 
   /**

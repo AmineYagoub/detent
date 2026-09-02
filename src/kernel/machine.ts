@@ -61,6 +61,12 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
    * dependency, not a stop — the ticket returns to the pool and waits for it.
    */
   ["IN_PROGRESS", "DEPENDENCY_DISCOVERED", to("READY")],
+  /*
+   * X-4″ (PRDR-102): a ticket the session judged larger than one session is a
+   * plan-level finding, like a false premise — a human's, with the proposal
+   * attached. No rung can make a ticket smaller.
+   */
+  ["IN_PROGRESS", "TICKET_OVERSIZED", to("NEEDS_HUMAN")],
 
   ["IN_PROGRESS", "GATE_GREEN", to("IN_REVIEW")],
   ["BLIND_FIX", "GATE_GREEN", to("IN_REVIEW")],
@@ -95,6 +101,8 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
 
   ["NEEDS_HUMAN", "HUMAN_APPROVED", to("APPROVED")],
   ["NEEDS_HUMAN", "HUMAN_REQUEUE", to("READY")],
+  /* PRDR-112: a human stop the outage caused is not a human's to clear. */
+  ["NEEDS_HUMAN", "OUTAGE_REQUEUE", to("READY")],
   ["BLOCKED", "HUMAN_REQUEUE", to("READY")],
 ];
 

@@ -81,6 +81,15 @@ export interface CoreOptions {
   readonly isAlive?: (pid: number) => boolean;
   /** B-2: per-ticket worktrees, merged `--no-ff` into the run branch on DONE. */
   readonly worktree?: boolean;
+  /**
+   * PRDR-104: whether this referee publishes the plugin hook files
+   * (`active_surface.json`, `stage.json`). True on the plugin path, where the
+   * model session that owns the claim is the reader. The headless driver
+   * passes false: its loop is a Node process no hook can nudge, and the files
+   * landed on whatever Claude session had the run root as its cwd — denying
+   * the operator's edits and telling them to drive a loop already running.
+   */
+  readonly hookFiles?: boolean;
 }
 
 export class RefereeContext {
@@ -94,6 +103,8 @@ export class RefereeContext {
   readonly rulesText: string;
   readonly bindingsPreamble: string;
   readonly spend: SpendLedger;
+  /** PRDR-104: false on the headless driver path. */
+  readonly hookFiles: boolean;
   readonly refs: RefSnapshot;
   readonly baseRef: string | null;
   private readonly workDirs = new Map<string, string>();
@@ -123,6 +134,7 @@ export class RefereeContext {
       2,
     );
     this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd);
+    this.hookFiles = opts.hookFiles ?? true;
     /* P7: every ref except the run branch is protected ground for this run. */
     this.refs = snapshotRefs(opts.root);
     /* V-5: the run's baseline, resolved once; null falls back to root commands. */
@@ -152,6 +164,7 @@ export class RefereeContext {
   /* ---- D-21 hook policy (T-120/T-121): the referee is the only writer ---- */
 
   publishHookPolicy(ticketId: string): void {
+    if (!this.hookFiles) return;
     publishClaimPolicy(this.root, {
       ticketId,
       protectedGlobs: this.loaded.config.protected,
@@ -161,10 +174,12 @@ export class RefereeContext {
   }
 
   clearHookPolicy(): void {
+    if (!this.hookFiles) return;
     clearClaimPolicy(this.root);
   }
 
   refreshRunRefeed(active: boolean): void {
+    if (!this.hookFiles) return;
     refreshRunRefeed(this.root, active, this.now() + this.budgets.ticket_wall_clock_ms);
   }
 

@@ -115,6 +115,8 @@ export function maxPossibleSessions(
       if (event === "HUMAN_REQUEUE" || event === "HUMAN_APPROVED") continue;
       /** X-4′: a discovered dependency re-queues into a new generation the same way. */
       if (event === "DEPENDENCY_DISCOVERED") continue;
+      /** PRDR-112: so does an outage re-queue. */
+      if (event === "OUTAGE_REQUEUE") continue;
       /** BUDGET_BREACH and GATE_DRIFT are halts, never the worst path. */
       if (event === "BUDGET_BREACH" || event === "GATE_DRIFT") continue;
       let result;

@@ -45,7 +45,7 @@ Repeat until the pool is empty or the user quits:
 4. Drive stages by the ticket's current state until it reaches a terminal
    state (`DONE`, `NEEDS_HUMAN`, `BLOCKED`):
    - `IN_PROGRESS` — call `attempt` `{ticket_id, state}`. If the result has
-     `falsified_ref`, `transition` with it. Otherwise call `gate`
+     `falsified_ref` or `oversized_ref`, `transition` with it. Otherwise call `gate`
      If that transition lands on `READY`, the referee found the path the session named in
      another ticket's surface and re-queued this one behind it (X-4′): `release` the claim
      and call `next`.

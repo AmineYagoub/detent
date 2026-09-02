@@ -1,5 +1,5 @@
 import { discover } from "../adapter/discover/index.js";
-import { assertNoDrift, readBindings, writeBindings } from "../adapter/drift.js";
+import { readBindings, writeBindings } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -9,6 +9,7 @@ import {
   claimed,
   gateDrift,
   humanApproved,
+  ticketOversized,
   humanRequeue,
   type KernelEvent,
 } from "./events.js";
@@ -17,6 +18,7 @@ import { currentCounters, currentGeneration, openGeneration, withCurrentCounters
 import { clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
+import { requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -57,8 +59,7 @@ export {
   ATTEMPT_STATES,
   Breach,
   EscrowError,
-  type CoreOptions,
-} from "./referee-context.js";
+  type CoreOptions, SessionRefusal } from "./referee-context.js";
 export { DriftHaltSignal } from "./referee-gate.js";
 
 export interface AcquireResult {
@@ -136,7 +137,7 @@ export class RefereeCore {
   pool(): { id: string; state: State }[] {
     if (!this.driftSwept) {
       this.driftSwept = true;
-      this.requeueDriftBlocked();
+      requeueDriftBlocked(this.root, (t, e) => this.commit(t, e), this.ctx.iso());
     }
     const readyPool = ready(this.root);
     /**
@@ -150,6 +151,7 @@ export class RefereeCore {
      * would spin forever.
      */
     healStaleClaims(this.root, RESUMABLE, this.ctx.isAlive);
+    requeueOutageVictims(this.root, (t, e) => this.commit(t, e), this.ctx.iso());
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );
@@ -209,26 +211,6 @@ export class RefereeCore {
 
   /* -------------------------------------------------- drift (V-3, D-23) */
 
-  private requeueDriftBlocked(): void {
-    const bindings = readBindings(this.root).bindings;
-    if (bindings.length === 0) return;
-    try {
-      assertNoDrift(bindings, discover(this.root));
-    } catch {
-      return;
-    }
-    for (const ticket of allTickets(this.root)) {
-      if (ticket.state !== "BLOCKED" || !lastNote(ticket).startsWith("drift-blocked:")) continue;
-      const requeued = this.commit(ticket, humanRequeue("verify-sync-rebaseline"));
-      const generations = openGeneration(requeued, {
-        at: this.ctx.iso(),
-        reason: `gate drift re-baselined via verify sync; ${lastNote(ticket)}`,
-      });
-      writeTicket(this.root, { ...requeued, generations });
-      appendNote(this.root, ticket.id, { author: "kernel", text: "requeued after drift re-baseline (V-3/X-8)" });
-    }
-  }
-
   /**
    * After a GATE_DRIFT unwind: every non-terminal CLAIMED ticket blocks with
    * the halt as evidence (draft.7's V-3), and the reason line is returned for
@@ -256,7 +238,7 @@ export class RefereeCore {
   /* ------------------------------------------------------ derived moves */
 
   /** R-4: the sole billable path — the session arm meters, this core mints. */
-  async attempt(id: string, state: (typeof ATTEMPT_STATES)[number]): Promise<{ falsifiedRef?: string }> {
+  async attempt(id: string, state: (typeof ATTEMPT_STATES)[number]): Promise<{ falsifiedRef?: string; oversizedRef?: string }> {
     const ticket = readTicket(this.root, id);
     const workDir = this.ctx.workDirFor(id);
     await this.sessions.launch(ticket, state, this.sessions.attemptInputs(ticket, state, workDir), workDir);
@@ -264,6 +246,9 @@ export class RefereeCore {
       const falsified = this.sessions.consumeFalsifiedSignal(id);
       /** X-4′ (PRDR-111): a dependency when the missing paths resolve, the X-4 stop when they do not. */
       if (falsified !== null) return { falsifiedRef: this.mintFor(id, resolveFalsification(this.root, id, falsified, this.ctx.iso())) };
+      /** X-4″ (PRDR-102): larger than one session — a human's, with the proposal attached. */
+      const oversized = this.sessions.consumeOversizedSignal(id);
+      if (oversized !== null) return { oversizedRef: this.mintFor(id, ticketOversized(oversized.note, oversized.split)) };
     }
     return {};
   }

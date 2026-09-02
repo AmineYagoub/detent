@@ -6,6 +6,7 @@ import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
 import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanReview } from "../schemas/init.js";
 import { PLAN_REVISIONS, reviewPlan, sessionBudget } from "./plan-review.js";
+import { sizingEvidence } from "./sizing-evidence.js";
 import { planSchema, type Binding, type Plan } from "../schemas/records.js";
 import { createTicket } from "../kernel/tickets/mutations.js";
 import { allTickets, readTicket } from "../kernel/tickets/readers.js";
@@ -124,6 +125,8 @@ async function draftPlan(deps: PlanDeps, findings?: PlanReview["findings"]): Pro
      * session can finish or a gate can verify.
      */
     session_budget: sessionBudget(deps.budgets),
+    /** X-4″ (PRDR-102): what the previous plan of these documents measured — turns per session, sessions that reported themselves oversized. */
+    ...(sizingEvidence(deps.root) === null ? {} : { sizing_evidence: sizingEvidence(deps.root) }),
     ...(findings === undefined ? {} : { review_findings: findings }),
     expected_output: planDraftSkeleton(),
     instruction: `${

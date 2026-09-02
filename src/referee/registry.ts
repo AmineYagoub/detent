@@ -4,6 +4,7 @@ import {
   Breach,
   DriftHaltSignal,
   EscrowError,
+  SessionRefusal,
   SpendExhaustedError,
   TransitionError,
   type RefereeCore,
@@ -28,7 +29,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export interface RefereeToolError {
   readonly error: {
-    readonly code: "DRIFT_HALT" | "BREACH" | "ILLEGAL_TRANSITION" | "BAD_EVIDENCE" | "INVALID_INPUT" | "UNKNOWN_TOOL";
+    readonly code: "DRIFT_HALT" | "BREACH" | "REFUSED" | "ILLEGAL_TRANSITION" | "BAD_EVIDENCE" | "INVALID_INPUT" | "UNKNOWN_TOOL";
     readonly message: string;
   };
 }
@@ -56,7 +57,7 @@ const claimOutput = z.object({
 });
 
 const attemptInput = z.object({ ticket_id: ticketId, state: z.enum(ATTEMPT_STATES) }).strict();
-const attemptOutput = z.object({ falsified_ref: z.string().optional() });
+const attemptOutput = z.object({ falsified_ref: z.string().optional(), oversized_ref: z.string().optional() });
 
 const gateInput = z
   .object({ ticket_id: ticketId, close_check: z.boolean().optional(), escalate_reason: z.string().optional() })
@@ -143,6 +144,10 @@ export async function callTool(core: RefereeCore, name: string, rawInput: unknow
     if (err instanceof Breach || err instanceof SpendExhaustedError) {
       return { error: { code: "BREACH", message: err.message } };
     }
+    /** PRDR-112: a backend refusal or outage is a structured route, so a driver can back off and retry. */
+    if (err instanceof SessionRefusal) {
+      return { error: { code: "REFUSED", message: err.message } };
+    }
     if (err instanceof TransitionError) {
       return { error: { code: "ILLEGAL_TRANSITION", message: err.message } };
     }
@@ -176,6 +181,7 @@ async function dispatch(core: RefereeCore, name: ToolName, input: unknown): Prom
       const result = await core.attempt(arg.ticket_id, arg.state);
       return attemptOutput.parse({
         ...(result.falsifiedRef !== undefined ? { falsified_ref: result.falsifiedRef } : {}),
+        ...(result.oversizedRef !== undefined ? { oversized_ref: result.oversizedRef } : {}),
       });
     }
     case "gate": {
