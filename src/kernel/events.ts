@@ -113,10 +113,10 @@ export function gateDrift(halt: DriftHaltError): KernelEvent {
 }
 
 /**
- * B-4's two triggers share one X-3 event: the ticket's own label, or the
- * diff touching risk globs — the matched files are the evidence.
+ * B-4′ (PRDR-107): one trigger — the diff touching the operator's risk globs;
+ * the matched files are the evidence. The plan's `risk_label` is advisory
+ * and mints no event.
  */
-export function riskRequired(cause: "label" | { readonly globs: readonly string[]; readonly files: readonly string[] }): KernelEvent {
-  if (cause === "label") return make("RISK_LABEL_REQUIRED", "risk gate: ticket carries risk_label (B-4)");
+export function riskRequired(cause: { readonly globs: readonly string[]; readonly files: readonly string[] }): KernelEvent {
   return make("RISK_LABEL_REQUIRED", `risk gate: diff touches ${cause.files.join(",")} (globs: ${cause.globs.join(",")}) (B-4)`);
 }

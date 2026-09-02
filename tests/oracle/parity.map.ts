@@ -100,7 +100,7 @@ export const PARITY: readonly ParityEntry[] = [
     oracle: "test_extra.py::test_three_change_cycles_escalate",
     ticket: "T-044",
     ts: "tests/kernel/stages.test.ts",
-    note: "D-6 divergence: the oracle recycled review changes into a shared fix pool (three cycles to exhaust); review has its own unit budget here, so the SECOND changes verdict escalates — the preserved property is that repeated changes reach a human",
+    note: "D-6 divergence: the oracle recycled review changes into a shared fix pool (three cycles to exhaust); review has its own budget here — `review_fix_attempts`, default 3, read from config (X-1‴, PRDR-108) — so the changes verdict after the last round escalates; the preserved property is that repeated changes reach a human",
   },
   {
     oracle: "test_extra.py::test_validate_report_approve_requeue",

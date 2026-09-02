@@ -45,10 +45,21 @@ export interface CeilingSpec {
 export const CEILINGS = {
   blind_fix_attempts: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 1 },
   informed_fix_attempts: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 1 },
-  review_fix_attempts: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 1 },
+  /**
+   * X-1‴ (PRDR-108): review findings buy this many review-fix rounds before a
+   * human. Was configurable and never read — the guard was hard-wired to one
+   * round, and six second-round stops on the certification gate were each
+   * cleared by a requeue relaying the same findings.
+   */
+  review_fix_attempts: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 3 },
   research_sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 1 },
   hypotheses: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 2 },
-  sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 18 },
+  /**
+   * Net session ceiling per generation: strictly above the computed worst case
+   * (T-014). Moved with X-1‴ (three review-fix rounds) and A-5′ (one review
+   * relaunch per IN_REVIEW entry), PRDR-108/109 — computed 24, net 28.
+   */
+  sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 28 },
   ticket_wall_clock_ms: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 3_600_000 },
   /**
    * X-1″ (PRDR-106): a sizing target, not a ceiling. It reaches PLAN and

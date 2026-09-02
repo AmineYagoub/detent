@@ -6,6 +6,7 @@ import {
   UNIT_SLOTS,
   breachTargetFor,
   consumeSlot,
+  countReviewFix,
   slotAvailable,
 } from "../../src/kernel/budgets.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
@@ -31,12 +32,13 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     }
   });
 
-  it("review_fix_attempts is independent of the ladder slots (D-6)", () => {
+  it("review_fix_attempts is not a unit slot: the ladder never touches it and it counts past one (X-1‴)", () => {
     const laddered = consumeSlot(
       consumeSlot(consumeSlot(ZERO_COUNTERS, "blind_fix_attempts"), "research_sessions"),
       "informed_fix_attempts",
     );
-    expect(slotAvailable(laddered, "review_fix_attempts")).toBe(true);
+    expect(laddered.review_fix_attempts).toBe(0);
+    expect(countReviewFix(countReviewFix(ZERO_COUNTERS)).review_fix_attempts).toBe(2);
   });
 
   it("every X-1 ceiling has a named enforcement site — no ceiling routes nowhere (P6)", () => {

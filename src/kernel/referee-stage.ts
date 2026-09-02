@@ -99,14 +99,27 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
   const hypothesisRaw = ctx.maybeArtifact(id, "hypothesis.json");
   const hypothesisParsed = hypothesisRaw === null ? null : parseArtifact(hypothesisSchema, hypothesisRaw);
   const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
-  const outcome = await reviewStage(ticket, ctx.diff(workDir, ctx.claimBase(id), ticket.surface, id), hypothesis, {
-    launch: async (inputs) => {
+  const diff = ctx.diff(workDir, ctx.claimBase(id), ticket.surface, id);
+  const deps = {
+    launch: async (inputs: Record<string, unknown>) => {
       await sessions.launch(ticket, "IN_REVIEW", inputs, workDir);
     },
     readArtifact: () => ctx.maybeArtifact(id, "review.json"),
-    note: (text) => appendNote(ctx.root, id, { author: "kernel", text }),
-  });
-  if (outcome.kind === "breaker") throw new Breach(outcome.reason);
+    note: (text: string) => appendNote(ctx.root, id, { author: "kernel", text }),
+  };
+  let outcome = await reviewStage(ticket, diff, hypothesis, deps);
+  /*
+   * A-5′ (PRDR-109): a review with no usable verdict — absent or invalid — is
+   * relaunched once before it counts. Six of the gate's human stops were a
+   * reviewer that crashed or wrote nothing, escalated as a budget breach when
+   * a second session would have written the verdict. The relaunch passes the
+   * same launch gates as any session and lands on the ledger.
+   */
+  if (outcome.kind === "breaker") {
+    deps.note(`${outcome.reason} — relaunched once (A-5′)`);
+    outcome = await reviewStage(ticket, diff, hypothesis, deps);
+  }
+  if (outcome.kind === "breaker") throw new Breach(`${outcome.reason} (after one relaunch, A-5′)`);
   return outcome.event;
 }
 

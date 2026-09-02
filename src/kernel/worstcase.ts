@@ -25,6 +25,14 @@ const SESSION_ENTRY_STATES: ReadonlySet<State> = new Set<State>([
   "IN_REVIEW",
 ]);
 
+/**
+ * A-5′ (PRDR-109): a review with no usable verdict is relaunched once by the
+ * referee, outside the table. Every IN_REVIEW entry can therefore cost two
+ * launches, and the worst case charges both so the net `sessions` ceiling
+ * still bounds what one generation can spend.
+ */
+const REVIEW_RELAUNCH_ALLOWANCE = 1;
+
 const zeroCounters: Counters = {
   blind_fix_attempts: 0,
   informed_fix_attempts: 0,
@@ -115,7 +123,7 @@ export function maxPossibleSessions(
         /* slot already consumed: this edge is unreachable here */
         continue;
       }
-      const cost = SESSION_ENTRY_STATES.has(result.to) ? 1 : 0;
+      const cost = SESSION_ENTRY_STATES.has(result.to) ? 1 + (result.to === "IN_REVIEW" ? REVIEW_RELAUNCH_ALLOWANCE : 0) : 0;
       best = Math.max(best, cost + walk(result.to, result.counters, nextOnPath, depth + cost));
     }
     memo.set(k, best);

@@ -86,8 +86,9 @@ describe("T-050 config reporting (X-1: the computation is authoritative)", () =>
     const report = await doctor(root, { installedSdkVersion: () => "0.3.191", env: {} });
     const check = named(report, "config");
     expect(check?.ok).toBe(true);
-    expect(check?.detail).toContain("computed worst case 14");
-    expect(check?.detail).toContain("net 18");
+    /** Moved with PRDR-108/109 (three review-fix rounds, one review relaunch per entry). */
+    expect(check?.detail).toContain("computed worst case 24");
+    expect(check?.detail).toContain("net 28");
   });
 
   it("a missing config is a failing check, not a crash", async () => {

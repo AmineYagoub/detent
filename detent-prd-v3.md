@@ -156,6 +156,30 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   generation, `ticket_wall_clock_ms` per ticket. The ledger keeps recording turns per
   session; that measurement is PRDR-102's input and needs no ceiling to exist.
 
+- **B-4′ (3.1.0, PRDR-107).** The plan's `risk_label` is advisory: recorded once as a
+  kernel note and shown in the report, never a stop. Eleven label stops across every gate
+  and field test were approved eleven times and declined never. The glob trigger is
+  unchanged — a DONE-candidate whose diff touches the operator's `risk` globs still waits
+  for a human, and approval still re-enters APPROVED for kernel re-verification.
+
+- **X-1‴ (3.1.0, PRDR-108).** `review_fix_attempts` is read by the machine: review findings
+  buy that many review-fix rounds before a human, default 3. It was configurable and never
+  consulted — the guard was hard-wired to one round. Six second-round stops on the
+  certification gate were each cleared by a requeue relaying the same findings. The key
+  leaves D-12's at-most-once slot set; the three ladder slots stay structural (D-24). The
+  computed worst case and the default net `sessions` move with it, deliberately.
+
+- **A-5′ (3.1.0, PRDR-109).** A review that produces no usable verdict — absent or
+  invalid — is relaunched once, noted, before it counts as a breach. Six such stops on the
+  gate, all cleared by a requeue that changed nothing. The relaunch passes D-25's spend gate
+  and the net session ceiling, lands on the ledger, and is charged in the worst-case figure
+  for every `IN_REVIEW` entry.
+
+- **X-2′ (3.1.0, PRDR-110).** Dry research enters `INFORMED_FIX` through the same guard as
+  valid research, carrying its finding — no external cause, so the fault is in the ticket's
+  own change. Eight of nine research sessions on the gate were dry and each became a stop.
+  D-13 holds: the informed attempt's red gate is still a direct edge to a human.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

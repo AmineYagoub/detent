@@ -15,11 +15,14 @@ import type { Counters } from "../schemas/ticket.js";
  * pool — that is the whole point of D-12's split.
  */
 
-/** The three ladder slots of D-12, plus research. Consumed on state entry. */
+/**
+ * D-12's at-most-once slots: the two fix rungs plus research, each consumed
+ * on state entry. `review_fix_attempts` left this set under X-1‴ (PRDR-108):
+ * it counts rounds against its configured ceiling instead.
+ */
 export const UNIT_SLOTS = [
   "blind_fix_attempts",
   "informed_fix_attempts",
-  "review_fix_attempts",
   "research_sessions",
 ] as const;
 export type UnitSlot = (typeof UNIT_SLOTS)[number];
@@ -70,6 +73,11 @@ export class SlotExhaustedError extends Error {
 export function consumeSlot(counters: Counters, slot: UnitSlot): Counters {
   if (!slotAvailable(counters, slot)) throw new SlotExhaustedError(slot);
   return { ...counters, [slot]: counters[slot] + 1 };
+}
+
+/** X-1‴ (PRDR-108): a review-fix round is counted here and compared in the guard. */
+export function countReviewFix(counters: Counters): Counters {
+  return { ...counters, review_fix_attempts: counters.review_fix_attempts + 1 };
 }
 
 export function countHypothesis(counters: Counters): Counters {

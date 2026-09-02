@@ -10,7 +10,8 @@ import { DEFAULT_BUDGETS } from "../helpers.js";
 
 const validConfig = (overrides: Record<string, unknown> = {}) => ({
   schema_version: 1,
-  budgets: { run_spend_usd: 25, sessions: 20, ...((overrides.budgets as object) ?? {}) },
+  /** Above the computed worst case (24 after PRDR-108/109), so the fixture config loads. */
+  budgets: { run_spend_usd: 25, sessions: 30, ...((overrides.budgets as object) ?? {}) },
   pinned: { agent_sdk: "0.3.191", claude_code: "2.1.191" },
   ...overrides,
 });
@@ -23,18 +24,18 @@ describe("T-014 maxPossibleSessions (X-1)", () => {
      * If this moves, the PRD's informative note and the default net move with
      * it — deliberately, not incidentally.
      */
-    expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(14);
+    expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(24);
   });
 
-  it("PRDR-057 resolved: the default config loads — net 18 strictly exceeds the computed 14", () => {
+  it("PRDR-057 resolved: the default config loads — net 28 strictly exceeds the computed 24", () => {
     /**
      * Draft.6 shipped sessions=14 against a computed worst case of 14, so no
      * default config could load (the defect this suite pinned until draft.7).
      */
     const { config, computedWorstCase } = loadConfig(validConfig({ budgets: { run_spend_usd: 25 } }));
-    expect(computedWorstCase).toBe(14);
-    expect(config.budgets.sessions).toBe(18);
-    expect(DEFAULT_BUDGETS.sessions).toBe(18);
+    expect(computedWorstCase).toBe(24);
+    expect(config.budgets.sessions).toBe(28);
+    expect(DEFAULT_BUDGETS.sessions).toBe(28);
   });
 
   it("D-24: a ladder ceiling set to any value but 1 is rejected at load, naming the key", () => {
@@ -57,7 +58,7 @@ describe("T-014 maxPossibleSessions (X-1)", () => {
      * If the walk took drift edges, BLOCKED would join every path at zero cost;
      * the figure must be identical to a table with no drift rows at all.
      */
-    expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(14);
+    expect(maxPossibleSessions(DEFAULT_BUDGETS)).toBe(24);
   });
 
   it("is sensitive to the TABLE: a synthetic recovery edge raises the figure", () => {

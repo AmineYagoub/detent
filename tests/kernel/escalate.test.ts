@@ -95,13 +95,18 @@ describe("T-049 B-4 risk gate (oracle test_risk_path_requires_human_approval)", 
     expect(git(root, "rev-parse", "master")).toBeTruthy();
   });
 
-  it("the risk_label half still fires without any glob", async () => {
+  it("the risk_label half is advisory (B-4′, PRDR-107): a note, never a stop", async () => {
+    /** Eleven label stops across every gate and field test: approved eleven times, declined never. */
     const root = await fixture();
     addTicket(root, { id: "t1", risk_label: true });
     const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "label" });
-    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
-    expect(readTicket(root, "t1").notes.map((n) => n.text).join(" ")).toContain("risk-labelled");
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    const t1 = readTicket(root, "t1");
+    expect(t1.state).toBe("DONE");
+    const notes = t1.notes.map((n) => n.text).join(" ");
+    expect(notes).toContain("risk-labelled by the plan");
+    expect(notes).not.toContain("requires human approval");
   });
 });
 

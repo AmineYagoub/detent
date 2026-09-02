@@ -1,7 +1,7 @@
 import type { Budgets } from "../schemas/budgets.js";
 import type { Counters, Ticket } from "../schemas/ticket.js";
 import { EVENTS, STATES, TERMINAL_STATES, type Event, type State } from "../schemas/states.js";
-import { countHypothesis, consumeSlot } from "./budgets.js";
+import { countHypothesis, countReviewFix, consumeSlot } from "./budgets.js";
 import { resolveRed } from "./resolver.js";
 
 /**
@@ -72,7 +72,13 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
   ["INFORMED_FIX", "GATE_RED", to("NEEDS_HUMAN")],
 
   ["RESEARCH", "RESEARCH_VALID", guard("enterInformed")],
-  ["RESEARCH", "RESEARCH_DRY", to("NEEDS_HUMAN")],
+  /*
+   * X-2′ (PRDR-110): dry research is a finding — no external cause — and buys
+   * the informed attempt carrying it, not a human. Eight of nine research
+   * sessions on the certification gate were dry; each became a stop a person
+   * cleared by requeueing with nothing new.
+   */
+  ["RESEARCH", "RESEARCH_DRY", guard("enterInformed")],
   ["RESEARCH", "UPSTREAM_BUG", to("BLOCKED")],
 
   ["IN_REVIEW", "REVIEW_APPROVE", to("APPROVED")],
@@ -138,9 +144,15 @@ const GUARDS: Record<GuardName, (c: Counters, ctx: GuardContext) => GuardOutcome
 
   resolveRed: (c) => resolveRed(c),
 
-  reviewChanges: (c) =>
-    c.review_fix_attempts === 0
-      ? { next: "REVIEW_FIX", counters: consumeSlot(c, "review_fix_attempts") }
+  /**
+   * X-1‴ (PRDR-108): review findings buy `review_fix_attempts` rounds, read
+   * from the budgets rather than hard-wired to one. Six second-round stops on
+   * the certification gate were each cleared by a requeue relaying the same
+   * findings — a loop the machine can run itself.
+   */
+  reviewChanges: (c, ctx) =>
+    c.review_fix_attempts < ctx.budgets.review_fix_attempts
+      ? { next: "REVIEW_FIX", counters: countReviewFix(c) }
       : { next: "NEEDS_HUMAN", counters: c },
 
   /* X-1: the informed slot is consumed exactly on entry to its namesake state. */

@@ -95,11 +95,29 @@ describe("T-011 transition table (X-3)", () => {
     expect(apply("IN_PROGRESS", "PREMISE_FALSIFIED", ZERO_COUNTERS, ctx("bug")).to).toBe("DIAGNOSED");
   });
 
-  it("review changes routes to REVIEW_FIX once, then to a human (D-6)", () => {
-    const first = apply("IN_REVIEW", "REVIEW_CHANGES", ZERO_COUNTERS, ctx());
-    expect(first.to).toBe("REVIEW_FIX");
-    expect(first.counters.review_fix_attempts).toBe(1);
-    expect(apply("IN_REVIEW", "REVIEW_CHANGES", first.counters, ctx()).to).toBe("NEEDS_HUMAN");
+  it("review changes routes to REVIEW_FIX review_fix_attempts times, then to a human (X-1‴, PRDR-108)", () => {
+    let counters = ZERO_COUNTERS;
+    const rounds = DEFAULT_BUDGETS.review_fix_attempts;
+    expect(rounds).toBeGreaterThan(1);
+    for (let i = 1; i <= rounds; i += 1) {
+      const step = apply("IN_REVIEW", "REVIEW_CHANGES", counters, ctx());
+      expect(step.to).toBe("REVIEW_FIX");
+      expect(step.counters.review_fix_attempts).toBe(i);
+      counters = step.counters;
+    }
+    expect(apply("IN_REVIEW", "REVIEW_CHANGES", counters, ctx()).to).toBe("NEEDS_HUMAN");
+    /** The ceiling is the config's, not the guard's: one round when the config says one. */
+    const one = ctx("feature", { ...DEFAULT_BUDGETS, review_fix_attempts: 1 });
+    const first = apply("IN_REVIEW", "REVIEW_CHANGES", ZERO_COUNTERS, one);
+    expect(apply("IN_REVIEW", "REVIEW_CHANGES", first.counters, one).to).toBe("NEEDS_HUMAN");
+  });
+
+  it("dry research enters the informed attempt, not a human (X-2′, PRDR-110)", () => {
+    const step = apply("RESEARCH", "RESEARCH_DRY", ZERO_COUNTERS, ctx());
+    expect(step.to).toBe("INFORMED_FIX");
+    expect(step.counters.informed_fix_attempts).toBe(1);
+    /** D-13 holds: the informed attempt's red gate is still a direct edge to a human. */
+    expect(apply("INFORMED_FIX", "GATE_RED", step.counters, ctx()).to).toBe("NEEDS_HUMAN");
   });
 
   it("apply is pure: input counters are never mutated", () => {

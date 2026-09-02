@@ -10,7 +10,7 @@ import { loadConfig } from "../../src/kernel/worstcase.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
-import { addTicket, makeRunRepo } from "../kernel/run-fixture.js";
+import { addTicket, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 
 /**
  * T-140 (PRDR-072) — a usage-limit outage turned four live sessions into
@@ -143,5 +143,39 @@ describe("X-1″ (PRDR-106) no session is terminated on turns", () => {
       .split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l) as { turns?: number; partial?: string });
     expect(rows.at(-1)?.turns).toBe(5000);
     expect(rows.at(-1)?.partial).toBeUndefined();
+  });
+});
+
+describe("A-5′ (PRDR-109) a review with no usable verdict is relaunched once", () => {
+  /**
+   * Six of the certification gate's human stops were a reviewer that crashed
+   * or wrote nothing, escalated as a budget breach; every one was requeued
+   * with "not a finding" and reviewed cleanly on the next launch.
+   */
+  it("a no-write first review is followed by one more launch, and the second verdict counts", { timeout: 60_000 }, async () => {
+    let launches = 0;
+    const review: typeof reviewApprove = (spec) => {
+      launches += 1;
+      return launches === 1 ? okResult() : reviewApprove(spec);
+    };
+    const backend = new MockBackend({ implement: () => okResult(), review });
+    const { core, root } = await makeCore(backend);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    await expect(core.recordStage("t-1", "review")).resolves.toBeDefined();
+    expect(backend.calls.filter((c) => c.role === "review")).toHaveLength(2);
+    const ticket = JSON.parse(readFileSync(path.join(stateDir(root), "plan", "t-1.json"), "utf8")) as {
+      notes: { text: string }[];
+    };
+    expect(ticket.notes.map((n) => n.text).join(" ")).toContain("relaunched once");
+  });
+
+  it("two failures still breach, and the breach names the relaunch", { timeout: 60_000 }, async () => {
+    const backend = new MockBackend({ implement: () => okResult(), review: () => okResult() });
+    const { core } = await makeCore(backend);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    await expect(core.recordStage("t-1", "review")).rejects.toThrow(/after one relaunch/);
+    expect(backend.calls.filter((c) => c.role === "review")).toHaveLength(2);
   });
 });

@@ -63,16 +63,23 @@ export class GateArm {
     return await this.evaluateGate(ticket, workDir, opts.escalateReason);
   }
 
-  /** B-4: the ticket's own label, or the diff touching risk globs — both
-   * require a human before finalize. A recorded human approval covers the
-   * risk once; the gates still re-verify (X-3). */
+  /** B-4′ (PRDR-107): the diff touching the operator's risk globs requires a
+   * human before finalize; the plan's own label is advisory — noted once,
+   * never a stop. A recorded human approval covers the risk once; the gates
+   * still re-verify (X-3). */
   private closeCheckRisk(ticket: Ticket, workDir: string): KernelEvent | null {
     const ctx = this.ctx;
     const approved = ticket.notes.some((n) => n.text.startsWith("human-approved:"));
     if (approved) return null;
-    if (ticket.risk_label) {
-      appendNote(ctx.root, ticket.id, { author: "kernel", text: "risk-labelled change requires human approval (B-4)" });
-      return riskRequired("label");
+    /*
+     * Eleven label stops across every gate and field test: approved eleven
+     * times, declined never. The label stays visible; the stop is gone.
+     */
+    if (ticket.risk_label && !ticket.notes.some((n) => n.text.startsWith("risk-labelled by the plan"))) {
+      appendNote(ctx.root, ticket.id, {
+        author: "kernel",
+        text: "risk-labelled by the plan (B-4′): advisory, no stop — configure `risk` globs to gate paths",
+      });
     }
     const globs = ctx.loaded.config.risk;
     if (globs.length > 0) {

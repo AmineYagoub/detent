@@ -1,6 +1,7 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { CEILINGS } from "../../src/schemas/budgets.js";
 import { cacheKey, type EnvFingerprint } from "../../src/adapter/env.js";
 import { EXIT_HUMAN_GATED, EXIT_OK, run } from "../../src/kernel/run.js";
 import { briefCachePath, researchStage } from "../../src/kernel/stages/research.js";
@@ -163,7 +164,7 @@ describe("T-044 review routing (D-6, A-5)", () => {
     expect(backend.rolesLaunched().filter((r) => r === "review_fix")).toHaveLength(1);
   });
 
-  it("oracle repeated-changes escalate: the second changes verdict finds the slot consumed → NEEDS_HUMAN (D-6)", async () => {
+  it("oracle repeated-changes escalate: the changes verdict after review_fix_attempts rounds → NEEDS_HUMAN (D-6, X-1‴)", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
@@ -175,9 +176,12 @@ describe("T-044 review routing (D-6, A-5)", () => {
     expect(t1.state).toBe("NEEDS_HUMAN");
     /**
      * D-6 divergence from the oracle's shared fix pool: review has its OWN
-     * unit budget, so the second changes verdict escalates directly.
+     * budget, `review_fix_attempts` (X-1‴, PRDR-108 — default 3, read from
+     * config), so the changes verdict after the last round escalates. The
+     * preserved property is that repeated changes reach a human.
      */
-    expect(t1.generations.at(-1)!.counters.review_fix_attempts).toBe(1);
+    expect(t1.generations.at(-1)!.counters.review_fix_attempts).toBe(CEILINGS.review_fix_attempts.default);
+    expect(backend.rolesLaunched().filter((r) => r === "review_fix")).toHaveLength(CEILINGS.review_fix_attempts.default);
     expect(t1.generations.at(-1)!.counters.blind_fix_attempts).toBe(0);
   });
 

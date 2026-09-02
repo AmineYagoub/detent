@@ -154,7 +154,7 @@ describe("T-054 constructors demand their justifying artifacts (type level, spot
         events.reviewChanges(review),
         events.researchDry("dry"),
         events.budgetBreach("reason"),
-        events.riskRequired("label"),
+        events.riskRequired({ globs: ["src/auth/**"], files: ["src/auth/login.ts"] }),
       ].map((e) => e.event),
     );
     expect(constructed.size).toBeGreaterThanOrEqual(11);
