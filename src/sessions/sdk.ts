@@ -20,6 +20,8 @@ export interface SdkBackendConfig {
   /** The scoped gate the Stop hook runs (S-2's continuation accelerant). */
   readonly runScopedGate?: (command: string) => Promise<{ green: boolean; outputTail: string }>;
   readonly gateCmd?: string | null;
+  /** Test seam (PRDR-114): the SDK's `query`, injectable so the fallback can be exercised without a backend. */
+  readonly queryFn?: (args: { prompt: string; options: Options }) => AsyncIterable<unknown>;
 }
 
 /**
@@ -196,6 +198,20 @@ export function parseResultMessage(message: unknown): SessionResult {
  * The live backend (transport — exercised under R-10's key gate only)
  */
 
+/**
+ * PRDR-114: the runtime's own "this model does not exist here" — a version
+ * that predates the model, a plan without it, a typo in the routing. Matched
+ * on the runtime's wording because that is the only signal it gives; a real
+ * session never produces one of these with work behind it, so the turn bound
+ * keeps a genuine crash from being mistaken for an unavailable model.
+ */
+export function isModelUnavailable(result: SessionResult): boolean {
+  if (result.ok || result.turns > 1) return false;
+  return /does not support this model|model[^\n]{0,80}(not found|not available|not supported|unavailable|invalid)|unsupported model|invalid model|no such model/i.test(
+    result.rawTail,
+  );
+}
+
 export class ClaudeCodeBackend implements SessionBackend {
   readonly name = "claude-code";
 
@@ -213,8 +229,34 @@ export class ClaudeCodeBackend implements SessionBackend {
     }
   }
 
+  /** PRDR-114: models this runtime has already refused — one $0 crash per model per run, never per session. */
+  private readonly unavailable = new Map<string, string>();
+
+  /**
+   * PRDR-114: a routed model the runtime cannot serve is not a crashed
+   * session. The first refusal costs one $0 attempt; the session then runs on
+   * the runtime default and says so in `modelFallback`, and every later
+   * launch of that model skips straight to the fallback.
+   */
   async run(spec: SessionSpec): Promise<SessionResult> {
-    const { query } = await import("@anthropic-ai/claude-agent-sdk");
+    if (spec.model !== "") {
+      const known = this.unavailable.get(spec.model);
+      if (known !== undefined) {
+        const fallback = await this.runOnce({ ...spec, model: "" });
+        return { ...fallback, modelFallback: { requested: spec.model, reason: known } };
+      }
+      const first = await this.runOnce(spec);
+      if (!isModelUnavailable(first)) return first;
+      const reason = first.rawTail.trim().slice(0, 200);
+      this.unavailable.set(spec.model, reason);
+      const fallback = await this.runOnce({ ...spec, model: "" });
+      return { ...fallback, modelFallback: { requested: spec.model, reason } };
+    }
+    return await this.runOnce(spec);
+  }
+
+  private async runOnce(spec: SessionSpec): Promise<SessionResult> {
+    const query = this.config.queryFn ?? (await import("@anthropic-ai/claude-agent-sdk")).query;
     let result: SessionResult | null = null;
     let observedTurns = 0;
     try {

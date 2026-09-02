@@ -26,6 +26,24 @@ export const ROLE_IDS = [
 export type RoleId = (typeof ROLE_IDS)[number];
 
 /**
+ * PRDR-114: the routing `init` writes. Judgement roles — the plan, the
+ * verdicts, the hypothesis, the informed attempt — get the stronger models;
+ * the volume roles get Sonnet. Typed over ROLE_IDS so a ninth role is a
+ * compile error here, not a silent runtime default. A routed model the
+ * runtime cannot serve falls back to the runtime default, noted per session.
+ */
+export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
+  planner: "claude-fable-5-1",
+  review: "claude-opus-5",
+  diagnose: "claude-opus-5",
+  informed_fix: "claude-opus-5",
+  implement: "claude-sonnet-5",
+  blind_fix: "claude-sonnet-5",
+  review_fix: "claude-sonnet-5",
+  research: "claude-sonnet-5",
+};
+
+/**
  * S-1's read-only set. Since S-1′ (PRDR-067) these roles run DEFAULT mode
  * with the read-only tool surface plus one scoped write rule for their own
  * artifact — plan mode blocks the write the A-contract demands and survives

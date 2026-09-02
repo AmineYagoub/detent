@@ -224,6 +224,16 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   from the ledger, and every oversized proposal — the only measured input either stage has
   ever had. Nothing auto-splits; the decision stays the planner's and the operator's.
 
+- **S-5′ (3.1.1, PRDR-114).** `init` writes an opinionated `model_routing`: the planner on
+  `claude-fable-5-1`; review, diagnose and the informed attempt on `claude-opus-5`; implement,
+  blind fix, review fix and research on `claude-sonnet-5` — judgement roles on the stronger
+  models, volume roles on Sonnet, typed over the role set so a new role cannot default
+  silently. A routed model the runtime cannot serve is not a crashed session: the backend
+  falls back to the runtime default for that session and every later one that run, and the
+  referee notes and journals the fallback per session; the ledger's `models` field says what
+  actually ran (PRDR-095). The agent-sdk pin moves to 0.3.258, whose bundled runtime serves
+  the models the default names. An existing config keeps its own routing untouched.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

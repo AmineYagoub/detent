@@ -151,6 +151,15 @@ export class SessionArm {
       prompt: `${role}@${ctx.prompts.hashes[role]}`,
     });
     const result = await ctx.backend.run(spec);
+    if (result.modelFallback !== undefined) {
+      /* PRDR-114: the routing asked for a model this runtime cannot serve; the ledger's `models` says what ran. */
+      const { requested, reason } = result.modelFallback;
+      appendNote(ctx.root, id, {
+        author: "kernel",
+        text: `model fallback (PRDR-114): ${role} is routed to ${requested}, unavailable on this runtime (${reason}) — ran on the runtime default`,
+      });
+      ctx.journal.appendTicketEvent(id, { stage: role, event: "model_fallback", at: ctx.iso(), requested, reason });
+    }
     const generationNow = currentGeneration(readTicket(ctx.root, id));
     ctx.spend.record(id, generationNow.index, role, result, ctx.iso());
     ctx.journal.appendTicketEvent(id, {

@@ -12,7 +12,7 @@ const validConfig = (overrides: Record<string, unknown> = {}) => ({
   schema_version: 1,
   /** Above the computed worst case (24 after PRDR-108/109), so the fixture config loads. */
   budgets: { run_spend_usd: 25, sessions: 30, ...((overrides.budgets as object) ?? {}) },
-  pinned: { agent_sdk: "0.3.191", claude_code: "2.1.191" },
+  pinned: { agent_sdk: "0.3.258", claude_code: "2.1.191" },
   ...overrides,
 });
 

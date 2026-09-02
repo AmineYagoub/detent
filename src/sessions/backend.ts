@@ -105,6 +105,12 @@ export interface SessionResult {
    * ceiling, both of which the cumulative fields exclude.
    */
   readonly perModel?: Readonly<Record<string, ModelTokenUsage>>;
+  /**
+   * PRDR-114: the routed model was unavailable on this runtime and the
+   * session ran on the runtime default instead. `requested` is what the
+   * config asked for; `models` on the ledger row says what actually ran.
+   */
+  readonly modelFallback?: { readonly requested: string; readonly reason: string };
 }
 
 export interface SessionBackend {

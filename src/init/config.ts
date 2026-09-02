@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir, writeArtifact } from "../fs/layout.js";
 import { CEILINGS } from "../schemas/budgets.js";
+import { DEFAULT_MODEL_ROUTING } from "../schemas/roles.js";
 
 /**
  * T-140 — `init` writes the project config (R-9, X-1, S-5).
@@ -12,7 +13,8 @@ import { CEILINGS } from "../schemas/budgets.js";
  * one the USER chose — the `--spend-cap-usd` argument is that choice, an
  * input like `--replan`, not a sixth decision (C-5 stays closed). Everything
  * else config carries starts at its documented default: the X-1 ceilings via
- * schema defaults, the F-1 protected set, no risk globs, no model routing.
+ * schema defaults, the F-1 protected set, no risk globs, and PRDR-114's model
+ * routing — judgement roles on the stronger models, volume roles on Sonnet.
  *
  * The v2 line shipped without this writer because its live exits (T-051,
  * T-070) never ran — the fixture wrote config by hand. The N-7 self-build
@@ -23,7 +25,7 @@ import { CEILINGS } from "../schemas/budgets.js";
 const DEFAULT_PROTECTED = ["tickets/**", ".detent/tickets/**", "AGENTS.md", "CLAUDE.md"] as const;
 
 /** S-5: the agent-sdk pin mirrors package.json's exact dependency. */
-const PINNED_AGENT_SDK = "0.3.191";
+const PINNED_AGENT_SDK = "0.3.258";
 
 /**
  * S-5's backend pin is "the version this project initialized against":
@@ -56,7 +58,7 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
     budgets: { run_spend_usd: cap },
     protected: [...DEFAULT_PROTECTED],
     risk: [],
-    model_routing: {},
+    model_routing: { ...DEFAULT_MODEL_ROUTING },
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });
   return spendCapUsd === undefined ? "written-default" : "written";
