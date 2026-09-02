@@ -70,11 +70,46 @@ const GREENFIELD_COMMANDS: Readonly<Record<string, Partial<Record<GateSlot, stri
  * V-1's execute-before-approve is not weakened here. It is deferred, and the
  * `provisional` status is the record that it has not happened yet.
  */
+/**
+ * PRDR-115: the planner writes `stack.language` as prose as readily as a
+ * name — "Go 1.27 (multi-module monorepo: …)" matched nothing and init
+ * refused a stack it had a table row for. The key is the first known
+ * language named as a WORD in the string; an exact match still wins.
+ */
+const LANGUAGE_WORDS: readonly (readonly [string, RegExp])[] = [
+  ["typescript", /\btypescript\b|\bts\b/i],
+  ["javascript", /\bjavascript\b|\bnode(?:\.js)?\b/i],
+  ["python", /\bpython\b/i],
+  ["go", /\bgo(?:lang)?\b/i],
+  ["rust", /\brust\b|\bcargo\b/i],
+];
+
+export function languageKey(raw: string): string | null {
+  const lower = raw.trim().toLowerCase();
+  if (lower in GREENFIELD_COMMANDS) return lower;
+  for (const [key, pattern] of LANGUAGE_WORDS) if (pattern.test(raw)) return key;
+  return null;
+}
+
 function provisionalBindingsFor(analysis: Analysis | null, at: string): Binding[] {
-  const language = analysis?.stack?.language.toLowerCase() ?? "";
-  const commands = GREENFIELD_COMMANDS[language];
-  if (commands === undefined) return [];
-  return (Object.entries(commands) as [GateSlot, string][]).map(([slot, resolved]) => ({
+  const stack = analysis?.stack ?? null;
+  if (stack === null) return [];
+  const key = languageKey(stack.language);
+  /*
+   * PRDR-115: commands the documents name are the bindings — the table is
+   * only for documents that name none. A stack table cannot know a project's
+   * own gates; ksar's D44 named all three and init still refused them.
+   */
+  const documented = Object.entries(stack.verification ?? {}).filter((e): e is [GateSlot, string] => typeof e[1] === "string" && e[1] !== "");
+  const commands: [GateSlot, string][] =
+    documented.some(([slot]) => slot === "test")
+      ? documented
+      : key === null
+        ? []
+        : (Object.entries(GREENFIELD_COMMANDS[key] ?? {}) as [GateSlot, string][]);
+  if (commands.length === 0) return [];
+  const language = key ?? "documented";
+  return commands.map(([slot, resolved]) => ({
     schema_version: SCHEMA_VERSION,
     slot,
     adapter: `greenfield:${language}`,

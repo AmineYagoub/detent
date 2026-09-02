@@ -58,10 +58,17 @@ export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
     summary: "<one-paragraph summary of what is being built — required, non-empty>",
     stack: greenfield
       ? {
-          language: "<chosen language — required>",
+          language: "<bare language name — Go, TypeScript, JavaScript, Python or Rust — required; details go in runtime/rationale>",
           runtime: "<runtime or empty string>",
           test_framework: "<test framework or empty string>",
           rationale: "<why this stack — may be empty>",
+          verification: {
+            test: "<the test command the documents name, exactly as written — omit the key if the documents name none>",
+            lint: "<lint command or omit>",
+            typecheck: "<typecheck command or omit>",
+            build: "<build command or omit>",
+            e2e: "<end-to-end command or omit>",
+          },
         }
       : null,
     questions: [{ id: "q1", question: "<a question ONLY the user can answer — omit entry if none>", blocking: true }],

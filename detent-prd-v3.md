@@ -234,6 +234,14 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   actually ran (PRDR-095). The agent-sdk pin moves to 0.3.258, whose bundled runtime serves
   the models the default names. An existing config keeps its own routing untouched.
 
+- **V-1′ (3.1.1, PRDR-115).** Greenfield's provisional bindings come from the documents
+  first: when the planning documents name the verification commands, ANALYZE copies them
+  into `stack.verification` exactly as written and those are the bindings bootstrap ticket
+  #1 proves. The per-language table is only the fallback for documents that name none, and
+  its key is the first known language named as a word in `stack.language` — the planner
+  writes that field as prose as readily as a name, and an exact-match lookup refused a Go
+  project whose documents named all three canonical gates.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

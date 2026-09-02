@@ -67,6 +67,20 @@ export const analysisSchema = z.strictObject({
       runtime: z.string().default(""),
       test_framework: z.string().default(""),
       rationale: z.string().default(""),
+      /**
+       * PRDR-115: the verification commands the DOCUMENTS name, exactly as
+       * written. When present they are the provisional bindings; the stack
+       * table is only the fallback for documents that name none.
+       */
+      verification: z
+        .strictObject({
+          test: nonEmptyString.optional(),
+          lint: nonEmptyString.optional(),
+          typecheck: nonEmptyString.optional(),
+          build: nonEmptyString.optional(),
+          e2e: nonEmptyString.optional(),
+        })
+        .optional(),
     })
     .nullable(),
   /** C-3: un-implementable specs become a BATCH of questions, never a drip. */
