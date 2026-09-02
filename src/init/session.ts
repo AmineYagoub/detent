@@ -39,6 +39,8 @@ export interface InitSessionDeps {
   readonly prompts: PromptSet;
   /** PRDR-088: X-1's run ceiling — init spend counts against it like any other. */
   readonly spendCeiling: number;
+  /** PRDR-114: the config's `model_routing`; the planner and planning research run on their routed models. */
+  readonly modelRouting?: Readonly<Record<string, string>>;
   readonly rulesText?: string;
   /** X-6/S-3 docs domains for research-capable init sessions. */
   readonly docsDomains?: readonly string[];
@@ -79,7 +81,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
       artifactWriteRule(request.artifactOut),
     ],
     permissionMode: "",
-    model: "",
+    model: deps.modelRouting?.[request.role] ?? "",
   };
 }
 

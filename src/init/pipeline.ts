@@ -15,7 +15,7 @@ import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
-import { launchInitSession } from "./session.js";
+import { type InitSessionDeps, launchInitSession } from "./session.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -33,10 +33,24 @@ export interface PipelineDeps {
   /** PRDR-086: narrows C-2 discovery to this increment's documents. Empty = all. */
   readonly planDocs?: readonly string[];
   readonly docsDomains?: readonly string[];
+  /** PRDR-114: routed models for the init roles (planner, research). */
+  readonly modelRouting?: Readonly<Record<string, string>>;
   readonly note?: (text: string) => void;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
   readonly print?: (text: string) => void;
+}
+
+/** The deps every init session launch shares — one place, so a new field cannot miss a call site. */
+function sessionDeps(deps: PipelineDeps): InitSessionDeps {
+  return {
+    root: deps.root,
+    backend: deps.backend,
+    prompts: deps.prompts,
+    spendCeiling: deps.budgets.run_spend_usd,
+    ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
+    ...(deps.modelRouting === undefined ? {} : { modelRouting: deps.modelRouting }),
+  };
 }
 
 export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
@@ -142,13 +156,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
           await launchInitSession(
-            {
-              root: deps.root,
-              backend: deps.backend,
-              prompts: deps.prompts,
-              spendCeiling: deps.budgets.run_spend_usd,
-              ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
-            },
+            sessionDeps(deps),
             { role: "planner", inputs, artifactOut: analysisPath(deps.root) },
           );
         },
@@ -158,13 +166,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
           researchOne: async (question, remaining) => {
             const artifactOut = path.join(stateDir(deps.root), "state", "planning-brief.json");
             const result = await launchInitSession(
-              {
-                root: deps.root,
-                backend: deps.backend,
-                prompts: deps.prompts,
-              spendCeiling: deps.budgets.run_spend_usd,
-                ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
-              },
+              sessionDeps(deps),
               {
                 role: "research",
                 inputs: { question, tool_call_budget: remaining, hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web" },
@@ -232,13 +234,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs: Record<string, unknown>, artifactOut?: string) => {
           await launchInitSession(
-            {
-              root: deps.root,
-              backend: deps.backend,
-              prompts: deps.prompts,
-              spendCeiling: deps.budgets.run_spend_usd,
-              ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
-            },
+            sessionDeps(deps),
             { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root) },
           );
         },

@@ -132,6 +132,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     }),
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),
+    modelRouting: routingFor(root),
     planDocs: planDocsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
@@ -207,4 +208,15 @@ function budgetsFor(root: string): Budgets {
   }
   /* X-1′: every ceiling has a default now, including the spend cap. */
   return Object.fromEntries(Object.entries(CEILINGS).map(([key, spec]) => [key, spec.default])) as Budgets;
+}
+
+/** PRDR-114: the routing init sessions run on — from the config `init` itself just wrote. */
+function routingFor(root: string): Readonly<Record<string, string>> {
+  const file = path.join(stateDir(root), "config.json");
+  if (!existsSync(file)) return {};
+  try {
+    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.model_routing;
+  } catch {
+    return {};
+  }
 }

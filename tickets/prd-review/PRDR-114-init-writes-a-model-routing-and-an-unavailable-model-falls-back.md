@@ -58,3 +58,11 @@ writes it and `init` announces it. `ClaudeCodeBackend.run` recognises the runtim
 "does not support this model" on a refused, work-free session, falls back to the runtime
 default for that session, remembers the model for the run, and returns `modelFallback`;
 the referee notes and journals it. The pin moves to 0.3.258 (runtime 2.1.258).
+
+## Amendment — the routing did not reach the planner
+
+Init sessions hard-coded `model: ""`: `model_routing.planner` (and `research`, for planning
+research) was dead on the only path that launches a planner, before this ticket and after
+its first commit. `PipelineDeps.modelRouting` now flows from the config `init` just wrote
+into every init session launch through one shared deps builder, and a test asserts every
+planner session carries the routed model.
