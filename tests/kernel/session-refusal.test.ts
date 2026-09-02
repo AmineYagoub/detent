@@ -125,43 +125,23 @@ describe("T-140 a fresh launch never inherits a stale artifact (PRDR-072)", () =
   });
 });
 
-describe("PRDR-097 a turns breach is a budget event, not an outage", () => {
+describe("X-1″ (PRDR-106) no session is terminated on turns", () => {
   /**
-   * Found by running the N-7 gate with implement on Haiku 4.5: sessions at
-   * 19/20/25 turns billed ~$0.11 and read `ok`; sessions at 61/65/68 billed
-   * $0.000 and read `crash`. The split was exactly `turns_per_stage`. The work
-   * was real — the 65-turn session scaffolded a whole project — so the ledger
-   * under-counted by 2.5x and the spend cap stopped enforcing anything.
+   * Four breaches on the certification gate — 103, 145, 307, 222 turns —
+   * caught zero runaways: every breached ticket finished on resume in 46-63
+   * turns, and every firing halted the run, recorded $0 and stranded the
+   * work. The ceiling is deleted; the ledger keeps the measurement.
    */
-  it("halts the run naming the ceiling, rather than laddering on untracked spend", { timeout: 60_000 }, async () => {
+  it("a long session is an ordinary session: no halt, no partial row, turns recorded", { timeout: 60_000 }, async () => {
     const backend = new MockBackend({
-      implement: () => ({ ...okResult(), ok: false, crashed: true, turnsBreached: true, turns: 68 }),
-    });
-    const { core } = await makeCore(backend);
-    expect(core.acquire("t-1").ok).toBe(true);
-    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow(/turns ceiling breached/);
-  });
-
-  it("does not masquerade as a backend outage", { timeout: 60_000 }, async () => {
-    const backend = new MockBackend({
-      implement: () => ({ ...okResult(), ok: false, crashed: true, turnsBreached: true, turns: 68 }),
-    });
-    const { core } = await makeCore(backend);
-    expect(core.acquire("t-1").ok).toBe(true);
-    /* PRDR-090's message would blame a healthy backend; this one names the ceiling. */
-    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow(/turns_per_stage/);
-    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.not.toThrow(/backend outage/);
-  });
-
-  it("the ledger separates a turns breach from a crash", { timeout: 60_000 }, async () => {
-    const backend = new MockBackend({
-      implement: () => ({ ...okResult(), ok: false, crashed: true, turnsBreached: true, turns: 68 }),
+      implement: () => ({ ...okResult(), turns: 5000 }),
     });
     const { core, root } = await makeCore(backend);
     expect(core.acquire("t-1").ok).toBe(true);
-    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow();
+    await core.attempt("t-1", "IN_PROGRESS");
     const rows = readFileSync(path.join(stateDir(root), "ledger.jsonl"), "utf8")
-      .split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l) as { partial?: string });
-    expect(rows.at(-1)?.partial).toBe("turns_breach");
+      .split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l) as { turns?: number; partial?: string });
+    expect(rows.at(-1)?.turns).toBe(5000);
+    expect(rows.at(-1)?.partial).toBeUndefined();
   });
 });

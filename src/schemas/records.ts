@@ -146,9 +146,9 @@ export const ledgerRowSchema = z.strictObject({
    */
   models: z.array(nonEmptyString).default([]),
   /**
-   * PRDR-097: `turns_breach` is separated from `crash`. Both zero their
-   * telemetry, but one is the operator's ceiling and one is the backend, and
-   * an audit that cannot tell them apart cannot explain a $0 row that did work.
+   * PRDR-097 separated `turns_breach` from `crash`; X-1″ (PRDR-106) deleted
+   * the ceiling, so no new row carries `turns_breach`. The value stays in the
+   * enum because the rows already written must still parse.
    */
   partial: z.enum(["crash", "turns_breach"]).optional(),
 });

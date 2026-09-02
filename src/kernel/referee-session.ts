@@ -110,7 +110,6 @@ export class SessionArm {
         : this.toolsFor(role),
       permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
-      maxTurns: ctx.budgets.turns_per_stage,
       /**
        * S-2′/D-21: the per-ticket hook policy. Surface = the ticket's declared
        * surface plus ONLY the runs area, where artifact/falsified/surface-
@@ -182,24 +181,6 @@ export class SessionArm {
      * distinguishing signal is consecutiveness, so that is what is counted; any
      * session that returns real work resets it.
      */
-    /**
-     * PRDR-097: a turns breach halts the run by name. X-1 gives every ceiling
-     * a human decision and never a silent retry, and this one is a
-     * configuration fact — the ceiling is too low for the configured model, so
-     * every ticket will breach it. Laddering on burns money the SDK's throw
-     * already made unbillable: measured at 2.5x under-count on a gate where
-     * 60% of turns billed zero. It is NOT counted toward the outage streak;
-     * the backend is healthy.
-     */
-    if (result.turnsBreached === true) {
-      throw new SessionRefusal(
-        `turns ceiling breached (X-1 turns_per_stage=${ctx.budgets.turns_per_stage}): ${role} for ${id} ran ` +
-          `${result.turns} turns before the backend terminated it. Its cost is unrecoverable and recorded as $0, ` +
-          `so continuing would spend untracked. Raise turns_per_stage for this model, or route this role to one ` +
-          `that finishes inside the ceiling.`,
-      );
-    }
-
     if (result.crashed === true) {
       this.consecutiveCrashes += 1;
       if (this.consecutiveCrashes >= CRASH_STREAK_HALT) {

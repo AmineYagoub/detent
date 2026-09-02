@@ -3,7 +3,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PLUGIN_AGENT_ROLES, renderAgent } from "../../scripts/build-plugin.js";
-import { CEILINGS } from "../../src/schemas/budgets.js";
 import { toolsForRole } from "../../src/sessions/guard.js";
 import { loadPromptSet, resolveAssignment } from "../../src/sessions/prompts.js";
 
@@ -84,10 +83,10 @@ describe("T-112 role surfaces in frontmatter (S-3′)", () => {
     }
   });
 
-  it("every role caps turns at the X-1 turns_per_stage default and disallows nested Task spawns (D-28)", () => {
+  it("no role carries a turn ceiling (X-1″, PRDR-106); every role disallows nested Task spawns (D-28)", () => {
     for (const role of PLUGIN_AGENT_ROLES) {
       const fm = frontmatterOf(agentFile(role));
-      expect(fm.get("maxTurns"), role).toBe(String(CEILINGS.turns_per_stage.default));
+      expect(fm.has("maxTurns"), role).toBe(false);
       expect(fm.get("disallowedTools"), role).toBe("Task");
     }
   });

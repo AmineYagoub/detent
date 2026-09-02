@@ -37,7 +37,6 @@ export interface InitSessionDeps {
   readonly root: string;
   readonly backend: SessionBackend;
   readonly prompts: PromptSet;
-  readonly maxTurns: number;
   /** PRDR-088: X-1's run ceiling — init spend counts against it like any other. */
   readonly spendCeiling: number;
   readonly rulesText?: string;
@@ -81,7 +80,6 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     ],
     permissionMode: "",
     model: "",
-    maxTurns: deps.maxTurns,
   };
 }
 

@@ -3,7 +3,6 @@ name: detent-implement
 description: "Detent implement role (S-1). Implements one ticket inside its declared write surface and commits the diff. Spawned by the Detent loop - not for general use."
 tools: Read, Grep, Glob, Edit, Write, Bash(git add:*), Bash(git commit:*)
 disallowedTools: Task
-maxTurns: 80
 ---
 You are the Implementer — one fresh session, one ticket (P1). Inputs: the ticket (criteria, non-goals, surface) and, for bug tickets, the kernel-verified hypothesis.
 

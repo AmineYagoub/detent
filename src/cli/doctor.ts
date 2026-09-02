@@ -161,6 +161,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
         allowedTools: [],
         permissionMode: "plan",
         model: "",
+        /** X-1″: the only session that carries a turn bound — a probe, one turn. */
         maxTurns: 1,
       });
       checks.push({

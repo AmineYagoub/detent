@@ -37,7 +37,6 @@ function spec(over: Partial<SessionSpec> = {}): SessionSpec {
     allowedTools: ["Edit", "Write"],
     permissionMode: "",
     model: "",
-    maxTurns: 30,
     ...over,
   };
 }
@@ -64,10 +63,12 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
     expect(buildOptions(spec(), CONFIG).permissionMode).toBe("default");
   });
 
-  it("model routing passes through only when set; turn ceiling always does (X-1)", () => {
+  it("model routing and the turn bound pass through only when set — no ceiling by default (X-1″)", () => {
     expect("model" in buildOptions(spec(), CONFIG)).toBe(false);
     expect(buildOptions(spec({ model: "haiku" }), CONFIG).model).toBe("haiku");
-    expect(buildOptions(spec({ maxTurns: 7 }), CONFIG).maxTurns).toBe(7);
+    /* PRDR-106: the referee sets none; only the doctor probe bounds itself. */
+    expect("maxTurns" in buildOptions(spec(), CONFIG)).toBe(false);
+    expect(buildOptions(spec({ maxTurns: 1 }), CONFIG).maxTurns).toBe(1);
   });
 
   it("the hook callback denies a protected write with the reason in the decision shape", async () => {

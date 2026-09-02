@@ -31,8 +31,12 @@ export interface SessionSpec {
   readonly permissionMode: "" | "plan";
   /** Model routing per role; empty means the backend's default. */
   readonly model: string;
-  /** X-1 `turns_per_stage`. */
-  readonly maxTurns: number;
+  /**
+   * X-1″ (PRDR-106): no ceiling by default. The referee and init never set
+   * one; the doctor probe bounds itself to a single turn, and that is the
+   * only caller that does.
+   */
+  readonly maxTurns?: number;
   /**
    * S-2′/D-21: the PER-TICKET containment policy for this session's hook —
    * the ticket's declared surface plus the artifact area, resolved against
@@ -95,14 +99,6 @@ export interface SessionResult {
    * not absent — the ledger records a flagged lower bound, never free work.
    */
   readonly crashed?: boolean;
-  /**
-   * PRDR-097: the session was terminated for exceeding `turns_per_stage`, not
-   * by transport death. X-1 makes a breached ceiling a human decision, so the
-   * two must not share a channel: a breach is the operator's ceiling being too
-   * low for the configured model, and it bills real money the SDK's throw has
-   * already lost.
-   */
-  readonly turnsBreached?: boolean;
   /**
    * PRDR-052: the per-model breakdown is the token source of record — it
    * includes nested-agent tokens and the response that crossed a budget

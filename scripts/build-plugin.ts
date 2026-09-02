@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
-import { CEILINGS } from "../src/schemas/budgets.js";
 import { type RoleId } from "../src/schemas/roles.js";
 import { toolsForRole } from "../src/sessions/guard.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
@@ -14,8 +13,8 @@ import { loadPromptSet } from "../src/sessions/prompts.js";
  *   single file renders, so an edited prompt cannot ship under a stale hash);
  *   the frontmatter derives from the same sources the SDK backend uses —
  *   `toolsForRole` for the S-3′ surface, `READ_ONLY_ROLES` for the permission
- *   mode, the X-1 `turns_per_stage` default for `maxTurns` — one truth, three
- *   skins (SDK options, plugin frontmatter, this file).
+ *   mode — one truth, three skins (SDK options, plugin frontmatter, this
+ *   file). No `maxTurns`: X-1″ (PRDR-106) deleted the turn ceiling.
  * - `hooks/dist/detent-hook.cjs` — the D-21 hook bundle: self-contained CJS so
  *   it runs under bare `node` from any user project cwd, with no dependency on
  *   the project's node_modules (the hook must work wherever the plugin is
@@ -66,7 +65,6 @@ export function renderAgent(role: PluginAgentRole, prompt: string): string {
     `description: "${DESCRIPTIONS[role]}"`,
     `tools: ${toolsForRole(role, []).join(", ")}`,
     "disallowedTools: Task",
-    `maxTurns: ${CEILINGS.turns_per_stage.default}`,
     "---",
     "",
   ].join("\n");

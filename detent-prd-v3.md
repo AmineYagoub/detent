@@ -144,6 +144,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   a launch gate with D-25's one-session overshoot bound, cumulative across restarts,
   routing to a human on breach (P6). The demand is deleted; the ceiling is not.
 
+- **X-1″ (3.1.0, PRDR-106).** `turns_per_stage` no longer terminates a session. Four
+  breaches on the certification gate — 103, 145, 307 and 222 turns — caught zero runaways:
+  every breached ticket finished on resume in 46–63 turns, and every firing halted the
+  run, recorded $0, and stranded uncommitted work (PRDR-105). The kill is deleted: no
+  session is launched with a turn ceiling, the referee has no breach path, and the plugin
+  agents carry no `maxTurns`. The key stays as the planner's sizing target —
+  `session_budget.implement_turns` (C-4′) — advisory and never enforced, and keeps its
+  name because a rename is a migration for every committed config. What bounds a session
+  is what bounded the run all along: `run_spend_usd` at launch (D-25), `sessions` per
+  generation, `ticket_wall_clock_ms` per ticket. The ledger keeps recording turns per
+  session; that measurement is PRDR-102's input and needs no ceiling to exist.
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives

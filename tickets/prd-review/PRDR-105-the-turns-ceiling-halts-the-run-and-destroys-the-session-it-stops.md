@@ -1,7 +1,7 @@
 ---
 id: PRDR-105
 title: "The turns ceiling has fired four times, caught zero runaways, and cost a run halt and ~$51 of unrecorded spend each time it stopped legitimate work"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "user-raised", "found-by-execution"]
@@ -93,3 +93,9 @@ Raised the gate's `turns_per_stage` to 400 and committed it (PRDR-092). 400 is a
 breach observed and 3.4× the largest completed session; a runaway now costs at most ~$26
 before the hard stop, with `run_spend_usd` behind it. This is a remedy for one run, not a
 default, and PRDR-098's default is untouched.
+
+## Superseded — PRDR-106
+
+The user's decision is to delete the ceiling rather than redesign its consequence. The
+measurement above stands and is what decided it; the redesign (scope, accounting, soft
+ceiling, auto-resume) is moot with no ceiling to soften. Closed in favour of PRDR-106.

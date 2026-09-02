@@ -37,7 +37,8 @@ export const ENFORCEMENT_SITES = {
   hypotheses: "kernel/machine",
   sessions: "kernel/run",
   ticket_wall_clock_ms: "kernel/run",
-  turns_per_stage: "sessions/sdk",
+  /** X-1″ (PRDR-106): advisory — read by the planner as `session_budget`, enforced nowhere. */
+  turns_per_stage: "init/plan-review",
   failure_research_tool_calls: "kernel/stages/research",
   planning_research_tool_calls: "init/plan-research",
   flake_reruns: "kernel/flake",

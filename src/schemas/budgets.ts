@@ -5,12 +5,13 @@ import { z } from "zod";
  * validator must accept is enumerable from the schema alone (PRDR-043).
  *
  * Scope is normative and differs per counter: most are per ticket per
- * generation, `turns_per_stage` is per session, and `run_spend_usd` is the
- * only run-scoped ceiling — the cross-generation financial backstop of X-8.
+ * generation, `turns_per_stage` is the planner's sizing target and bounds
+ * nothing (X-1″), and `run_spend_usd` is the only run-scoped ceiling — the
+ * cross-generation financial backstop of X-8.
  */
 type BudgetScope =
   | "ticket/generation"
-  | "session"
+  | "plan-sizing"
   | "research-session"
   | "init"
   | "red-gate"
@@ -21,9 +22,12 @@ type BudgetScope =
 /**
  * The breach target a ceiling declares. Most emit BUDGET_BREACH, but three do
  * not, and encoding that here keeps T-012's coverage test honest (PRDR-043).
+ * `NONE` is X-1″'s advisory figure: a number the planner sizes against and
+ * nothing enforces, so it has no breach to target.
  */
 export type BreachTarget =
   | "BUDGET_BREACH"
+  | "NONE"
   | "RESEARCH_DRY"
   | "AWAIT_INFO_BATCH"
   | "LADDER_ENTRY"
@@ -47,14 +51,16 @@ export const CEILINGS = {
   sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 18 },
   ticket_wall_clock_ms: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 3_600_000 },
   /**
-   * PRDR-098: 30 was below Detent's own reference workload. Measured implement
-   * turns on the N-7 gate across two models: 20, 25, 25, 27, 32, 32, 34, 39,
-   * 43 — five of nine at or above the old default. That was survivable while a
-   * breach was silently mis-recorded as a crash (PRDR-097); now that a breach
-   * HALTS the run by name, a default under the workload halts most runs. 80
-   * clears the observed maximum with room while still bounding a runaway.
+   * X-1″ (PRDR-106): a sizing target, not a ceiling. It reaches PLAN and
+   * REVIEW_PLAN as `session_budget.implement_turns` (C-4′) and nothing else
+   * reads it — no session is launched with it and nothing halts on it. The
+   * ceiling it used to be fired four times on the certification gate (103,
+   * 145, 307, 222 turns), caught zero runaways, and each time halted the run,
+   * recorded $0 and stranded the work (PRDR-105). Keeps its name because a
+   * rename is a migration for every committed config; keeps PRDR-098's 80
+   * because that is still the size of one honest implement session.
    */
-  turns_per_stage: { scope: "session", breachTarget: "BUDGET_BREACH", default: 80 },
+  turns_per_stage: { scope: "plan-sizing", breachTarget: "NONE", default: 80 },
   failure_research_tool_calls: { scope: "research-session", breachTarget: "RESEARCH_DRY", default: 8 },
   planning_research_tool_calls: { scope: "init", breachTarget: "AWAIT_INFO_BATCH", default: 16 },
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
