@@ -15,10 +15,11 @@ import { planResearch, type PlanResearchDeps, type PlanResearchResult } from "./
  * stack to discover, so verification cannot be determined before it), and
  * un-implementable specs become one batched question set rather than a drip.
  *
- * The batch is genuinely single: questions the planner raised and questions
- * planning research could not answer (C-3a) arrive in the SAME AWAIT_INFO,
- * because two interruptions for one round of confusion is exactly the drip
- * C-3 forbids.
+ * The batch is genuinely single — and since C-3′ (PRDR-117) it is asked at
+ * PRESENT, with the whole plan: questions the planner raised and questions
+ * planning research could not answer (C-3a) travel there together, each with
+ * the assumption the plan proceeds on, because a stop in the middle of
+ * planning is exactly the drip C-3 forbids.
  */
 
 export function analysisPath(root: string): string {
@@ -71,7 +72,14 @@ export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
           },
         }
       : null,
-    questions: [{ id: "q1", question: "<a question ONLY the user can answer — omit entry if none>", blocking: true }],
+    questions: [
+      {
+        id: "q1",
+        question: "<a question ONLY the user can answer — omit entry if none>",
+        blocking: false,
+        assumption: "<what the plan proceeds on while it is unanswered — required unless blocking>",
+      },
+    ],
     assumptions: [{ claim: "<assumption made>", evidence: "<why it is safe — may be empty>" }],
     docs_read: ["<repo-relative path actually read>"],
   };
@@ -97,7 +105,7 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
         greenfield
           ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object."
           : "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen."
-      } Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone.`,
+      } Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone. A question the documents cannot answer goes in \`questions\` WITH the assumption the plan proceeds on while it is unanswered; \`blocking: true\` only when no assumption can carry it — questions are asked once, with the whole plan (C-3′).`,
   });
 
   const raw = readAnalysis(deps.root);
@@ -120,31 +128,26 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     throw new Error("ANALYZE ran on a greenfield project without choosing a stack — DETERMINE_VERIFICATION has nothing to bind (D-10)");
   }
 
-  /** ---- C-3a: research the open questions before asking the human ---------- */
+  /**
+   * C-3a: research every open question before it reaches the human. C-3′
+   * (PRDR-117): what research cannot settle no longer stops the pipeline — it
+   * rides to PRESENT with the assumption the plan proceeds on, and is asked
+   * once, with the whole plan.
+   */
   let research: PlanResearchResult | null = null;
-  const blocking = analysis.questions.filter((q) => q.blocking).map((q) => q.question);
-
-  if (deps.research !== undefined && blocking.length > 0) {
-    research = await planResearch(blocking, { ...deps.research, root: deps.root });
+  const asked = analysis.questions.map((q) => q.question);
+  if (deps.research !== undefined && asked.length > 0) {
+    research = await planResearch(asked, { ...deps.research, root: deps.root });
     for (const brief of research.briefs) {
       deps.note?.(`planning research answered: ${brief.question} — ${brief.answer.claim}`);
     }
   }
-
-  /** Questions research could not settle (or that were never researched). */
-  const stillOpen = research === null ? blocking : research.unanswered;
-
-  if (stillOpen.length > 0) {
-    /* C-3: ONE interruption carrying the whole batch. */
-    return {
-      kind: "interrupt",
-      interrupt: "AWAIT_INFO",
-      message:
-        `The plan needs ${stillOpen.length} question(s) answered before it can be written.\n${ 
-        stillOpen.map((q, i) => `  ${i + 1}. ${q}`).join("\n") 
-        }\n\nAnswer them in the planning documents and re-run \`detent init\`.`,
-      items: stillOpen,
-    };
+  const unanswered = new Set(research === null ? asked : research.unanswered);
+  const open = analysis.questions.filter((q) => unanswered.has(q.question));
+  if (open.length > 0) {
+    deps.note?.(
+      `${open.length} question(s) carried to PRESENT with their assumptions (C-3′)${open.some((q) => q.blocking) ? " — one or more blocking" : ""}`,
+    );
   }
 
   return {
@@ -152,6 +155,8 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     outputs: {
       analysis: analysis as unknown as Record<string, unknown>,
       greenfield,
+      /** C-3′: the questions research could not settle, assumptions attached, for PRESENT. */
+      open_questions: open as unknown as Record<string, unknown>[],
       research_briefs: research === null ? [] : research.briefs.map((b) => b.question_hash),
       research_tool_calls: research?.toolCallsUsed ?? 0,
     },

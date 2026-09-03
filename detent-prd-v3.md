@@ -250,6 +250,54 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   Found on ksar-cloud: six real findings — three tickets oversized, two missing edges, one
   untestable criterion — discarded over one word, and the draft written unreviewed.
 
+- **C-2‴ (3.1.1, PRDR-117).** A product larger than one planning pass is planned by Detent
+  itself, to the end, without stopping. A **SLICE** phase between DETERMINE_VERIFICATION and
+  PLAN reads the whole document set and cuts it into ordered increments — the walking skeleton
+  first, each later slice thickening the ones it names in `depends_on`, every requirement id
+  placed in exactly one slice — and PLAN then plans each slice in turn: drafted with the
+  earlier slices' ticket index in view (ids `t-<slice>-NNN`, cross-slice edges by id),
+  reviewed as its own plan (C-4″), revised once, and cached under `.detent/state/plan/<slice>`
+  keyed by everything it read, so an edited document re-plans its slice and reuses the rest
+  (C-8) while `--replan` wipes the cache (C-8′). When every slice is planned, a fresh session
+  reviews the WHOLE plan: the closed tag set gains `coherence` — two tickets that contradict,
+  duplicate, or disagree about the interface between them, usually across slices — and
+  coverage is judged across every slice's requirement ids and baseline items. A `changes`
+  verdict redrafts only the slices its findings name, with the rest of the plan in view and
+  the ids later slices depend on kept; a second whole review says what remains, and that is
+  presented to the human rather than ground on (D-24). Order is enforced in the written plan:
+  a ticket with no edge of its own into the slice it thickens is blocked on that slice's
+  capstones — the tickets nothing else in it depends on — so a slice cannot start before the
+  ones it builds on are DONE, and nothing inside a slice is serialised that need not be. The
+  draft's ids and edges are normalised rather than trusted: a colliding id is renamed and its
+  slice's references follow; an edge to nothing planned is dropped and kept as a `dependency`
+  finding for the human. `plan_docs` (C-2″) remains the manual scope for a deliberate
+  narrowing; it is no longer how a large product is planned. Found on ksar-cloud: a product
+  the user sized at five hundred tickets planned as twenty-seven, because one pass over one
+  slice was all the pipeline could hold, and the sequencing and the stopping were the
+  operator's.
+
+- **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
+  ask for it. Detent carries a **production baseline** — fifteen items across six areas
+  (security, reliability, data, observability, operations, quality), each with an
+  `applies_when` and a `verifiable_by`. SLICE receives it and places every applicable item in
+  the slice where the thing it hardens first exists; PLAN receives the items its slice
+  carries and drafts tickets whose acceptance criteria are the item's `verifiable_by`, sourced
+  `baseline:PB-###`, which REVIEW_PLAN accepts as provenance and judges under `coverage`. A
+  document's explicit decision wins over the baseline, and the ticket records it.
+  `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
+  used by people who will not write "and back it up" — the plan says it for them.
+
+- **C-3′ (3.1.1, PRDR-117).** Planning does not stop for a question. Every question a stage
+  cannot answer — ANALYZE's, SLICE's, each slice's PLAN — carries the assumption the plan
+  proceeds on, and the batch is asked ONCE, with the whole plan, at PRESENT: the human answers
+  and approves in the same sitting, and an answer that changes an assumption re-plans only the
+  slices whose inputs it touched (C-8). `AWAIT_INFO` moves from ANALYZE to PRESENT and is
+  raised only for a question marked blocking — one no assumption could carry — after the plan
+  is written and shown. C-3's rule stands and is stronger: one batch, never a drip, and never
+  a stop in the middle of a product that takes a night to plan. Planning research (C-3a)
+  still runs first over every question; its unanswered residue joins the batch as before,
+  now with the analyst's assumption beside it. The interrupt set is unchanged at five (C-5).
+
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
   requirement larger than that decomposes into dependent tickets. PLAN receives
@@ -262,7 +310,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   remains planning judgment, deliberately unvalidated (A-1 is unchanged): a numeric
   ceiling would refuse honest atomic work.
 
-The `init` pipeline (§4.1 of v2) is **inherited unchanged** in its phases and interrupts — `INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_APPROVAL] → READY` — and re-surfaced as plugin commands and skills. C-1…C-8 hold verbatim (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
+The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1): `INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five — and re-surfaced as plugin commands and skills. C-1…C-8 hold verbatim (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
 - **C-1′** `init` and `run` are the plugin's two commands (`/detent:init`, `/detent:run`), and Detent registers skills so the model invokes the right phase from natural intent ("plan this repo", "keep going"). The headless driver exposes the same two as the retained CLI verbs. C-1's git-root rule and the five C-5 interrupts are unchanged; interrupts are surfaced as the plugin's **presented decisions**, still a closed set of five.
   *AC:* the plugin manifest registers exactly two commands; a docs test asserts the five-decision closed set; subdirectory invocation still exits/《presents》 the root hint with no `.detent/` created.

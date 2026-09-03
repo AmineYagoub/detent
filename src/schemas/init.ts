@@ -15,6 +15,8 @@ export const INIT_PHASES = [
   "DISCOVER",
   "ANALYZE",
   "DETERMINE_VERIFICATION",
+  /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */
+  "SLICE",
   "PLAN",
   "PREPARE_AGENTS",
   "PRESENT",
@@ -41,7 +43,8 @@ export type Interrupt = (typeof INTERRUPTS)[number];
 /** Which phase may raise which interrupt (C-4.1's bracketed positions). */
 export const INTERRUPT_PHASE = {
   AWAIT_DOCS: "DISCOVER",
-  AWAIT_INFO: "ANALYZE",
+  /** C-3′ (PRDR-117): questions are batched from every planning stage and asked once, with the whole plan. */
+  AWAIT_INFO: "PRESENT",
   AWAIT_BINDING_CHOICE: "DETERMINE_VERIFICATION",
   AWAIT_SETUP_CONSENT: "DETERMINE_VERIFICATION",
   AWAIT_APPROVAL: "PRESENT",
@@ -57,6 +60,21 @@ export const INTERRUPT_PHASE = {
  * output, which is precisely why D-10 puts analysis before verification
  * determination — there is nothing to bind against until the stack exists.
  */
+/**
+ * C-3′ (PRDR-117): a question the documents cannot answer no longer stops
+ * planning. It carries the ASSUMPTION the plan proceeds on, is batched with
+ * every other planning stage's questions, and is asked once — with the whole
+ * plan, at PRESENT. `blocking` is reserved for a question no assumption can
+ * carry; it turns the final presentation into AWAIT_INFO instead of approval.
+ */
+export const planQuestionSchema = z.strictObject({
+  id: nonEmptyString,
+  question: nonEmptyString,
+  blocking: z.boolean().default(false),
+  assumption: z.string().default(""),
+});
+export type PlanQuestion = z.infer<typeof planQuestionSchema>;
+
 export const analysisSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   summary: nonEmptyString,
@@ -84,16 +102,7 @@ export const analysisSchema = z.strictObject({
     })
     .nullable(),
   /** C-3: un-implementable specs become a BATCH of questions, never a drip. */
-  questions: z
-    .array(
-      z.strictObject({
-        id: nonEmptyString,
-        question: nonEmptyString,
-        /** Blocking questions must be answered before PLAN may proceed. */
-        blocking: z.boolean().default(true),
-      }),
-    )
-    .default([]),
+  questions: z.array(planQuestionSchema).default([]),
   assumptions: z.array(z.strictObject({ claim: nonEmptyString, evidence: z.string().default("") })).default([]),
   /** Repo-relative POSIX paths ANALYZE actually read. */
   docs_read: z.array(nonEmptyString).default([]),
@@ -184,7 +193,12 @@ export function requireLocalSearchBeforeWeb(
  * `shape` (skeleton ordering) and `sizing` (too much work). A finding names
  * both tickets, because the remedy is an edge or a surface and both need the pair.
  */
-export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency"] as const;
+/**
+ * C-2‴ (PRDR-117) adds `coherence`: two tickets — usually in different slices —
+ * that contradict each other, duplicate each other, or disagree about the
+ * interface between them. The whole-plan review is where it is judged.
+ */
+export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency", "coherence"] as const;
 
 export const planReviewSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
@@ -221,7 +235,54 @@ export const planDraftSchema = z.strictObject({
       }),
     )
     .min(1),
+  /** C-3′: questions a slice's drafting raised; batched to PRESENT with the rest. */
+  questions: z.array(planQuestionSchema).default([]),
 });
 
 export type PlanDraft = z.infer<typeof planDraftSchema>;
 export type PlanDraftTicket = PlanDraft["tickets"][number];
+
+/*
+ * ---------------------------------------------------------------------------
+ * SLICE's artifact (C-2‴, PRDR-117)
+ */
+
+/**
+ * The whole document pack, cut into ordered increments before any ticket is
+ * drafted. A slice is what one planning pass can hold and what one human can
+ * review: a goal, the requirement ids it delivers, the documents it planned
+ * from, and the slices it thickens. Every requirement id in the pack lands in
+ * exactly one slice; every applicable production-baseline item lands in one
+ * too, so a pack that never mentions backups still gets a backup slice.
+ */
+export const sliceSchema = z.strictObject({
+  id: z.string().regex(/^s\d{2,3}$/, "slice ids are s01, s02, … s999"),
+  title: nonEmptyString,
+  goal: nonEmptyString,
+  requirement_ids: z.array(nonEmptyString).default([]),
+  /** PB-### ids from the production baseline this slice delivers. */
+  baseline_items: z.array(nonEmptyString).default([]),
+  docs: z.array(nonEmptyString).default([]),
+  depends_on: z.array(nonEmptyString).default([]),
+  expected_tickets: z.number().int().positive().default(20),
+  rationale: z.string().default(""),
+});
+export type SliceSpec = z.infer<typeof sliceSchema>;
+
+export const slicesSchema = z
+  .strictObject({
+    schema_version: z.literal(SCHEMA_VERSION),
+    slices: z.array(sliceSchema).min(1),
+    questions: z.array(planQuestionSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    value.slices.forEach((slice, i) => {
+      if (seen.has(slice.id)) ctx.addIssue({ code: "custom", path: ["slices", i, "id"], message: `duplicate slice id ${slice.id}` });
+      for (const dep of slice.depends_on) {
+        if (!seen.has(dep)) ctx.addIssue({ code: "custom", path: ["slices", i, "depends_on"], message: `${slice.id} depends on ${dep}, which is not an EARLIER slice` });
+      }
+      seen.add(slice.id);
+    });
+  });
+export type Slices = z.infer<typeof slicesSchema>;

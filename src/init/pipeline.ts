@@ -8,7 +8,9 @@ import { analysisFromOutputs, analysisPath, analyzeStage } from "./analyze.js";
 import { determineVerification } from "./bind.js";
 import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
-import { presentStage, type ApprovalDecision } from "./present.js";
+import { presentInputsFromOutputs, presentStage, type ApprovalDecision } from "./present.js";
+import { sliceStage, slicesFromOutputs, slicesPath } from "./slice.js";
+import { baselineDigest } from "./baseline.js";
 import { readBindings } from "../adapter/drift.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
@@ -35,6 +37,8 @@ export interface PipelineDeps {
   readonly docsDomains?: readonly string[];
   /** PRDR-114: routed models for the init roles (planner, research). */
   readonly modelRouting?: Readonly<Record<string, string>>;
+  /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out. */
+  readonly planBaseline?: "production" | "none";
   readonly note?: (text: string) => void;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
@@ -59,6 +63,7 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
     discoverPhase(deps),
     analyzePhase(deps),
     determinePhase(deps),
+    slicePhase(deps),
     planPhase(deps),
     prepareAgentsPhase(deps),
     presentPhase(deps),
@@ -210,16 +215,45 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
+function slicePhase(deps: PipelineDeps): PhaseHandler {
+  return {
+    phase: "SLICE",
+    /** The CONTENTS of every document, the analysis, the baseline and the prompt: any of them moving re-slices. */
+    digest: (ctx) => {
+      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
+      return `${contentsDigest(deps.root, docs)}|${valueDigest([
+        ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
+        deps.planBaseline ?? "production",
+        baselineDigest(),
+        deps.prompts.hashes.planner,
+      ])}`;
+    },
+    run: async (ctx) =>
+      await sliceStage({
+        root: deps.root,
+        docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
+        analysis: analysisFromOutputs(ctx.outputs),
+        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
+        baseline: deps.planBaseline ?? "production",
+        ...(deps.note === undefined ? {} : { note: deps.note }),
+        launch: async (inputs) => {
+          await launchInitSession(sessionDeps(deps), { role: "planner", inputs, artifactOut: slicesPath(deps.root) });
+        },
+      }),
+  };
+}
+
 function planPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PLAN",
-    /* Chained: PLAN re-runs whenever analysis or the bindings moved. */
+    /* Chained: PLAN re-runs whenever analysis, the bindings or the slices moved; inside, unchanged slices are reused. */
     digest: (ctx) =>
       /* PRDR-082: the planner prompt joins the analysis and the bindings — the
-       * three inputs that actually determine this plan. */
+       * inputs that actually determine this plan. */
       valueDigest([
         ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
         ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null,
+        ctx.outputs["SLICE"]?.["slices"] ?? null,
         deps.prompts.hashes.planner,
       ]),
     run: async (ctx) => {
@@ -231,6 +265,9 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
         boundSlots: bindings.map((b) => b.slot),
         budgets: deps.budgets,
+        slices: slicesFromOutputs(ctx.outputs),
+        baseline: deps.planBaseline ?? "production",
+        promptHash: deps.prompts.hashes.planner,
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs: Record<string, unknown>, artifactOut?: string) => {
           await launchInitSession(
@@ -264,7 +301,12 @@ function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {
 function presentPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PRESENT",
-    digest: (ctx) => valueDigest([ctx.outputs["PLAN"]?.["tickets"] ?? null, ctx.outputs["PREPARE_AGENTS"]?.["assignments"] ?? null]),
+    digest: (ctx) =>
+      valueDigest([
+        ctx.outputs["PLAN"]?.["tickets"] ?? null,
+        ctx.outputs["PREPARE_AGENTS"]?.["assignments"] ?? null,
+        presentInputsFromOutputs(ctx.outputs),
+      ]),
     run: async (ctx) => {
       const stored = readBindings(deps.root);
       return await presentStage({
@@ -274,6 +316,7 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         skips: stored.skips as unknown as Skip[],
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
+        ...presentInputsFromOutputs(ctx.outputs),
         ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
         ...(deps.print === undefined ? {} : { print: deps.print }),
       });

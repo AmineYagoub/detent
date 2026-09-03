@@ -50,15 +50,26 @@ export const DRAFT = (ids: string[]): object => ({
 
 export const APPROVE_PLAN = { schema_version: 1, verdict: "approve", findings: [] };
 
-/** The planner answers whichever artifact the spec asks for (three stages since PRDR-084). */
+/** C-2‴: one slice over the whole pack — the shape a small product's SLICE produces. */
+export const ONE_SLICE = {
+  schema_version: 1,
+  slices: [
+    { id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" },
+  ],
+  questions: [],
+};
+
+/** The planner answers whichever artifact the spec asks for (four stages since C-2‴). */
 export const planner =
-  (analysis: object, draft: object, review: object = APPROVE_PLAN): StageFn =>
+  (analysis: object, draft: object, review: object = APPROVE_PLAN, slices: object = ONE_SLICE): StageFn =>
   (spec) => {
     const artifact = spec.artifactOut.endsWith("plan-draft.json")
       ? draft
       : spec.artifactOut.endsWith("plan-review.json")
         ? review
-        : analysis;
+        : spec.artifactOut.endsWith("slices.json")
+          ? slices
+          : analysis;
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };

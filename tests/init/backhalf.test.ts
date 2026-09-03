@@ -69,8 +69,14 @@ const DRAFT = (ids: string[]) => ({
   })),
 });
 
-/** The planner answers whichever artifact the spec asks for (three stages since PRDR-084). */
+/** The planner answers whichever artifact the spec asks for (four stages since C-2‴). */
 const APPROVE_PLAN = { schema_version: 1, verdict: "approve", findings: [] };
+/** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
+const ONE_SLICE = {
+  schema_version: 1,
+  slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" }],
+  questions: [],
+};
 
 const planner =
   (analysis: object, draft: object, review: object = APPROVE_PLAN): StageFn =>
@@ -79,7 +85,9 @@ const planner =
       ? draft
       : spec.artifactOut.endsWith("plan-review.json")
         ? review
-        : analysis;
+        : spec.artifactOut.endsWith("slices.json")
+          ? ONE_SLICE
+          : analysis;
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -627,6 +635,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
       "DISCOVER",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
+      "SLICE",
       "PLAN",
       "PREPARE_AGENTS",
       "PRESENT",

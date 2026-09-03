@@ -130,15 +130,22 @@ const ANALYSIS_BROWNFIELD = {
   docs_read: ["PRD.md"],
 };
 
+/** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
+const ONE_SLICE = {
+  schema_version: 1,
+  slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" }],
+  questions: [],
+};
+
 /**
- * The planner serves two phases (ANALYZE and PLAN); which artifact it must
- * write is named in the spec, so the fixture answers the request rather than
- * guessing from call order.
+ * The planner serves several phases (ANALYZE, SLICE, PLAN); which artifact it
+ * must write is named in the spec, so the fixture answers the request rather
+ * than guessing from call order.
  */
 const plannerStage =
   (analysis: object, draft: object): StageFn =>
   (spec) => {
-    const payload = spec.artifactOut.endsWith("plan-draft.json") ? draft : analysis;
+    const payload = spec.artifactOut.endsWith("plan-draft.json") ? draft : spec.artifactOut.endsWith("slices.json") ? ONE_SLICE : analysis;
     writeFileSync(spec.artifactOut, `${JSON.stringify(payload)}\n`);
     return okResult();
   };
@@ -219,12 +226,14 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(isGreenfield(["package.json"])).toBe(false);
   });
 
-  it("missing info yields ONE interruption carrying ≥2 questions (C-3's AC — a batch, not a drip)", async () => {
+  it("missing info no longer stops ANALYZE: every open question rides to PRESENT with its assumption (C-3′, PRDR-117)", async () => {
     const root = repo({ "PRD.md": "# vague\n" });
+    const notes: string[] = [];
     const outcome = await analyzeStage({
       root,
       docs: ["PRD.md"],
       stackMarkers: ["package.json"],
+      note: (t) => notes.push(t),
       launch: async () => {
         writeFileSync(
           analysisPath(root),
@@ -232,21 +241,23 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
             ...ANALYSIS_BROWNFIELD,
             questions: [
               { id: "q1", question: "Which database backs the ledger?", blocking: true },
-              { id: "q2", question: "Is multi-tenancy in scope for v1?", blocking: true },
-              { id: "q3", question: "Preferred log format?", blocking: false },
+              { id: "q2", question: "Is multi-tenancy in scope for v1?", blocking: false, assumption: "single tenant" },
+              { id: "q3", question: "Preferred log format?", blocking: false, assumption: "JSON lines" },
             ],
           }),
         );
       },
     });
 
-    expect(outcome.kind).toBe("interrupt");
-    if (outcome.kind !== "interrupt") throw new Error("unreachable");
-    expect(outcome.interrupt).toBe("AWAIT_INFO");
-    /** blocking only, batched together */
-    expect(outcome.items).toHaveLength(2);
-    expect(outcome.message).toContain("Which database");
-    expect(outcome.message).toContain("multi-tenancy");
+    /** C-3′: the phase completes; the batch is asked once, with the whole plan, at PRESENT. */
+    expect(outcome.kind).toBe("complete");
+    if (outcome.kind !== "complete") throw new Error("unreachable");
+    const open = outcome.outputs["open_questions"] as { id: string; blocking: boolean; assumption: string }[];
+    expect(open.map((q) => q.id)).toEqual(["q1", "q2", "q3"]);
+    expect(open.filter((q) => q.blocking).map((q) => q.id)).toEqual(["q1"]);
+    expect(open[1]!.assumption).toBe("single tenant");
+    expect(notes.join(" ")).toContain("carried to PRESENT");
+    expect(notes.join(" ")).toContain("blocking");
   });
 
   it("an invalid analysis fails the phase rather than becoming a user question (P2)", async () => {

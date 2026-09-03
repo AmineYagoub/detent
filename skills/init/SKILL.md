@@ -34,10 +34,21 @@ Pass through flags from $ARGUMENTS (for example `--replan`). Re-invoking is
 always safe: every phase checkpoints, and C-8 replays exactly what changed —
 editing PRD.md replays ANALYZE-forward; editing nothing replays nothing.
 
-## The seven phases (C-4.1, in order)
+## The eight phases (C-4.1, in order)
 
-`INIT_FS` → `DISCOVER` → `ANALYZE` → `DETERMINE_VERIFICATION` → `PLAN` →
-`PREPARE_AGENTS` → `PRESENT`
+`INIT_FS` → `DISCOVER` → `ANALYZE` → `DETERMINE_VERIFICATION` → `SLICE` →
+`PLAN` → `PREPARE_AGENTS` → `PRESENT`
+
+`SLICE` (C-2‴) cuts the whole document set into ordered increments — the
+walking skeleton first — and `PLAN` then plans every slice in turn, one
+session-sized ticket set per slice, reviews each, reviews the whole plan for
+coherence and coverage, and revises what the reviews fault. Planning does not
+pause between slices: it runs to the end of the product, and the questions it
+could not answer ride to `PRESENT`. `SLICE` also places Detent's production
+baseline (C-2⁗ — secrets, auth, backups, health checks, CI gates, and the
+rest) into the slices where each item belongs, so the plan is production grade
+even when the documents never asked; `plan_baseline: "none"` in
+`.detent/config.json` opts a project out.
 
 ## The five presented decisions (C-5 — a closed set)
 
@@ -48,10 +59,14 @@ decision yourself.
 
 1. **`AWAIT_DOCS`** — raised at `DISCOVER` when no planning documents exist
    (C-2). Channel: the human supplies or names the documents; re-invoke.
-2. **`AWAIT_INFO`** — raised at `ANALYZE`: one batch of questions planning
-   research could not settle (C-3/C-3a). Channel: the answers go INTO the
-   planning documents; the human edits (or dictates edits they approve), then
-   re-invoke — changed contents replay ANALYZE-forward (C-8).
+2. **`AWAIT_INFO`** — raised at `PRESENT` (C-3′): the whole plan is written
+   first, and every question planning could not answer — from analysis,
+   slicing, and each slice's drafting — is presented ONCE with it, each with
+   the assumption the plan proceeds on. It becomes `AWAIT_INFO` only when a
+   question is blocking: no assumption could carry it. Channel: the answers go
+   INTO the planning documents; the human edits (or dictates edits they
+   approve), then re-invoke — changed contents replay ANALYZE-forward (C-8),
+   and only the slices whose inputs moved are re-planned.
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

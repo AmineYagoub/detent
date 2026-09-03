@@ -169,6 +169,10 @@ export const planSchema = z
       .default([]),
     assignments: z.record(z.string(), nonEmptyString).default({}),
     input_doc_hashes: z.record(z.string(), sha256Hex).default({}),
+    /** C-2‴ (PRDR-117): the increments the plan was planned in. Additive and defaulted — an older plan reads as unsliced. */
+    slices: z
+      .array(z.strictObject({ id: nonEmptyString, title: nonEmptyString, tickets: z.array(nonEmptyString).default([]) }))
+      .default([]),
   })
   .superRefine((plan, ctx) => {
     const known = new Set(plan.tickets);

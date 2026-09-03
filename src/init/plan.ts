@@ -1,17 +1,16 @@
-import { createHash } from "node:crypto";
 import type { Budgets } from "../schemas/budgets.js";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanReview } from "../schemas/init.js";
-import { PLAN_REVISIONS, reviewPlan, sessionBudget } from "./plan-review.js";
+import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { sessionBudget } from "./plan-review.js";
+import { planSlices } from "./plan-slices.js";
+import { wholePlanReview } from "./plan-whole.js";
 import { sizingEvidence } from "./sizing-evidence.js";
-import { planSchema, type Binding, type Plan } from "../schemas/records.js";
-import { createTicket } from "../kernel/tickets/mutations.js";
-import { allTickets, readTicket } from "../kernel/tickets/readers.js";
-import { ticketPath } from "../kernel/tickets/paths.js";
-import type { Ticket } from "../schemas/ticket.js";
+import { PRODUCTION_BASELINE } from "./baseline.js";
+import type { Binding } from "../schemas/records.js";
+import { readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 
 /**
@@ -58,7 +57,8 @@ type UnmappedDraftKeys = Exclude<keyof PlanDraftTicket, MappedDraftKeys>;
 const DRAFT_MAPPING_IS_TOTAL: UnmappedDraftKeys extends never ? true : never = true;
 void DRAFT_MAPPING_IS_TOTAL;
 
-export const BOOTSTRAP_TICKET_ID = "t-001-bootstrap";
+export { BOOTSTRAP_TICKET_ID } from "./plan-write.js";
+import { BOOTSTRAP_TICKET_ID, writePlan, type DraftedTicket } from "./plan-write.js";
 
 export function planDraftPath(root: string): string {
   return path.join(stateDir(root), "state", "plan-draft.json");
@@ -81,6 +81,12 @@ export interface PlanDeps {
   /** PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN a verdict. */
   readonly launch: (inputs: Record<string, unknown>, artifactOut?: string) => Promise<void>;
   readonly note?: (text: string) => void;
+  /** C-2‴ (PRDR-117): the increments SLICE cut; PLAN plans each in turn. Empty = one unnamed slice over `docs`. */
+  readonly slices?: readonly SliceSpec[];
+  /** C-2‴: the production baseline the plan must deliver, or "none" — written into the config. */
+  readonly baseline?: "production" | "none";
+  /** PRDR-082: the planner prompt hash, folded into every slice's cache key. */
+  readonly promptHash?: string;
 }
 
 /**
@@ -107,15 +113,25 @@ export function planDraftSkeleton(): Record<string, unknown> {
   };
 }
 
-/** One drafting launch. Called again with findings when the review asks (PRDR-084). */
-async function draftPlan(deps: PlanDeps, findings?: PlanReview["findings"]): Promise<void> {
+/** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with findings when a review asks (PRDR-084). */
+export async function draftPlan(
+  deps: PlanDeps,
+  scope: {
+    readonly slice?: SliceSpec;
+    readonly planIndex?: readonly DraftedTicket[];
+    readonly findings?: PlanReview["findings"];
+    /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
+    readonly keepIds?: readonly string[];
+  } = {},
+): Promise<void> {
   /* A re-run derives fresh (C-8); a stale draft is an echo chamber, not an input. */
   rmSync(planDraftPath(deps.root), { force: true });
-
+  const slice = scope.slice;
+  const docs = slice !== undefined && slice.docs.length > 0 ? slice.docs : deps.docs;
   await deps.launch({
     stage: "PLAN",
     analysis: deps.analysis,
-    docs: deps.docs,
+    docs,
     greenfield: deps.greenfield,
     bound_slots: deps.boundSlots,
     /**
@@ -127,175 +143,67 @@ async function draftPlan(deps: PlanDeps, findings?: PlanReview["findings"]): Pro
     session_budget: sessionBudget(deps.budgets),
     /** X-4″ (PRDR-102): what the previous plan of these documents measured — turns per session, sessions that reported themselves oversized. */
     ...(sizingEvidence(deps.root) === null ? {} : { sizing_evidence: sizingEvidence(deps.root) }),
-    ...(findings === undefined ? {} : { review_findings: findings }),
+    ...(slice === undefined ? {} : { slice }),
+    /** C-2⁗: the baseline items this slice carries, with what each is verified by — tickets are drafted from them. */
+    ...(slice === undefined || deps.baseline === "none" || slice.baseline_items.length === 0
+      ? {}
+      : { production_baseline: PRODUCTION_BASELINE.filter((b) => slice.baseline_items.includes(b.id)) }),
+    ...(scope.planIndex === undefined || scope.planIndex.length === 0
+      ? {}
+      : { plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })) }),
+    ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
+    ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
     expected_output: planDraftSkeleton(),
     instruction: `${
       deps.greenfield
         ? "Draft the feature tickets. Do NOT draft a scaffolding or setup ticket — Detent adds the bootstrap ticket itself and blocks everything on it."
         : "Draft the tickets. Each needs non-empty, testable acceptance criteria and an explicit surface."
-    } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\` and \`tickets\` only; the validator is strict and refuses unknown keys (P2).${
-      findings === undefined ? "" : " A previous draft drew the `review_findings` in your inputs — address every one of them in this draft."
+    }${
+      slice === undefined
+        ? ""
+        : ` Draft ONLY slice \`${slice.id}\` (${slice.title}): every requirement id in its \`requirement_ids\` and every baseline item in its \`baseline_items\` reaches a ticket, and nothing outside it does. A \`production_baseline\` item becomes tickets whose criteria are its \`verifiable_by\`, sourced \`baseline:PB-###\` (C-2⁗). Ticket ids are \`t-${slice.id}-NNN\`. A ticket that needs code an earlier slice built names that ticket in \`depends_on\` by its id from \`plan_index\`.`
+    } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. A question the documents cannot answer goes in \`questions\` with the assumption the draft proceeds on. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\`, \`tickets\` and \`questions\` only; the validator is strict and refuses unknown keys (P2).${
+      scope.findings === undefined ? "" : " A previous draft drew the `review_findings` in your inputs — address every one of them in this draft."
+    }${
+      scope.keepIds === undefined || scope.keepIds.length === 0 ? "" : " Keep every ticket id in `keep_ids` exactly — later slices depend on them."
     }`,
   });
 }
 
+/**
+ * C-2‴ (PRDR-117): PLAN runs to the end of the product. Every slice is
+ * drafted, reviewed and revised in turn (`planSlices`), the whole plan is
+ * reviewed once for coherence and coverage (`wholePlanReview`) with one
+ * targeted revision of the slices it faults, and only then are tickets
+ * written — bootstrap first, cross-slice order enforced, orphans removed.
+ * No stage here asks a human anything: questions ride to PRESENT.
+ */
 export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
-  await draftPlan(deps);
-  let drafted = readValidatedDraft(deps.root);
-
-  /**
-   * PRDR-084 — the plan's own D-6. A fresh session judges the draft against
-   * the five properties a plan can be wrong about; a `changes` verdict buys
-   * exactly one revision (see PLAN_REVISIONS), and whatever the reviewer still
-   * faults after that rides to PRESENT as a note for the human, rather than
-   * the machine grinding on a judgment call.
-   */
-  const review = await reviewPlan(deps, drafted);
-  if (review === null) {
-    deps.note?.("plan review produced no usable artifact after one relaunch — the draft stands unreviewed (PRDR-084, C-4⁗)");
-  } else if (review.verdict === "changes" && review.findings.length > 0) {
-    deps.note?.(`plan review: ${review.findings.length} finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
-    for (let round = 0; round < PLAN_REVISIONS; round += 1) {
-      await draftPlan(deps, review.findings);
-      drafted = readValidatedDraft(deps.root);
-    }
-    const second = await reviewPlan(deps, drafted);
-    if (second !== null && second.verdict === "changes" && second.findings.length > 0) {
-      deps.note?.(
-        `plan review after revision: ${second.findings.length} finding(s) remain — ` +
-          `${second.findings.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; ")}`,
-      );
-    } else {
-      deps.note?.("plan review: revision accepted");
-    }
-  } else {
-    deps.note?.("plan review: approve");
-  }
+  const slices: readonly SliceSpec[] =
+    deps.slices !== undefined && deps.slices.length > 0
+      ? deps.slices
+      : [{ id: "s01", title: "the plan", goal: "everything the documents ask for", requirement_ids: [], baseline_items: [], docs: [...deps.docs], depends_on: [], expected_tickets: 20, rationale: "" }];
+  const planned = await planSlices(deps, slices);
+  const reviewed = await wholePlanReview(deps, slices, planned.tickets);
+  const drafted = reviewed.tickets;
 
   const ids = new Set(drafted.map((t) => t.id));
-  if (ids.size !== drafted.length) throw new Error("PLAN drafted duplicate ticket ids");
+  if (ids.size !== drafted.length) throw new Error("PLAN drafted duplicate ticket ids across slices");
   if (ids.has(BOOTSTRAP_TICKET_ID)) throw new Error(`PLAN drafted ${BOOTSTRAP_TICKET_ID}; the bootstrap ticket is Detent's (C-4)`);
   for (const ticket of drafted) {
     for (const dep of ticket.depends_on) {
       if (!ids.has(dep)) throw new Error(`ticket ${ticket.id} depends on unknown ticket ${dep}`);
     }
   }
-
-  /** ---- C-4: greenfield gets bootstrap #1, and everything blocks on it ------ */
-  const written: Ticket[] = [];
-  if (deps.greenfield) {
-    written.push(createBootstrapTicket(deps));
-    deps.note?.(`bootstrap ticket ${BOOTSTRAP_TICKET_ID} created; every other ticket is blocked on it (C-4)`);
-  }
-
-  /**
-   * PRDR-085: DONE work is not re-planned. Its code is committed and its
-   * record is real; a redraft reusing the id would reset it to READY and send
-   * a session to rebuild what already exists.
-   */
-  const done = new Set(allTickets(deps.root).filter((t) => t.state === "DONE").map((t) => t.id));
-  for (const draft of drafted) {
-    if (done.has(draft.id)) {
-      deps.note?.(`${draft.id} is DONE — preserved, not re-planned (PRDR-085)`);
-      written.push(readTicket(deps.root, draft.id));
-      continue;
-    }
-    const blockers = deps.greenfield ? [BOOTSTRAP_TICKET_ID, ...draft.depends_on] : [...draft.depends_on];
-    written.push(
-      createTicket(deps.root, {
-        id: draft.id,
-        type: draft.type,
-        title: draft.title,
-        description: draft.description,
-        acceptance_criteria: draft.acceptance_criteria,
-        /**
-         * PRDR-101: the draft always carried `non_goals` and this call did not
-         * copy it, so the schema defaulted it to `[]` and every ticket in every
-         * plan reached the implementer and the reviewer with its boundaries
-         * stripped. Silent, because an empty list is legal.
-         */
-        non_goals: draft.non_goals,
-        surface: draft.surface,
-        blockers,
-        risk_label: draft.risk_label,
-      }),
-    );
-  }
-
-  /**
-   * PRDR-085: tickets the new plan does not name are orphans — a replan that
-   * shrinks 32 tickets to 15 used to leave the other 17 on disk, READY and
-   * claimable, so `run` would build work no plan asked for. DONE tickets are
-   * never orphans: they are carried above and their record stands.
-   */
-  const planned = new Set(written.map((t) => t.id));
-  for (const existing of allTickets(deps.root)) {
-    if (planned.has(existing.id) || existing.state === "DONE") continue;
-    rmSync(ticketPath(deps.root, existing.id), { force: true });
-    deps.note?.(`${existing.id} removed — the new plan does not contain it (PRDR-085)`);
-  }
-
-  /** ---- A-2: the plan artifact ------------------------------------------- */
-  const plan: Plan = planSchema.parse({
-    schema_version: 1,
-    tickets: written.map((t) => t.id),
-    edges: written.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
-    /* PREPARE_AGENTS fills these (T-067) */
-    assignments: {},
-    input_doc_hashes: Object.fromEntries(
-      deps.docs.map((doc) => [doc, hashFile(path.join(deps.root, ...doc.split("/")))]),
-    ),
-  });
-  writeFileSync(planPath(deps.root), `${JSON.stringify(plan, null, 2)}\n`);
-
+  const written = writePlan(deps, drafted, slices);
   return {
     kind: "complete",
     outputs: {
-      tickets: written.map((t) => t.id),
-      bootstrap: deps.greenfield ? BOOTSTRAP_TICKET_ID : null,
-      plan: plan as unknown as Record<string, unknown>,
+      ...written,
+      questions: [...planned.questions, ...reviewed.questions] as unknown as Record<string, unknown>[],
+      review_findings: reviewed.remaining as unknown as Record<string, unknown>[],
     },
   };
-}
-
-/**
- * C-4's bootstrap ticket, constructed rather than drafted. Its criteria name
- * every slot that bound, because "prove every bound slot executes green" is
- * the ticket's actual job — and F-2 is stated in its non-goals so the session
- * working it cannot mistake `.detent/` for a place project config may live.
- */
-function createBootstrapTicket(deps: PlanDeps): Ticket {
-  const stack = deps.analysis?.stack;
-  const slots = deps.boundSlots.length > 0 ? deps.boundSlots : ["test"];
-  return createTicket(deps.root, {
-    id: BOOTSTRAP_TICKET_ID,
-    type: "feature",
-    title: "Bootstrap: project scaffolding and native verification tooling",
-    description: [
-      "Create the project scaffolding and establish its native verification tooling.",
-      stack === undefined || stack === null
-        ? ""
-        : `Stack chosen at ANALYZE: ${stack.language}${stack.runtime === "" ? "" : ` on ${stack.runtime}`}` +
-          `${stack.test_framework === "" ? "" : `, tested with ${stack.test_framework}`}. ${stack.rationale}`,
-      "",
-      "Configuration you create here is ticket work product, reviewed as code (C-4) — it lives in project files, never in `.detent/` (F-2).",
-    ]
-      .filter((l) => l !== "")
-      .join("\n"),
-    acceptance_criteria: [
-      "The project's own verification commands exist in project files (not `.detent/`).",
-      ...slots.map((slot) => `The \`${slot}\` gate runs and exits 0.`),
-      "A reader can run the project's tests from a fresh clone using only its native tooling.",
-    ],
-    non_goals: [
-      "Detent's own state directory `.detent/` holds no project configuration (F-2).",
-      "No feature work — this ticket establishes the ground the other tickets stand on.",
-    ],
-    /* scaffolding necessarily touches the whole tree */
-    surface: ["**"],
-    /* claimed first */
-    priority: 100,
-  });
 }
 
 /*
@@ -389,7 +297,7 @@ export function bootstrapBlocks(root: string, ticketId: string): boolean {
   return readTicket(root, BOOTSTRAP_TICKET_ID).state !== "DONE";
 }
 
-function readValidatedDraft(root: string): PlanDraftTicket[] {
+export function readValidatedDraft(root: string): { readonly tickets: PlanDraftTicket[]; readonly questions: PlanQuestion[] } {
   const raw = readDraft(root);
   const parsed = raw === null ? null : parseArtifact(planDraftSchema, raw);
   if (parsed === null || !parsed.ok) {
@@ -399,7 +307,7 @@ function readValidatedDraft(root: string): PlanDraftTicket[] {
         : `PLAN produced an invalid draft: ${parsed.reason === "invalid" ? parsed.issues.join("; ") : "newer schema"}`,
     );
   }
-  return [...parsed.value.tickets];
+  return { tickets: [...parsed.value.tickets], questions: [...parsed.value.questions] };
 }
 
 function readDraft(root: string): unknown {
@@ -413,10 +321,5 @@ function readJson(file: string): unknown {
   } catch {
     return null;
   }
-}
-
-function hashFile(abs: string): string {
-  if (!existsSync(abs)) return createHash("sha256").update("").digest("hex");
-  return createHash("sha256").update(readFileSync(abs)).digest("hex");
 }
 

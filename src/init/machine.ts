@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
 import { initLayout, stateDir } from "../fs/layout.js";
@@ -117,6 +117,15 @@ export interface InitResult {
  * ---------------------------------------------------------------------------
  * Digest helpers — the two shapes a phase's inputs can take
  */
+
+/**
+ * C-2‴: where PLAN caches each slice's reviewed draft, keyed by what it read.
+ * Named here — beside the digests — because `--replan` must wipe it: C-8′
+ * promises a fresh planning session, and a cache hit is the opposite.
+ */
+export function sliceCacheDir(root: string): string {
+  return path.join(stateDir(root), "state", "plan");
+}
 
 /** Which files exist, not what they say. Sorted, POSIX, contents ignored. */
 export function listingDigest(paths: readonly string[]): string {
@@ -255,6 +264,8 @@ export async function runInit(
     /* Hand-edited tickets invalidate the approval; PRESENT re-presents the diff. */
     messages.push("tickets were edited after approval — approval invalidated, re-presenting (C-8)");
   }
+  /* C-8′: a replan is a fresh planning session — every slice is drafted again (C-2‴). */
+  if (opts.replan === true) rmSync(sliceCacheDir(root), { recursive: true, force: true });
 
   initLayout(root);
 

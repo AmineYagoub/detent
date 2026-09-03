@@ -149,6 +149,8 @@ const configSchema = z.strictObject({
    * rediscovers everything and re-plans the entire thing.
    */
   plan_docs: z.array(glob).default([]),
+  /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out, in writing. */
+  plan_baseline: z.enum(["production", "none"]).default("production"),
   risk: z.array(glob).default([]),
   model_routing: z.record(z.string(), nonEmptyString).default({}),
   pinned: z.strictObject({

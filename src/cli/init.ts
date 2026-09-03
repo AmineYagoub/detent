@@ -133,6 +133,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     prompts: loadPromptSet(),
     budgets: budgetsFor(root),
     modelRouting: routingFor(root),
+    planBaseline: baselineFor(root),
     planDocs: planDocsFor(root),
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
@@ -218,5 +219,16 @@ function routingFor(root: string): Readonly<Record<string, string>> {
     return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.model_routing;
   } catch {
     return {};
+  }
+}
+
+/** C-2‴ (PRDR-117): the production baseline the plan is held to — "none" only when the config says so. */
+function baselineFor(root: string): "production" | "none" {
+  const file = path.join(stateDir(root), "config.json");
+  if (!existsSync(file)) return "production";
+  try {
+    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.plan_baseline;
+  } catch {
+    return "production";
   }
 }

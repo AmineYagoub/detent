@@ -51,15 +51,16 @@ Two commands. That is the whole public workflow.
 detent init
 ```
 
-`init` runs seven phases, in order:
+`init` runs eight phases, in order — and does not stop between them:
 
 - **INIT_FS**: checks you're at a git root and scaffolds `.detent/`.
 - **DISCOVER**: finds your planning documents and candidate verification commands.
-- **ANALYZE**: reads the documents and summarizes what's being built; batches any question they can't answer into one round.
+- **ANALYZE**: reads the documents and summarizes what's being built; every question they can't answer is noted with the assumption planning proceeds on.
 - **DETERMINE_VERIFICATION**: probes candidate test/lint/build commands and binds the ones that actually run.
-- **PLAN**: derives tickets with acceptance criteria, surfaces, and dependencies.
+- **SLICE**: cuts the whole product into ordered increments — walking skeleton first — and places a production baseline (secrets, auth, backups, health checks, CI gates, …) in the slice where each item belongs, whether or not your documents asked for it.
+- **PLAN**: plans every slice in turn into tickets with acceptance criteria, surfaces, and dependencies; each slice is reviewed as its own plan, then the whole plan is reviewed for coherence against your documents.
 - **PREPARE_AGENTS**: assigns roles and, where configured, models per ticket.
-- **PRESENT**: shows you the bindings and plan, and stops for your approval.
+- **PRESENT**: shows you the slices, the plan, and every open question with its assumption — once, at the end — and stops for your answers and approval.
 
 ```bash
 detent run

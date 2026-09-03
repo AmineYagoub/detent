@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { sizingEvidence } from "./sizing-evidence.js";
+import { PRODUCTION_BASELINE } from "./baseline.js";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
@@ -8,13 +9,14 @@ import {
   planReviewSchema,
   type PlanDraftTicket,
   type PlanReview,
+  type SliceSpec,
 } from "../schemas/init.js";
 
 /**
  * PRDR-084 — the plan's own D-6.
  *
  * A fresh planner-role session judges the DRAFT plan before any ticket is
- * written, over the five properties a plan can be wrong about. The review
+ * written, over the closed set of properties a plan can be wrong about. The review
  * advises: an absent or unparseable verdict leaves the draft standing, because
  * a planning aid that can block the pipeline is a new way for init to fail.
  */
@@ -107,13 +109,59 @@ const REVIEW_INSTRUCTION =
   "cannot be met when the ticket runs. Name BOTH tickets in the finding — the one whose criterion reaches, and the one that " +
   "owns what it reaches for — because the remedy is an edge or a surface and either needs the pair). " +
   "An honest `approve` is a real verdict; do not manufacture findings, and a ticket with genuinely no boundary worth stating is " +
-  "not a finding. The verdict is EXACTLY `approve` or `changes` — no other word — and every finding's `tag` is one of the seven " +
-  "named here. Write EXACTLY the `expected_output` shape.";
+  "not a finding. `coherence` (two tickets that contradict, duplicate, or disagree about their interface — judged when the " +
+  "whole plan is in view; see `scope_instruction` when present). The verdict is EXACTLY `approve` or `changes` — no other word " +
+  "— and every finding's `tag` is one of the eight named here. Write EXACTLY the `expected_output` shape.";
+
+/**
+ * C-2‴ (PRDR-117): what the reviewer is judging — one slice against its own
+ * requirement set with the earlier slices' tickets in view, or the whole plan
+ * across every slice, where `coherence` and cross-slice coverage are judged.
+ */
+export type ReviewScope =
+  | {
+      readonly kind: "slice";
+      readonly slice: SliceSpec;
+      readonly planIndex: readonly {
+        readonly id: string;
+        readonly slice: string;
+        readonly title: string;
+        readonly surface: readonly string[];
+      }[];
+    }
+  | { readonly kind: "whole"; readonly slices: readonly SliceSpec[] };
+
+function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
+  if (scope === undefined) return {};
+  if (scope.kind === "slice") {
+    return {
+      scope: "slice",
+      slice: scope.slice,
+      plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })),
+      scope_instruction:
+        `This draft is ONE slice, \`${scope.slice.id}\` (${scope.slice.title}). Judge coverage against ITS ` +
+        "`requirement_ids` and `baseline_items` only (a PB-### item traces to `baseline:PB-###`, valid provenance); " +
+        "`plan_index` lists the earlier slices' tickets, for dependency findings that reach across slices.",
+    };
+  }
+  const carried = new Set(scope.slices.flatMap((s) => s.baseline_items));
+  return {
+    scope: "whole",
+    slices: scope.slices,
+    ...(carried.size === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => carried.has(b.id)) }),
+    scope_instruction:
+      "This is the WHOLE plan across every slice, each ticket tagged with its slice. Add `coherence`: tickets that " +
+      "contradict each other, duplicate each other, or disagree about the interface between them — usually in different " +
+      "slices. Judge coverage across EVERY slice's `requirement_ids` and `baseline_items` (a PB-### item traces to " +
+      "`baseline:PB-###`, which is valid provenance). Name the ticket in every finding; the slice is known from it.",
+  };
+}
 
 async function reviewOnce(
   deps: ReviewDeps,
   tickets: readonly PlanDraftTicket[],
   previous: { readonly issue: string } | null,
+  scope?: ReviewScope,
 ): Promise<{
   readonly review: PlanReview | null;
   readonly issue: string | null;
@@ -133,6 +181,7 @@ async function reviewOnce(
           : { sizing_evidence: sizingEvidence(deps.root) }),
         expected_output: planReviewSkeleton(),
         instruction: REVIEW_INSTRUCTION,
+        ...scopeInputs(scope),
         ...(previous === null
           ? {}
           : {
@@ -189,8 +238,9 @@ async function reviewOnce(
 export async function reviewPlan(
   deps: ReviewDeps,
   tickets: readonly PlanDraftTicket[],
+  scope?: ReviewScope,
 ): Promise<PlanReview | null> {
-  const first = await reviewOnce(deps, tickets, null);
+  const first = await reviewOnce(deps, tickets, null, scope);
   if (first.review !== null) {
     if (first.normalisedFrom !== null)
       deps.note?.(
@@ -201,9 +251,12 @@ export async function reviewPlan(
   deps.note?.(
     `plan review artifact unusable (${first.issue}) — relaunching the review once (C-4⁗)`,
   );
-  const second = await reviewOnce(deps, tickets, {
-    issue: first.issue ?? "unusable",
-  });
+  const second = await reviewOnce(
+    deps,
+    tickets,
+    { issue: first.issue ?? "unusable" },
+    scope,
+  );
   if (second.review !== null) {
     if (second.normalisedFrom !== null)
       deps.note?.(

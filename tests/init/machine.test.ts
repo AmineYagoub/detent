@@ -83,6 +83,7 @@ describe("T-060 C-5: the interrupt set is closed", () => {
       "DISCOVER",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
+      "SLICE",
       "PLAN",
       "PREPARE_AGENTS",
       "PRESENT",

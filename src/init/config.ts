@@ -59,6 +59,7 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
     protected: [...DEFAULT_PROTECTED],
     risk: [],
     model_routing: { ...DEFAULT_MODEL_ROUTING },
+    plan_baseline: "production",
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });
   return spendCapUsd === undefined ? "written-default" : "written";
