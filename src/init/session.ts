@@ -121,5 +121,19 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
       `${request.role} session failed${result.rawTail === "" ? "" : `: ${result.rawTail.slice(-300)}`}`,
     );
   }
+  /**
+   * S-4′ (PRDR-118): the same circuit breaker the run loop applies. A stream
+   * that ends with no result message parses as `is_error: undefined`, which
+   * reads as SUCCESS with no telemetry — so a session killed in transport
+   * returned ok, recorded $0 against the ceiling, and its phase then reported
+   * "produced no artifact", blaming the model for a death on the wire. The
+   * run loop has caught this since T-046; init never looked.
+   */
+  if (!result.telemetryParsed) {
+    throw new Error(
+      `${request.role} session ended with no telemetry (S-4 circuit breaker) — the session died in transport rather than producing an artifact. ` +
+        "Nothing was charged against the run ceiling, so its cost is unrecorded; re-run `detent init` to resume (C-8).",
+    );
+  }
   return result;
 }

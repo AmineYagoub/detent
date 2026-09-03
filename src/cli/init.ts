@@ -112,6 +112,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
+  let config: ReturnType<typeof configFor>;
+  try {
+    config = configFor(root);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\nFix it (or delete it to start over) — init will not plan against a config it cannot read (R-9′).\n`);
+    return EXIT_ERROR;
+  }
   const handlers = buildPipeline({
     root,
     backend: new ClaudeCodeBackend({
@@ -131,10 +138,10 @@ export async function main(argv: readonly string[]): Promise<number> {
       },
     }),
     prompts: loadPromptSet(),
-    budgets: budgetsFor(root),
-    modelRouting: routingFor(root),
-    planBaseline: baselineFor(root),
-    planDocs: planDocsFor(root),
+    budgets: budgetsFor(config),
+    modelRouting: config?.model_routing ?? {},
+    planBaseline: config?.plan_baseline ?? "production",
+    planDocs: config?.plan_docs ?? [],
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),
     /*
@@ -182,53 +189,37 @@ export async function main(argv: readonly string[]): Promise<number> {
   return EXIT_OK;
 }
 
+/**
+ * R-9′ (PRDR-118): the config loads or nothing runs. Each of these readers
+ * used to catch its own parse failure and return a default, so a merge
+ * conflict in `.detent/config.json` silently widened planning scope to the
+ * whole repository, reset the spend ceiling to the default, and dropped the
+ * model routing — at full model cost, against a scope nobody asked for, with
+ * nothing printed. `run` already refuses a config it cannot read; `init`, which
+ * is the expensive one, did not.
+ */
+function configFor(root: string): ReturnType<typeof loadConfig>["config"] | null {
+  const file = path.join(stateDir(root), "config.json");
+  if (!existsSync(file)) return null;
+  try {
+    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config;
+  } catch (err) {
+    throw new Error(`.detent/config.json cannot be read: ${(err as Error).message}`);
+  }
+}
+
 /** Config budgets when one exists; X-1's defaults when init is bootstrapping. */
+function budgetsFor(config: ReturnType<typeof configFor>): Budgets {
+  /* X-1′: every ceiling has a default now, including the spend cap. */
+  return config?.budgets ?? (Object.fromEntries(Object.entries(CEILINGS).map(([key, spec]) => [key, spec.default])) as Budgets);
+}
 /**
  * PRDR-086: the increment's planning scope. Read straight from config so a
  * replan plans the slice the project currently declares, not everything the
  * repository has ever specified.
  */
-function planDocsFor(root: string): readonly string[] {
-  const file = path.join(stateDir(root), "config.json");
-  if (!existsSync(file)) return [];
-  try {
-    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.plan_docs;
-  } catch {
-    return [];
-  }
-}
 
-function budgetsFor(root: string): Budgets {
-  const file = path.join(stateDir(root), "config.json");
-  if (existsSync(file)) {
-    try {
-      return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.budgets;
-    } catch {
-      /* a config init has not written yet is not an error here */
-    }
-  }
-  /* X-1′: every ceiling has a default now, including the spend cap. */
-  return Object.fromEntries(Object.entries(CEILINGS).map(([key, spec]) => [key, spec.default])) as Budgets;
-}
 
 /** PRDR-114: the routing init sessions run on — from the config `init` itself just wrote. */
-function routingFor(root: string): Readonly<Record<string, string>> {
-  const file = path.join(stateDir(root), "config.json");
-  if (!existsSync(file)) return {};
-  try {
-    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.model_routing;
-  } catch {
-    return {};
-  }
-}
 
 /** C-2‴ (PRDR-117): the production baseline the plan is held to — "none" only when the config says so. */
-function baselineFor(root: string): "production" | "none" {
-  const file = path.join(stateDir(root), "config.json");
-  if (!existsSync(file)) return "production";
-  try {
-    return loadConfig(JSON.parse(readFileSync(file, "utf8"))).config.plan_baseline;
-  } catch {
-    return "production";
-  }
-}

@@ -12,6 +12,7 @@ import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { Binding } from "../schemas/records.js";
 import { readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
+import { previousAttemptInput, withOneRelaunch } from "./retry.js";
 
 /**
  * T-066 — PLAN generation and the bootstrap lifecycle (C-4, A-2).
@@ -113,16 +114,46 @@ export function planDraftSkeleton(): Record<string, unknown> {
   };
 }
 
+/**
+ * C-4⁗′ (PRDR-118): draft, and if the artifact is unusable, draft once more
+ * with the validator's own words. `planDraftSchema` is strict, so one stray
+ * key in one ticket of one slice would otherwise end a run that has already
+ * planned nineteen others.
+ */
+export async function draftAndRead(
+  deps: PlanDeps,
+  scope: DraftScope,
+): Promise<{ readonly tickets: PlanDraftTicket[]; readonly questions: PlanQuestion[] }> {
+  const attempt = await withOneRelaunch<{ tickets: PlanDraftTicket[]; questions: PlanQuestion[] }>(
+    { stage: `PLAN${scope.slice === undefined ? "" : ` ${scope.slice.id}`}`, note: deps.note },
+    async (previous) => {
+      await draftPlan(deps, scope, previous);
+      try {
+        return { value: readValidatedDraft(deps.root), issue: null };
+      } catch (err) {
+        return { value: null, issue: (err as Error).message };
+      }
+    },
+  );
+  if (attempt.value === null) {
+    throw new Error(`PLAN could not draft ${scope.slice === undefined ? "the plan" : `slice ${scope.slice.id} (${scope.slice.title})`}: ${attempt.issue ?? "no usable draft"}. Slices already planned are cached — re-run \`detent init\` to resume here (C-8).`);
+  }
+  return attempt.value;
+}
+
+export interface DraftScope {
+  readonly slice?: SliceSpec;
+  readonly planIndex?: readonly DraftedTicket[];
+  readonly findings?: PlanReview["findings"];
+  /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
+  readonly keepIds?: readonly string[];
+}
+
 /** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with findings when a review asks (PRDR-084). */
 export async function draftPlan(
   deps: PlanDeps,
-  scope: {
-    readonly slice?: SliceSpec;
-    readonly planIndex?: readonly DraftedTicket[];
-    readonly findings?: PlanReview["findings"];
-    /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
-    readonly keepIds?: readonly string[];
-  } = {},
+  scope: DraftScope = {},
+  previous: { readonly issue: string } | null = null,
 ): Promise<void> {
   /* A re-run derives fresh (C-8); a stale draft is an echo chamber, not an input. */
   rmSync(planDraftPath(deps.root), { force: true });
@@ -153,6 +184,7 @@ export async function draftPlan(
       : { plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })) }),
     ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
     ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
+    ...previousAttemptInput(previous, "plan draft"),
     expected_output: planDraftSkeleton(),
     instruction: `${
       deps.greenfield
@@ -196,12 +228,27 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     }
   }
   const written = writePlan(deps, drafted, slices);
+
+  /**
+   * Every finding a review still held after its revision round, from BOTH
+   * levels: each slice's own review (and the normalisation that dropped an
+   * impossible edge), then the whole plan's. A finding that names a ticket the
+   * whole-plan revision has since replaced is dropped — it was answered.
+   */
+  const live = new Set(drafted.map((t) => t.id));
+  const held = planned.remaining.flatMap((r) =>
+    r.findings.map((f) =>
+      /* Keep the slice: a plan-wide finding names no ticket, and "which of twenty-five" is the first thing a reader asks. */
+      f.ticket !== undefined && live.has(f.ticket) ? f : { ...f, finding: `[${r.slice}] ${f.finding}` },
+    ),
+  );
+  const findings = [...held, ...reviewed.remaining, ...written.findings];
   return {
     kind: "complete",
     outputs: {
       ...written,
       questions: [...planned.questions, ...reviewed.questions] as unknown as Record<string, unknown>[],
-      review_findings: reviewed.remaining as unknown as Record<string, unknown>[],
+      review_findings: findings as unknown as Record<string, unknown>[],
     },
   };
 }

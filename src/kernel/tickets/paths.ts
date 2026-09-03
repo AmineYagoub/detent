@@ -1,5 +1,6 @@
 import path from "node:path";
 import { STATE_DIR } from "../../fs/layout.js";
+import { isSafeTicketId } from "../../schemas/common.js";
 
 /**
  * F-1 layout. `plan/` is committed; `claims/` is local and gitignored — a claim
@@ -10,5 +11,16 @@ import { STATE_DIR } from "../../fs/layout.js";
 
 export const ticketsDir = (root: string): string => path.join(root, STATE_DIR, "plan");
 export const claimsDir = (root: string): string => path.join(root, STATE_DIR, "claims");
-export const ticketPath = (root: string, id: string): string => path.join(ticketsDir(root), `${id}.json`);
-export const claimPath = (root: string, id: string): string => path.join(claimsDir(root), `${id}.claim`);
+/**
+ * The floor under every reader and writer: an id that is not a safe file name
+ * never becomes a path. The schema rejects one on the way in, but this is the
+ * guard that holds even when a caller builds a path from something the schema
+ * never saw — a checkpoint, a cache, a hand-edited plan.
+ */
+function safeId(id: string): string {
+  if (!isSafeTicketId(id)) throw new Error(`unsafe ticket id ${JSON.stringify(id)} — a ticket id is a file name under ${STATE_DIR}/plan (F-1)`);
+  return id;
+}
+
+export const ticketPath = (root: string, id: string): string => path.join(ticketsDir(root), `${safeId(id)}.json`);
+export const claimPath = (root: string, id: string): string => path.join(claimsDir(root), `${safeId(id)}.claim`);

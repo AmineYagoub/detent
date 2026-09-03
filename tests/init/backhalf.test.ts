@@ -488,7 +488,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     expect(written!.bindings[0]?.status).toBe("provisional");
   });
 
-  it("a planner that drafts the bootstrap ticket itself is refused (C-4 makes it Detent's)", async () => {
+  it("a planner that drafts the bootstrap ticket's id has it renamed and flagged — not a fatal, poisoned run (C-4)", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
     const backend = new MockBackend({
       planner: planner(
@@ -496,9 +496,22 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
         DRAFT([BOOTSTRAP_TICKET_ID, "t-100"]),
       ),
     });
-    await expect(runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }))).rejects.toThrow(
-      /bootstrap ticket is Detent's/,
-    );
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    /**
+     * C-4 still owns the id, but throwing here ended the run AFTER all the
+     * model spend and cached the offending draft, so every later `detent init`
+     * failed identically and only `--replan` — re-planning everything — could
+     * clear it. The id is Detent's, so the draft is renamed and the human is
+     * told it may duplicate the scaffolding.
+     */
+    expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
+    const ids = allTickets(root).map((t) => t.id);
+    expect(ids).toContain(BOOTSTRAP_TICKET_ID);
+    /** Detent's own bootstrap, not the planner's: the constructed one has the C-4 title. */
+    expect(readTicket(root, BOOTSTRAP_TICKET_ID).title).toContain("Bootstrap:");
+    expect(ids).toContain("t-100");
+    expect(result.interrupt?.message).toContain(`drafted with ${BOOTSTRAP_TICKET_ID}`);
   });
 
   it("the A-2 plan records edges and the hashes of the docs it derived from (C-8)", async () => {

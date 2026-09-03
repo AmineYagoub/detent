@@ -52,6 +52,14 @@ export interface PhaseHandler {
    * make every re-init replay the world.
    */
   digest(ctx: InitContext): string;
+  /**
+   * C-8‴ (PRDR-118): whether what this phase WROTE is still there. Digests
+   * cover a phase's inputs and must not move when it succeeds, so a phase
+   * whose output can be deleted out from under a fresh checkpoint declares it
+   * here instead. Absent means "nothing to check". Deleting `.detent/plan/`
+   * used to reuse every checkpoint and report READY over an empty directory.
+   */
+  outputIntact?(ctx: InitContext): boolean;
   run(ctx: InitContext): Promise<PhaseOutcome>;
 }
 
@@ -217,6 +225,35 @@ export function approvalState(root: string): ApprovalState {
  * before it are reused from their checkpoints; the interrupted phase is NOT
  * checkpointed, so re-running `init` resumes exactly there.
  */
+/**
+ * Whether PLAN would re-execute on this invocation — i.e. whether some phase
+ * at or before it has drifted. Digests are pure reads, so this costs nothing
+ * and spends nothing; it is the same walk the driver does below, stopped at
+ * the first miss.
+ */
+function wouldReplan(root: string, handlers: readonly PhaseHandler[], now: () => number): boolean {
+  let carried = "";
+  const outputs: Record<string, Record<string, unknown>> = {};
+  for (const phase of INIT_PHASES) {
+    const handler = handlers.find((h) => h.phase === phase);
+    if (handler === undefined) continue;
+    let hash: string;
+    try {
+      hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest({ root, outputs, now })}`).digest("hex");
+    } catch {
+      /* A digest that cannot be computed is drift by definition. */
+      return true;
+    }
+    carried = hash;
+    const read = readCheckpoint(root, phase, hash);
+    if (read.status !== "fresh") return true;
+    if (handler.outputIntact?.({ root, outputs, now }) === false) return true;
+    outputs[phase] = { ...read.checkpoint.outputs };
+    if (phase === "PLAN") return false;
+  }
+  return false;
+}
+
 export async function runInit(
   root: string,
   handlers: readonly PhaseHandler[],
@@ -239,11 +276,19 @@ export async function runInit(
     };
   }
   /**
-   * PRDR-085: `--replan` means a fresh planning session. Re-deriving under a
-   * ticket that is mid-ladder or claimed would pull the ground out from a
-   * running session, so the refusal comes BEFORE any model spend.
+   * PRDR-085: re-deriving under a ticket that is mid-ladder or claimed pulls
+   * the ground out from a running session — `writePlan` resets every drafted
+   * ticket to READY with fresh counters and deletes the ones the new plan does
+   * not name. The refusal comes BEFORE any model spend.
+   *
+   * C-8″ (PRDR-118): this guarded `--replan` only, and every other route to a
+   * re-plan was unguarded — including the one PRESENT itself recommends.
+   * Answer a question in a planning document while a run is executing, re-run
+   * `detent init` with no flag, and the content digest replays ANALYZE-forward
+   * into PLAN, which resets the claimed ticket a session is working in. The
+   * guard belongs to re-planning, not to the flag.
    */
-  if (opts.replan === true) {
+  if (opts.replan === true || wouldReplan(root, handlers, now)) {
     const inFlight = inFlightTickets(root);
     if (inFlight.length > 0) {
       return {
@@ -253,8 +298,8 @@ export async function runInit(
         executed: [],
         reused: [],
         messages: [
-          `--replan refused: ${inFlight.join(", ")} still in flight. ` +
-            "Let the run finish or resolve them (detent status), then replan.",
+          `${opts.replan === true ? "--replan" : "re-planning"} refused: ${inFlight.join(", ")} still in flight. ` +
+            "Let the run finish or resolve them (detent status), then plan again.",
         ],
         outputs: {},
       };
@@ -295,11 +340,12 @@ export async function runInit(
 
     if (!replaying) {
       const read = readCheckpoint(root, phase, hash);
-      if (read.status === "fresh") {
+      if (read.status === "fresh" && handler.outputIntact?.(ctx) !== false) {
         outputs[phase] = { ...read.checkpoint.outputs };
         reused.push(phase);
         continue;
       }
+      if (read.status === "fresh") messages.push(`${phase} is re-running: what it wrote is no longer on disk (C-8‴)`);
       replaying = true;
       replayedFrom = phase;
     }

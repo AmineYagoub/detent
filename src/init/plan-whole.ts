@@ -1,5 +1,5 @@
 import type { PlanQuestion, PlanReview, SliceSpec } from "../schemas/init.js";
-import { draftPlan, readValidatedDraft, type PlanDeps } from "./plan.js";
+import { draftAndRead, type PlanDeps } from "./plan.js";
 import { reviewPlan } from "./plan-review.js";
 import { normaliseDraft, tagSlice } from "./plan-slices.js";
 import type { DraftedTicket } from "./plan-write.js";
@@ -32,8 +32,27 @@ export async function wholePlanReview(
   if (slices.length <= 1) return { tickets: [...tickets], questions: [], remaining: [] };
 
   const first = await reviewPlan(deps, tickets, { kind: "whole", slices });
-  if (first === null || first.verdict !== "changes" || first.findings.length === 0) {
-    deps.note?.(first === null ? "whole-plan review: no usable verdict — the plan stands as its slices left it" : "whole-plan review: approve");
+  if (first === null) {
+    /**
+     * The coherence review is the whole reason this stage exists, and it is the
+     * largest session of the run — the one most likely to be refused for size.
+     * Its absence used to be one line on stdout and a successful init; the
+     * human approving the plan could not know it never ran.
+     */
+    deps.note?.("whole-plan review: NO VERDICT after the relaunch — the plan was never reviewed as one thing");
+    return {
+      tickets: [...tickets],
+      questions: [],
+      remaining: [
+        {
+          tag: "coherence",
+          finding: `the whole-plan review produced no usable verdict, so nothing checked the ${slices.length} slices against each other — each was reviewed only on its own`,
+        },
+      ],
+    };
+  }
+  if (first.verdict !== "changes" || first.findings.length === 0) {
+    deps.note?.(first.verdict === "approve" ? "whole-plan review: approve" : "whole-plan review: changes, but the verdict named no finding — nothing to revise");
     return { tickets: [...tickets], questions: [], remaining: [] };
   }
   deps.note?.(`whole-plan review: ${first.findings.length} finding(s) — ${first.findings.map((f) => f.tag).join(", ")}`);
@@ -52,6 +71,14 @@ export async function wholePlanReview(
 
   let updated: DraftedTicket[] = [...tickets];
   const questions: PlanQuestion[] = [];
+  /**
+   * A finding that names no ticket belongs to the plan, not to a slice. Giving
+   * it to every redrafted slice told five independent sessions to each satisfy
+   * it — which is how a coherence review manufactures the duplication it was
+   * convened to find. It goes to the first slice redrafted; the rest are told
+   * only what is theirs.
+   */
+  let planWideUnclaimed = [...planWide];
   for (const slice of slices) {
     const findings = bySlice.get(slice.id);
     if (findings === undefined) continue;
@@ -62,8 +89,8 @@ export async function wholePlanReview(
     const currentIds = new Set(updated.filter((t) => t.slice === slice.id).map((t) => t.id));
     /** Ids later slices reach for: the redraft keeps them, or it is discarded. */
     const keepIds = [...new Set(later.flatMap((t) => t.depends_on).filter((d) => currentIds.has(d)))];
-    await draftPlan(deps, { slice, planIndex: [...earlier, ...later], findings: [...findings, ...planWide], keepIds });
-    const drafted = readValidatedDraft(deps.root);
+    const drafted = await draftAndRead(deps, { slice, planIndex: [...earlier, ...later], findings: [...findings, ...planWideUnclaimed], keepIds });
+    planWideUnclaimed = [];
     const fresh = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), earlier, deps.note, [...earlier, ...later]).tickets;
     const missing = keepIds.filter((id) => !fresh.some((t) => t.id === id));
     if (missing.length > 0) {

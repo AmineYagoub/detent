@@ -14,6 +14,34 @@ export const nonEmptyString = z.string().min(1);
 export const isoTimestamp = z.iso.datetime({ offset: true });
 export const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, "expected a sha256 hex digest");
 
+/**
+ * A ticket id becomes a FILE NAME under `.detent/plan/` (F-1), and the plan
+ * that produces it is written by a model. Until this existed, `nonEmptyString`
+ * accepted `../../package`, which `writeTicket` then joined onto the plan
+ * directory and wrote through — outside the repository, over any file the
+ * process could reach. It also accepted two ids differing only in case, which
+ * are one file on macOS: the plan claimed three tickets, the disk held two,
+ * and the pool deadlocked on a ticket the plan said existed.
+ *
+ * So the id is constrained to what is unambiguous as a filename on every
+ * platform: lowercase (case cannot be the only difference), no separators, no
+ * dots (no traversal, no extension games), bounded length, and never one of
+ * the two reserved artifact names that share the directory.
+ */
+export const RESERVED_TICKET_IDS: ReadonlySet<string> = new Set(["plan", "approval"]);
+
+export const ticketId = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/, "a ticket id is lowercase a-z, 0-9, `-` and `_`, 1-64 characters, starting alphanumeric")
+  .refine((id: string) => !RESERVED_TICKET_IDS.has(id), {
+    message: "`plan` and `approval` are reserved: they are artifact names in the same directory",
+  });
+
+/** Whether a string is safe to use as a ticket's file name. The floor every writer checks. */
+export function isSafeTicketId(id: string): boolean {
+  return ticketId.safeParse(id).success;
+}
+
 /** A glob pattern; matching semantics are picomatch's throughout (R-6). */
 export const glob = nonEmptyString;
 

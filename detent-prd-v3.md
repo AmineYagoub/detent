@@ -257,8 +257,9 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   placed in exactly one slice — and PLAN then plans each slice in turn: drafted with the
   earlier slices' ticket index in view (ids `t-<slice>-NNN`, cross-slice edges by id),
   reviewed as its own plan (C-4″), revised once, and cached under `.detent/state/plan/<slice>`
-  keyed by everything it read, so an edited document re-plans its slice and reuses the rest
-  (C-8) while `--replan` wipes the cache (C-8′). When every slice is planned, a fresh session
+  keyed by its own documents, its spec, the stack, the bindings, the budgets and the prompt —
+  so an edited document re-plans its slice and reuses the rest (C-8‴) while `--replan` wipes
+  the cache (C-8′). When every slice is planned, a fresh session
   reviews the WHOLE plan: the closed tag set gains `coherence` — two tickets that contradict,
   duplicate, or disagree about the interface between them, usually across slices — and
   coverage is judged across every slice's requirement ids and baseline items. A `changes`
@@ -286,6 +287,72 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   document's explicit decision wins over the baseline, and the ticket records it.
   `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
   used by people who will not write "and back it up" — the plan says it for them.
+
+- **F-1′ (3.1.1, PRDR-118).** A ticket id is a FILE NAME under `.detent/plan/`, and a model
+  writes it. It is therefore constrained like one: lowercase, alphanumeric with `-` and `_`,
+  at most 64 characters, and never `plan` or `approval`, which are artifact names in the same
+  directory. The schema rejects one on the way in and the path builder refuses one that
+  reached it another way. Found by audit: `nonEmptyString` accepted `../../package`, which the
+  writer joined onto the plan directory and wrote through — outside the repository, over any
+  file the process could reach — and accepted two ids differing only in case, which are one
+  file on macOS: the plan claimed three tickets, the disk held two, and the pool deadlocked
+  on a ticket the plan said existed.
+
+- **A-1″ (3.1.1, PRDR-118).** The drafted graph is repaired before it is written, not trusted
+  and not merely refused. An id that is unusable or already planned is renamed and this
+  slice's own references follow — but a reference that also names a real earlier ticket is
+  left alone, because that is what it meant. An edge to nothing planned is dropped, and a
+  dependency CYCLE is broken at the edge that closes it. Each repair is a `dependency`
+  finding the human sees at approval. Nothing downstream ever looked for a cycle — not the
+  draft validator, not the plan schema — and two tickets naming each other is an ordinary
+  thing for a model to write; the result was a permanent, silent deadlock in which `ready()`
+  simply never offered those tickets and nothing reported why.
+
+- **C-2⁵ (3.1.1, PRDR-118).** A ticket's own edge into an earlier slice does not stand in for
+  that slice's order. The planner is told to name the specific ticket it needs, so this is the
+  commonest shape a plan takes — and treating it as sufficient let a later slice start against
+  a slice that was one ticket in. Only a capstone the ticket already names is skipped; the
+  rest still gate it.
+
+- **C-8″ (3.1.1, PRDR-118).** The in-flight refusal belongs to re-planning, not to the
+  `--replan` flag. Re-planning rewrites every drafted ticket to READY with fresh counters and
+  deletes the ones the new plan does not name, and the guard against doing that under a
+  claimed or mid-ladder ticket ran only for the flag. Every other route was unguarded —
+  including the one PRESENT itself recommends: answer a question in a planning document while
+  a run is executing, re-run `detent init`, and the content digest replays ANALYZE-forward
+  into PLAN, which resets the ticket a session is working in.
+
+- **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
+  whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
+  every checkpoint and report READY over an empty directory. A digest covers a phase's inputs
+  and must never move when the phase succeeds, so this is a separate question from the digest.
+  And a slice's cache key holds what actually determines that slice — its own documents, its
+  spec, the stack, the bindings, the budgets, the prompt — rather than the whole ANALYZE
+  artifact and every earlier ticket id: ANALYZE is a model act whose prose drifts on every
+  re-run, so a typo in one slice's document re-planned all twenty, and the ids cascaded the
+  same way. What the slice actually reached into is recorded as its external dependencies and
+  checked precisely on reuse. The cache is validated on read like every other artifact.
+
+- **C-4⁗′ (3.1.1, PRDR-118).** Every strict planning artifact gets the one relaunch PRDR-116
+  gave the review — the validator's own words in the inputs, and only then a failure. The
+  lesson had been applied one level too low: the review's artifact is the simplest planning
+  produces, while the SLICE and PLAN artifacts are the strictest and by far the most
+  expensive, and they had no second attempt at all. A twenty-slice product asks for thirty to
+  sixty independent strict artifacts, so at a one-percent chance of a stray key in any of
+  them, better than a third of runs would abort hours in. A failure now names the slice it
+  died on and says that the finished slices are cached.
+
+- **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
+  has had since T-046. A stream that ends with no result message parses as success with no
+  telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
+  and its phase then reported "produced no artifact" — blaming the model for a death on the
+  wire.
+
+- **R-9′ (3.1.1, PRDR-118).** `init` refuses a `.detent/config.json` it cannot read, as `run`
+  already does. Each reader used to catch its own parse failure and return a default, so a
+  merge conflict in the config silently widened planning scope to the whole repository, reset
+  the spend ceiling, and dropped the model routing — at full model cost, against a scope
+  nobody asked for, with nothing printed.
 
 - **C-3′ (3.1.1, PRDR-117).** Planning does not stop for a question. Every question a stage
   cannot answer — ANALYZE's, SLICE's, each slice's PLAN — carries the assumption the plan

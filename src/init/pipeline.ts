@@ -1,4 +1,5 @@
 import path from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { discover as discoverStack } from "../adapter/discover/index.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
@@ -250,12 +251,21 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
     digest: (ctx) =>
       /* PRDR-082: the planner prompt joins the analysis and the bindings — the
        * inputs that actually determine this plan. */
-      valueDigest([
+      /**
+       * C-8‴ (PRDR-118): PLAN's own OUTPUT joins its inputs. No phase digest
+       * covered what the phase had written, so deleting `.detent/plan/` — a
+       * botched merge, a branch switch, a start-over — reused every checkpoint
+       * and reported READY over an empty directory. The slice caches survive,
+       * so re-running PLAN after a deletion costs the write, not the planning.
+       */
+      `${valueDigest([
         ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
         ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null,
         ctx.outputs["SLICE"]?.["slices"] ?? null,
         deps.prompts.hashes.planner,
-      ]),
+      ])}`,
+    /** C-8‴: the tickets and the plan artifact are PLAN's output; if they are gone, plan again. */
+    outputIntact: () => planOutputIntact(deps.root),
     run: async (ctx) => {
       const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
       return await planStage({
@@ -280,6 +290,26 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
+/**
+ * Whether PLAN's own output is still on disk: the plan artifact exists and
+ * every ticket it names has a file. Deleting `.detent/plan/` — a botched merge,
+ * a branch switch, a start-over — used to reuse every checkpoint and report
+ * READY over an empty directory. Re-planning after a deletion costs the write,
+ * not the planning: the slice caches are untouched.
+ */
+function planOutputIntact(root: string): boolean {
+  const file = path.join(stateDir(root), "plan", "plan.json");
+  if (!existsSync(file)) return false;
+  try {
+    const plan = JSON.parse(readFileSync(file, "utf8")) as { tickets?: unknown };
+    const ids = Array.isArray(plan.tickets) ? (plan.tickets as string[]) : [];
+    const have = new Set(allTickets(root).map((t) => t.id));
+    return ids.every((id) => have.has(id));
+  } catch {
+    return false;
+  }
+}
+
 function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PREPARE_AGENTS",
@@ -287,7 +317,14 @@ function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {
      * The vendored prompt hashes plus the ticket set: a re-vendored prompt
      * must re-assign, because `role@hash` would otherwise name a stale build.
      */
-    digest: (ctx) => valueDigest([deps.prompts.hashes, ctx.outputs["PLAN"]?.["tickets"] ?? null]),
+    /**
+     * The ticket CONTENTS, not just the ids: the role a ticket opens on is
+     * derived from its `type` (S-7), and PRESENT invites editing tickets — so
+     * flipping one to `bug` and re-running left `assignments.json` naming the
+     * role for the type it used to be.
+     */
+    digest: (ctx) =>
+      valueDigest([deps.prompts.hashes, ctx.outputs["PLAN"]?.["tickets"] ?? null, allTickets(deps.root).map((t) => `${t.id}:${t.type}`)]),
     run: async () =>
       prepareAgents({
         root: deps.root,

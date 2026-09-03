@@ -7,7 +7,7 @@ import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js"
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { PLAN_FINDING_TAGS, slicesSchema, type SliceSpec } from "../../src/schemas/init.js";
-import { slicesSkeleton } from "../../src/init/slice.js";
+import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
@@ -204,6 +204,40 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
   });
 
+  it("C-8‴: a re-analysis does not re-plan slices whose own documents never moved", async () => {
+    const root = repo(DOCS);
+    let summary = "the first analysis";
+    const log: string[] = [];
+    const backend = new MockBackend({
+      planner: (spec) => {
+        const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
+        let artifact: object;
+        if (spec.artifactOut.endsWith("slices.json")) artifact = TWO_SLICES;
+        else if (spec.artifactOut.endsWith("plan-draft.json")) {
+          log.push(`PLAN:${sliceOf(inputs)}`);
+          artifact = twoSliceDraft(inputs);
+        } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = APPROVE_PLAN;
+        else artifact = { ...ANALYSIS(null), summary };
+        writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
+        return okResult();
+      },
+    });
+    const handlers = () => buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
+    await runInit(root, handlers());
+    expect(log).toEqual(["PLAN:s01", "PLAN:s02"]);
+
+    /**
+     * Editing one slice's document re-runs ANALYZE, and ANALYZE is a model act
+     * — its prose differs every time. While the whole analysis was in every
+     * slice's cache key, that drift re-planned the entire product for a typo.
+     */
+    log.splice(0);
+    summary = "the second analysis, worded differently";
+    writeFileSync(path.join(root, "prd-billing.md"), "# billing, revised\n");
+    await runInit(root, handlers());
+    expect(log).toEqual(["PLAN:s02"]);
+  });
+
   it("C-2⁗: SLICE receives the production baseline unless the config opts out", async () => {
     for (const baseline of ["production", "none"] as const) {
       const root = repo(DOCS);
@@ -229,11 +263,91 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
       (t) => notes.push(t),
     );
     expect(out.tickets.map((t) => t.id)).toEqual(["t-s02-001", "t-s02-002"]);
-    /** The slice's own references follow the rename; the unknown edge and the self-edge are gone. */
-    expect(out.tickets[1]!.depends_on).toEqual(["t-s02-001"]);
+    /**
+     * The reference is NOT rewritten to the renamed local ticket: `t-s01-001`
+     * also names a real ticket in an earlier slice, and that is what the
+     * planner was given in `plan_index`. Rewriting it would have destroyed the
+     * only cross-slice edge the draft declared, and silently.
+     */
+    expect(out.tickets[1]!.depends_on).toEqual(["t-s01-001"]);
     expect(out.findings).toEqual([{ tag: "dependency", ticket: "t-s02-002", finding: expect.stringContaining("t-s09-001") }]);
-    expect(notes.join("\n")).toContain("t-s01-001 collides with a planned ticket — renamed t-s02-001");
+    expect(notes.join("\n")).toContain('"t-s01-001" is unusable or already planned — renamed t-s02-001');
     expect(notes.join("\n")).toContain("edge dropped");
+  });
+
+  it("a finding a slice's own review still holds after its revision reaches the presentation — the single-slice case, where no whole-plan review runs", async () => {
+    const root = repo(DOCS);
+    const held = { tag: "sizing", ticket: "t-s01-002", finding: "still larger than one session after the revision" };
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          slices: { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [] },
+          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] }),
+          review: () => ({ schema_version: 1, verdict: "changes", findings: [held] }),
+        },
+        [],
+      ),
+    });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    /** One slice means no whole-plan review, so the slice's own leftover is the ONLY finding there is. */
+    expect(result.interrupt?.message).toContain("Review findings held after revision (1)");
+    expect(result.interrupt?.message).toContain("sizing (t-s01-002): still larger than one session");
+  });
+
+  it("a dependency dropped as impossible is presented as a finding, not swallowed", async () => {
+    const root = repo(DOCS);
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          slices: { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [] },
+          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001", ["t-s99-001"])], questions: [] }),
+          review: () => APPROVE_PLAN,
+        },
+        [],
+      ),
+    });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(readTicket(root, "t-s01-001").blockers).toEqual([]);
+    expect(result.interrupt?.message).toContain("dependency (t-s01-001)");
+    expect(result.interrupt?.message).toContain("t-s99-001");
+  });
+
+  it("a slice naming a document nothing discovered is grounded, not planned from an empty desk", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    const seen: Record<string, unknown>[] = [];
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          slices: {
+            schema_version: 1,
+            slices: [{ ...TWO_SLICES.slices[0]!, docs: ["docs/imagined.md"], baseline_items: ["PB-001", "PB-404"] }],
+            questions: [],
+          },
+          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }),
+          review: () => APPROVE_PLAN,
+        },
+        [],
+        seen,
+      ),
+    });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+
+    expect(notes.join("\n")).toContain("docs/imagined.md was never discovered");
+    expect(notes.join("\n")).toContain("it will plan from every discovered document");
+    expect(notes.join("\n")).toContain("PB-404 name no production-baseline item");
+    /** The slice plans from the whole discovered set rather than from a path that does not exist. */
+    const draft = seen.find((i) => i["stage"] === "PLAN")!;
+    expect(draft["docs"]).toEqual(["PRD.md", "prd-billing.md"]);
+    expect((draft["production_baseline"] as { id: string }[]).map((b) => b.id)).toEqual(["PB-001"]);
+  });
+
+  it("an unreadable SLICE checkpoint fails the phase — it never silently reverts to planning the whole product in one pass", () => {
+    expect(slicesFromOutputs({})).toEqual([]);
+    expect(() => slicesFromOutputs({ SLICE: { slices: [{ id: "nope", title: "t" }] } })).toThrow(/SLICE checkpoint is unreadable/);
+    expect(slicesFromOutputs({ SLICE: { slices: TWO_SLICES.slices } }).map((s) => s.id)).toEqual(["s01", "s02"]);
   });
 
   it("the SLICE skeleton parses through its own schema; the baseline is well-formed; `coherence` is in the closed tag set", () => {

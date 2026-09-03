@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
-import { createTicket } from "../kernel/tickets/mutations.js";
-import { ticketPath } from "../kernel/tickets/paths.js";
-import { allTickets, readTicket } from "../kernel/tickets/readers.js";
-import type { Analysis, PlanDraftTicket, SliceSpec } from "../schemas/init.js";
+import { newTicket as buildTicket, writeTicket } from "../kernel/tickets/mutations.js";
+import { claimPath, ticketPath } from "../kernel/tickets/paths.js";
+import { allTickets } from "../kernel/tickets/readers.js";
+import type { Analysis, PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
 import { planSchema, type Plan } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 
@@ -51,10 +51,18 @@ export function capstoneBlockers(ticket: DraftedTicket, slices: readonly SliceSp
   for (const dep of own.depends_on) {
     const theirs = all.filter((t) => t.slice === dep);
     if (theirs.length === 0) continue;
-    const alreadyLinked = ticket.depends_on.some((d) => theirs.some((t) => t.id === d));
-    if (alreadyLinked) continue;
+    /**
+     * A ticket's OWN edge into the earlier slice does not stand in for the
+     * slice's order. The planner is told to name the specific ticket it needs,
+     * so this is the commonest shape there is — and treating it as sufficient
+     * let a later slice start against a slice that was one ticket in. Only the
+     * capstone the ticket already names is skipped; the rest still gate it.
+     */
     const dependedOn = new Set(theirs.flatMap((t) => t.depends_on));
-    for (const t of theirs) if (!dependedOn.has(t.id)) out.push(t.id);
+    for (const t of theirs) {
+      if (dependedOn.has(t.id) || ticket.depends_on.includes(t.id)) continue;
+      out.push(t.id);
+    }
   }
   return out;
 }
@@ -63,12 +71,35 @@ export function writePlan(
   deps: WriteDeps,
   drafted: readonly DraftedTicket[],
   slices: readonly SliceSpec[],
-): { readonly tickets: string[]; readonly bootstrap: string | null; readonly plan: Record<string, unknown> } {
+): { readonly tickets: string[]; readonly bootstrap: string | null; readonly plan: Record<string, unknown>; readonly findings: PlanReview["findings"] } {
+  const existing = allTickets(deps.root);
+  const done = new Map(existing.filter((t) => t.state === "DONE").map((t) => [t.id, t]));
+  const findings: PlanReview["findings"] = [];
+
+  /**
+   * C-8″ (PRDR-118): everything is decided in memory and validated BEFORE a
+   * byte moves. This function used to create every ticket, delete every
+   * orphan, and only then parse the plan artifact — so a plan the schema
+   * refused left the directory rewritten and `plan.json` missing, with no way
+   * back but hand-editing. Decide, validate, then write.
+   */
+  const planned: Ticket[] = [];
+
   /** ---- C-4: greenfield gets bootstrap #1, and everything blocks on it ------ */
-  const written: Ticket[] = [];
   if (deps.greenfield) {
-    written.push(createBootstrapTicket(deps));
-    deps.note?.(`bootstrap ticket ${BOOTSTRAP_TICKET_ID} created; every other ticket is blocked on it (C-4)`);
+    /**
+     * A DONE bootstrap is finished scaffolding, and re-creating it reset it to
+     * READY with its generations wiped — then blocked the whole plan behind
+     * rebuilding a project that already exists.
+     */
+    const finished = done.get(BOOTSTRAP_TICKET_ID);
+    if (finished === undefined) {
+      planned.push(bootstrapTicket(deps));
+      deps.note?.(`bootstrap ticket ${BOOTSTRAP_TICKET_ID} created; every other ticket is blocked on it (C-4)`);
+    } else {
+      planned.push(finished);
+      deps.note?.(`${BOOTSTRAP_TICKET_ID} is DONE — preserved, not re-created (C-4/PRDR-085)`);
+    }
   }
 
   /**
@@ -76,34 +107,67 @@ export function writePlan(
    * record is real; a redraft reusing the id would reset it to READY and send
    * a session to rebuild what already exists.
    */
-  const done = new Set(allTickets(deps.root).filter((t) => t.state === "DONE").map((t) => t.id));
   for (const draft of drafted) {
-    if (done.has(draft.id)) {
+    const finished = done.get(draft.id);
+    if (finished !== undefined) {
       deps.note?.(`${draft.id} is DONE — preserved, not re-planned (PRDR-085)`);
-      written.push(readTicket(deps.root, draft.id));
+      /**
+       * Ids are positional (`t-<slice>-NNN`), so a renumbered slice reuses
+       * them by default. When the preserved work is not what the plan now says
+       * that id means, the human is the only one who can tell whether the
+       * requirement is finished or was silently dropped.
+       */
+      if (finished.title !== draft.title) {
+        findings.push({
+          tag: "traceability",
+          ticket: draft.id,
+          finding: `the plan drafts this id as "${draft.title}" but a DONE ticket already holds it as "${finished.title}" — the DONE work was kept and the drafted work is NOT in the plan`,
+        });
+        deps.note?.(`${draft.id}: DONE as "${finished.title}", drafted as "${draft.title}" — kept the DONE ticket, flagged for you`);
+      }
+      planned.push(finished);
       continue;
     }
     const ordering = capstoneBlockers(draft, slices, drafted);
-    const blockers = [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])];
-    written.push(
-      createTicket(deps.root, {
-        id: draft.id,
-        type: draft.type,
-        title: draft.title,
-        description: draft.description,
-        acceptance_criteria: draft.acceptance_criteria,
-        /**
-         * PRDR-101: the draft always carried `non_goals` and this call did not
-         * copy it, so the schema defaulted it to `[]` and every ticket in every
-         * plan reached the implementer and the reviewer with its boundaries
-         * stripped. Silent, because an empty list is legal.
-         */
-        non_goals: draft.non_goals,
-        surface: draft.surface,
-        blockers,
-        risk_label: draft.risk_label,
-      }),
+    planned.push(
+      newTicket(deps, draft, [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])]),
     );
+  }
+
+  /**
+   * A preserved DONE ticket carries the blockers of the plan that created it,
+   * and the new plan may not name them. The edge would fail `planSchema` after
+   * every ticket had already been rewritten; the work is finished, so the
+   * stale edge is dropped rather than the plan.
+   */
+  const ids = new Set(planned.map((t) => t.id));
+  const settled = planned.map((t) => {
+    const live = t.blockers.filter((b) => ids.has(b));
+    if (live.length === t.blockers.length) return t;
+    deps.note?.(`${t.id}: dropped blocker(s) ${t.blockers.filter((b) => !ids.has(b)).join(", ")} — the new plan does not contain them`);
+    return { ...t, blockers: live };
+  });
+
+  /** ---- A-2: the plan artifact, validated before anything is written ------ */
+  const plan: Plan = planSchema.parse({
+    schema_version: 1,
+    tickets: settled.map((t) => t.id),
+    edges: settled.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
+    /* PREPARE_AGENTS fills these (T-067) */
+    assignments: {},
+    input_doc_hashes: Object.fromEntries(deps.docs.map((doc) => [doc, hashFile(path.join(deps.root, ...doc.split("/")))])),
+    /** C-2‴: the increments the plan was planned in, for the presentation and the report. */
+    slices: slices.map((s) => ({ id: s.id, title: s.title, tickets: drafted.filter((t) => t.slice === s.id).map((t) => t.id) })),
+  });
+  /** ---- everything validated: now the directory may change ---------------- */
+  for (const ticket of settled) {
+    const preserved = done.get(ticket.id);
+    /**
+     * A preserved ticket is rewritten only when its blockers were pruned, so
+     * the file and the plan artifact agree; its state, generations and notes
+     * are the object read from disk and are carried through untouched.
+     */
+    if (preserved === undefined || preserved.blockers.length !== ticket.blockers.length) writeTicket(deps.root, ticket);
   }
 
   /**
@@ -112,30 +176,20 @@ export function writePlan(
    * claimable, so `run` would build work no plan asked for. DONE tickets are
    * never orphans: they are carried above and their record stands.
    */
-  const planned = new Set(written.map((t) => t.id));
-  for (const existing of allTickets(deps.root)) {
-    if (planned.has(existing.id) || existing.state === "DONE") continue;
-    rmSync(ticketPath(deps.root, existing.id), { force: true });
-    deps.note?.(`${existing.id} removed — the new plan does not contain it (PRDR-085)`);
+  for (const stale of existing) {
+    if (ids.has(stale.id) || stale.state === "DONE") continue;
+    rmSync(ticketPath(deps.root, stale.id), { force: true });
+    rmSync(claimPath(deps.root, stale.id), { force: true });
+    deps.note?.(`${stale.id} removed — the new plan does not contain it (PRDR-085)`);
   }
 
-  /** ---- A-2: the plan artifact ------------------------------------------- */
-  const plan: Plan = planSchema.parse({
-    schema_version: 1,
-    tickets: written.map((t) => t.id),
-    edges: written.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
-    /* PREPARE_AGENTS fills these (T-067) */
-    assignments: {},
-    input_doc_hashes: Object.fromEntries(deps.docs.map((doc) => [doc, hashFile(path.join(deps.root, ...doc.split("/")))])),
-    /** C-2‴: the increments the plan was planned in, for the presentation and the report. */
-    slices: slices.map((s) => ({ id: s.id, title: s.title, tickets: drafted.filter((t) => t.slice === s.id).map((t) => t.id) })),
-  });
   writeFileSync(planFile(deps.root), `${JSON.stringify(plan, null, 2)}\n`);
 
   return {
-    tickets: written.map((t) => t.id),
+    tickets: settled.map((t) => t.id),
     bootstrap: deps.greenfield ? BOOTSTRAP_TICKET_ID : null,
     plan: plan as unknown as Record<string, unknown>,
+    findings,
   };
 }
 
@@ -145,10 +199,10 @@ export function writePlan(
  * the ticket's actual job — and F-2 is stated in its non-goals so the session
  * working it cannot mistake `.detent/` for a place project config may live.
  */
-function createBootstrapTicket(deps: WriteDeps): Ticket {
+function bootstrapTicket(deps: WriteDeps): Ticket {
   const stack = deps.analysis?.stack;
   const slots = deps.boundSlots.length > 0 ? deps.boundSlots : ["test"];
-  return createTicket(deps.root, {
+  return buildTicket({
     id: BOOTSTRAP_TICKET_ID,
     type: "feature",
     title: "Bootstrap: project scaffolding and native verification tooling",
@@ -176,6 +230,28 @@ function createBootstrapTicket(deps: WriteDeps): Ticket {
     surface: ["**"],
     /* claimed first */
     priority: 100,
+  });
+}
+
+/** A drafted ticket, built in memory. Writing is the caller's, after validation. */
+function newTicket(deps: WriteDeps, draft: DraftedTicket, blockers: readonly string[]): Ticket {
+  void deps;
+  return buildTicket({
+    id: draft.id,
+    type: draft.type,
+    title: draft.title,
+    description: draft.description,
+    acceptance_criteria: draft.acceptance_criteria,
+    /**
+     * PRDR-101: the draft always carried `non_goals` and this call did not
+     * copy it, so the schema defaulted it to `[]` and every ticket in every
+     * plan reached the implementer and the reviewer with its boundaries
+     * stripped. Silent, because an empty list is legal.
+     */
+    non_goals: draft.non_goals,
+    surface: draft.surface,
+    blockers: [...blockers],
+    risk_label: draft.risk_label,
   });
 }
 

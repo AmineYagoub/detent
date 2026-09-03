@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { STATES } from "./states.js";
-import { SCHEMA_VERSION, glob, isoTimestamp, nonEmptyString } from "./common.js";
+import { SCHEMA_VERSION, glob, isoTimestamp, nonEmptyString, ticketId } from "./common.js";
 
 /**
  * A-1 Ticket, with X-8 attempt generations.
@@ -39,7 +39,7 @@ export const reviewTags = ["correctness", "requirement", "scope", "rules"] as co
 
 export const ticketSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
-  id: nonEmptyString,
+  id: ticketId,
   type: z.enum(["feature", "bug"]),
   title: nonEmptyString,
   description: z.string(),

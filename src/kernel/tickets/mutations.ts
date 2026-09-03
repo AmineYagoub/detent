@@ -106,13 +106,23 @@ export interface NewTicket {
 }
 
 export function createTicket(root: string, input: NewTicket, at = new Date().toISOString()): Ticket {
+  return writeTicket(root, newTicket(input, at));
+}
+
+/**
+ * The ticket a draft becomes, in memory. Split from `createTicket` so a
+ * caller that must validate a whole plan before touching the directory can
+ * build every ticket first (C-8″, PRDR-118) — a plan the schema refuses used
+ * to leave the plan directory half-rewritten.
+ */
+export function newTicket(input: NewTicket, at = new Date().toISOString()): Ticket {
   const generation: Generation = {
     index: 0,
     counters: { ...ZERO_COUNTERS },
     outcome: "in_flight",
     started_at: at,
   };
-  return writeTicket(root, {
+  return ticketSchema.parse({
     schema_version: SCHEMA_VERSION,
     id: input.id,
     type: input.type,
