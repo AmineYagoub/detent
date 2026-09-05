@@ -165,7 +165,19 @@ const configSchema = z.strictObject({
   symbols: z
     .strictObject({
       enabled: z.boolean().default(false),
-      command: nonEmptyString.default("serena-agent"),
+      /**
+       * S-3‴ (PRDR-123): a bare executable NAME, resolved on PATH — never a
+       * path. `.detent/config.json` is repository content, and an unrestricted
+       * string let a repo point the orchestrator at an executable it shipped
+       * and have it run at the operator's privilege, before anything was
+       * presented or approved. Constrained here, at load, rather than at the
+       * call site, so no execution path can be reached with a value that never
+       * should have parsed.
+       */
+      command: z
+        .string()
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "symbols.command is an executable name resolved on PATH, not a path — no `/`, `\\` or `..`")
+        .default("serena-agent"),
       pinned: nonEmptyString.default("0.1.4"),
     })
     .default({ enabled: false, command: "serena-agent", pinned: "0.1.4" }),

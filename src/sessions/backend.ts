@@ -118,6 +118,11 @@ export interface SessionResult {
    * config asked for; `models` on the ledger row says what actually ran.
    */
   readonly modelFallback?: { readonly requested: string; readonly reason: string };
+  /**
+   * S-3‴ (PRDR-123): configured MCP servers this session did NOT get. Absent
+   * means the session reported nothing either way — never read as success.
+   */
+  readonly mcpFailures?: readonly { readonly name: string; readonly status: string }[];
 }
 
 export interface SessionBackend {

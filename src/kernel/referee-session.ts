@@ -166,6 +166,15 @@ export class SessionArm {
       });
       ctx.journal.appendTicketEvent(id, { stage: role, event: "model_fallback", at: ctx.iso(), requested, reason });
     }
+    if (result.mcpFailures !== undefined && result.mcpFailures.length > 0) {
+      /* S-3‴ (PRDR-123): the session ran without tools it was configured to have. */
+      const lost = result.mcpFailures.map((s) => `${s.name} (${s.status})`).join(", ");
+      appendNote(ctx.root, id, {
+        author: "kernel",
+        text: `MCP server unavailable to this session (PRDR-123): ${lost} — it ran without those tools; nothing failed, but symbol intelligence was not in play`,
+      });
+      ctx.journal.appendTicketEvent(id, { stage: role, event: "mcp_unavailable", at: ctx.iso(), servers: lost });
+    }
     const generationNow = currentGeneration(readTicket(ctx.root, id));
     ctx.spend.record(id, generationNow.index, role, result, ctx.iso());
     ctx.journal.appendTicketEvent(id, {

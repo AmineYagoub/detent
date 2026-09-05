@@ -329,6 +329,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   who declines once is never asked again. PRDR-119 removed noise that buried signal; a standing
   banner would be the same mistake in a different costume.
 
+- **S-3‴ (3.1.1, PRDR-123).** `symbols.command` is an executable NAME resolved on PATH, refused
+  at config load if it contains a separator or a traversal. `.detent/config.json` is repository
+  content, and an unrestricted string let a repo point the orchestrator at an executable it
+  shipped and have it run at the operator's privilege, in the orchestrator process, before
+  anything was presented or approved. This restores parity with the boundary Detent already
+  has — it executes repo-defined verification commands by design, but those are discovered from
+  known structured locations and re-validated against drift before every gate (V-3) — and it
+  claims nothing beyond that parity: Detent is not safe to run against a repository you do not
+  trust, and never was.
+  Separately, a session reports the MCP servers it did NOT get. The status comes from the SDK's
+  own init message, is carried on the result, and is noted and journalled exactly as a model
+  fallback is (PRDR-114). Probing the binary per ticket answers the wrong question — it can
+  exist while this session's server never attached — and a session that quietly lost its symbol
+  tools was indistinguishable from one that never had them. An absent or unrecognised init
+  message is treated as no information, never as success.
+
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
   terminal — it ends the evaluation before the allow rules are reached. The guard governs where

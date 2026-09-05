@@ -271,9 +271,27 @@ export class ClaudeCodeBackend implements SessionBackend {
     const query = this.config.queryFn ?? (await import("@anthropic-ai/claude-agent-sdk")).query;
     let result: SessionResult | null = null;
     let observedTurns = 0;
+    let mcpFailures: { name: string; status: string }[] | null = null;
     try {
       const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
       for await (const message of stream) {
+        /**
+         * S-3‴ (PRDR-123): the init message is the only per-session truth
+         * about whether a configured MCP server actually attached. Probing the
+         * binary answers a different question — it can exist while this
+         * session's server never connected — and a session that quietly lost
+         * its symbol tools looked identical to one that never had them.
+         * `pending` is not failure: startup is non-blocking.
+         */
+        if ((message as { type?: string }).type === "system") {
+          const servers = (message as { mcp_servers?: { name?: unknown; status?: unknown }[] }).mcp_servers;
+          if (Array.isArray(servers)) {
+            const bad = servers
+              .filter((s) => typeof s.status === "string" && s.status !== "connected" && s.status !== "pending")
+              .map((s) => ({ name: String(s.name ?? "?"), status: String(s.status) }));
+            if (bad.length > 0) mcpFailures = bad;
+          }
+        }
         if ((message as { type?: string }).type === "assistant") observedTurns += 1;
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);
@@ -309,6 +327,7 @@ export class ClaudeCodeBackend implements SessionBackend {
       });
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
-    return result ?? parseResultMessage({});
+    const out = result ?? parseResultMessage({});
+    return mcpFailures === null ? out : { ...out, mcpFailures };
   }
 }

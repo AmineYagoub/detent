@@ -12,6 +12,28 @@ import {
 } from "../../src/adapter/symbols.js";
 import { buildOptions } from "../../src/sessions/sdk.js";
 import { symbolReminder } from "../../src/init/symbol-reminder.js";
+import { ClaudeCodeBackend } from "../../src/sessions/sdk.js";
+import { loadConfig } from "../../src/kernel/worstcase.js";
+import { CEILINGS } from "../../src/schemas/budgets.js";
+
+const BASE_CONFIG = {
+  schema_version: 1,
+  budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])),
+  pinned: { agent_sdk: "0.3.258", claude_code: "2.1.258" },
+};
+
+/** Drive the backend over a scripted message stream and report what it concluded about MCP. */
+async function captureFailures(messages: unknown[]): Promise<readonly { name: string; status: string }[] | undefined> {
+  const backend = new ClaudeCodeBackend({
+    policy: { surface: ["**"], protectedGlobs: [], workRoot: "/repo" },
+    queryFn: () => (async function* () { for (const m of messages) yield m; })() as never,
+  });
+  const result = await backend.run({
+    role: "implement", ticketId: "t-1", promptPrefix: "p", promptVariable: "v",
+    cwd: "/repo", artifactOut: "/repo/out.json", allowedTools: ["Read"], permissionMode: "", model: "",
+  });
+  return result.mcpFailures;
+}
 import { contractEvidence, identifierOf, unverifiedProvides } from "../../src/kernel/contract-verify.js";
 
 /**
@@ -135,6 +157,49 @@ describe("A-1⁗ the declared interface is checked against what the ticket actua
     const t = ticket([{ kind: "symbol", id: "pkg.Run", note: "" }]);
     expect(unverifiedProvides(t, "+func RunServer() {}")).toEqual(["pkg.Run"]);
     expect(unverifiedProvides(t, "+func Run() {}")).toEqual([]);
+  });
+});
+
+describe("S-3‴ the command is a name, and a server that never attached says so", () => {
+  it("refuses a command that names a path — a repository cannot choose which executable runs", () => {
+    const load = (command: string) => loadConfig({ ...BASE_CONFIG, symbols: { enabled: true, command, pinned: "0.1.4" } });
+    /**
+     * `.detent/config.json` is repository content. Unrestricted, it let a repo
+     * point the orchestrator at an executable it shipped and have it run at the
+     * operator's privilege, before anything was presented or approved.
+     */
+    for (const bad of ["./evil.sh", "../evil", "/tmp/evil", "dir/serena", "evil;rm -rf /", ".hidden"]) {
+      expect(() => load(bad), `${bad} must not parse`).toThrow();
+    }
+    for (const good of ["serena-agent", "serena", "serena_agent", "s2"]) {
+      expect(load(good).config.symbols.command).toBe(good);
+    }
+  });
+
+  it("a configured server that did not connect is reported; pending and connected are not failures", async () => {
+    const statuses = (mcp: { name: string; status: string }[]) =>
+      captureFailures([
+        { type: "system", mcp_servers: mcp },
+        { type: "result", subtype: "success", total_cost_usd: 0.1, num_turns: 1, usage: { input_tokens: 1, output_tokens: 1 } },
+      ]);
+    expect(await statuses([{ name: "serena", status: "failed" }])).toEqual([{ name: "serena", status: "failed" }]);
+    expect(await statuses([{ name: "serena", status: "needs-auth" }])).toEqual([{ name: "serena", status: "needs-auth" }]);
+    expect(await statuses([{ name: "serena", status: "connected" }])).toBeUndefined();
+    /** Startup is non-blocking, so pending at init is not yet a failure. */
+    expect(await statuses([{ name: "serena", status: "pending" }])).toBeUndefined();
+  });
+
+  it("silence is not success: a session that reported no server status claims no failure", async () => {
+    const none = await captureFailures([
+      { type: "result", subtype: "success", total_cost_usd: 0.1, num_turns: 1, usage: { input_tokens: 1, output_tokens: 1 } },
+    ]);
+    expect(none).toBeUndefined();
+    /** An unrecognised shape is information we do not have, never a claim either way. */
+    const garbage = await captureFailures([
+      { type: "system", mcp_servers: "not-an-array" },
+      { type: "result", subtype: "success", total_cost_usd: 0.1, num_turns: 1, usage: { input_tokens: 1, output_tokens: 1 } },
+    ]);
+    expect(garbage).toBeUndefined();
   });
 });
 
