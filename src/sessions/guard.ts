@@ -22,7 +22,17 @@ export interface GuardPolicy {
 }
 
 export interface GuardDecision {
-  readonly decision: "allow" | "deny";
+  /**
+   * S-2‴ (PRDR-122): `abstain` is not `allow`. The SDK evaluates permissions in
+   * a fixed order — hooks, then deny rules, then ask rules, then the mode, then
+   * the ALLOW RULES — and a hook that says `allow` ends that evaluation. So
+   * answering `allow` for a tool this guard does not govern silently overrode
+   * `allowedTools`: every `Bash` call was permitted despite the allowlist
+   * granting only `Bash(git add:*)` and `Bash(git commit:*)`, because a bash
+   * call names no path and fell through to the old blanket allow. Abstaining
+   * returns the decision to the allowlist, where it belongs.
+   */
+  readonly decision: "allow" | "deny" | "abstain";
   readonly reason: string;
 }
 
@@ -69,17 +79,19 @@ const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit
 export function guardToolUse(toolName: string, toolInput: unknown, policy: GuardPolicy): GuardDecision {
   const target = pathOf(toolInput);
   /**
-   * A tool call naming no path (or a malformed one) is allowed here: bricking
-   * the session gains nothing, and the kernel re-runs full gates regardless (P2).
+   * A tool call naming no path is not this guard's business — it governs WHERE
+   * a mutation lands. Abstaining hands it back to the allowlist rather than
+   * granting it, which is what an `allow` here did.
    */
-  if (target === null) return { decision: "allow", reason: "no path in tool input" };
+  if (target === null) return { decision: "abstain", reason: "no path in tool input — the allowlist decides" };
 
   const rel = path.relative(path.resolve(policy.workRoot), path.resolve(policy.workRoot, target));
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
   }
   if (!MUTATING_TOOLS.has(toolName)) {
-    return { decision: "allow", reason: `${rel} read inside the worktree (S-2″)` };
+    /* Inside the worktree and not a mutation: bounded by P7 above, granted by the allowlist. */
+    return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2″)` };
   }
   if (matchAny(rel, policy.protectedGlobs)) {
     return {

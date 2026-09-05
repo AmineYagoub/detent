@@ -329,6 +329,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   who declines once is never asked again. PRDR-119 removed noise that buried signal; a standing
   banner would be the same mistake in a different costume.
 
+- **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
+  does not allow it. A hook decision runs before every other permission step, so `allow` is
+  terminal — it ends the evaluation before the allow rules are reached. The guard governs where
+  a mutation lands and answered `allow` for everything else, which meant it was silently
+  granting rather than declining to object: `implement` is allowlisted only `Bash(git add:*)`
+  and `Bash(git commit:*)`, yet every bash command passed, because a bash call names no path.
+  The same hole waved through any MCP tool, whose parameters the guard cannot read — including
+  the editing tools S-3′ was written to keep out. Now `deny` is terminal and unchanged, `allow`
+  is reserved for a mutating call the guard positively cleared, and `abstain` omits the
+  decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
+  D-29's rule that a hook may narrow what the permission rules grant and never widen it.
+
 - **A-1⁗ (3.1.1, PRDR-121).** A ticket that declares it provides a symbol is checked against the
   diff it produced: the identifier appears in what the ticket changed, or it does not. The precise
   answer is a symbol-table lookup and needs a client Detent does not have; this needs nothing, and

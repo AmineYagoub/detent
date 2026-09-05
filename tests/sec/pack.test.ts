@@ -66,10 +66,15 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
 
   it("a Bash tool call that names no path is not an escape hatch — the kernel re-verifies (P2)", () => {
     /**
-     * The guard allows path-less calls (bricking gains nothing); containment
-     * of what Bash *does* is the allowlist plus the kernel's own gate re-run.
+     * S-2‴ (PRDR-122): containment of what Bash *does* is the allowlist plus
+     * the kernel's own gate re-run — which is exactly why this must ABSTAIN.
+     * A hook decision of `allow` is terminal in the SDK's permission order, so
+     * the previous blanket allow here overrode the allowlist it names as the
+     * real control: `implement` is granted only `Bash(git add:*)` and
+     * `Bash(git commit:*)`, and every other command was being permitted by
+     * this line. The comment was right; the assertion contradicted it.
      */
-    expect(guardToolUse("Bash", { command: "cat /etc/passwd" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Bash", { command: "cat /etc/passwd" }, POLICY).decision).toBe("abstain");
   });
 });
 

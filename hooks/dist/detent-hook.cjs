@@ -1579,13 +1579,13 @@ function pathOf(toolInput) {
 var MUTATING_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 function guardToolUse(toolName, toolInput, policy) {
   const target = pathOf(toolInput);
-  if (target === null) return { decision: "allow", reason: "no path in tool input" };
+  if (target === null) return { decision: "abstain", reason: "no path in tool input \u2014 the allowlist decides" };
   const rel = import_node_path.default.relative(import_node_path.default.resolve(policy.workRoot), import_node_path.default.resolve(policy.workRoot, target));
   if (rel.startsWith("..") || import_node_path.default.isAbsolute(rel)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
   }
   if (!MUTATING_TOOLS.has(toolName)) {
-    return { decision: "allow", reason: `${rel} read inside the worktree (S-2\u2033)` };
+    return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2\u2033)` };
   }
   if (matchAny(rel, policy.protectedGlobs)) {
     return {
@@ -1687,7 +1687,7 @@ function decidePreToolUse(payload, nowMs) {
     protectedGlobs: strings(cfg?.protected),
     workRoot: cwd
   });
-  return decision.decision === "allow" ? null : denyJson(decision.reason);
+  return decision.decision === "deny" ? denyJson(decision.reason) : null;
 }
 function runScopedGate(command, cwd) {
   const result = (0, import_node_child_process.spawnSync)(command, {

@@ -55,17 +55,26 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
   });
 
   it("a tool call naming no path is allowed — the kernel re-verifies regardless (P2)", () => {
-    expect(guardToolUse("Bash", {}, POLICY).decision).toBe("allow");
-    expect(guardToolUse("Write", null, POLICY).decision).toBe("allow");
-    expect(guardToolUse("Bash", { command: "git status" }, POLICY).decision).toBe("allow");
+    /**
+     * S-2‴ (PRDR-122): these ABSTAIN rather than allow. A hook decision of
+     * `allow` is terminal in the SDK's permission order, so answering it for a
+     * pathless call overrode `allowedTools` — and `implement` is granted only
+     * `Bash(git add:*)` and `Bash(git commit:*)`, while every other bash
+     * command was being permitted by this very line.
+     */
+    expect(guardToolUse("Bash", {}, POLICY).decision).toBe("abstain");
+    expect(guardToolUse("Write", null, POLICY).decision).toBe("abstain");
+    expect(guardToolUse("Bash", { command: "git status" }, POLICY).decision).toBe("abstain");
+    /** An MCP tool the guard does not govern is likewise the allowlist's call, not a grant. */
+    expect(guardToolUse("mcp__serena__replace_symbol_body", { relative_path: "src/a.ts" }, POLICY).decision).toBe("abstain");
   });
 
   it("S-2″ (PRDR-068): reads are worktree-bounded, not surface-bounded — a session can read its spec", () => {
     /** T-140's empty-diff lesson: a worker denied READING the PRD cannot implement it. */
-    expect(guardToolUse("Read", { file_path: "/wt/detent-prd-v3.md" }, POLICY).decision).toBe("allow");
-    expect(guardToolUse("Grep", { path: "/wt/README.md" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Read", { file_path: "/wt/detent-prd-v3.md" }, POLICY).decision).toBe("abstain");
+    expect(guardToolUse("Grep", { path: "/wt/README.md" }, POLICY).decision).toBe("abstain");
     /** SEC-3 is immutability, not unreadability. */
-    expect(guardToolUse("Read", { file_path: "/wt/AGENTS.md" }, POLICY).decision).toBe("allow");
+    expect(guardToolUse("Read", { file_path: "/wt/AGENTS.md" }, POLICY).decision).toBe("abstain");
     /** P7: the worktree bounds every tool, reads included. */
     expect(guardToolUse("Read", { file_path: "/etc/hosts" }, POLICY).decision).toBe("deny");
   });

@@ -145,7 +145,13 @@ function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
     protectedGlobs: strings(cfg?.protected),
     workRoot: cwd,
   });
-  return decision.decision === "allow" ? null : denyJson(decision.reason);
+  /**
+   * S-2‴ (PRDR-122): only a DENY speaks. `allow` and `abstain` are both silence
+   * here — this hook can narrow what the permission rules would grant, never
+   * widen it (D-29), so an abstention is precisely "no opinion" and must not
+   * become a refusal.
+   */
+  return decision.decision === "deny" ? denyJson(decision.reason) : null;
 }
 
 /** Executes the scoped gate for the Stop decision (the oracle's `subprocess.run`). */

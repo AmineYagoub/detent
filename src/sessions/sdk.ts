@@ -42,10 +42,16 @@ export function buildPreToolUseHook(policy: GuardPolicy): NonNullable<Options["h
               payload.tool_input,
               policy,
             );
+            /**
+             * S-2‴ (PRDR-122): an abstention omits `permissionDecision`
+             * entirely, so the SDK carries on to its deny/ask/allow rules. A
+             * hook that answered `allow` ended the evaluation and overrode
+             * `allowedTools`.
+             */
             return {
               hookSpecificOutput: {
                 hookEventName: "PreToolUse" as const,
-                permissionDecision: decision.decision,
+                ...(decision.decision === "abstain" ? {} : { permissionDecision: decision.decision }),
                 permissionDecisionReason: decision.reason,
               },
             };
