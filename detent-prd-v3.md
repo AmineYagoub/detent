@@ -345,6 +345,16 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   tools was indistinguishable from one that never had them. An absent or unrecognised init
   message is treated as no information, never as success.
 
+- **S-1″ (3.1.1, PRDR-124).** An init session carries its OWN containment policy, whose surface
+  is exactly the artifact it was asked to write. S-1′ has always said such a session gets the
+  read-only surface plus one write rule; the rule was granted on the allowlist while the hook
+  fell back to the backend's construction policy of `**`, and a cleared mutation returns a
+  terminal allow, so the allowlist was never consulted and the rule was decorative. A planner
+  asked for one artifact wrote its draft as two part files beside it and the phase found
+  nothing where it was told to look. Reads are unchanged — non-mutating calls abstain (S-2‴)
+  and the worktree bound holds — because a planner that cannot read the documents cannot
+  analyse them.
+
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
   terminal — it ends the evaluation before the allow rules are reached. The guard governs where

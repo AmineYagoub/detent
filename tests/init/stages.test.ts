@@ -291,7 +291,21 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(call!.spec.allowedTools.slice(0, 3)).toEqual(["Read", "Grep", "Glob"]);
     expect(call!.spec.allowedTools).not.toContain("Write");
     expect(call!.spec.allowedTools).not.toContain("Edit");
+    /**
+     * S-1″ (PRDR-124): the allowlist's one write rule is only true if the
+     * hook's surface agrees. The backend's fallback policy was `**`, and a
+     * mutating call the guard clears returns a TERMINAL allow, so the
+     * allowlist was never reached — a planner asked for one artifact wrote its
+     * draft as `<slice>-part1.json` and `-part2.json` instead, and the phase
+     * found nothing where it was told to look.
+     */
+    expect(call!.spec.policy?.surface).toEqual([".detent/state/analysis.json"]);
+    expect(call!.spec.policy?.workRoot).toBe(root);
+    for (const shut of [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"]) {
+      expect(call!.spec.policy?.protectedGlobs).toContain(shut);
+    }
     const writeRules = call!.spec.allowedTools.filter((t) => t.startsWith("Write("));
+
     expect(writeRules).toHaveLength(1);
     expect(writeRules[0]).toBe(`Write(/${call!.spec.artifactOut})`);
     expect(writeRules[0]).toContain(".detent/state/analysis.json");

@@ -82,6 +82,28 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     ],
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
+    /**
+     * S-1″ (PRDR-124): the per-session containment policy, so the one write
+     * rule above is TRUE rather than merely stated.
+     *
+     * The allowlist granted exactly `Write(<artifact>)`, but the backend's
+     * construction policy — the fallback the hook uses when a spec carries
+     * none — was `surface: ["**"]`. A mutating call the guard clears returns
+     * `allow`, which is terminal in the SDK's permission order, so the
+     * allowlist was never consulted and a planner could write anywhere in the
+     * repository. It did: asked for one artifact, it wrote its draft as
+     * `state/plan/<slice>-part1.json` and `-part2.json`, and the phase then
+     * found no artifact where it was told one would be.
+     *
+     * Reads are unaffected — non-mutating calls abstain (S-2‴) and `Read` is
+     * allowlisted — so the surface here governs writes alone, which is exactly
+     * what S-1′ always claimed.
+     */
+    policy: {
+      surface: [path.relative(deps.root, request.artifactOut).split(path.sep).join("/")],
+      protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json", ".detent/tickets/**"],
+      workRoot: deps.root,
+    },
   };
 }
 

@@ -145,3 +145,29 @@ describe("T-046 tool surfaces (S-3, oracle test_research_session_gets_domain_sco
     expect(edit("/wt/AGENTS.md").decision).toBe("deny");
   });
 });
+
+describe("S-1″ (PRDR-124): an init session's surface is its artifact, so its one write rule is real", () => {
+  const initPolicy = {
+    surface: [".detent/state/plan-draft.json"],
+    protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"],
+    workRoot: "/wt",
+  };
+
+  it("the artifact is writable and nothing else in the repo is", () => {
+    expect(guardToolUse("Write", { file_path: "/wt/.detent/state/plan-draft.json" }, initPolicy).decision).toBe("allow");
+    /** The exact escape observed live: the draft written as parts beside the artifact. */
+    const part = guardToolUse("Write", { file_path: "/wt/.detent/state/plan/s01-part1.json" }, initPolicy);
+    expect(part.decision).toBe("deny");
+    expect(part.reason).toContain("outside this ticket's declared surface");
+    expect(guardToolUse("Write", { file_path: "/wt/src/anything.ts" }, initPolicy).decision).toBe("deny");
+    expect(guardToolUse("Edit", { file_path: "/wt/detent-prd-v3.md" }, initPolicy).decision).toBe("deny");
+  });
+
+  it("reading is untouched — the surface governs writes alone", () => {
+    /** A planner that cannot read the documents cannot analyse them (T-140's lesson). */
+    expect(guardToolUse("Read", { file_path: "/wt/detent-prd-v3.md" }, initPolicy).decision).toBe("abstain");
+    expect(guardToolUse("Grep", { path: "/wt/src" }, initPolicy).decision).toBe("abstain");
+    /** The worktree bound still holds for reads. */
+    expect(guardToolUse("Read", { file_path: "/etc/hosts" }, initPolicy).decision).toBe("deny");
+  });
+});
