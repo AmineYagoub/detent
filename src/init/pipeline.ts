@@ -12,6 +12,7 @@ import { planDraftPath, planStage } from "./plan.js";
 import { presentInputsFromOutputs, presentStage, type ApprovalDecision } from "./present.js";
 import { sliceStage, slicesFromOutputs, slicesPath } from "./slice.js";
 import { baselineDigest } from "./baseline.js";
+import type { SymbolsConfig } from "../adapter/symbols.js";
 import { readBindings } from "../adapter/drift.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
@@ -40,6 +41,8 @@ export interface PipelineDeps {
   readonly modelRouting?: Readonly<Record<string, string>>;
   /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out. */
   readonly planBaseline?: "production" | "none";
+  /** S-3′ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
+  readonly symbols?: SymbolsConfig;
   readonly note?: (text: string) => void;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
@@ -354,6 +357,7 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
         ...presentInputsFromOutputs(ctx.outputs),
+        ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
         ...(deps.print === undefined ? {} : { print: deps.print }),
       });

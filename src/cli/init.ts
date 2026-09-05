@@ -141,6 +141,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     budgets: budgetsFor(config),
     modelRouting: config?.model_routing ?? {},
     planBaseline: config?.plan_baseline ?? "production",
+    ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
     planDocs: config?.plan_docs ?? [],
     note: (text) => process.stdout.write(`  ${text}\n`),
     print: (text) => process.stdout.write(`${text}\n`),

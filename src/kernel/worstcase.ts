@@ -158,6 +158,18 @@ const configSchema = z.strictObject({
     claude_code: nonEmptyString,
   }),
   /**
+   * S-3′ (PRDR-121): optional symbol intelligence. Absent or disabled, every
+   * stage runs unchanged. Detent never installs it — `enabled` with a command
+   * it cannot run is a setup message, not an install (D-4/F-2).
+   */
+  symbols: z
+    .strictObject({
+      enabled: z.boolean().default(false),
+      command: nonEmptyString.default("serena-agent"),
+      pinned: nonEmptyString.default("0.1.4"),
+    })
+    .default({ enabled: false, command: "serena-agent", pinned: "0.1.4" }),
+  /**
    * S-1: sessions are constructed with no external setting sources. Recorded in
    * config so `doctor` can report it and a backend upgrade cannot silently
    * re-enable project-scope policy from the repository under work (PRDR-051).

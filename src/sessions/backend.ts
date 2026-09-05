@@ -47,6 +47,13 @@ export interface SessionSpec {
    * reached the hook.
    */
   readonly policy?: GuardPolicy;
+  /**
+   * S-3′ (PRDR-121): MCP servers this session may call, by name. Only ever the
+   * optional symbol-intelligence server, and only its READ tools — the
+   * allowlist is what grants them, and `assertNoEditingTools` refuses any tool
+   * that would write outside the D-21 hook's sight.
+   */
+  readonly mcpServers?: Readonly<Record<string, unknown>>;
 }
 
 /**

@@ -309,6 +309,26 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   ksar-cloud, where eight findings survived a revision round and five were one defect wearing
   different costumes — two tickets disagreeing about a name neither of them owned.
 
+- **S-3′ (3.1.1, PRDR-121).** Symbol intelligence is an OPTIONAL adapter, discovered and never
+  installed. `symbols: { enabled, command, pinned }` in config; absent or disabled, every stage
+  runs unchanged. Enabled with a command Detent cannot run raises `AWAIT_SETUP_CONSENT` naming
+  the pinned install command — Detent binds to what the machine has and does not put software
+  on it (D-4/F-2), and a third-party server with read access to a private repository is a
+  decision its owner makes. Two constraints are structural rather than configurable: only the
+  server's READ tools are ever granted, because its editing tools write from inside the MCP
+  server process and would never pass the `Write`/`Edit` calls the D-21 hook inspects (S-2′,
+  SEC-3); and the server's own cross-session memory is disabled, because a hidden per-project
+  memory would make two identical runs diverge (C-8, S-6). There is no flag that permits
+  either.
+
+- **S-3″ (3.1.1, PRDR-121).** The reminder to install it is EARNED, never periodic. Detent
+  mentions symbol intelligence only when the run just completed contains evidence it would have
+  helped — a `coherence` or `dependency` finding whose subject was a symbol — and the message
+  names those tickets, gives the pinned install command, and states how to silence it forever
+  in the same breath. No evidence, no message. `enabled: false` is honoured absolutely: a user
+  who declines once is never asked again. PRDR-119 removed noise that buried signal; a standing
+  banner would be the same mistake in a different costume.
+
 - **C-3″ (3.1.1, PRDR-119).** A question is for a fact outside the documents AND outside
   engineering judgement — a price, a domain or account the founder owns, a vendor or payment
   rail with commercial consequences, a legal or retention rule, a credential; a decision whose

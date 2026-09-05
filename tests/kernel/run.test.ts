@@ -310,6 +310,7 @@ describe("T-041 X-1 enforcement fixtures", () => {
         setting_sources: [],
         plan_docs: [],
         plan_baseline: "production" as const,
+        symbols: { enabled: false, command: "serena-agent", pinned: "0.1.4" },
       },
       computedWorstCase: 14,
     };

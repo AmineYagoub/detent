@@ -95,6 +95,12 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
     settingSources: [],
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
+    /**
+     * S-3′ (PRDR-121): the optional symbol server, when the adapter granted
+     * one. Its READ tools are in `allowedTools`; nothing else it exposes is
+     * reachable, and `assertNoEditingTools` refuses an allowlist that tries.
+     */
+    ...(spec.mcpServers === undefined ? {} : { mcpServers: spec.mcpServers as NonNullable<Options["mcpServers"]> }),
     /** X-1″ (PRDR-106): no ceiling unless a caller sets one — only the doctor probe does. */
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
     ...(spec.model === "" ? {} : { model: spec.model }),

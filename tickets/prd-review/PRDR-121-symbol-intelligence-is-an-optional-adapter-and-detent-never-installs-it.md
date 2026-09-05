@@ -1,7 +1,7 @@
 ---
 id: PRDR-121
 title: "Detent has no way to ask what code actually references a symbol, so a declared contract cannot be verified and a session cannot see what its change will break"
-state: OPEN
+state: DONE
 severity: normal
 category: capability
 labels: ["prd-review"]

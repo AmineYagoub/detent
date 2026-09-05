@@ -6,6 +6,8 @@ import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PlanQuestion, PlanReview } from "../schemas/init.js";
 import { planHash } from "./machine.js";
+import { symbolReminder } from "./symbol-reminder.js";
+import type { SymbolsConfig } from "../adapter/symbols.js";
 import { bindingTable } from "./bind.js";
 import type { PhaseOutcome } from "./machine.js";
 
@@ -42,6 +44,8 @@ export interface PresentInput {
   readonly findings?: PlanReview["findings"];
   /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
   readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
+  /** S-3″: absent means unconfigured, which is what earns the reminder. */
+  readonly symbols?: SymbolsConfig;
 }
 
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
@@ -126,6 +130,9 @@ export function renderPresentation(input: PresentInput): string {
     for (const f of findings) lines.push(`  ${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`);
   }
   lines.push("", "Bindings and tickets are overridable — edit them and re-run `detent init` (C-3b/C-8).");
+  /** S-3″ (PRDR-121): shown only when this run produced evidence it would have helped. */
+  const reminder = symbolReminder(input.symbols, findings);
+  if (reminder !== null) lines.push(reminder);
   return lines.join("\n");
 }
 
