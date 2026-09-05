@@ -329,6 +329,15 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   who declines once is never asked again. PRDR-119 removed noise that buried signal; a standing
   banner would be the same mistake in a different costume.
 
+- **A-1⁗ (3.1.1, PRDR-121).** A ticket that declares it provides a symbol is checked against the
+  diff it produced: the identifier appears in what the ticket changed, or it does not. The precise
+  answer is a symbol-table lookup and needs a client Detent does not have; this needs nothing, and
+  catches the case that occurs — a ticket claiming a name it never wrote, which another ticket's
+  work is waiting on. It is deliberately weak in one direction only: an identifier in a comment
+  satisfies it, so it never fails a ticket and never touches the gate. It is EVIDENCE handed to
+  the review, which was already judging whether the diff does what the ticket says, so a false
+  positive is a sentence a reviewer dismisses rather than a red build.
+
 - **C-3″ (3.1.1, PRDR-119).** A question is for a fact outside the documents AND outside
   engineering judgement — a price, a domain or account the founder owns, a vendor or payment
   rail with commercial consequences, a legal or retention rule, a credential; a decision whose

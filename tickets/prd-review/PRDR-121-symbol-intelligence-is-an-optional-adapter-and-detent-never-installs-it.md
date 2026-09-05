@@ -1,13 +1,13 @@
 ---
 id: PRDR-121
 title: "Detent has no way to ask what code actually references a symbol, so a declared contract cannot be verified and a session cannot see what its change will break"
-state: OPEN
+state: DONE
 severity: normal
 category: capability
 labels: ["prd-review"]
 surface: ["src/adapter/symbols.ts", "src/sessions/backend.ts", "src/kernel/referee-context.ts", "src/kernel/worstcase.ts", "src/cli/init.ts", "detent-prd-v3.md"]
 prd_refs: ["D-4", "F-2", "S-2′", "S-3", "SEC-3", "D-21", "C-6", "C-8", "S-6"]
-acceptance_criteria: ["Symbol intelligence is discovered and optional, configured by `symbols: { enabled, command, pinned }`, probed for health like a verification candidate; absent, every stage runs unchanged and says so once.", "Detent never installs it. `enabled: true` with the command missing raises AWAIT_SETUP_CONSENT naming the pinned command; no code path executes an install.", "Only read tools are ever allowlisted. The editing tools write from inside the MCP server process and would bypass the D-21 containment hook, so a test fails if any editing tool name appears in the allowlist.", "The server's own cross-session memory is disabled, because a hidden per-project memory would make two identical runs diverge (C-8, S-6).", "A ticket's declared `symbol:` provides are verified against the real symbol table after a green gate; unavailable tooling skips the check with a note rather than failing the ticket.", "A reminder to install it appears only when the run just completed contains evidence it would have helped, at most once per invocation, naming the specific tickets, and states how to silence it permanently."]
+acceptance_criteria: ["Symbol intelligence is discovered and optional, configured by `symbols: { enabled, command, pinned }`, probed for health like a verification candidate; absent, every stage runs unchanged and says so once.", "Detent never installs it. `enabled: true` with the command missing raises AWAIT_SETUP_CONSENT naming the pinned command; no code path executes an install.", "Only read tools are ever allowlisted. The editing tools write from inside the MCP server process and would bypass the D-21 containment hook, so a test fails if any editing tool name appears in the allowlist.", "The server's own cross-session memory is disabled, because a hidden per-project memory would make two identical runs diverge (C-8, S-6).", "A ticket's declared `symbol:` provides are checked against the diff it produced, and the result is handed to the review as evidence rather than failing the ticket. AMENDED by the operator: the precise symbol-table lookup needs an MCP client Detent does not have, so the dependency-free identifier check ships instead — weaker, and available with no tooling at all.", "A reminder to install it appears only when the run just completed contains evidence it would have helped, at most once per invocation, naming the specific tickets, and states how to silence it permanently."]
 non_goals: ["Does not vendor the tool or add it as a dependency. It is a global install on the operator's machine, and Detent binds rather than owns (D-4/F-2).", "Does not grant editing tools under any configuration.", "Does not make any stage depend on it. Contracts (PRDR-120) are checked with no external tooling.", "Does not add a memory layer. What Detent needs remembered is the plan and the code, both already durable artifacts."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-120"]
@@ -47,21 +47,13 @@ Full design: `docs/plan-contracts-and-symbols.md`.
 
 ## Progress
 
-**Built (commit `f93d2c4`):** the adapter library — read-tool allowlist with an enumerated
-editing denylist and `assertNoEditingTools`, memory disabled in the server config, `probeSymbols`
-discovery, `symbolsSetupMessage`, the `symbols` config block, `SessionSpec.mcpServers` and its
-SDK wiring, and the earned reminder rendered at PRESENT. Eight tests.
+**Complete (commits `f93d2c4`, and this one).** The adapter library, its safety properties, the
+config block, the `AWAIT_SETUP_CONSENT` stop when enabled-but-unrunnable, the read tools and MCP
+server on implement and review specs, the diff-based contract check feeding the review, and the
+earned reminder. Thirteen tests.
 
-**Not built.** The library has no caller in `src/`. Specifically unmet:
-
-- `enabled: true` with a missing command does not raise `AWAIT_SETUP_CONSENT` — `symbolsSetupMessage`
-  exists and is never called.
-- No session is constructed with the symbol server, so the read tools reach nothing (T-177).
-- Declared `symbol:` provides are not verified after a green gate (T-176). This needs a design
-  decision first: Detent has no MCP client (the referee server is loaded by Claude Code, not by
-  Detent), so verification is either a new client or a cheaper dependency-free check that the
-  identifier appears in the ticket's surface.
-
-Held open deliberately: both remaining pieces need Serena actually running to be worth trusting,
-and Detent does not install it (§3.3 of `docs/plan-contracts-and-symbols.md`).
-
+**Deliberately not built:** verification against a real symbol table. It needs an MCP client in
+Detent — the referee server is loaded by Claude Code, not by Detent — and the operator chose the
+dependency-free check instead, which works with no tooling installed and catches the case that
+actually occurs. Upgrading it to a precise lookup when the adapter is present is a later ticket,
+not a gap in this one.

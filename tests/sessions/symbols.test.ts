@@ -12,6 +12,7 @@ import {
 } from "../../src/adapter/symbols.js";
 import { buildOptions } from "../../src/sessions/sdk.js";
 import { symbolReminder } from "../../src/init/symbol-reminder.js";
+import { contractEvidence, identifierOf, unverifiedProvides } from "../../src/kernel/contract-verify.js";
 
 /**
  * S-3′ / S-3″ (PRDR-121) — the adapter's safety properties.
@@ -85,6 +86,46 @@ describe("S-3′ symbol intelligence cannot become a containment hole", () => {
       .join("\n");
     expect(/execFileSync\([^)]*install/.test(source), "no code path may install the tool").toBe(false);
     expect(probeSymbols(CONFIG, () => undefined)).toEqual({ kind: "ready", command: "serena-agent" });
+  });
+});
+
+describe("A-1⁗ the declared interface is checked against what the ticket actually changed", () => {
+  const ticket = (provides: { kind: "symbol" | "config"; id: string; note: string }[]) =>
+    ({ provides, consumes: [] }) as unknown as Parameters<typeof unverifiedProvides>[0];
+
+  it("takes the identifier from the tail of the contract id", () => {
+    expect(identifierOf("controlplane/internal/v1.TerminalStates")).toBe("TerminalStates");
+    expect(identifierOf("pkg.Deps")).toBe("Deps");
+    expect(identifierOf("Bare")).toBe("Bare");
+  });
+
+  it("a ticket claiming a symbol its diff never mentions becomes evidence for the review", () => {
+    const t = ticket([{ kind: "symbol", id: "controlplane/internal/v1.TerminalStates", note: "failed, stopped" }]);
+    const diff = "+++ b/controlplane/internal/v1/state.go\n+func Something() {}\n";
+    expect(unverifiedProvides(t, diff)).toEqual(["controlplane/internal/v1.TerminalStates"]);
+    const evidence = contractEvidence(t, diff);
+    expect(evidence["unverified_provides"]).toEqual(["controlplane/internal/v1.TerminalStates"]);
+    expect(String(evidence["contract_instruction"])).toContain("evidence, not proof");
+  });
+
+  it("says nothing when the identifier is there, when nothing is declared, or when there is no diff", () => {
+    const t = ticket([{ kind: "symbol", id: "v1.TerminalStates", note: "" }]);
+    expect(unverifiedProvides(t, "+func TerminalStates() []State {}")).toEqual([]);
+    expect(contractEvidence(t, "+func TerminalStates() []State {}")).toEqual({});
+    expect(unverifiedProvides(ticket([]), "anything")).toEqual([]);
+    /** No diff is no evidence either way — it must never accuse on absence of input. */
+    expect(unverifiedProvides(t, "")).toEqual([]);
+  });
+
+  it("only `symbol` provides are checked — a config key is not an identifier in the code", () => {
+    const t = ticket([{ kind: "config", id: "KSAR_BUILD_TIMEOUT", note: "" }]);
+    expect(unverifiedProvides(t, "+nothing here")).toEqual([]);
+  });
+
+  it("matches whole identifiers, so a longer name does not satisfy a shorter one", () => {
+    const t = ticket([{ kind: "symbol", id: "pkg.Run", note: "" }]);
+    expect(unverifiedProvides(t, "+func RunServer() {}")).toEqual(["pkg.Run"]);
+    expect(unverifiedProvides(t, "+func Run() {}")).toEqual([]);
   });
 });
 

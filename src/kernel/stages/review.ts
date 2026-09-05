@@ -69,8 +69,15 @@ export interface ReviewDeps {
 
 export type ReviewOutcome = { readonly kind: "event"; readonly event: KernelEvent } | { readonly kind: "breaker"; readonly reason: string };
 
-export async function reviewStage(ticket: Ticket, diff: string, hypothesis: Hypothesis | null, deps: ReviewDeps): Promise<ReviewOutcome> {
-  await deps.launch(buildReviewerInputs(ticket, diff, hypothesis));
+export async function reviewStage(
+  ticket: Ticket,
+  diff: string,
+  hypothesis: Hypothesis | null,
+  deps: ReviewDeps,
+  /** A-1⁗ (PRDR-121): mechanical evidence about the ticket's declared interface. */
+  evidence: Record<string, unknown> = {},
+): Promise<ReviewOutcome> {
+  await deps.launch({ ...buildReviewerInputs(ticket, diff, hypothesis), ...evidence });
 
   const raw = deps.readArtifact();
   const parsed = raw === null ? null : parseArtifact(reviewSchema, raw);

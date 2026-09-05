@@ -9,6 +9,7 @@ import { reviewBasis } from "./review-scope.js";
 import { pidAlive } from "./tickets/mutations.js";
 import { allTickets } from "./tickets/readers.js";
 import { contractKey } from "../schemas/init.js";
+import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, type SymbolsConfig } from "../adapter/symbols.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { SpendLedger } from "./ledger.js";
@@ -141,6 +142,36 @@ export class RefereeContext {
     this.refs = snapshotRefs(opts.root);
     /* V-5: the run's baseline, resolved once; null falls back to root commands. */
     this.baseRef = resolveBaseRef(opts.root, runBranch);
+  }
+
+  /** S-3′ (PRDR-121): the symbol server a session may call, when one is configured and runnable. */
+  get symbols(): SymbolsConfig | undefined {
+    return this.loaded.config.symbols;
+  }
+
+  /**
+   * S-3′: the read tools a session may call, probed once per referee. Absent,
+   * disabled or unrunnable all yield none, and every stage runs as before.
+   */
+  symbolTools(): string[] {
+    if (this.symbolStatus().kind !== "ready") return [];
+    const tools = symbolToolNames();
+    /* SEC-3: refuses rather than trusts — an editing tool here is a containment hole. */
+    assertNoEditingTools(tools);
+    return tools;
+  }
+
+  symbolServer(): Record<string, unknown> {
+    const status = this.symbolStatus();
+    if (status.kind !== "ready") return {};
+    return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, this.root) };
+  }
+
+  private symbolProbe: ReturnType<typeof probeSymbols> | null = null;
+
+  private symbolStatus(): ReturnType<typeof probeSymbols> {
+    this.symbolProbe ??= probeSymbols(this.symbols);
+    return this.symbolProbe;
   }
 
   get budgets(): Budgets {

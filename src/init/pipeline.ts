@@ -213,6 +213,7 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
     run: async (ctx) =>
       await determineVerification({
         root: deps.root,
+        ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         analysis: analysisFromOutputs(ctx.outputs),
       }),

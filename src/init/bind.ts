@@ -1,4 +1,5 @@
 import { discover } from "../adapter/discover/index.js";
+import { probeSymbols, symbolsSetupMessage, type SymbolsConfig } from "../adapter/symbols.js";
 import { bindAll, acknowledgeSkip, type BindReport, type Skip } from "../adapter/bind.js";
 import { writeBindings } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
@@ -35,6 +36,8 @@ import type { PhaseOutcome } from "./machine.js";
 export const SETUP_REQUIRED_SLOTS: readonly GateSlot[] = ["test"];
 
 export interface DetermineDeps {
+  /** S-3′: optional symbol intelligence; absent or disabled, this phase ignores it. */
+  readonly symbols?: SymbolsConfig;
   readonly root: string;
   /** C-4: greenfield binds provisional; brownfield binds approved. */
   readonly greenfield: boolean;
@@ -124,6 +127,22 @@ function provisionalBindingsFor(analysis: Analysis | null, at: string): Binding[
 
 export async function determineVerification(deps: DetermineDeps): Promise<PhaseOutcome> {
   const at = deps.now?.() ?? new Date().toISOString();
+
+  /**
+   * S-3′ (PRDR-121): tooling availability is this phase's question, and symbol
+   * intelligence is tooling. Configured and unrunnable is a stop, because the
+   * operator asked for it and it is broken — but Detent names the command and
+   * does not run it (D-4/F-2).
+   */
+  const symbols = probeSymbols(deps.symbols);
+  if (symbols.kind === "missing") {
+    return {
+      kind: "interrupt",
+      interrupt: "AWAIT_SETUP_CONSENT",
+      message: symbolsSetupMessage(deps.symbols as SymbolsConfig, symbols.reason),
+      items: ["symbols"],
+    };
+  }
 
   /** ---- greenfield: propose from the chosen stack, do not execute (C-4) ---- */
   if (deps.greenfield) {

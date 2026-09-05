@@ -110,8 +110,14 @@ export class SessionArm {
        * the A-contract demands.
        */
       allowedTools: READ_ONLY_ROLES.has(role)
-        ? [...this.toolsFor(role), artifactWriteRule(artifactOut)]
-        : this.toolsFor(role),
+        ? [...this.toolsFor(role), ...ctx.symbolTools(), artifactWriteRule(artifactOut)]
+        : [...this.toolsFor(role), ...ctx.symbolTools()],
+      /**
+       * S-3′ (PRDR-121): the optional symbol server, when one is configured
+       * and runnable. Read tools only — its editing tools write from inside
+       * the server process, where the D-21 hook below cannot see them.
+       */
+      ...ctx.symbolServer(),
       permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
       /**

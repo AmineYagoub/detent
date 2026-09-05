@@ -9,6 +9,7 @@ import { Breach, publicTicket, type RefereeContext } from "./referee-context.js"
 import type { SessionArm } from "./referee-session.js";
 import type { KernelEvent } from "./events.js";
 import { runsDir } from "./journal.js";
+import { contractEvidence } from "./contract-verify.js";
 import { diagnoseStage } from "./stages/diagnose.js";
 import { reviewStage } from "./stages/review.js";
 import { researchStage } from "./stages/research.js";
@@ -100,6 +101,14 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
   const hypothesisParsed = hypothesisRaw === null ? null : parseArtifact(hypothesisSchema, hypothesisRaw);
   const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
   const diff = ctx.diff(workDir, ctx.claimBase(id), ticket.surface, id);
+  /** A-1⁗: whether the interface the ticket promised is actually in the diff. */
+  const evidence = contractEvidence(ticket, diff);
+  if (Object.keys(evidence).length > 0) {
+    appendNote(ctx.root, id, {
+      author: "kernel",
+      text: `declared provides not found in the changed files: ${(evidence["unverified_provides"] as string[]).join(", ")} — passed to the review as evidence (A-1⁗)`,
+    });
+  }
   const deps = {
     launch: async (inputs: Record<string, unknown>) => {
       await sessions.launch(ticket, "IN_REVIEW", inputs, workDir);
@@ -107,7 +116,7 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
     readArtifact: () => ctx.maybeArtifact(id, "review.json"),
     note: (text: string) => appendNote(ctx.root, id, { author: "kernel", text }),
   };
-  let outcome = await reviewStage(ticket, diff, hypothesis, deps);
+  let outcome = await reviewStage(ticket, diff, hypothesis, deps, evidence);
   /*
    * A-5′ (PRDR-109): a review with no usable verdict — absent or invalid — is
    * relaunched once before it counts. Six of the gate's human stops were a
@@ -117,7 +126,7 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
    */
   if (outcome.kind === "breaker") {
     deps.note(`${outcome.reason} — relaunched once (A-5′)`);
-    outcome = await reviewStage(ticket, diff, hypothesis, deps);
+    outcome = await reviewStage(ticket, diff, hypothesis, deps, evidence);
   }
   if (outcome.kind === "breaker") throw new Breach(`${outcome.reason} (after one relaunch, A-5′)`);
   return outcome.event;
