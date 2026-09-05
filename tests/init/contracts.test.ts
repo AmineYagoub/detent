@@ -42,6 +42,23 @@ const t = (id: string, over: Partial<DraftedTicket> = {}): DraftedTicket => ({
   ...over,
 });
 
+/** A written plan whose blockers contain a cycle is a pool that never offers those tickets. */
+function noCycle(tickets: readonly DraftedTicket[]): boolean {
+  const edges = new Map(tickets.map((x) => [x.id, x.depends_on]));
+  const done = new Set<string>();
+  let ok = true;
+  const walk = (id: string, stack: Set<string>): void => {
+    if (stack.has(id)) { ok = false; return; }
+    if (done.has(id)) return;
+    stack.add(id);
+    for (const d of edges.get(id) ?? []) walk(d, stack);
+    stack.delete(id);
+    done.add(id);
+  };
+  for (const id of edges.keys()) walk(id, new Set());
+  return ok;
+}
+
 describe("A-1‴ the four checks, each against a real ksar defect", () => {
   it("duplicate ownership: `t-004` and `t-005` both defining run() is caught without a reviewer", () => {
     const out = applyContracts([
@@ -102,6 +119,50 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
     expect(out.tickets.find((x) => x.id === "a")!.depends_on).toEqual([]);
     expect(out.findings[0]!.tag).toBe("dependency");
     expect(out.findings[0]!.finding).toContain("one of them owns the wrong half");
+  });
+
+  it("two tickets that each consume the other's name cannot BOTH derive an edge — that was a silent deadlock", () => {
+    const out = applyContracts([
+      t("a", { provides: [{ kind: "symbol", id: "pkg.A", note: "" }], consumes: [{ kind: "symbol", id: "pkg.B" }] }),
+      t("b", { provides: [{ kind: "symbol", id: "pkg.B", note: "" }], consumes: [{ kind: "symbol", id: "pkg.A" }] }),
+    ]);
+    /**
+     * Judging each candidate against a reachability snapshot taken BEFORE any
+     * derivation let both edges through: in the original graph neither reached
+     * the other. The plan was written with a blocked on b and b blocked on a,
+     * no finding, and `ready()` never offered either again.
+     */
+    expect(out.derived.map((d) => `${d.consumer}->${d.provider}`)).toEqual(["a->b"]);
+    expect(out.tickets.find((x) => x.id === "b")!.depends_on).toEqual([]);
+    expect(out.findings.map((f) => f.tag)).toEqual(["dependency"]);
+    expect(out.findings[0]!.finding).toContain("one of them owns the wrong half");
+  });
+
+  it("a ring of three closes the same way — no pairwise check could have seen it", () => {
+    const ring = applyContracts([
+      t("x", { provides: [{ kind: "symbol", id: "p.X", note: "" }], consumes: [{ kind: "symbol", id: "p.Y" }] }),
+      t("y", { provides: [{ kind: "symbol", id: "p.Y", note: "" }], consumes: [{ kind: "symbol", id: "p.Z" }] }),
+      t("z", { provides: [{ kind: "symbol", id: "p.Z", note: "" }], consumes: [{ kind: "symbol", id: "p.X" }] }),
+    ]);
+    expect(ring.derived.map((d) => `${d.consumer}->${d.provider}`)).toEqual(["x->y", "y->z"]);
+    expect(noCycle(ring.tickets)).toBe(true);
+    expect(ring.findings.some((f) => f.finding.includes("owns the wrong half"))).toBe(true);
+  });
+
+  it("a long legitimate chain still derives every edge — the guard refuses cycles, not depth", () => {
+    const chain = applyContracts(
+      Array.from({ length: 6 }, (_, i) =>
+        t(`t${i}`, {
+          provides: [{ kind: "symbol", id: `p.S${i}`, note: "" }],
+          ...(i === 0 ? {} : { consumes: [{ kind: "symbol" as const, id: `p.S${i - 1}` }] }),
+        }),
+      ),
+    );
+    expect(chain.derived).toHaveLength(5);
+    expect(chain.findings).toEqual([]);
+    expect(noCycle(chain.tickets)).toBe(true);
+    /** And the ordering is real: the last ticket transitively reaches the first. */
+    expect(chain.tickets.find((x) => x.id === "t5")!.depends_on).toEqual(["t4"]);
   });
 
   it("a ticket consuming what it provides itself is not a dependency on anyone", () => {

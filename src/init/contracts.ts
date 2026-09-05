@@ -42,24 +42,28 @@ const NOUN: Readonly<Record<string, string>> = {
   event: "event",
 };
 
-/** Everything reachable from `id` through declared edges — who is already guaranteed to come first. */
-function ancestry(tickets: readonly DraftedTicket[]): Map<string, Set<string>> {
-  const edges = new Map(tickets.map((t) => [t.id, t.depends_on]));
-  const memo = new Map<string, Set<string>>();
-  const walk = (id: string, seen: Set<string>): Set<string> => {
-    const cached = memo.get(id);
-    if (cached !== undefined) return cached;
-    if (seen.has(id)) return new Set();
+/**
+ * Does `from` already reach `to` through the edges the graph holds RIGHT NOW?
+ *
+ * Deliberately not memoised across derivations. An earlier version computed
+ * reachability once, up front, and checked every candidate edge against that
+ * snapshot — so `a` consuming from `b` and `b` consuming from `a` both passed,
+ * because in the ORIGINAL graph neither reached the other. The plan was written
+ * with `a` blocked on `b` and `b` blocked on `a`: a permanent, silent deadlock,
+ * with no finding, which is exactly the class PRDR-118 removed for drafted
+ * edges. Derived edges have to be judged against the graph as it accumulates.
+ */
+function reaches(edges: ReadonlyMap<string, ReadonlySet<string>>, from: string, to: string): boolean {
+  const stack = [...(edges.get(from) ?? [])];
+  const seen = new Set<string>();
+  while (stack.length > 0) {
+    const id = stack.pop() as string;
+    if (id === to) return true;
+    if (seen.has(id)) continue;
     seen.add(id);
-    const out = new Set<string>();
-    for (const dep of edges.get(id) ?? []) {
-      out.add(dep);
-      for (const up of walk(dep, seen)) out.add(up);
-    }
-    memo.set(id, out);
-    return out;
-  };
-  return new Map(tickets.map((t) => [t.id, walk(t.id, new Set())]));
+    for (const next of edges.get(id) ?? []) stack.push(next);
+  }
+  return false;
 }
 
 export function applyContracts(input: readonly DraftedTicket[]): ContractResult {
@@ -86,9 +90,9 @@ export function applyContracts(input: readonly DraftedTicket[]): ContractResult 
   }
 
   /** ---- what each ticket leans on, and whether the plan guarantees it ------ */
-  const reachable = ancestry(input);
-  const edgesToAdd = new Map<string, Set<string>>();
+  const edges = new Map<string, Set<string>>(input.map((t) => [t.id, new Set(t.depends_on)]));
 
+  /* Deterministic order: the same plan derives the same edges, every time (C-8). */
   for (const t of input) {
     for (const c of t.consumes) {
       const key = contractKey(c);
@@ -99,10 +103,14 @@ export function applyContracts(input: readonly DraftedTicket[]): ContractResult 
       }
       const provider = providers.find((p) => p !== t.id);
       if (provider === undefined) continue;
-      if (reachable.get(t.id)?.has(provider) === true) continue;
+      if (reaches(edges, t.id, provider)) continue;
 
-      /* An edge that closes a loop is a contradiction, not an omission. */
-      if (reachable.get(provider)?.has(t.id) === true) {
+      /*
+       * An edge that closes a loop is a contradiction, not an omission — and
+       * this is checked against the accumulated graph, so a pair or a ring of
+       * mutually-consuming tickets is caught on the edge that would close it.
+       */
+      if (reaches(edges, provider, t.id)) {
         findings.push({
           tag: "dependency",
           ticket: t.id,
@@ -110,15 +118,12 @@ export function applyContracts(input: readonly DraftedTicket[]): ContractResult 
         });
         continue;
       }
-      edgesToAdd.set(t.id, new Set([...(edgesToAdd.get(t.id) ?? []), provider]));
+      edges.get(t.id)?.add(provider);
       derived.push({ consumer: t.id, provider, contract: key });
     }
   }
 
-  const tickets = input.map((t) => {
-    const add = edgesToAdd.get(t.id);
-    return add === undefined ? { ...t } : { ...t, depends_on: [...new Set([...t.depends_on, ...add])] };
-  });
+  const tickets = input.map((t) => ({ ...t, depends_on: [...(edges.get(t.id) ?? new Set(t.depends_on))] }));
   return { tickets, findings, derived };
 }
 
