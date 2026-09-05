@@ -66,7 +66,32 @@ function reaches(edges: ReadonlyMap<string, ReadonlySet<string>>, from: string, 
   return false;
 }
 
-export function applyContracts(input: readonly DraftedTicket[]): ContractResult {
+/**
+ * Which provider a consumer is bound to when a name has more than one owner.
+ *
+ * Shared with `referee-context`, which tells the session whose definition to
+ * implement against. The two used to disagree — this picked the first in draft
+ * order, that one the last in ticket-id order — so a consumer could be blocked
+ * on one ticket and handed a different, contradicting ticket's note. The
+ * ambiguity is already reported as a `coherence` finding; what must not vary is
+ * WHICH answer the two halves of the system give.
+ */
+export function resolveOwner(providers: readonly string[], self: string): string | undefined {
+  return [...providers].filter((p) => p !== self).sort()[0];
+}
+
+export function applyContracts(
+  input: readonly DraftedTicket[],
+  /**
+   * C-2‴ slice order, earliest first. Defaulting this to "no ordering" would
+   * be fail-OPEN — a caller that forgot it would silently get backwards edges
+   * and the deadlock they cause — so when it is absent the order is derived
+   * from the tickets themselves, which `planSlices` emits slice by slice.
+   */
+  sliceOrder: readonly string[] = [],
+  /** Names already provided by DONE work this plan no longer redrafts. */
+  external: readonly string[] = [],
+): ContractResult {
   const findings: PlanReview["findings"] = [];
   const derived: { consumer: string; provider: string; contract: string }[] = [];
 
@@ -91,6 +116,16 @@ export function applyContracts(input: readonly DraftedTicket[]): ContractResult 
 
   /** ---- what each ticket leans on, and whether the plan guarantees it ------ */
   const edges = new Map<string, Set<string>>(input.map((t) => [t.id, new Set(t.depends_on)]));
+  const order = sliceOrder.length > 0 ? sliceOrder : [...new Set(input.map((t) => t.slice))];
+  const rank = new Map(order.map((id, i) => [id, i]));
+  const sliceOf = new Map(input.map((t) => [t.id, t.slice]));
+  const settled = new Set(external);
+  /** A slice's own order is the plan's; a ticket cannot be pushed behind work that comes after it. */
+  const later = (consumer: string, provider: string): boolean => {
+    const a = rank.get(sliceOf.get(consumer) ?? "");
+    const b = rank.get(sliceOf.get(provider) ?? "");
+    return a !== undefined && b !== undefined && b > a;
+  };
 
   /* Deterministic order: the same plan derives the same edges, every time (C-8). */
   for (const t of input) {
@@ -98,11 +133,30 @@ export function applyContracts(input: readonly DraftedTicket[]): ContractResult 
       const key = contractKey(c);
       const providers = owners.get(key) ?? [];
       if (providers.length === 0) {
+        /* Work already finished still owns its names, even when this plan no longer redrafts it. */
+        if (settled.has(key)) continue;
         findings.push({ tag: "dependency", ticket: t.id, finding: unownedMessage(t.id, c) });
         continue;
       }
-      const provider = providers.find((p) => p !== t.id);
+      const provider = resolveOwner(providers, t.id);
       if (provider === undefined) continue;
+
+      /**
+       * The slices are ordered, and an edge backwards through that order is a
+       * plan defect, not an omission to fix silently. Deriving it produced a
+       * deadlock in the ordinary case: an early ticket needing a key a later
+       * slice defines got blocked on that slice, while `capstoneBlockers`
+       * blocked the later slice on the earlier one. Both tickets READY, neither
+       * ever claimable, and nothing said so.
+       */
+      if (later(t.id, provider)) {
+        findings.push({
+          tag: "dependency",
+          ticket: t.id,
+          finding: `consumes the ${NOUN[c.kind] ?? c.kind} \`${c.id}\` from ${provider}, which the plan puts in a LATER slice (${sliceOf.get(provider)} after ${sliceOf.get(t.id)}) — either the name belongs earlier or this ticket belongs later; no edge was added, because one backwards would deadlock both slices`,
+        });
+        continue;
+      }
       if (reaches(edges, t.id, provider)) continue;
 
       /*

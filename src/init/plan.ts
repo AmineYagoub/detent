@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { contractKey, planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { sessionBudget } from "./plan-review.js";
 import { planSlices } from "./plan-slices.js";
 import { wholePlanReview } from "./plan-whole.js";
@@ -11,7 +11,7 @@ import { applyContracts } from "./contracts.js";
 import { sizingEvidence } from "./sizing-evidence.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { Binding } from "../schemas/records.js";
-import { readTicket } from "../kernel/tickets/readers.js";
+import { allTickets, readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { previousAttemptInput, withOneRelaunch } from "./retry.js";
 
@@ -240,7 +240,16 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    * findings; a provider the plan does not already order before its consumer
    * becomes an EDGE, derived from the coupling rather than guessed.
    */
-  const contracts = applyContracts(reviewed.tickets);
+  const inPlan = new Set(reviewed.tickets.map((t) => t.id));
+  /** Names DONE work already owns, even where this plan no longer redrafts it. */
+  const settledNames = allTickets(deps.root)
+    .filter((t) => t.state === "DONE" && !inPlan.has(t.id))
+    .flatMap((t) => t.provides.map((p) => contractKey(p)));
+  const contracts = applyContracts(
+    reviewed.tickets,
+    slices.map((s) => s.id),
+    settledNames,
+  );
   const drafted = contracts.tickets;
   for (const d of contracts.derived) {
     deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);

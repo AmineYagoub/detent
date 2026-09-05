@@ -9,6 +9,7 @@ import { reviewBasis } from "./review-scope.js";
 import { pidAlive } from "./tickets/mutations.js";
 import { allTickets } from "./tickets/readers.js";
 import { contractKey } from "../schemas/init.js";
+import { resolveOwner } from "../init/contracts.js";
 import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, type SymbolsConfig } from "../adapter/symbols.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
@@ -354,10 +355,29 @@ function untrackedAsDiff(workDir: string, names: readonly string[]): string {
 function contractInputs(ticket: Ticket, root: string | undefined): Record<string, unknown> {
   const provides = ticket.provides.map((p) => ({ kind: p.kind, id: p.id, note: p.note }));
   if (provides.length === 0 && ticket.consumes.length === 0) return {};
-  const owners = new Map<string, { ticket: string; note: string }>();
+  /**
+   * The same tie-break `applyContracts` used to bind the edge (A-1‴). These
+   * disagreed once — first-in-draft-order there, last-in-id-order here — so a
+   * consumer could be blocked on one provider and told to implement against
+   * another's contradicting note.
+   */
+  const claims = new Map<string, { ids: string[]; notes: Map<string, string> }>();
   for (const other of root === undefined ? [] : allTickets(root)) {
     if (other.id === ticket.id) continue;
-    for (const p of other.provides) owners.set(contractKey(p), { ticket: other.id, note: p.note });
+    for (const p of other.provides) {
+      const key = contractKey(p);
+      const entry = claims.get(key) ?? { ids: [], notes: new Map<string, string>() };
+      entry.ids.push(other.id);
+      entry.notes.set(other.id, p.note);
+      claims.set(key, entry);
+    }
+  }
+  const owners = new Map<string, { ticket: string; note: string }>();
+  for (const [key, entry] of claims) {
+    const owner = resolveOwner(entry.ids, ticket.id);
+    if (owner === undefined) continue;
+    const contested = entry.ids.length > 1 ? ` (contested: ${[...entry.ids].sort().join(", ")} all claim this name)` : "";
+    owners.set(key, { ticket: owner, note: `${entry.notes.get(owner) ?? ""}${contested}` });
   }
   const consumes = ticket.consumes.map((c) => {
     const owner = owners.get(contractKey(c));

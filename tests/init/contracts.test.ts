@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyContracts } from "../../src/init/contracts.js";
-import { CONTRACT_KINDS, contractKey } from "../../src/schemas/init.js";
+import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
+import { CONTRACT_KINDS, contractKey, planDraftSchema } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 
 /**
@@ -225,6 +225,62 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
     expect(seen["consumes"]).toEqual([
       { kind: "config", id: "KSAR_BUILD_TIMEOUT", owned_by: "t-s01-002", note: "build deadline, default 30m" },
     ]);
+  });
+
+  it("a name provided by a LATER slice is refused, not derived — deriving it deadlocked both slices", () => {
+    const out = applyContracts(
+      [
+        t("t-s01-001", { slice: "s01", consumes: [{ kind: "config", id: "SHARED_KEY" }] }),
+        t("t-s02-001", { slice: "s02", provides: [{ kind: "config", id: "SHARED_KEY", note: "the key" }] }),
+      ],
+      ["s01", "s02"],
+    );
+    /**
+     * The ordinary shape: an early ticket needs a key a later slice defines.
+     * Deriving the backwards edge blocked s01 on s02, while capstoneBlockers
+     * blocked s02 on s01 for slice order. Both READY, neither ever claimable,
+     * and nothing said so.
+     */
+    expect(out.derived).toEqual([]);
+    expect(out.tickets.find((x) => x.id === "t-s01-001")!.depends_on).toEqual([]);
+    expect(out.findings[0]!.finding).toContain("LATER slice");
+    expect(out.findings[0]!.finding).toContain("would deadlock");
+  });
+
+  it("slice order is derived from the tickets when the caller does not pass it — the default is not fail-open", () => {
+    const out = applyContracts([
+      t("t-s01-001", { slice: "s01", consumes: [{ kind: "config", id: "K" }] }),
+      t("t-s02-001", { slice: "s02", provides: [{ kind: "config", id: "K", note: "" }] }),
+    ]);
+    expect(out.derived).toEqual([]);
+    expect(out.findings[0]!.finding).toContain("LATER slice");
+  });
+
+  it("a name owned by DONE work this plan no longer redrafts is not reported unowned", () => {
+    const consumer = [t("t-s02-001", { slice: "s02", consumes: [{ kind: "config", id: "SHARED_KEY" }] })];
+    expect(applyContracts(consumer).findings).toHaveLength(1);
+    /** The DONE ticket still owns it; the false alarm would have invited a second provider. */
+    expect(applyContracts(consumer, [], ["config:SHARED_KEY"]).findings).toEqual([]);
+  });
+
+  it("both halves of the system bind a contested name to the SAME provider", () => {
+    expect(resolveOwner(["t-b", "t-a", "t-c"], "t-self")).toBe("t-a");
+    /** Order of declaration must not change the answer — the edge and the note agree. */
+    expect(resolveOwner(["t-c", "t-a", "t-b"], "t-self")).toBe("t-a");
+    expect(resolveOwner(["t-a"], "t-a")).toBeUndefined();
+  });
+
+  it("a stray space does not turn one name into two", () => {
+    const parsed = planDraftSchema.parse({
+      schema_version: 1,
+      tickets: [
+        { ...bare("t-s01-001"), provides: [{ kind: "config", id: " SHARED_PORT ", note: "n" }] },
+        { ...bare("t-s01-002"), consumes: [{ kind: "config", id: "SHARED_PORT " }] },
+      ],
+    });
+    const out = applyContracts(parsed.tickets.map((x) => ({ ...x, slice: "s01" })));
+    expect(out.findings).toEqual([]);
+    expect(out.derived.map((d) => d.contract)).toEqual(["config:SHARED_PORT"]);
   });
 
   it("the vocabulary is closed and the key is stable", () => {

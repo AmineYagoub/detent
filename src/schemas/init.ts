@@ -234,9 +234,20 @@ export const CONTRACT_KINDS = ["symbol", "config", "file", "route", "table", "ev
 export type ContractKind = (typeof CONTRACT_KINDS)[number];
 
 /** A name this ticket brings into existence, with the meaning a consumer needs. */
+/**
+ * Trimmed on the way in. A provider writing `SHARED_PORT` and a consumer
+ * writing `SHARED_PORT ` are the same name to every human and were two
+ * different names to `contractKey`, which turned an ordinary edge into a false
+ * "nothing provides it" finding whose wording blamed the wrong thing.
+ */
+const contractId = z
+  .string()
+  .transform((v) => v.trim())
+  .refine((v) => v.length > 0, "a contract id cannot be empty or whitespace");
+
 export const contractProvideSchema = z.strictObject({
   kind: z.enum(CONTRACT_KINDS),
-  id: nonEmptyString,
+  id: contractId,
   /** What the name MEANS. Handed verbatim to every session that consumes it. */
   note: z.string().default(""),
 });
@@ -244,7 +255,7 @@ export const contractProvideSchema = z.strictObject({
 /** A name this ticket depends on another ticket having brought into existence. */
 export const contractConsumeSchema = z.strictObject({
   kind: z.enum(CONTRACT_KINDS),
-  id: nonEmptyString,
+  id: contractId,
 });
 
 export type ContractProvide = z.infer<typeof contractProvideSchema>;
