@@ -106,15 +106,28 @@ function defaultProbe(command: string): void {
 }
 
 /**
- * The MCP server a session is given. `--enable-memory false` is not optional
- * politeness: a server that remembers across sessions breaks C-8's replay and
- * S-6's byte-identical prefixes.
+ * The MCP server a session is given.
+ *
+ * Every flag here is upstream's and was verified against Serena's own
+ * configuration documentation rather than assumed — an earlier version of this
+ * function passed `--context ide-assistant` (not a valid context) and
+ * `--enable-memory false` (not a flag at all), so the memory this comment
+ * claims to disable would have stayed on and the test asserting otherwise
+ * proved nothing.
+ *
+ * `--mode no-memories` is the real mechanism: it disables the memory tools and
+ * everything built on them. That is not politeness — a server that remembers
+ * across sessions breaks C-8's replay and S-6's byte-identical prefixes.
+ * `--context claude-code` is the right environment for a session the Agent SDK
+ * drives, because it drops the tools that would duplicate the built-in ones.
  */
+export const SYMBOL_SERVER_ARGS: readonly string[] = ["start-mcp-server", "--context", "claude-code", "--mode", "no-memories"];
+
 export function symbolServerConfig(config: SymbolsConfig, root: string): Record<string, unknown> {
   return {
     serena: {
       command: config.command,
-      args: ["start-mcp-server", "--context", "ide-assistant", "--project", root, "--enable-memory", "false"],
+      args: [...SYMBOL_SERVER_ARGS, "--project", root],
     },
   };
 }

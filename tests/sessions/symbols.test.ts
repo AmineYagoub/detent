@@ -42,12 +42,21 @@ describe("S-3′ symbol intelligence cannot become a containment hole", () => {
     expect(() => assertNoEditingTools(["safe_delete"])).toThrow(/SEC-3/);
   });
 
-  it("disables the server's own memory, because a remembering session breaks replay", () => {
+  it("disables the server's own memory with upstream's real mechanism, because a remembering session breaks replay", () => {
     const server = symbolServerConfig(CONFIG, "/repo") as { serena: { args: string[] } };
     const args = server.serena.args;
-    expect(args).toContain("--enable-memory");
-    expect(args[args.indexOf("--enable-memory") + 1]).toBe("false");
-    expect(args).toContain("/repo");
+    /**
+     * These are upstream's flags, checked against Serena's configuration docs.
+     * A previous version asserted `--enable-memory false`, which is not a flag
+     * Serena has — the test passed, the memory would have stayed on, and the
+     * property this suite exists to guarantee was never guaranteed.
+     */
+    expect(args.slice(0, 2)).toEqual(["start-mcp-server", "--context"]);
+    expect(args).toContain("--mode");
+    expect(args[args.indexOf("--mode") + 1]).toBe("no-memories");
+    /** `claude-code` drops the tools that would duplicate the session's built-ins. */
+    expect(args[args.indexOf("--context") + 1]).toBe("claude-code");
+    expect(args[args.indexOf("--project") + 1]).toBe("/repo");
   });
 
   it("reaches the session as an MCP server whose tools are exactly the read set", () => {
