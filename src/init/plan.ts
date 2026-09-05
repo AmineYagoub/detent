@@ -7,6 +7,7 @@ import { planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion
 import { sessionBudget } from "./plan-review.js";
 import { planSlices } from "./plan-slices.js";
 import { wholePlanReview } from "./plan-whole.js";
+import { applyContracts } from "./contracts.js";
 import { sizingEvidence } from "./sizing-evidence.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { Binding } from "../schemas/records.js";
@@ -52,6 +53,8 @@ type MappedDraftKeys =
   | "non_goals"
   | "surface"
   | "depends_on"
+  | "provides"
+  | "consumes"
   | "risk_label";
 type UnmappedDraftKeys = Exclude<keyof PlanDraftTicket, MappedDraftKeys>;
 /** Fails to compile the moment a drafted field is left unhandled. */
@@ -108,6 +111,10 @@ export function planDraftSkeleton(): Record<string, unknown> {
         non_goals: ["<explicitly out of scope — may be empty list>"],
         surface: ["src/**", "tests/**"],
         depends_on: [],
+        /** A-1‴: the names this ticket OWNS, each with the meaning a consumer needs. */
+        provides: [{ kind: "symbol", id: "<pkg/path.ExportedName>", note: "<what it means — a consumer session is handed this verbatim>" }],
+        /** A-1‴: names another ticket owns. Detent derives the dependency edge from these. */
+        consumes: [{ kind: "config", id: "<KEY another ticket introduces — omit the list if none>" }],
         risk_label: false,
       },
     ],
@@ -226,7 +233,21 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       : [{ id: "s01", title: "the plan", goal: "everything the documents ask for", requirement_ids: [], baseline_items: [], docs: [...deps.docs], depends_on: [], expected_tickets: 20, rationale: "" }];
   const planned = await planSlices(deps, slices);
   const reviewed = await wholePlanReview(deps, slices, planned.tickets);
-  const drafted = reviewed.tickets;
+  /**
+   * A-1‴ (PRDR-120): the declarations are checked by code, after every model
+   * has had its say and before a ticket reaches disk. Two tickets owning one
+   * name, a name nobody owns and a shared file two tickets create become
+   * findings; a provider the plan does not already order before its consumer
+   * becomes an EDGE, derived from the coupling rather than guessed.
+   */
+  const contracts = applyContracts(reviewed.tickets);
+  const drafted = contracts.tickets;
+  for (const d of contracts.derived) {
+    deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);
+  }
+  if (contracts.findings.length > 0) {
+    deps.note?.(`contract checks: ${contracts.findings.length} finding(s) — ${contracts.findings.map((f) => f.tag).join(", ")}`);
+  }
 
   const ids = new Set(drafted.map((t) => t.id));
   if (ids.size !== drafted.length) throw new Error("PLAN drafted duplicate ticket ids across slices");
@@ -251,13 +272,14 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       f.ticket !== undefined && live.has(f.ticket) ? f : { ...f, finding: `[${r.slice}] ${f.finding}` },
     ),
   );
-  const findings = [...held, ...reviewed.remaining, ...written.findings];
+  const findings = [...held, ...reviewed.remaining, ...contracts.findings, ...written.findings];
   return {
     kind: "complete",
     outputs: {
       ...written,
       questions: [...planned.questions, ...reviewed.questions] as unknown as Record<string, unknown>[],
       review_findings: findings as unknown as Record<string, unknown>[],
+      derived_edges: contracts.derived as unknown as Record<string, unknown>[],
     },
   };
 }

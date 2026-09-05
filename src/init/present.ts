@@ -40,12 +40,14 @@ export interface PresentInput {
   readonly questions?: readonly PlanQuestion[];
   /** Findings the reviews still held after their revision round. */
   readonly findings?: PlanReview["findings"];
+  /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
+  readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
 }
 
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "findings"> {
+): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges"> {
   const list = <T>(phase: string, key: string): T[] => (outputs[phase]?.[key] as T[] | undefined) ?? [];
   const seen = new Set<string>();
   const takenIds = new Set<string>();
@@ -65,7 +67,12 @@ export function presentInputsFromOutputs(
     questions.push({ ...q, id });
   }
   const plan = outputs["PLAN"]?.["plan"] as { slices?: PresentInput["slices"] } | undefined;
-  return { slices: plan?.slices ?? [], questions, findings: list<PlanReview["findings"][number]>("PLAN", "review_findings") };
+  return {
+    slices: plan?.slices ?? [],
+    questions,
+    findings: list<PlanReview["findings"][number]>("PLAN", "review_findings"),
+    derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges"),
+  };
 }
 
 /** The PRESENT summary. Rendered identically by `init` and by `run` (C-7). */
@@ -104,6 +111,14 @@ export function renderPresentation(input: PresentInput): string {
       lines.push(`  ${q.blocking ? "[BLOCKING] " : ""}${q.id}: ${q.question}`);
       if (q.assumption !== "") lines.push(`      assumed: ${q.assumption}`);
     }
+  }
+  const edges = input.derivedEdges ?? [];
+  if (edges.length > 0) {
+    lines.push(
+      "",
+      `Dependencies Detent derived (${edges.length}) — the plan declared a name one ticket owns and another needs, so the edge is the plan's own, not a guess (A-1‴):`,
+    );
+    for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
   }
   const findings = input.findings ?? [];
   if (findings.length > 0) {

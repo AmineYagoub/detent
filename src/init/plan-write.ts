@@ -251,6 +251,9 @@ function newTicket(deps: WriteDeps, draft: DraftedTicket, blockers: readonly str
     non_goals: draft.non_goals,
     surface: draft.surface,
     blockers: [...blockers],
+    /** A-1‴: the interface travels with the ticket — the sessions read it. */
+    provides: draft.provides,
+    consumes: draft.consumes,
     risk_label: draft.risk_label,
   });
 }

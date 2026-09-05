@@ -36,7 +36,7 @@ export class SessionArm {
   attemptInputs(ticket: Ticket, state: SessionState, workDir: string): Record<string, unknown> {
     switch (state) {
       case "IN_PROGRESS":
-        return { ticket: publicTicket(ticket) };
+        return { ticket: publicTicket(ticket, this.ctx.root) };
       case "INFORMED_FIX":
         return { ...this.fixInputs(ticket, workDir), research: this.ctx.maybeArtifact(ticket.id, "research.json") };
       case "REVIEW_FIX":
@@ -48,7 +48,7 @@ export class SessionArm {
 
   fixInputs(ticket: Ticket, workDir: string): Record<string, unknown> {
     return {
-      ticket: publicTicket(ticket),
+      ticket: publicTicket(ticket, this.ctx.root),
       failure: this.ctx.maybeArtifact(ticket.id, "last_failure.json"),
       hypothesis: this.ctx.maybeArtifact(ticket.id, "hypothesis.json"),
       diff: this.ctx.diff(workDir),

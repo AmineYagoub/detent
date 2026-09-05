@@ -288,6 +288,27 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
   used by people who will not write "and back it up" — the plan says it for them.
 
+- **A-1‴ (3.1.1, PRDR-120).** A ticket declares the interface it OWNS and the interfaces it
+  LEANS ON. `provides` names what it brings into existence — a `symbol`, a `config` key, a
+  shared `file`, a `route`, a `table`, an `event` — each with the meaning a consumer needs;
+  `consumes` names what another ticket owns. The kinds are a closed set, like the interrupts
+  and the finding tags. The contract is the union of the tickets' own declarations, so unlike
+  a separate artifact it cannot drift from them.
+  Detent then checks the union with CODE, no session and no judgement: a name two tickets
+  provide is a `coherence` finding naming both, a name nobody provides is a `dependency`
+  finding, a shared file two tickets create is a conflict reported before it happens, and a
+  provider the plan does not already order before its consumer becomes a **derived dependency
+  edge** — the plan carrying an edge the planner never thought to write. An edge that would
+  close a cycle is refused and reported instead, because two tickets needing each other is a
+  contradiction rather than an omission. X-4′ recovers the same fact at run time, one
+  generation later; this is the plan knowing it first. The declarations travel onto the written
+  ticket, so an implement or review session receives its own `provides` and, for each
+  `consumes`, the OWNING ticket's note — the interface reaches the work instead of being
+  inferred and contradicted. What this does not do is judge semantics: whether two rules over
+  one value agree stays the reviewer's, now with the right pair in front of it. Found on
+  ksar-cloud, where eight findings survived a revision round and five were one defect wearing
+  different costumes — two tickets disagreeing about a name neither of them owned.
+
 - **C-3″ (3.1.1, PRDR-119).** A question is for a fact outside the documents AND outside
   engineering judgement — a price, a domain or account the founder owns, a vendor or payment
   rail with commercial consequences, a legal or retention rule, a credential; a decision whose

@@ -7,6 +7,8 @@ import type { Ticket } from "../schemas/ticket.js";
 import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
 import { reviewBasis } from "./review-scope.js";
 import { pidAlive } from "./tickets/mutations.js";
+import { allTickets } from "./tickets/readers.js";
+import { contractKey } from "../schemas/init.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { SpendLedger } from "./ledger.js";
@@ -308,7 +310,46 @@ function untrackedAsDiff(workDir: string, names: readonly string[]): string {
   return out;
 }
 
-export function publicTicket(ticket: Ticket): Record<string, unknown> {
+/**
+ * A-1‴ (PRDR-120): the interface travels with the work.
+ *
+ * A session is handed the names its ticket OWNS, and for each name it leans
+ * on, the note written by the ticket that owns it — so the session building
+ * `t-016` reads "TerminalStates() = [failed, stopped], fixed by t-002" instead
+ * of inferring it and contradicting it. This is the context enhancement, and
+ * it comes from the plan rather than from a memory store: nothing to keep in
+ * sync, nothing that can drift.
+ */
+function contractInputs(ticket: Ticket, root: string | undefined): Record<string, unknown> {
+  const provides = ticket.provides.map((p) => ({ kind: p.kind, id: p.id, note: p.note }));
+  if (provides.length === 0 && ticket.consumes.length === 0) return {};
+  const owners = new Map<string, { ticket: string; note: string }>();
+  for (const other of root === undefined ? [] : allTickets(root)) {
+    if (other.id === ticket.id) continue;
+    for (const p of other.provides) owners.set(contractKey(p), { ticket: other.id, note: p.note });
+  }
+  const consumes = ticket.consumes.map((c) => {
+    const owner = owners.get(contractKey(c));
+    return owner === undefined
+      ? { kind: c.kind, id: c.id, owned_by: null, note: "" }
+      : { kind: c.kind, id: c.id, owned_by: owner.ticket, note: owner.note };
+  });
+  return {
+    ...(provides.length === 0 ? {} : { provides }),
+    ...(consumes.length === 0
+      ? {}
+      : {
+          consumes,
+          contract_instruction:
+            "`provides` are the names this ticket must bring into existence exactly as described — another ticket's work depends on them. " +
+            "`consumes` are names other tickets own; `note` is the owning ticket's own description of what the name means, and it is binding: " +
+            "implement against it rather than re-deciding it, and if it cannot be honoured say so rather than changing it silently.",
+        }),
+  };
+}
+
+/** `root` resolves the notes of the tickets this one consumes from; omitted, the names travel without them. */
+export function publicTicket(ticket: Ticket, root?: string): Record<string, unknown> {
   return {
     id: ticket.id,
     type: ticket.type,
@@ -316,6 +357,7 @@ export function publicTicket(ticket: Ticket): Record<string, unknown> {
     description: ticket.description,
     acceptance_criteria: ticket.acceptance_criteria,
     non_goals: ticket.non_goals,
+    ...contractInputs(ticket, root),
     surface: ticket.surface,
   };
 }

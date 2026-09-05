@@ -1,6 +1,7 @@
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { ticketSchema, type Generation, type Ticket } from "../../schemas/ticket.js";
+import type { ContractConsume, ContractProvide } from "../../schemas/init.js";
 import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { ZERO_COUNTERS } from "../generations.js";
 import { claimPath, claimsDir, ticketPath, ticketsDir } from "./paths.js";
@@ -101,6 +102,9 @@ export interface NewTicket {
   readonly non_goals?: readonly string[];
   readonly surface?: readonly string[];
   readonly blockers?: readonly string[];
+  /** A-1‴ (PRDR-120): the interface this ticket owns, and the ones it leans on. */
+  readonly provides?: readonly ContractProvide[];
+  readonly consumes?: readonly ContractConsume[];
   readonly priority?: number;
   readonly risk_label?: boolean;
 }
@@ -132,6 +136,8 @@ export function newTicket(input: NewTicket, at = new Date().toISOString()): Tick
     non_goals: [...(input.non_goals ?? [])],
     surface: [...(input.surface ?? [])],
     blockers: [...(input.blockers ?? [])],
+    provides: [...(input.provides ?? [])],
+    consumes: [...(input.consumes ?? [])],
     /** X-4′: discovered at run time, never at creation. */
     waits_on: [],
     links: [],

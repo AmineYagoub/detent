@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contractConsumeSchema, contractProvideSchema } from "./init.js";
 import { STATES } from "./states.js";
 import { SCHEMA_VERSION, glob, isoTimestamp, nonEmptyString, ticketId } from "./common.js";
 
@@ -48,6 +49,13 @@ export const ticketSchema = z.strictObject({
   non_goals: z.array(z.string()).default([]),
   surface: z.array(glob).default([]),
   blockers: z.array(nonEmptyString).default([]),
+  /**
+   * A-1‴ (PRDR-120): the interface this ticket owns, and the interfaces it
+   * leans on. Carried onto the written ticket because the implement and review
+   * sessions receive them — a consumer is handed the provider's own note.
+   */
+  provides: z.array(contractProvideSchema).default([]),
+  consumes: z.array(contractConsumeSchema).default([]),
   /**
    * X-4′ (PRDR-111): dependencies the RUN discovered — a falsification naming
    * a path another ticket's surface owns. Declared structure stays in

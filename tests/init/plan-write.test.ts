@@ -32,6 +32,8 @@ const ticket = (id: string, deps: string[] = [], title = `t ${id}`) => ({
   non_goals: [],
   surface: ["src/**"],
   depends_on: deps,
+  provides: [],
+  consumes: [],
   risk_label: false,
 });
 

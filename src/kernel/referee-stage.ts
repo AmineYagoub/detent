@@ -78,7 +78,7 @@ async function diagnose(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
       await sessions.launch(
         ticket,
         "DIAGNOSED",
-        { ticket: publicTicket(ticket), expected_output: hypothesisSkeleton() },
+        { ticket: publicTicket(ticket, ctx.root), expected_output: hypothesisSkeleton() },
         workDir,
       );
     },
@@ -138,7 +138,7 @@ async function research(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
     toolCallCeiling: ctx.budgets.failure_research_tool_calls,
     note: (text) => appendNote(ctx.root, id, { author: "kernel", text }),
     ticketInputs: {
-      ticket: publicTicket(ticket),
+      ticket: publicTicket(ticket, ctx.root),
       failure: ctx.maybeArtifact(id, "last_failure.json"),
       expected_output: researchBriefSkeleton(),
     },

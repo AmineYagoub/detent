@@ -217,6 +217,42 @@ export const planReviewSchema = z.strictObject({
 
 export type PlanReview = z.infer<typeof planReviewSchema>;
 
+/**
+ * A-1‴ (PRDR-120) — what a ticket OWNS and what it LEANS ON.
+ *
+ * Coupling between tickets is at the symbol level, and the plan could only say
+ * it two ways: `depends_on`, which the planner guessed, and `surface`, a file
+ * glob. Neither expresses "t-002 defines TerminalStates() and t-016 depends on
+ * what it means", so every interface disagreement waited for a reviewer to
+ * notice — and the same class reappeared in every slice of ksar-cloud's plan.
+ *
+ * The kinds are closed, like the interrupt and finding sets: a vocabulary the
+ * planner cannot hold in mind is one it fills in badly. Six cover every defect
+ * that run actually produced.
+ */
+export const CONTRACT_KINDS = ["symbol", "config", "file", "route", "table", "event"] as const;
+export type ContractKind = (typeof CONTRACT_KINDS)[number];
+
+/** A name this ticket brings into existence, with the meaning a consumer needs. */
+export const contractProvideSchema = z.strictObject({
+  kind: z.enum(CONTRACT_KINDS),
+  id: nonEmptyString,
+  /** What the name MEANS. Handed verbatim to every session that consumes it. */
+  note: z.string().default(""),
+});
+
+/** A name this ticket depends on another ticket having brought into existence. */
+export const contractConsumeSchema = z.strictObject({
+  kind: z.enum(CONTRACT_KINDS),
+  id: nonEmptyString,
+});
+
+export type ContractProvide = z.infer<typeof contractProvideSchema>;
+export type ContractConsume = z.infer<typeof contractConsumeSchema>;
+
+/** The index key both sides agree on. */
+export const contractKey = (c: { readonly kind: string; readonly id: string }): string => `${c.kind}:${c.id}`;
+
 export const planDraftSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   tickets: z
@@ -231,6 +267,9 @@ export const planDraftSchema = z.strictObject({
         surface: z.array(z.string()).default([]),
         /** Ticket ids this one depends on; becomes A-1 `blockers`. */
         depends_on: z.array(nonEmptyString).default([]),
+        /** A-1‴: the names this ticket owns, and the ones it leans on. */
+        provides: z.array(contractProvideSchema).default([]),
+        consumes: z.array(contractConsumeSchema).default([]),
         risk_label: z.boolean().default(false),
       }),
     )
