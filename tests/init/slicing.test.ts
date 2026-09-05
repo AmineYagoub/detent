@@ -350,6 +350,41 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(slicesFromOutputs({ SLICE: { slices: TWO_SLICES.slices } }).map((s) => s.id)).toEqual(["s01", "s02"]);
   });
 
+  it("PRDR-119: every question reaching the human has a unique id, across a slice's two drafts and across stages", async () => {
+    const root = repo(DOCS);
+    /** Both drafts of s01 number their own questions from one, as a planner naturally would. */
+    const first = { id: "s01-q1", question: "Which payment rail serves the USD tier?", blocking: false, assumption: "Chargily only" };
+    const second = { id: "s01-q1", question: "What is the trial credit amount?", blocking: false, assumption: "5000 DZD" };
+    let drafts = 0;
+    const backend = new MockBackend({
+      planner: (spec) => {
+        let artifact: object;
+        if (spec.artifactOut.endsWith("slices.json")) {
+          artifact = { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [{ id: "s01-q1", question: "Which Cloudflare zone?", blocking: false, assumption: "ksarapp.dev" }] };
+        } else if (spec.artifactOut.endsWith("plan-draft.json")) {
+          drafts += 1;
+          artifact = { schema_version: 1, tickets: [ticket(`t-s01-00${drafts}`)], questions: [drafts === 1 ? first : second] };
+        } else if (spec.artifactOut.endsWith("plan-review.json")) {
+          /** The first review asks for a revision, so the slice drafts twice. */
+          artifact = drafts === 1 ? { schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] } : APPROVE_PLAN;
+        } else {
+          artifact = { ...ANALYSIS(null), questions: [{ id: "s01-q1", question: "What is the apps domain?", blocking: false, assumption: "ksarapp.dev" }] };
+        }
+        writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
+        return okResult();
+      },
+    });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const message = result.interrupt?.message ?? "";
+    const ids = [...message.matchAll(/^ {2}(\S+): /gm)].map((m) => m[1] as string);
+    expect(ids.length, "four questions from three stages, all shown").toBe(4);
+    expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(ids.length);
+    /** Both of the slice's drafts contributed, and neither was lost to the other's id. */
+    expect(message).toContain("Which payment rail serves the USD tier?");
+    expect(message).toContain("What is the trial credit amount?");
+  });
+
   it("the SLICE skeleton parses through its own schema; the baseline is well-formed; `coherence` is in the closed tag set", () => {
     expect(slicesSchema.safeParse(slicesSkeleton()).success).toBe(true);
     const ids = PRODUCTION_BASELINE.map((b) => b.id);

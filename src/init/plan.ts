@@ -111,6 +111,15 @@ export function planDraftSkeleton(): Record<string, unknown> {
         risk_label: false,
       },
     ],
+    /** C-3′: omit the entry entirely when the slice raises no question — most do not. */
+    questions: [
+      {
+        id: "<slice>-q1",
+        question: "<a fact outside the documents AND outside engineering judgement — omit the entry if none>",
+        blocking: false,
+        assumption: "<what the plan proceeds on while it is unanswered — required unless blocking>",
+      },
+    ],
   };
 }
 

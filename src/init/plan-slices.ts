@@ -293,6 +293,13 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);
     }
+    /**
+     * PRDR-119: a slice's questions come from two drafts — the first and the
+     * revision — and each numbered its own from one, so a slice presented two
+     * `q1`s with different content. Ids are assigned here, over the merged
+     * set, because only this side knows both drafts.
+     */
+    const numbered = asked.map((q, i) => ({ ...q, id: `${slice.id}-q${i + 1}` }));
     const own = new Set(normalised.tickets.map((t) => t.id));
     writeFileSync(
       cachePath(deps.root, slice.id),
@@ -301,7 +308,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
           schema_version: SCHEMA_VERSION,
           key,
           tickets: normalised.tickets,
-          questions: asked,
+          questions: numbered,
           remaining: held,
           external_deps: [...new Set(normalised.tickets.flatMap((t) => t.depends_on).filter((d) => !own.has(d)))],
           reviewed,
@@ -311,7 +318,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       )}\n`,
     );
     index.push(...normalised.tickets);
-    questions.push(...asked);
+    questions.push(...numbered);
     if (held.length > 0) remaining.push({ slice: slice.id, findings: held });
   }
   return { tickets: index, questions, remaining };

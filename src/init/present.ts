@@ -48,12 +48,21 @@ export function presentInputsFromOutputs(
 ): Pick<PresentInput, "slices" | "questions" | "findings"> {
   const list = <T>(phase: string, key: string): T[] => (outputs[phase]?.[key] as T[] | undefined) ?? [];
   const seen = new Set<string>();
+  const takenIds = new Set<string>();
   const questions: PlanQuestion[] = [];
   for (const q of [...list<PlanQuestion>("ANALYZE", "open_questions"), ...list<PlanQuestion>("SLICE", "questions"), ...list<PlanQuestion>("PLAN", "questions")]) {
     const key = q.question.trim().toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    questions.push(q);
+    /**
+     * PRDR-119: three stages number their questions independently, so the
+     * batch could show the same id twice. The id is what a human writes down
+     * when answering, so it has to mean one question.
+     */
+    let id = q.id;
+    for (let n = 2; takenIds.has(id); n += 1) id = `${q.id}-${n}`;
+    takenIds.add(id);
+    questions.push({ ...q, id });
   }
   const plan = outputs["PLAN"]?.["plan"] as { slices?: PresentInput["slices"] } | undefined;
   return { slices: plan?.slices ?? [], questions, findings: list<PlanReview["findings"][number]>("PLAN", "review_findings") };

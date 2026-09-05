@@ -288,6 +288,24 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
   used by people who will not write "and back it up" — the plan says it for them.
 
+- **C-3″ (3.1.1, PRDR-119).** A question is for a fact outside the documents AND outside
+  engineering judgement — a price, a domain or account the founder owns, a vendor or payment
+  rail with commercial consequences, a legal or retention rule, a credential; a decision whose
+  cost is counted in money or contracts rather than in code. Everything a competent engineer
+  could settle by reading the documents is SETTLED, and the decision with its reason is
+  recorded where the work is: the ticket's `description`, the slice's `rationale`, or the
+  analysis's `assumptions`. Asking to have a defensible decision confirmed is not caution, it
+  is noise that buries the two or three decisions a human must actually make. Found on
+  ksar-cloud: the first slice raised ten questions of which seven were the planner seeking
+  permission for choices it had already justified from the documents — one asked whether
+  running every component on a single host was acceptable, which the slice document itself
+  requires — and at nineteen slices that projected to roughly two hundred questions at
+  approval, against perhaps twenty-five real ones. C-3′'s batching is unchanged; what changed
+  is what earns a place in the batch. A question also carries an id unique across everything
+  one session writes, and the batch keeps it unique across every stage: two questions sharing
+  an id are indistinguishable to the human answering them, and a slice's first and revised
+  drafts each numbered from one.
+
 - **F-1′ (3.1.1, PRDR-118).** A ticket id is a FILE NAME under `.detent/plan/`, and a model
   writes it. It is therefore constrained like one: lowercase, alphanumeric with `-` and `_`,
   at most 64 characters, and never `plan` or `approval`, which are artifact names in the same
