@@ -1,7 +1,7 @@
 ---
 id: PRDR-121
 title: "Detent has no way to ask what code actually references a symbol, so a declared contract cannot be verified and a session cannot see what its change will break"
-state: DONE
+state: OPEN
 severity: normal
 category: capability
 labels: ["prd-review"]
@@ -44,3 +44,24 @@ install with read access to a private codebase, so it is discovered, never insta
 decision stays the operator's.
 
 Full design: `docs/plan-contracts-and-symbols.md`.
+
+## Progress
+
+**Built (commit `f93d2c4`):** the adapter library — read-tool allowlist with an enumerated
+editing denylist and `assertNoEditingTools`, memory disabled in the server config, `probeSymbols`
+discovery, `symbolsSetupMessage`, the `symbols` config block, `SessionSpec.mcpServers` and its
+SDK wiring, and the earned reminder rendered at PRESENT. Eight tests.
+
+**Not built.** The library has no caller in `src/`. Specifically unmet:
+
+- `enabled: true` with a missing command does not raise `AWAIT_SETUP_CONSENT` — `symbolsSetupMessage`
+  exists and is never called.
+- No session is constructed with the symbol server, so the read tools reach nothing (T-177).
+- Declared `symbol:` provides are not verified after a green gate (T-176). This needs a design
+  decision first: Detent has no MCP client (the referee server is loaded by Claude Code, not by
+  Detent), so verification is either a new client or a cheaper dependency-free check that the
+  identifier appears in the ticket's surface.
+
+Held open deliberately: both remaining pieces need Serena actually running to be worth trusting,
+and Detent does not install it (§3.3 of `docs/plan-contracts-and-symbols.md`).
+
