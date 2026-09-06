@@ -33,7 +33,7 @@ export type RoleId = (typeof ROLE_IDS)[number];
  * runtime cannot serve falls back to the runtime default, noted per session.
  */
 export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
-  planner: "claude-fable-5-1",
+  planner: "claude-opus-5",
   review: "claude-opus-5",
   diagnose: "claude-opus-5",
   informed_fix: "claude-opus-5",

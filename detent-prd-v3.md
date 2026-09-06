@@ -345,6 +345,24 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   tools was indistinguishable from one that never had them. An absent or unrecognised init
   message is treated as no information, never as success.
 
+- **C-2⁵′ (3.1.1, PRDR-125).** How many tickets a slice holds is CONFIGURATION, not a number in
+  a prompt: `slice_size` is a `{min, max}` band, 12–18 by default, folded into SLICE's digest so
+  a changed band re-cuts the product. A slice is drafted by one session into one artifact
+  (S-1″), so its size is the size of the largest thing the pipeline must produce without
+  failing — a real operational parameter. Measured on the first self-build gate: a 36-ticket
+  slice, the top of the old 15–40 band, emitted 176,391 output tokens, about 4,900 per ticket
+  now that a ticket carries its contracts and their notes, and that draft is where a session
+  limit killed the run. Smaller slices are not cheaper — drafting is the same work and the
+  review, revision and re-review are paid per slice — they buy a failure you can afford. The
+  band stays guidance rather than enforcement: `expected_tickets` is planning judgement (A-1),
+  and a slice that ignores it is the reviewer's `sizing` finding.
+
+- **S-5″ (3.1.1, PRDR-125).** The planner runs on `claude-opus-5`. S-5′ seated it on Fable 5.1
+  on the strength of a probe; the first self-build gate measured it on real work, and the
+  operator's call is that it is not the right seat for the role that determines every other
+  session. Review, diagnose and the informed attempt were already on Opus; implement, the three
+  fixes and research stay on Sonnet.
+
 - **S-1″ (3.1.1, PRDR-124).** An init session carries its OWN containment policy, whose surface
   is exactly the artifact it was asked to write. S-1′ has always said such a session gets the
   read-only surface plus one write rule; the rule was granted on the allowlist while the hook

@@ -102,7 +102,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (ensured !== "exists") {
     process.stdout.write(
-      "model routing defaulted (PRDR-114): planner → claude-fable-5-1; review, diagnose, informed_fix → claude-opus-5; " +
+      "model routing defaulted (PRDR-114, S-5″): planner, review, diagnose, informed_fix → claude-opus-5; " +
         "implement, blind_fix, review_fix, research → claude-sonnet-5. A routed model this runtime cannot serve falls back " +
         "to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n",
     );
@@ -141,6 +141,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     budgets: budgetsFor(config),
     modelRouting: config?.model_routing ?? {},
     planBaseline: config?.plan_baseline ?? "production",
+    ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
     ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
     planDocs: config?.plan_docs ?? [],
     note: (text) => process.stdout.write(`  ${text}\n`),

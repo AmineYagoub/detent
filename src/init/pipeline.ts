@@ -43,6 +43,8 @@ export interface PipelineDeps {
   readonly planBaseline?: "production" | "none";
   /** S-3′ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
   readonly symbols?: SymbolsConfig;
+  /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
+  readonly sliceSize?: { readonly min: number; readonly max: number };
   readonly note?: (text: string) => void;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
@@ -230,6 +232,8 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
         ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
         deps.planBaseline ?? "production",
         baselineDigest(),
+        /* C-2⁵′: re-cutting on a new band is the whole point of the knob. */
+        deps.sliceSize ?? { min: 12, max: 18 },
         deps.prompts.hashes.planner,
       ])}`;
     },
@@ -240,6 +244,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
         analysis: analysisFromOutputs(ctx.outputs),
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         baseline: deps.planBaseline ?? "production",
+        sliceSize: deps.sliceSize ?? { min: 12, max: 18 },
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
           await launchInitSession(sessionDeps(deps), { role: "planner", inputs, artifactOut: slicesPath(deps.root) });

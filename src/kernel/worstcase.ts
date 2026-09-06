@@ -151,6 +151,26 @@ const configSchema = z.strictObject({
   plan_docs: z.array(glob).default([]),
   /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out, in writing. */
   plan_baseline: z.enum(["production", "none"]).default("production"),
+  /**
+   * C-2⁵′ (PRDR-125): how many tickets one slice should hold.
+   *
+   * A slice is drafted by ONE session into ONE artifact, so its size is the
+   * size of the largest thing this pipeline ever has to produce without
+   * failing. Measured on the first self-build gate: a 36-ticket slice emitted
+   * 176,391 output tokens — about 4,900 per ticket, because a ticket now
+   * carries its contracts and their notes — and that draft is where a session
+   * limit killed the run. The old band's top was set before contracts existed.
+   *
+   * Smaller slices do not save money: the drafting is the same work, and the
+   * review, revision and re-review around each slice are paid per slice. They
+   * buy a failure you can afford — half the tokens, half the loss when a
+   * session dies, which on a run that has died four times is worth more than
+   * the overhead costs.
+   */
+  slice_size: z
+    .strictObject({ min: z.number().int().positive(), max: z.number().int().positive() })
+    .refine((v) => v.max >= v.min, "slice_size.max must be at least slice_size.min")
+    .default({ min: 12, max: 18 }),
   risk: z.array(glob).default([]),
   model_routing: z.record(z.string(), nonEmptyString).default({}),
   pinned: z.strictObject({

@@ -28,6 +28,8 @@ export interface SliceDeps {
   readonly analysis: Analysis | null;
   readonly greenfield: boolean;
   readonly baseline: "production" | "none";
+  /** C-2⁵′: the ticket band one slice should hold; the size of the largest artifact a session must write. */
+  readonly sliceSize: { readonly min: number; readonly max: number };
   readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
   readonly note?: (text: string) => void;
 }
@@ -86,6 +88,7 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
     analysis: deps.analysis,
     greenfield: deps.greenfield,
     production_baseline: deps.baseline === "none" ? [] : PRODUCTION_BASELINE,
+    slice_size: deps.sliceSize,
     expected_output: slicesSkeleton(),
     ...previousAttemptInput(previous, "slices artifact"),
     instruction:
@@ -94,7 +97,9 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
       "earlier ones and names them in `depends_on`. Place EVERY requirement id the documents define in exactly one slice's " +
       "`requirement_ids`, exactly as written. Place every `production_baseline` item whose `applies_when` the product meets " +
       "into the slice where it belongs (PB-### in `baseline_items`); an item that does not apply is omitted, and the " +
-      "rationale of the slice that would have carried it says why. Size a slice to 15–40 tickets (`expected_tickets`). " +
+      `rationale of the slice that would have carried it says why. Size a slice to ${deps.sliceSize.min}–${deps.sliceSize.max} tickets ` +
+      "(`expected_tickets`) — one slice is drafted by ONE session into ONE artifact, and that artifact is the largest thing this " +
+      "pipeline must produce without failing. A large product is many slices, and that is the point. " +
       "Do NOT draft tickets here. A question the documents cannot answer goes in `questions` with the assumption the " +
       "slicing proceeds on — mark it blocking only if no assumption can carry it. Write EXACTLY the `expected_output` " +
       "shape to artifact_out; the validator is strict (P2).",
