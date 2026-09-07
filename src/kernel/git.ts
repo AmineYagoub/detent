@@ -18,14 +18,44 @@ const TICKET_TRAILER = "Detent-Ticket";
 /** B-1/D-20: history written before the rename keeps its trailer; readers accept both, permanently. */
 const LEGACY_TICKET_TRAILER = "Foreman-Ticket";
 
+/**
+ * P7′ (PRDR-130): `maxBuffer` is explicit. Node defaults `execFileSync` to 1 MB
+ * and throws ENOBUFS above it, so every git call in the kernel was silently
+ * capped at a number nobody chose — and a bootstrap ticket's diff, which
+ * carries the project's lockfile, routinely exceeds it.
+ */
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
 export function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: GIT_MAX_BUFFER });
 }
 
+/**
+ * P7′ (PRDR-130): did git RUN and merely answer non-zero, or could it not run
+ * at all? The two were one `null` and the difference is the whole defect: a
+ * failed spawn, a permissions error or an output overrun read as "found
+ * nothing", so the reviewer got an empty diff, B-4 minted no risk label, and
+ * the base guard treated every branch as newly created and deleted it.
+ *
+ * Verified shapes: a non-zero exit carries a numeric `status` and no `code`; a
+ * failure to run or to capture carries `status: null` and a string `code`
+ * (`ENOBUFS`, `ENOENT`). Only the first is an answer.
+ */
+export function gitCouldNotRun(err: unknown): boolean {
+  const e = err as { status?: unknown; code?: unknown };
+  return typeof e?.status !== "number";
+}
+
+/**
+ * `null` means git ran and said no. A call that could not run RAISES — its
+ * callers are asking a question about the repository, and silence is not an
+ * answer to it.
+ */
 function tryGit(cwd: string, ...args: string[]): string | null {
   try {
     return git(cwd, ...args);
-  } catch {
+  } catch (err) {
+    if (gitCouldNotRun(err)) throw err;
     return null;
   }
 }

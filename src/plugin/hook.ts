@@ -1,8 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/hook-files.js";
-import { guardToolUse, pathOf, stopGate } from "../sessions/guard.js";
+import { guardToolUse, pathOf } from "../sessions/guard.js";
 
 /**
  * T-113 — the D-21 containment hook in plugin form (S-2′, SEC-6, D-29).
@@ -10,7 +9,7 @@ import { guardToolUse, pathOf, stopGate } from "../sessions/guard.js";
  * The oracle enforced containment via subprocess hooks reading
  * `active_surface.json`; the headless driver registers the same decisions as
  * in-process SDK callbacks (sdk.ts). This module is the third skin over the
- * ONE decision implementation — `guardToolUse`/`stopGate` from
+ * ONE decision implementation — `guardToolUse` from
  * sessions/guard.ts — shipped as the plugin's `hooks/hooks.json` command
  * (bundled by scripts/build-plugin.ts into `hooks/dist/detent-hook.cjs`).
  * Deterministic `command` hooks only: the platform's `prompt`/`agent` hook
@@ -47,14 +46,6 @@ interface HookPayload {
   readonly cwd?: unknown;
   readonly stop_hook_active?: unknown;
 }
-
-/**
- * The oracle's 900 s stop-gate timeout — equal to `gate_timeout_ms`'s X-1
- * default. A literal, not an import: the bundle stays free of the zod-backed
- * schema layer, and the hook is config-blind by design — the referee re-runs
- * the authoritative gate with the configured ceiling regardless (P2).
- */
-const GATE_TIMEOUT_MS = 900_000;
 
 function payloadCwd(payload: HookPayload): string {
   return typeof payload.cwd === "string" && payload.cwd !== "" ? payload.cwd : process.cwd();
@@ -154,18 +145,6 @@ function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
   return decision.decision === "deny" ? denyJson(decision.reason) : null;
 }
 
-/** Executes the scoped gate for the Stop decision (the oracle's `subprocess.run`). */
-function runScopedGate(command: string, cwd: string): { green: boolean; outputTail: string } {
-  const result = spawnSync(command, {
-    shell: true,
-    cwd,
-    encoding: "utf8",
-    timeout: GATE_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const merged = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  return { green: result.status === 0, outputTail: merged.slice(-1500) };
-}
 
 /**
  * The Stop decision. Absent or unreadable stage file allows: the stop gate is
@@ -176,30 +155,41 @@ function runScopedGate(command: string, cwd: string): { green: boolean; outputTa
  */
 async function decideStop(payload: HookPayload, nowMs: number): Promise<string | null> {
   const cwd = payloadCwd(payload);
-  let stage = "";
-  let gateCmd: string | null = null;
   let refeed = "";
-  let parsed: { stage?: unknown; gate_cmd?: unknown; run_refeed?: unknown; expires_at_ms?: unknown } | null;
+  let parsed: { run_refeed?: unknown; expires_at_ms?: unknown } | null;
   try {
     parsed = JSON.parse(readFileSync(path.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8")) as typeof parsed;
-    stage = typeof parsed?.stage === "string" ? parsed.stage : "";
-    gateCmd = typeof parsed?.gate_cmd === "string" ? parsed.gate_cmd : null;
     refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";
   } catch {
     return null;
   }
-  if (expired(parsed, nowMs)) return null;
+  /**
+   * D-27″ (PRDR-128): an ABSENT expiry is EXPIRED. It used to mean eternal, so
+   * a file a repository committed never lapsed. Every legitimate writer stamps
+   * one (`hook-policy.ts`), so requiring it costs nothing and removes the only
+   * way a planted file could persist.
+   */
+  if (typeof parsed?.expires_at_ms !== "number" || nowMs > parsed.expires_at_ms) return null;
   const stopHookActive = Boolean(payload.stop_hook_active);
   /**
    * T-120 loop persistence: while the referee says work remains, ending the
    * session gets one deterministic nudge back into the loop (the re-feed
    * pattern; `stop_hook_active` bounds it to a single firing).
+   *
+   * This is now the ONLY thing the Stop path does. `gate_cmd` was read from
+   * this same file and run through a shell — and because the hook carries no
+   * matcher it runs in every session of every user who installed the plugin, so
+   * a repository that merely COMMITTED a `stage.json` executed arbitrary code,
+   * with no run in flight and nothing approved. Removing it costs nothing real:
+   * nothing in the product has ever written a non-null `gate_cmd`
+   * (`refreshRunRefeed` hard-codes `null`, and a test asserts it), so the path
+   * had no producer, and the stop gate was always an accelerant the referee
+   * re-runs regardless (P2).
    */
   if (refeed !== "" && !stopHookActive) {
     return JSON.stringify({ decision: "block", reason: refeed });
   }
-  const decision = await stopGate({ stage, gateCmd, stopHookActive }, async (command) => runScopedGate(command, cwd));
-  return decision.decision === "allow" ? null : JSON.stringify({ decision: "block", reason: decision.reason });
+  return null;
 }
 
 /**

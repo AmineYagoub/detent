@@ -22,7 +22,14 @@ export async function main(argv: readonly string[]): Promise<number> {
     allowPositionals: true,
     options: {
       "max-tickets": { type: "string" },
-      backend: { type: "string", default: "mock" },
+      /**
+       * C-14″ (PRDR-129): LIVE by default. This defaulted to "mock" while
+       * `referee` defaulted to "claude" and `init` refused the fixture outright,
+       * so the README's two-command golden path — test-locked to exactly
+       * `detent init` and `detent run`, with no flag — executed a fake whose
+       * result shape is indistinguishable from a real session.
+       */
+      backend: { type: "string", default: "claude" },
       worker: { type: "string", default: "w1" },
       /* B-2: per-ticket worktrees, merged --no-ff into the run branch on DONE. */
       worktree: { type: "boolean", default: false },
@@ -37,6 +44,17 @@ export async function main(argv: readonly string[]): Promise<number> {
   const root = positionals[0] ?? process.cwd();
   const maxTickets = values["max-tickets"] === undefined ? undefined : Number(values["max-tickets"]);
   const backend = values.backend === "mock" ? new MockBackend() : buildLiveBackend(root);
+  /**
+   * C-14″: a fixture run writes real ledger rows and real journal events against
+   * real ticket state, so it must never be mistaken for a real one. Said once,
+   * before anything is spent.
+   */
+  if (values.backend === "mock") {
+    process.stderr.write(
+      "running against the FIXTURE backend (--backend mock): no model session will run, and the ledger and journal " +
+        "below are fabricated. Pass --backend claude for a real run.\n",
+    );
+  }
 
   /**
    * C-10: escalations resolve inside `run` on a TTY; non-TTY exits 10 with

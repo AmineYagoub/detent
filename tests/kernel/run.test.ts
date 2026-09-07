@@ -14,6 +14,7 @@ import {
 } from "../../src/kernel/run.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
+import { requeueTicket } from "../../src/kernel/plumbing.js";
 import { prefixHash } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
@@ -151,6 +152,70 @@ describe("T-041 oracle full ladder (test_ladder_exhausts_to_needs_human_with_dos
     expect(dossier.suggested_resolutions.length).toBeGreaterThan(0);
     expect(existsSync(path.join(root, ".detent/runs/t1/last_failure.json"))).toBe(true);
     expect(readTicket(root, "t1").generations.at(-1)).toMatchObject({ outcome: "needs_human" });
+  });
+});
+
+/**
+ * B-5′ (PRDR-131) — the crash skip belongs to the generation that crashed.
+ *
+ * `unfinished` counted `start` against `end` over the ticket's WHOLE journal
+ * and the skip event rebalanced neither, so one killed session suppressed that
+ * role on that ticket forever. The ladder still spent real money fixing an
+ * implementation that had never been written, and requeue — the documented
+ * remedy — could not clear it. Both halves are asserted here, because the
+ * within-generation skip is B-5 working and must survive the fix.
+ */
+describe("B-5′ a crash suppresses the relaunch within its generation, and not beyond it", () => {
+  it("the implement session is skipped on resume, then LAUNCHES again after a requeue opens a new generation", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+
+    /* A session that began work and died: the gate is left RED, as after an OOM kill. */
+    const crashingImplement: StageFn = (spec) => {
+      writeTree(spec.cwd, { ".fail": "half-written work\n" });
+      throw new Error("simulated OOM kill");
+    };
+    /* What a working implement session would do — clear the failure and commit. */
+    const implementRepairs: StageFn = (spec) => {
+      rmSync(path.join(spec.cwd, ".fail"), { force: true });
+      writeTree(spec.cwd, { [`src/feature-${spec.ticketId}.txt`]: "done\n" });
+      git(spec.cwd, "add", "-A");
+      git(spec.cwd, "commit", "-q", "-m", `${spec.ticketId}: implement`);
+      return okResult();
+    };
+
+    /* 1. The implement session dies mid-flight, leaving a `start` with no `end`. */
+    const first = new MockBackend({ implement: crashingImplement });
+    expect((await run(opts(root, first))).exitCode).toBe(EXIT_ERROR);
+    expect(first.rolesLaunched().filter((r) => r === "implement")).toHaveLength(1);
+
+    /*
+     * 2. Resume in the SAME generation: B-5 holds — the session is not
+     *    relaunched, the gate judges the tree as-is, and the ladder exhausts
+     *    onto the human. This half must survive the fix.
+     */
+    const second = new MockBackend({ implement: implementRepairs, review: reviewApprove });
+    await run(opts(root, second));
+    expect(second.rolesLaunched()).not.toContain("implement");
+    const crashed = readTicket(root, "t1");
+    expect(crashed.state).toBe("NEEDS_HUMAN");
+
+    /* 3. A requeue opens a fresh generation with zeroed counters (X-8). */
+    const requeue = requeueTicket(root, "t1", "operator", "try again");
+    expect(requeue.exitCode).toBe(0);
+    expect(readTicket(root, "t1").generations.length).toBe(crashed.generations.length + 1);
+
+    /*
+     * 4. The new generation must actually implement. Before B-5′ it launched
+     *    nothing — on this generation or any later one — so the gate ran on the
+     *    same unchanged tree, went red again, and the ladder burned blind_fix,
+     *    research and informed_fix on work that had never been written. The
+     *    documented remedy could not clear it.
+     */
+    const third = new MockBackend({ implement: implementRepairs, review: reviewApprove });
+    await run(opts(root, third));
+    expect(third.rolesLaunched()).toContain("implement");
+    expect(readTicket(root, "t1").state).toBe("DONE");
   });
 });
 

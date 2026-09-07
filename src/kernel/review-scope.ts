@@ -1,5 +1,5 @@
 import picomatch from "picomatch";
-import { commitPatch, git, ticketCommits } from "./git.js";
+import { commitPatch, git, gitCouldNotRun, ticketCommits } from "./git.js";
 
 /**
  * PRDR-113 — the review basis, scoped by Detent's own matcher.
@@ -23,13 +23,20 @@ export function surfaceMatcher(surface: readonly string[]): SurfaceMatch | null 
   return (name) => isMatch(name);
 }
 
+/**
+ * A git call that ran and answered non-zero yields no names — `commitNames`
+ * depends on that, because a root commit has no `^` parent. A call that could
+ * not run yields nothing at all, and P7′ (PRDR-130) refuses to report that as
+ * an empty file list.
+ */
 function names(cwd: string, ...args: string[]): string[] {
   try {
     return git(cwd, ...args)
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l !== "");
-  } catch {
+  } catch (err) {
+    if (gitCouldNotRun(err)) throw err;
     return [];
   }
 }
@@ -51,7 +58,9 @@ export function untrackedNames(cwd: string): string[] {
 function safe(fn: () => string): string {
   try {
     return fn();
-  } catch {
+  } catch (err) {
+    /* P7′: an empty diff is a claim about the tree; an unrunnable git is not. */
+    if (gitCouldNotRun(err)) throw err;
     return "";
   }
 }

@@ -2,12 +2,17 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  changedFiles,
+  commitPatch,
   commitsOn,
   ensureRunBranch,
   parseTicketTrailers,
   resolveBaseRef,
+  snapshotRefs,
   worktreePath,
 } from "../../src/kernel/git.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { EXIT_HUMAN_GATED, EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
@@ -216,5 +221,71 @@ describe("T-042 V-5: the run baseline", () => {
     git(root, "branch", "-q", "-m", "main", "old-main");
     git(root, "branch", "-q", "-m", "old-main", "renamed-away");
     expect(resolveBaseRef(root, { branch: runBranch.branch, base: "main" })).toBeNull();
+  });
+});
+
+/**
+ * P7′ (PRDR-130) — a git call that could not run is not a git call that found
+ * nothing.
+ *
+ * `git()` ran without an explicit `maxBuffer`, so Node's 1 MB default threw
+ * ENOBUFS on any larger output and every wrapper turned the throw into an
+ * empty value. One `null` stood for two different facts, and three controls
+ * read the wrong one: the reviewer got `""` for a diff (under the truncation
+ * cap, so the banner never fired), `changedFiles` returned empty so B-4 minted
+ * no risk label, and `snapshotRefs` returned an empty map, after which the
+ * base-branch guard treated EVERY local branch as newly created and deleted it.
+ */
+describe("P7′ git output over 1 MB, and failure that is not absence", () => {
+  function repoWithLargeCommit(): { root: string; sha: string } {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-big-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "seed.txt": "seed\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "init");
+    /* Comfortably over Node's 1 MB execFileSync default — a lockfile's size. */
+    writeTree(root, { "big.txt": `${"lorem ipsum dolor sit amet\n".repeat(60_000)}` });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "big");
+    return { root, sha: git(root, "rev-parse", "HEAD").trim() };
+  }
+
+  it("a commit larger than 1 MB reaches the reviewer as a real diff, not as an empty string", () => {
+    const { root, sha } = repoWithLargeCommit();
+    const patch = commitPatch(root, sha, []);
+    expect(patch.length).toBeGreaterThan(1_000_000);
+    expect(patch).toContain("big.txt");
+  });
+
+  /* Guard, not a reproduction: `--name-only` output stays small, so this call was never the one overflowing. */
+  it("changedFiles still answers for a commit that size — the fix does not over-correct", () => {
+    const { root } = repoWithLargeCommit();
+    expect(changedFiles(root, "HEAD~1")).toContain("big.txt");
+  });
+
+  /**
+   * The only unrecoverable path in the set. `snapshotRefs` returned an empty
+   * map when its single `for-each-ref` could not run, and `enforceBaseGuard`'s
+   * "a brand-new non-run branch is also a write" loop then matched every
+   * branch and ran `update-ref -d` on each — `main` included.
+   */
+  it("a snapshot that could not be TAKEN raises, so the base guard never mistakes it for a repo with no branches", () => {
+    expect(() => snapshotRefs(path.join(tmpdir(), "detent-does-not-exist-xyz"))).toThrow();
+  });
+
+  it("a git call that RAN and answered non-zero is still tolerated — a root commit has no parent", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-root-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "a.txt": "1\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "root");
+    /* `diff <sha>^ <sha>` exits non-zero here; `show` answers instead. */
+    expect(commitPatch(root, git(root, "rev-parse", "HEAD").trim(), [])).toContain("a.txt");
   });
 });

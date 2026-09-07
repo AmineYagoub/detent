@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   READ_ONLY_STAGES,
   guardToolUse,
@@ -69,8 +72,27 @@ describe("S-2⁗ the resolved destination is what is judged (PRDR-127)", () => {
 
   it("realpathNearest falls back to the lexical path when no ancestor exists — the fictional root above still works", () => {
     expect(realpathNearest("/wt/.detent/state/plan-draft.json")).toBe("/wt/.detent/state/plan-draft.json");
-    /* And it resolves a real one, including the ancestor link macOS puts under /tmp. */
-    expect(realpathNearest("/tmp")).toBe(realpathNearest("/private/tmp"));
+  });
+
+  /**
+   * PRDR-131a: this assertion used to be `realpathNearest("/tmp")` against
+   * `realpathNearest("/private/tmp")`, which holds only where `/tmp` IS a link —
+   * macOS. On Linux, where CI runs, `/tmp` resolves to itself and `/private`
+   * does not exist, so the two differ and the assertion failed. The property
+   * worth asserting is that a link and its target resolve alike; building the
+   * link makes that true everywhere instead of true where it was written.
+   */
+  it("realpathNearest follows a link to its target — asserted on a link the test builds, not on the host's /tmp layout", () => {
+    const base = mkdtempSync(path.join(tmpdir(), "detent-rp-"));
+    try {
+      mkdirSync(path.join(base, "target"));
+      symlinkSync(path.join(base, "target"), path.join(base, "link"));
+      expect(realpathNearest(path.join(base, "link", "file.txt"))).toBe(realpathNearest(path.join(base, "target", "file.txt")));
+      /* And the link resolves to the target rather than to itself. */
+      expect(realpathNearest(path.join(base, "link"))).toBe(realpathNearest(path.join(base, "target")));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 

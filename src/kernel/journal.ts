@@ -83,16 +83,30 @@ export class RunJournal {
    * B-5: a `start` with no matching `end` means the process died mid-session.
    * The budget was consumed; the session may NOT relaunch, and the gate judges
    * the tree as-is.
+   *
+   * B-5′ (PRDR-131): scoped to the GENERATION, which this took no account of.
+   * The journal is per-ticket and the skip event rebalances nothing, so
+   * `starts > ends` stayed true for the ticket's whole life: one killed session
+   * suppressed that role forever. X-8 defines a new generation by zeroed
+   * counters, so B-5's premise — the budget was consumed — is simply false
+   * across one, and the ladder went on spending real money fixing an
+   * implementation that had never been written. Requeue, the documented
+   * remedy, could not clear it.
+   *
+   * An event with no `generation` was written before this was recorded at all;
+   * counting it toward generation 0 is the conservative reading, and preserves
+   * B-5 for the in-flight resume it was written for.
    */
-  unfinished(ticketId: string, role: string): boolean {
+  unfinished(ticketId: string, role: string, generation: number): boolean {
     const file = this.ticketJournalPath(ticketId);
     if (!existsSync(file)) return false;
     let starts = 0;
     let ends = 0;
     for (const line of readFileSync(file, "utf8").split("\n")) {
       if (line.trim() === "") continue;
-      const record = JSON.parse(line) as { stage?: string; event?: string };
+      const record = JSON.parse(line) as { stage?: string; event?: string; generation?: unknown };
       if (record.stage !== role) continue;
+      if ((typeof record.generation === "number" ? record.generation : 0) !== generation) continue;
       if (record.event === "start") starts += 1;
       else if (record.event === "end") ends += 1;
     }

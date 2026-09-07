@@ -385,6 +385,58 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **D-27″ (3.1.1, PRDR-128).** The plugin hook no longer executes a command from repository
+  content, because it never had one to execute. The Stop path read `gate_cmd` out of
+  `<cwd>/.detent/stage.json` and ran it through a shell, and `expired()` treated an ABSENT
+  `expires_at_ms` as eternal rather than as expired — and since the hook is registered with no
+  matcher, it runs in every session of every user who installed the plugin. Cloning a hostile
+  repository and opening a session in it was therefore sufficient to execute arbitrary code,
+  with no run in flight, no config, no plan and no approval. The remedy is removal rather than
+  authentication: NOTHING in the product has ever written a non-null `gate_cmd`
+  — `refreshRunRefeed` hard-codes `null`, and a test asserts it — so the execution path had no
+  producer and served only an attacker. The run re-feed, which is what this file legitimately
+  carries, is unchanged, and the hook's own contract is unaffected: the stop gate was always
+  *"an accelerant, never the authority — the referee re-runs the full gate after session end"*
+  (P2), and on this path it had never once run. An absent expiry is now expired, so a planted
+  file cannot linger. The prior defence — that a repository could achieve the same through its
+  own settings hooks — does not hold: those sit behind Claude Code's trust prompt, and this
+  fired without one. SEC-6 says a settings file may only narrow what Detent does; a repository
+  file causing execution that would not otherwise happen is that property inverted.
+
+- **B-5′ (3.1.1, PRDR-131).** The crash skip is scoped to the GENERATION, not to the ticket's
+  lifetime. B-5's premise — the budget was consumed, so a crashed session may not relaunch — is
+  sound for the generation being resumed and false across one, because X-8 defines a new
+  generation by zeroed counters. `unfinished` counted `start` against `end` over the ticket's
+  whole journal and the skip event rebalanced neither, so one killed session suppressed that role
+  on that ticket permanently: the ladder still spent real money fixing an implementation that was
+  never written, and requeue — the documented remedy — could not clear it. Session events now
+  carry the generation they belong to, which was not previously recorded at all; events without
+  one count toward generation 0, the conservative reading that preserves B-5 for the resume it
+  was written for.
+
+- **C-14″ (3.1.1, PRDR-129).** The porcelain runs LIVE. `detent run` defaulted to the fixture
+  backend while `detent referee` defaulted to the live one and `detent init` refused the fixture
+  outright — and the README's two-command golden path, test-locked to exactly `detent init` and
+  `detent run`, carries no flag. So the documented public workflow executed a fake whose result
+  shape is indistinguishable from a real session: fabricated telemetry into the real ledger,
+  `start`/`end` into the real journal, session and generation counters consumed against real
+  tickets, ending in NEEDS_HUMAN for a reason that was not the reason. The default is now live,
+  a non-live backend announces itself before the run, and the per-run config audit event records
+  which backend ran — `SessionBackend.name` existed with no reader, so a journal could not answer
+  "was this real?" even afterwards.
+
+- **P7′ (3.1.1, PRDR-130).** A git call that COULD NOT COMPLETE is not a git call that found
+  nothing. `git()` ran without an explicit `maxBuffer`, so Node's 1 MB default threw ENOBUFS on
+  any larger output, and every wrapper turned the throw into an empty value — one `null` standing
+  for two different facts. Three consequences, none announced: the reviewer received `""` for a
+  diff, which is under the truncation cap so the "never truncate silently" banner never fired;
+  `changedFiles` returned empty, so B-4 minted no risk label and a risk-touching diff finalized
+  without the human approval it requires; and `snapshotRefs` returned an empty map, after which
+  the base-branch guard's own "a new branch is also a write" loop matched EVERY local branch,
+  `main` included, and deleted them. The buffer is now explicit, failure is distinguishable from
+  absence at every wrapper, and a guard with no baseline refuses to act rather than treating
+  every branch as new.
+
 - **S-2⁗ (3.1.1, PRDR-127).** Containment is judged against the RESOLVED destination of a path,
   not the path a session typed. `path.resolve` normalises `..` lexically and does not follow
   symbolic links, so a link inside the worktree walked past the boundary, past the declared

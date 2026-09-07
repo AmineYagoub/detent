@@ -131,6 +131,12 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       event: "config",
       at: new Date().toISOString(),
       run_branch: runBranch.branch,
+      /**
+       * C-14″ (PRDR-129): which backend ran. `SessionBackend.name` existed with
+       * zero readers, so a journal could not answer "was this real?" even after
+       * the fact — a fixture run and a live run left identical records.
+       */
+      backend: opts.backend.name,
       budgets: loaded.config.budgets,
       model_routing: loaded.config.model_routing,
       protected: loaded.config.protected,

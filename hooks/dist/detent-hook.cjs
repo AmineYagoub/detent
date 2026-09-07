@@ -1548,7 +1548,6 @@ var require_picomatch2 = __commonJS({
 });
 
 // src/plugin/hook.ts
-var import_node_child_process = require("node:child_process");
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = __toESM(require("node:path"), 1);
 
@@ -1646,26 +1645,8 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
   }
   return { decision: "allow", reason: `${rel} is inside the declared surface` };
 }
-var READ_ONLY_STAGES = /* @__PURE__ */ new Set(["planner", "diagnose", "research", "review"]);
-async function stopGate(input, runScopedGate2) {
-  if (input.stopHookActive) {
-    return { decision: "allow", reason: "stop-hook continuation already active; the kernel judges from here" };
-  }
-  if (input.gateCmd === null || input.gateCmd.trim() === "" || READ_ONLY_STAGES.has(input.stage)) {
-    return { decision: "allow", reason: "no stop gate for this stage" };
-  }
-  const result = await runScopedGate2(input.gateCmd);
-  if (result.green) return { decision: "allow", reason: "scoped gate green" };
-  return {
-    decision: "block",
-    reason: `GATE RED \u2014 the stage cannot end while verification fails.
-$ ${input.gateCmd}
-${result.outputTail.slice(-1500)}`
-  };
-}
 
 // src/plugin/hook.ts
-var GATE_TIMEOUT_MS = 9e5;
 function payloadCwd(payload) {
   return typeof payload.cwd === "string" && payload.cwd !== "" ? payload.cwd : process.cwd();
 }
@@ -1734,38 +1715,22 @@ function decidePreToolUse(payload, nowMs) {
   });
   return decision.decision === "deny" ? denyJson(decision.reason) : null;
 }
-function runScopedGate(command, cwd) {
-  const result = (0, import_node_child_process.spawnSync)(command, {
-    shell: true,
-    cwd,
-    encoding: "utf8",
-    timeout: GATE_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  const merged = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  return { green: result.status === 0, outputTail: merged.slice(-1500) };
-}
 async function decideStop(payload, nowMs) {
   const cwd = payloadCwd(payload);
-  let stage = "";
-  let gateCmd = null;
   let refeed = "";
   let parsed;
   try {
     parsed = JSON.parse((0, import_node_fs2.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8"));
-    stage = typeof parsed?.stage === "string" ? parsed.stage : "";
-    gateCmd = typeof parsed?.gate_cmd === "string" ? parsed.gate_cmd : null;
     refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";
   } catch {
     return null;
   }
-  if (expired(parsed, nowMs)) return null;
+  if (typeof parsed?.expires_at_ms !== "number" || nowMs > parsed.expires_at_ms) return null;
   const stopHookActive = Boolean(payload.stop_hook_active);
   if (refeed !== "" && !stopHookActive) {
     return JSON.stringify({ decision: "block", reason: refeed });
   }
-  const decision = await stopGate({ stage, gateCmd, stopHookActive }, async (command) => runScopedGate(command, cwd));
-  return decision.decision === "allow" ? null : JSON.stringify({ decision: "block", reason: decision.reason });
+  return null;
 }
 async function handleHookInput(raw, nowMs = Date.now()) {
   let payload;

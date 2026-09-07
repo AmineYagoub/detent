@@ -183,34 +183,42 @@ describe("T-121 D-28 ambient-bypass denies over the bundle", () => {
 const stop = (cwd: string, active = false): { readonly out: string; readonly code: number } =>
   run({ hook_event_name: "Stop", stop_hook_active: active, cwd });
 
-describe("T-113 Stop gate over the bundle (T-046 oracle ports)", () => {
-  it("test_blocks_stop_while_red — GATE RED with the command and output tail", () => {
-    const cwd = work({ ".detent/stage.json": JSON.stringify({ stage: "implement", gate_cmd: "echo boom && exit 1" }) });
-    const blocked = stop(cwd);
-    expect(blocked.code).toBe(0);
-    const parsed = JSON.parse(blocked.out) as { decision: string; reason: string };
-    expect(parsed.decision).toBe("block");
-    expect(parsed.reason).toContain("GATE RED");
-    expect(parsed.reason).toContain("echo boom && exit 1");
-    expect(parsed.reason).toContain("boom");
+describe("T-113 Stop gate over the bundle (D-27″: the re-feed, and nothing executable)", () => {
+  /**
+   * D-27″ (PRDR-128). This block used to prove the oracle's red/green stop gate
+   * over the bundle, with `gate_cmd` values the tests wrote by hand. That path
+   * is gone, and the tests went with it, because they were the reason it looked
+   * legitimate: NOTHING in the product has ever written a non-null `gate_cmd`
+   * — `refreshRunRefeed` hard-codes `null` and `tests/referee/hook-policy.test.ts`
+   * asserts it — so four passing tests sat around an execution path production
+   * could not produce and only an attacker could reach.
+   *
+   * The hook is registered with no matcher, so it runs in every session of every
+   * user who installed the plugin; a repository that merely COMMITTED a
+   * `.detent/stage.json` executed arbitrary code as the operator, with no run in
+   * flight, no config, no plan and no approval. Reproduced before the fix.
+   */
+  it("a repository-planted gate_cmd is NOT executed — with no expiry, and with a live one", () => {
+    const sentinel = "pwned.txt";
+    for (const expires of [undefined, FUTURE]) {
+      const cwd = work({
+        ".detent/stage.json": JSON.stringify({
+          stage: "implement",
+          gate_cmd: `echo owned > ${sentinel}; exit 1`,
+          ...(expires === undefined ? {} : { expires_at_ms: expires }),
+        }),
+      });
+      expect(stop(cwd)).toEqual({ out: "", code: 0 });
+      expect(existsSync(path.join(cwd, sentinel)), `executed with expires_at_ms=${String(expires)}`).toBe(false);
+    }
   });
 
-  it("test_allows_stop_when_green", () => {
-    const cwd = work({ ".detent/stage.json": JSON.stringify({ stage: "implement", gate_cmd: "exit 0" }) });
-    expect(stop(cwd)).toEqual({ out: "", code: 0 });
-  });
-
-  it("read-only stages have no stop gate, even with a red command bound", () => {
-    const cwd = work({ ".detent/stage.json": JSON.stringify({ stage: "review", gate_cmd: "exit 1" }) });
-    expect(stop(cwd)).toEqual({ out: "", code: 0 });
-  });
-
-  it("stop_hook_active breaks hook-induced loops WITHOUT running the gate", () => {
+  it("an ABSENT expiry is expired — a planted file cannot linger", () => {
+    /* This used to mean "eternal", which is what let a committed file survive indefinitely. */
     const cwd = work({
-      ".detent/stage.json": JSON.stringify({ stage: "implement", gate_cmd: "echo hit > marker.txt; exit 1" }),
+      ".detent/stage.json": JSON.stringify({ stage: "driver", run_refeed: "Detent run in flight: continue." }),
     });
-    expect(stop(cwd, true)).toEqual({ out: "", code: 0 });
-    expect(existsSync(path.join(cwd, "marker.txt"))).toBe(false);
+    expect(stop(cwd, false)).toEqual({ out: "", code: 0 });
   });
 
   it("no stage file means no stop gate — accelerant, never the authority (P2)", () => {

@@ -59,8 +59,10 @@ export class SessionArm {
     const ctx = this.ctx;
     const role = roleForState(state);
     const id = ticket.id;
-    if (ctx.journal.unfinished(id, role)) {
-      ctx.journal.appendTicketEvent(id, { stage: role, event: "skipped_after_crash", at: ctx.iso() });
+    /** B-5′ (PRDR-131): the crash skip belongs to the generation that crashed, not to the ticket. */
+    const openGen = currentGeneration(ticket).index;
+    if (ctx.journal.unfinished(id, role, openGen)) {
+      ctx.journal.appendTicketEvent(id, { stage: role, event: "skipped_after_crash", at: ctx.iso(), generation: openGen });
       return;
     }
 
@@ -153,6 +155,8 @@ export class SessionArm {
       stage: role,
       event: "start",
       at: ctx.iso(),
+      /** B-5′: which generation this session belongs to — the fact the skip needs and never had. */
+      generation: generation.index,
       /* The audit trail names the prompt that actually ran. */
       prompt: `${role}@${ctx.prompts.hashes[role]}`,
     });
@@ -181,6 +185,7 @@ export class SessionArm {
       stage: role,
       event: "end",
       at: ctx.iso(),
+      generation: generationNow.index,
       ok: result.ok,
       cost: result.costEstimateUsd,
     });

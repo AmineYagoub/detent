@@ -4,7 +4,7 @@ import { readBindings } from "../adapter/drift.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
-import { git, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
+import { git, gitCouldNotRun, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
 import { reviewBasis } from "./review-scope.js";
 import { pidAlive } from "./tickets/mutations.js";
 import { allTickets } from "./tickets/readers.js";
@@ -295,7 +295,15 @@ export class RefereeContext {
         `The complete changed-file list follows; read files in the worktree for full content.]\n` +
         `${stat}\n${full.slice(-DIFF_BODY_CAP)}`
       );
-    } catch {
+    } catch (err) {
+      /**
+       * P7′ (PRDR-130): a diff that could not be COMPUTED is not an empty diff.
+       * This returned `""`, which is under the truncation cap, so the "never
+       * truncate silently" banner above never fired and the reviewer was asked
+       * to judge a ticket against nothing. Failing closed sends it to a human
+       * instead — we cannot review what we could not read.
+       */
+      if (gitCouldNotRun(err)) throw err;
       return "";
     }
   }
