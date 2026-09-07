@@ -192,6 +192,40 @@ describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => 
 /**
  * C-9′ (PRDR-139) / X-1⁗ (PRDR-140) / B-2″ (PRDR-145b) — phase 3.
  */
+/**
+ * PRDR-144 — an EMPTY diff reaching a reviewer.
+ *
+ * P7′ (PRDR-130) showed a swallowed git error handed the reviewer `""`, which
+ * is under `DIFF_BODY_CAP`, so the "never truncate silently" banner never
+ * fired and a ticket was judged against nothing. That was found by reading the
+ * code, not by a test: nothing in the suite asserted what a review receives or
+ * does when the diff is empty.
+ */
+describe("PRDR-144 a review handed an empty diff", () => {
+  it("the reviewer is given the empty diff verbatim, and its verdict still governs", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    let sawDiff: string | null = null;
+    /* A session that commits nothing: the gate is green on the unchanged tree. */
+    const implementNothing: StageFn = () => okResult();
+    const capturing: StageFn = (spec) => {
+      sawDiff = (JSON.parse(spec.promptVariable) as { inputs: { diff?: string } }).inputs.diff ?? "";
+      return reviewApprove(spec);
+    };
+    await run(opts(root, new MockBackend({ implement: implementNothing, review: capturing })));
+
+    expect(sawDiff, "the reviewer must be launched at all").not.toBeNull();
+    expect(sawDiff, "an empty diff reaches the reviewer as empty — not as a banner, not as a throw").toBe("");
+    /*
+     * And the verdict is what decides: Detent does not second-guess an approve
+     * on an empty diff, which is precisely why the reviewer must be able to SEE
+     * that it is empty. If that ever changes to a kernel-side refusal, this
+     * assertion is where it should be stated.
+     */
+    expect(readTicket(root, "t1").state).toBe("DONE");
+  });
+});
+
 describe("C-9′ a run executes only the plan a human approved", () => {
   it("refuses when a ticket's approved content changed after the approval", async () => {
     const root = await fixture();

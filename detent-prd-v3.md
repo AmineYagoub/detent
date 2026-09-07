@@ -448,6 +448,20 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   so this promotes a mode that has been tested rather than trading a known hazard for an untested
   one. `--no-worktree` still carries those surfaces, now as an explicit choice.
 
+- **V-1‴ (3.1.1, PRDR-155).** A bound gate that VERIFIES NOTHING is named to the operator.
+  `bindSlot` refuses a command that will not terminate and one that cannot execute; a command
+  that exits 0 having done nothing is neither, so `"test": "echo no tests here"` bound as an
+  approved gate and passed for the life of the project — making P2's "only exit codes count"
+  vacuous. V-1″ closed the adjacent case of NO bound gate; this is the same hole one step in, and
+  it was found by generalising a monorepo-specific critical rather than accepting its framing.
+  Deliberately EVIDENCE, on the A-1⁗ and V-6 precedent: a fast zero-exit command is genuinely
+  ambiguous — a small build and a clean lint are both — so refusing it would make `init` unusable
+  on the projects it should serve, and the decisive check (break the tree, require red) is what
+  V-6 does at review time where a diff exists to revert. The signal is DURATION, measured rather
+  than guessed: a vacuous `echo` probes in 96 ms and a script doing real work in 344 ms, while
+  output is useless because npm echoes the script line either way. The notice carries the
+  command's own output so a person settles it in a second.
+
 - **V-1″ (3.1.1, PRDR-135).** No bound gate is UNVERIFIABLE, not green. `runScopedGates`
   returned `null` when no binding matched any requested slot and the caller read it as a pass,
   minting a real `GATE_GREEN` carrying the evidence string "no bound gates" — so a

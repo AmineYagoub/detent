@@ -46,6 +46,8 @@ export interface DetermineDeps {
   readonly timeoutMs?: number;
   readonly acknowledgedBy?: string;
   readonly now?: () => string;
+  /** V-1‴ (PRDR-155): where a bound gate that may verify nothing is said. */
+  readonly note?: (text: string) => void;
 }
 
 /**
@@ -240,11 +242,20 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
 
   writeBindings(deps.root, { bindings: [...report.bindings], skips: [...skips] });
 
+  /**
+   * V-1‴ (PRDR-155): a bound gate that may verify nothing. Said HERE, where the
+   * operator is watching bindings being chosen, rather than carried to PRESENT
+   * — this is the moment the answer is obvious to them, and the binding it
+   * describes is on the screen.
+   */
+  for (const notice of report.notices) deps.note?.(notice);
+
   return {
     kind: "complete",
     outputs: {
       bindings: report.bindings as unknown as Record<string, unknown>[],
       skips: skips as unknown as Record<string, unknown>[],
+      gate_notices: [...report.notices],
       status,
     },
   };

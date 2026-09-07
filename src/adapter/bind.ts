@@ -218,6 +218,50 @@ export interface BindReport {
   /** Outcomes a human must resolve: C-3b's two interrupt conditions. */
   readonly interrupts: readonly (ChoiceRequiredOutcome | RejectedOutcome)[];
   readonly unbound: readonly GateSlot[];
+  /** V-1‴ (PRDR-155): bound gates that may verify nothing. Evidence, never a refusal. */
+  readonly notices: readonly string[];
+}
+
+/**
+ * V-1‴ (PRDR-155) — a gate that runs cleanly and verifies nothing.
+ *
+ * `bindSlot` refuses two things: a command that will not terminate (watch mode)
+ * and one that cannot execute. A command that exits 0 having done nothing is
+ * neither, so it binds — and `"test": "echo no tests here"` becomes an approved
+ * gate that passes for the life of the project. P2 says only exit codes count;
+ * a gate that always exits 0 makes P2 vacuous. V-1″ closed the adjacent case of
+ * NO bound gate; this is the same hole one step in.
+ *
+ * Evidence and not a refusal, deliberately. A fast silent zero-exit command is
+ * ambiguous — `go build ./...` on a small module is exactly that, and so is a
+ * lint gate on a clean tree — so refusing it would make `init` unusable on the
+ * projects it should serve. The decisive test is breaking the tree and
+ * requiring the gate to go red, which is what V-6 does at REVIEW time, where a
+ * diff already exists to revert; there is none at bind time. So this measures,
+ * records, and hands it to the human, who settles it in a second.
+ */
+/**
+ * Measured, not guessed: `"test": "echo 'no tests here'"` probes in 96 ms
+ * through npm, while a script doing real work takes 344 ms and a real suite
+ * takes seconds. Output is NOT a usable signal — npm echoes the script line, so
+ * even a vacuous gate prints something — which is why this keys on duration and
+ * hands the operator the output to judge rather than judging it here.
+ */
+const QUIET_GATE_MS = 500;
+
+export function vacuousGateNotices(outcomes: readonly SlotOutcome[]): string[] {
+  const notices: string[] = [];
+  for (const outcome of outcomes) {
+    if (outcome.kind !== "bound" || outcome.result.durationMs >= QUIET_GATE_MS) continue;
+    const tail = outcome.result.output.trim().split("\n").slice(-2).join(" / ").slice(0, 120);
+    notices.push(
+      `${outcome.slot}: \`${outcome.binding.resolved}\` exited 0 in ${outcome.result.durationMs}ms — ` +
+        `confirm it actually runs your checks. It printed: ${tail === "" ? "(nothing)" : tail}. ` +
+        "A gate that always passes verifies nothing, and every ticket goes green against it (V-1‴). " +
+        "Fast can be legitimate — a small build, a clean lint — so this is evidence, not a refusal.",
+    );
+  }
+  return notices;
 }
 
 export async function bindAll(discovery: Discovery, opts: BindOptions): Promise<BindReport> {
@@ -232,6 +276,7 @@ export async function bindAll(discovery: Discovery, opts: BindOptions): Promise<
       (o): o is ChoiceRequiredOutcome | RejectedOutcome => o.kind === "choice-required" || o.kind === "rejected",
     ),
     unbound: outcomes.filter((o): o is UnboundOutcome => o.kind === "unbound").map((o) => o.slot),
+    notices: vacuousGateNotices(outcomes),
   };
 }
 

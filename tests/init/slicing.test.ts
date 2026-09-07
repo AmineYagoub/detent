@@ -9,6 +9,7 @@ import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { PLAN_FINDING_TAGS, slicesSchema, type SliceSpec } from "../../src/schemas/init.js";
 import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
+import { presentInputsFromOutputs } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 
@@ -491,5 +492,32 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     /** A slice may only depend on an EARLIER slice. */
     const backwards = slicesSchema.safeParse({ ...TWO_SLICES, slices: [...TWO_SLICES.slices].reverse() });
     expect(backwards.success).toBe(false);
+  });
+});
+
+/**
+ * PRDR-144 — `presentInputsFromOutputs` directly.
+ *
+ * It reads a checkpoint's `outputs`, which the schema types as
+ * `z.record(z.string(), z.unknown())`, and casts at six sites. It was only ever
+ * exercised through pipelines that had just written their own inputs — so a
+ * checkpoint from an older build reaches PRESENT unvalidated and throws inside
+ * rendering, AFTER the expensive phases have been skipped as reusable.
+ */
+describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () => {
+  it("survives outputs that are missing, empty, or the wrong shape", () => {
+    for (const outputs of [
+      {},
+      { PLAN: {} },
+      { PLAN: { plan: null } },
+      { PLAN: { plan: { slices: "not an array" } } },
+      { SLICE: { slices: [] }, PLAN: { plan: { slices: [] } } },
+      { ANALYZE: { questions: "not an array" } },
+    ] as Record<string, Record<string, unknown>>[]) {
+      expect(
+        () => presentInputsFromOutputs(outputs),
+        `presentInputsFromOutputs threw on ${JSON.stringify(outputs).slice(0, 60)}`,
+      ).not.toThrow();
+    }
   });
 });

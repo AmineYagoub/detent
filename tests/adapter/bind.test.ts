@@ -287,3 +287,37 @@ function okResult(command: string) {
     durationMs: 1,
   };
 }
+
+/**
+ * V-1‴ (PRDR-155) — a bound gate that verifies nothing.
+ *
+ * `bindSlot` refuses a command that will not terminate and one that cannot
+ * execute. A command that exits 0 having done nothing is neither, so
+ * `"test": "echo no tests here"` binds as an approved gate and passes for the
+ * life of the project — making P2's "only exit codes count" vacuous. V-1″
+ * closed the adjacent case of NO bound gate; this is the same hole one step in.
+ */
+describe("V-1‴ a gate that runs cleanly and verifies nothing is flagged, not refused", () => {
+  function repoWith(scripts: Record<string, string>): string {
+    const root = tmpTree({ "package.json": JSON.stringify({ name: "vac", scripts }, null, 2) });
+    trees.push(root);
+    return root;
+  }
+
+  it("flags a script that exits instantly, and hands the operator its output to judge", async () => {
+    const root = repoWith({ test: "echo 'no tests here'" });
+    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
+    /* Still BOUND — this is evidence, never a refusal. */
+    expect(report.bindings.map((b) => b.slot)).toContain("test");
+    expect(report.notices.join("\n")).toContain("confirm it actually runs your checks");
+    expect(report.notices.join("\n"), "the operator needs the output to judge in one second").toContain("no tests here");
+  });
+
+  it("says nothing about a gate that took real time", async () => {
+    /* Output is not a usable signal — npm echoes the script line either way — so duration is. */
+    const root = repoWith({ test: "node -e \"const t=Date.now();while(Date.now()-t<900);console.log('ran')\"" });
+    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
+    expect(report.bindings.map((b) => b.slot)).toContain("test");
+    expect(report.notices, "a gate that did work must not be accused").toEqual([]);
+  });
+});
