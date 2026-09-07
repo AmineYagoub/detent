@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
+import { approvalState } from "../init/machine.js";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -30,6 +31,8 @@ export async function main(argv: readonly string[]): Promise<number> {
       root: { type: "string" },
       backend: { type: "string", default: "claude" },
       worker: { type: "string" },
+      /** B-2″ (PRDR-153): the same posture the headless verb takes. */
+      "no-worktree": { type: "boolean", default: false },
     },
   });
   const root = values.root ?? process.cwd();
@@ -40,6 +43,28 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
   const loaded = loadConfig(JSON.parse(readFileSync(configPath, "utf8")));
+
+  /**
+   * C-9′ / B-2″ (PRDR-153): the MCP path is the interface the plugin actually
+   * drives, and it had NEITHER guard — no approval check anywhere in the path,
+   * and no `worktree`, so `RefereeContext` defaulted it to false and the
+   * model-driven driver ran an unapproved plan in the operator's own checkout.
+   * X-1⁗ moved the wall clock to the launch seam precisely so a ceiling would
+   * not live on one driver only; these two were left on one driver in the same
+   * change.
+   */
+  const approved = approvalState(root);
+  if (!approved.approved) {
+    process.stderr.write("no approved plan — run `detent init` and approve it first (C-9)\n");
+    return 2;
+  }
+  if (approved.stale) {
+    process.stderr.write(
+      "the approval in .detent/plan/approval.json is for a different plan — the tickets have changed since it was given. " +
+        "Re-approve with `detent init` (C-9)\n",
+    );
+    return 2;
+  }
 
   const backend: SessionBackend =
     values.backend === "mock"
@@ -58,6 +83,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       backend,
       prompts: loadPromptSet(),
       ...(values.worker !== undefined ? { worker: values.worker } : {}),
+      worktree: values["no-worktree"] !== true,
     },
     loaded,
     journal,

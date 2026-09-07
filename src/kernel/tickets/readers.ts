@@ -61,7 +61,8 @@ function unwrap(id: string, result: SchemaCheck<Ticket>): Ticket {
  * record, once for the plan. PRDR-064 asks F-1 to say what a ticket file is
  * rather than leaving readers to maintain an exclusion list.
  */
-const NON_TICKET_FILES: ReadonlySet<string> = new Set(["approval.json", "plan.json"]);
+/** PRDR-153: the one definition. `planHash` and `run` each had their own, and both were wrong. */
+export const NON_TICKET_FILES: ReadonlySet<string> = new Set(["approval.json", "plan.json"]);
 
 export function allTickets(root: string): Ticket[] {
   const dir = ticketsDir(root);

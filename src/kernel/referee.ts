@@ -160,7 +160,7 @@ export class RefereeCore {
     if (!pool.some((p) => p.id === id)) {
       return { ok: false, reason: claimRefusal(this.root, id) };
     }
-    if (!claim(this.root, id, this.ctx.worker)) {
+    if (!claim(this.root, id, this.ctx.worker, () => this.ctx.iso())) {
       return { ok: false, reason: `claimed by another worker` };
     }
     markCurrentTicket(this.root, id);

@@ -53,7 +53,15 @@ export function claimBreakable(info: ClaimInfo, isAlive: (pid: number) => boolea
  * gets EEXIST. The write that follows is not part of the atomic step, so a
  * reader must treat an empty claim file as held-by-someone, not as free.
  */
-export function claim(root: string, id: string, owner: string): boolean {
+/**
+ * X-1⁗ (PRDR-153): `now` is injectable, because the wall-clock check subtracts
+ * this timestamp from `ctx.iso()`. Those were two different clocks — `iso()` is
+ * injected in tests, `at` was always real — so under a frozen fixture clock the
+ * elapsed time came out hugely negative and the check never fired, including
+ * in the canonical X-1 wall-clock test. A subtraction across two clocks is not
+ * a duration.
+ */
+export function claim(root: string, id: string, owner: string, now: () => string = () => new Date().toISOString()): boolean {
   mkdirSync(claimsDir(root), { recursive: true });
   let fd: number;
   try {
@@ -63,7 +71,7 @@ export function claim(root: string, id: string, owner: string): boolean {
     throw err;
   }
   try {
-    const info: ClaimInfo = { owner, pid: process.pid, at: new Date().toISOString(), host: hostname() };
+    const info: ClaimInfo = { owner, pid: process.pid, at: now(), host: hostname() };
     writeFileSync(fd, JSON.stringify(info));
   } finally {
     closeSync(fd);

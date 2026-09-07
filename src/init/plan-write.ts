@@ -161,6 +161,30 @@ export function writePlan(
     /** C-2‴: the increments the plan was planned in, for the presentation and the report. */
     slices: slices.map((s) => ({ id: s.id, title: s.title, tickets: drafted.filter((t) => t.slice === s.id).map((t) => t.id) })),
   });
+  /**
+   * C-9′ (PRDR-153): the live-claim check belongs HERE, before anything is
+   * written. PRDR-139 put it in the orphan sweep — after every ticket had
+   * already been rewritten — so the throw left the directory reset, the orphans
+   * present and `plan.json` stale: exactly the half-written state this file's
+   * own header says it was restructured to prevent ("Decide, validate, then
+   * write", PRDR-118).
+   *
+   * It also covers RETAINED tickets, which the sweep never reached. A claimed
+   * ticket the new plan keeps is overwritten by a freshly built `newTicket` —
+   * state READY, generations wiped — while its session runs on. The lock
+   * surviving is no comfort if the state it protects is rewound.
+   */
+  for (const current of existing) {
+    if (current.state === "DONE") continue;
+    const held = readClaim(deps.root, current.id);
+    if (held !== null && !claimBreakable(held, pidAlive, hostname())) {
+      throw new Error(
+        `${current.id} is claimed by a live process (pid ${held.pid} on ${held.host}) — stop the run before re-planning. ` +
+          "Re-planning rewrites a ticket's state and generations, and removing one deletes its lock (C-9/R-3).",
+      );
+    }
+  }
+
   /** ---- everything validated: now the directory may change ---------------- */
   for (const ticket of settled) {
     const preserved = done.get(ticket.id);
@@ -180,21 +204,7 @@ export function writePlan(
    */
   for (const stale of existing) {
     if (ids.has(stale.id) || stale.state === "DONE") continue;
-    /**
-     * C-9′ (PRDR-139): never break a LIVE claim. This was the only claim
-     * breaker in the tree that skipped `claimBreakable` — `plumbing.ts` checks
-     * a dead pid on a matching host in both of its breakers — while the
-     * `inFlightTickets` guard upstream is a check-then-act separated from this
-     * act by an entire model-driven planning run. A `run` that claimed a ticket
-     * in that window had its lock deleted underneath it.
-     */
-    const claim = readClaim(deps.root, stale.id);
-    if (claim !== null && !claimBreakable(claim, pidAlive, hostname())) {
-      throw new Error(
-        `${stale.id} is claimed by a live process (pid ${claim.pid} on ${claim.host}) and this plan no longer contains it — ` +
-          "stop the run before re-planning; removing a ticket a session is working in would delete its lock (C-9/R-3).",
-      );
-    }
+    /* Live claims were refused above, before anything was written. */
     rmSync(ticketPath(deps.root, stale.id), { force: true });
     rmSync(claimPath(deps.root, stale.id), { force: true });
     deps.note?.(`${stale.id} removed — the new plan does not contain it (PRDR-085)`);

@@ -8,6 +8,7 @@ import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
 import { acquireRunLock, runLockRefusal } from "./run-lock.js";
 import { approvalState } from "../init/machine.js";
+import { NON_TICKET_FILES } from "./tickets/readers.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
 import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
@@ -125,7 +126,28 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
    * corrupt. `readTicket` refuses it by name a moment later, which is the error
    * worth surfacing.
    */
-  const approved = planFilesReadable(root) ? approvalState(root) : { stale: false };
+  /**
+   * PRDR-153: an unreadable plan file REFUSES rather than disabling the check.
+   * `planFilesReadable` excluded only `approval.json` while `NON_TICKET_FILES`
+   * excludes `plan.json` too — so a conflicted `plan.json`, the most
+   * merge-prone file in a committed directory, turned the C-9 comparison off
+   * and nothing downstream noticed, because `allTickets` skips it by name. The
+   * "readTicket refuses it a moment later" argument held for ticket files and
+   * was false for this one.
+   */
+  if (!planArtifactReadable(root)) {
+    return notReady(
+      "`.detent/plan/plan.json` is not readable JSON, so the approval cannot be checked against the plan it names. " +
+        "Repair or restore it — a merge conflict there is the usual cause, and a run executes only what a human approved (C-9).",
+    );
+  }
+  /*
+   * A ticket that will not parse is DAMAGE, not an edit: `readTicket` refuses
+   * it by name a moment later, which is the precise error. Skipping the
+   * comparison here keeps that diagnosis rather than reporting "the tickets
+   * have changed since you approved".
+   */
+  const approved = ticketFilesReadable(root) ? approvalState(root) : { stale: false };
   if (approved.stale) {
     return notReady(
       "the approval in .detent/plan/approval.json is for a different plan — the tickets have changed since it was " +
@@ -248,12 +270,29 @@ function readApproval(root: string): string {
   return "ok";
 }
 
-/** C-9′: every ticket in the plan parses, so a hash comparison means what it says. */
-function planFilesReadable(root: string): boolean {
+/**
+ * C-9′ (PRDR-153): `plan.json` is what NAMES the approved set, so an unreadable
+ * one is a refusal in its own right. It used to fall into the same bucket as a
+ * corrupt ticket and silently disable the whole comparison — and nothing
+ * downstream noticed, because `allTickets` skips it by name.
+ */
+function planArtifactReadable(root: string): boolean {
+  const file = path.join(stateDir(root), "plan", "plan.json");
+  if (!existsSync(file)) return true;
+  try {
+    JSON.parse(readFileSync(file, "utf8"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every TICKET parses, so a hash comparison means what it says. */
+function ticketFilesReadable(root: string): boolean {
   const dir = path.join(stateDir(root), "plan");
   if (!existsSync(dir)) return true;
   for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".json") || name === "approval.json") continue;
+    if (!name.endsWith(".json") || NON_TICKET_FILES.has(name)) continue;
     try {
       JSON.parse(readFileSync(path.join(dir, name), "utf8"));
     } catch {

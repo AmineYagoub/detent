@@ -5,7 +5,7 @@ import path from "node:path";
 import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import { git } from "../kernel/git.js";
-import { readTicket, isClaimed } from "../kernel/tickets/readers.js";
+import { NON_TICKET_FILES, readTicket, isClaimed } from "../kernel/tickets/readers.js";
 import { ticketsDir } from "../kernel/tickets/paths.js";
 import { INIT_PHASES, type InitPhase, type Interrupt } from "../schemas/init.js";
 
@@ -221,9 +221,16 @@ const APPROVED_FIELDS: readonly (keyof Ticket)[] = [
   "acceptance_criteria",
   "non_goals",
   "surface",
+  /**
+   * PRDR-153: `blockers` stays — plan-time only, verified: no run-time writer.
+   * `waits_on` and `links` were added by PRDR-152 and are REMOVED again: both
+   * are written DURING a run — `dependency.ts` sets `waits_on` on an X-4′
+   * discovered dependency, and `linkDiscovered` sets `links` on both sides of
+   * an X-6 discovery — so including them refused the next resume of any run
+   * that discovered anything. The fix for the graph bypass was right; two of
+   * the three fields I reached for were run state.
+   */
   "blockers",
-  "waits_on",
-  "links",
   "provides",
   "consumes",
   "risk_label",
@@ -236,12 +243,35 @@ function approvedProjection(raw: unknown): string {
   return JSON.stringify(APPROVED_FIELDS.map((k) => [k, t[k] ?? null]));
 }
 
+/**
+ * PRDR-153: the ids the PLAN names, or null when there is no readable plan.
+ *
+ * A run creates tickets in the same directory the hash scans — X-5 quarantine
+ * and X-6 discovery both call `linkDiscovered`, which writes a new `.json`
+ * there — so hashing every file meant Detent's own bookkeeping invalidated the
+ * approval and refused the next resume. Anchoring to `plan.json`'s ticket list
+ * is exact: it is what the human was shown, and `linkDiscovered` never touches
+ * it.
+ */
+function plannedIds(root: string): ReadonlySet<string> | null {
+  try {
+    const raw = JSON.parse(readFileSync(path.join(stateDir(root), "plan", "plan.json"), "utf8")) as { tickets?: unknown };
+    return Array.isArray(raw.tickets) ? new Set(raw.tickets.filter((t): t is string => typeof t === "string")) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function planHash(root: string): string {
   const dir = path.join(stateDir(root), "plan");
   if (!existsSync(dir)) return createHash("sha256").update("").digest("hex");
+  const planned = plannedIds(root);
   const h = createHash("sha256");
   for (const name of readdirSync(dir).sort()) {
-    if (!name.endsWith(".json") || name === "approval.json") continue;
+    /** PRDR-153: ONE definition of "not a ticket" — `readers.ts` already had it. */
+    if (!name.endsWith(".json") || NON_TICKET_FILES.has(name)) continue;
+    /* Only what the plan named; a ticket the RUN filed is not an edit to what was approved. */
+    if (planned !== null && !planned.has(name.replace(/\.json$/, ""))) continue;
     let projected: string;
     try {
       projected = approvedProjection(JSON.parse(readFileSync(path.join(dir, name), "utf8")));

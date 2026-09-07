@@ -215,10 +215,23 @@ describe("C-9′ a run executes only the plan a human approved", () => {
   it("a resume of an approved plan still runs, though the run has rewritten its tickets", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
+    /*
+     * PRDR-153: NO intervening `addTicket`. It calls `approveFixturePlan`, which
+     * re-stamps the hash from whatever is on disk — so the original version of
+     * this test would have passed even if `planHash` still covered whole ticket
+     * files, which is the very thing it claims to prove. The approval must be
+     * the one given BEFORE run 1 rewrote anything.
+     */
+    addTicket(root, { id: "t2" });
+    const approvedHash = JSON.parse(readFileSync(path.join(root, ".detent/plan/approval.json"), "utf8")) as { plan_hash: string };
+
     const first = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
     expect(first.exitCode).toBe(EXIT_OK);
-    /* The ticket file now carries a DONE state, counters and notes it did not have at approval. */
-    addTicket(root, { id: "t2" });
+    /* Both tickets now carry DONE states, counters and notes they lacked at approval. */
+    expect(readTicket(root, "t1").state).toBe("DONE");
+    const still = JSON.parse(readFileSync(path.join(root, ".detent/plan/approval.json"), "utf8")) as { plan_hash: string };
+    expect(still.plan_hash, "the approval was not re-stamped").toBe(approvedHash.plan_hash);
+
     const resumed = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
     expect(resumed.exitCode, "a rewritten ticket file must not read as an edited plan").toBe(EXIT_OK);
   });
@@ -238,8 +251,14 @@ describe("C-9′ a run executes only the plan a human approved", () => {
     addTicket(root, { id: "t1" });
     const file = path.join(root, ".detent/plan/t1.json");
     const ticket = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-    /* The fields that legitimately change DURING a run and are not part of the approval. */
-    const runState = new Set(["schema_version", "state", "generations", "notes"]);
+    /**
+     * The fields that legitimately change DURING a run. `waits_on` is set by
+     * X-4′ dependency discovery (`dependency.ts`) and `links` by X-6 discovery
+     * (`linkDiscovered`) — PRDR-152 briefly treated both as approved content,
+     * which refused the next resume of any run that discovered anything.
+     * `blockers` is genuinely plan-time: no run-time writer exists.
+     */
+    const runState = new Set(["schema_version", "state", "generations", "notes", "waits_on", "links"]);
 
     for (const field of Object.keys(ticket)) {
       if (runState.has(field)) continue;
@@ -290,8 +309,16 @@ describe("X-1⁗ the wall clock is enforced where the work is launched", () => {
      * someone else and it is skipped entirely. A zero ceiling is refused by the
      * X-1 worst-case check at config load, so that route is closed too.
      */
-    const future = (): number => Date.now() + 86_400_000;
-    const outcome = await run({ ...opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })), now: future });
+    /*
+     * PRDR-153: a clock that ADVANCES, by just over the default ceiling per
+     * read. Claim time and the check now read the same injectable clock — they
+     * used to be two different ones, which is why this check never fired under
+     * a frozen fixture clock — so a constant offset yields zero elapsed, and
+     * counting calls is fragile because `iso()` is read many times per stage.
+     */
+    let clock = Date.now();
+    const advancing = (): number => (clock += 3_600_001);
+    const outcome = await run({ ...opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })), now: advancing });
     expect(JSON.stringify(outcome.summary)).toContain("wall clock");
   });
 });
