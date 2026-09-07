@@ -143,7 +143,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
   expect(detectWorkspace(gatherFacts(root))).toBeNull();
 
   /** --- execute + approve (V-1: every candidate runs before approval) -------- */
-  const report = await bindAll(discover(root), { root, timeoutMs: PROBE_TIMEOUT_MS });
+  const report = await bindAll(discover(root), { root, timeoutMs: PROBE_TIMEOUT_MS , redact: (t) => t });
   const bindings: Binding[] = [...report.bindings];
 
   if (plan.choose === undefined) {

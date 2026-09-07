@@ -242,7 +242,7 @@ describe("T-026 V-2 record", () => {
 describe("T-026 skips and unbound slots (V-1)", () => {
   it("an unbound slot is reported, never invented", async () => {
     const root = tree(pkg({ test: "vitest run" }));
-    const report = await bindAll(discover(root), { root, runner: async (s) => okResult(s.command), now: NOW });
+    const report = await bindAll(discover(root), { root, runner: async (s) => okResult(s.command), now: NOW , redact: (t) => t });
     expect(report.unbound).toContain("e2e");
     expect(report.bindings.map((b) => b.slot)).toEqual(["test"]);
   });
@@ -258,7 +258,7 @@ describe("T-026 skips and unbound slots (V-1)", () => {
       ...pkg({ test: "vitest run", lint: "eslint ." }),
       Makefile: "test:\n\techo hi\n",
     });
-    const report = await bindAll(discover(root), { root, runner: async (s) => okResult(s.command), now: NOW });
+    const report = await bindAll(discover(root), { root, runner: async (s) => okResult(s.command), now: NOW , redact: (t) => t });
     expect(report.bindings.map((b) => b.slot)).toEqual(["lint"]);
     expect(report.interrupts.map((i) => i.slot)).toEqual(["test"]);
     expect([...report.unbound].sort()).toEqual(["build", "e2e", "test_single", "typecheck"]);
@@ -306,7 +306,7 @@ describe("V-1‴ a gate that runs cleanly and verifies nothing is flagged, not r
 
   it("flags a script whose every statement is a no-op, and quotes it back", async () => {
     const root = repoWith({ test: "echo 'no tests here'" });
-    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
+    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 , redact: (t) => t });
     /* Still BOUND — this is evidence, never a refusal. */
     expect(report.bindings.map((b) => b.slot)).toContain("test");
     expect(report.notices.join("\n")).toContain("exits 0 having done nothing");
@@ -321,7 +321,7 @@ describe("V-1‴ a gate that runs cleanly and verifies nothing is flagged, not r
    */
   it("says nothing about a real command, however fast it returns", async () => {
     const root = repoWith({ test: "node -e \"if (1 + 1 !== 2) process.exit(1)\"" });
-    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
+    const report = await bindAll(discover(root), { root, timeoutMs: 20_000 , redact: (t) => t });
     expect(report.bindings.map((b) => b.slot)).toContain("test");
     expect(report.notices, "a gate that did work must not be accused").toEqual([]);
   });

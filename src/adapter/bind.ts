@@ -123,13 +123,22 @@ export interface BindOptions {
   readonly status?: Binding["status"];
   readonly facts?: Pick<StackFacts, "pm">;
   readonly normalize?: (candidate: Candidate, facts?: Pick<StackFacts, "pm">) => Invocation;
-  /**
-   * SEC-4 (PRDR-156): how command output embedded in a notice is redacted.
-   * `src/init/bind.ts` — the only production caller — passes `scrub`. Absent,
-   * notices stay in memory and are never written or printed, which is all a
-   * direct `bindAll` caller in a test does.
-   */
-  readonly redact?: Redact;
+}
+
+/**
+ * `bindAll`'s options. `redact` is REQUIRED and lives here rather than on
+ * `BindOptions` (PRDR-163) because `bindAll` is the only function that
+ * produces notices — `bindSlot` and `resolveChoice` have no use for it.
+ *
+ * It was optional with an identity default, which made the "required"
+ * parameter on `vacuousGateNotices` void at the only entry point production
+ * uses; the comment beside it claimed `src/init/bind.ts` was the sole caller,
+ * and that was false. `src/cli/verify.ts` reaches `bindAll` through its own
+ * `deps.bind` indirection, passed nothing, and produced notices carrying a raw
+ * token. Required means the compiler names every caller.
+ */
+export interface BindAllOptions extends BindOptions {
+  readonly redact: Redact;
 }
 
 const defaultRunner: GateRunner = (spec) =>
@@ -274,16 +283,37 @@ export interface BindReport {
  * a false accusation on every gate would be a new harm.
  */
 
-/** The executable half of a `config_region`, with each engine's own shape stripped off. */
-function commandBody(region: string): string | null {
-  /* `exists:<file>` — go, rust, tsc. The command follows from a real tool, never from a script body. */
-  if (region.startsWith("exists:")) return null;
-  const script = /^scripts\.[^=]+=([\s\S]*)$/.exec(region);
-  if (script !== null) return script[1] ?? "";
+/**
+ * Which adapters put an executable COMMAND in `config_region`, and in what shape.
+ *
+ * PRDR-161: a whitelist, because the first version was a blacklist of the
+ * shapes its author had thought of. `config_region` is "the smallest canonical
+ * text that determines `resolved`" — which for `pyproject` is a TOML TABLE and
+ * for `workspace:*` is a marker string, neither of which is shell. Sniffing
+ * the text for a recipe header would work today and break on the next engine;
+ * the adapter's own name is the fact, and `BoundOutcome` carries it.
+ *
+ * The others are `exists:<file>` (go, cargo, tsc, and pyproject's fallback):
+ * the command follows from a real tool, never from a body someone wrote.
+ */
+const COMMAND_REGION: Readonly<Record<string, "script" | "recipe">> = {
+  "node-scripts": "script",
+  make: "recipe",
+  just: "recipe",
+};
+
+/** The executable half of a `config_region`, or null when this adapter has none. */
+function commandBody(candidate: Candidate): string | null {
+  const shape = COMMAND_REGION[candidate.adapter];
+  if (shape === undefined) return null;
+  if (shape === "script") {
+    /* `scripts.<name>=<body>`. A workspace-derived candidate reuses no such region, so this fails closed. */
+    const script = /^scripts\.[^=]+=([\s\S]*)$/.exec(candidate.config_region);
+    return script === null ? null : (script[1] ?? "");
+  }
   /* A make or just recipe block: the first line is the target header, the rest is the recipe. */
-  const lines = region.split("\n");
-  if (lines.length > 1) return lines.slice(1).join("\n");
-  return region;
+  const lines = candidate.config_region.split("\n");
+  return lines.length > 1 ? lines.slice(1).join("\n") : null;
 }
 
 /** Shell statements that exit 0 having done nothing. */
@@ -294,8 +324,8 @@ const NO_OP = /^(?:echo|printf|true|exit\s+0)\b|^:$/;
  * quote-blind on purpose: over-splitting a real command yields fragments that
  * are not no-ops, so it can only cause a miss, never a false accusation.
  */
-export function verifiesNothing(region: string): boolean {
-  const body = commandBody(region);
+export function verifiesNothing(candidate: Candidate): boolean {
+  const body = commandBody(candidate);
   if (body === null) return false;
   const statements = body
     .split(/&&|\|\||;|\n/)
@@ -318,7 +348,7 @@ export type Redact = (text: string) => string;
 export function vacuousGateNotices(outcomes: readonly SlotOutcome[], redact: Redact): string[] {
   const notices: string[] = [];
   for (const outcome of outcomes) {
-    if (outcome.kind !== "bound" || !verifiesNothing(outcome.candidate.config_region)) continue;
+    if (outcome.kind !== "bound" || !verifiesNothing(outcome.candidate)) continue;
     /**
      * SEC-4: scrubbed BEFORE it can reach a file, a stream or a prompt — the
      * same rule `referee-gate.ts` applies to gate output it writes. A project
@@ -332,18 +362,19 @@ export function vacuousGateNotices(outcomes: readonly SlotOutcome[], redact: Red
      * `curl -H "Authorization: Bearer …"` is an ordinary thing to find in one
      * — and this notice quotes it back verbatim.
      */
-    const body = redact(commandBody(outcome.candidate.config_region)?.trim() ?? "");
+    /* PRDR-161: capped like the output tail — a long recipe should not go to stdout whole. */
+    const body = redact(commandBody(outcome.candidate)?.trim() ?? "").slice(0, 120);
     notices.push(
       `${outcome.slot}: \`${outcome.binding.resolved}\` runs \`${body}\` — every statement in it exits 0 having ` +
         `done nothing. It printed: ${tail === "" ? "(nothing)" : tail} (${outcome.result.durationMs}ms). ` +
         "A gate that always passes verifies nothing, and every ticket goes green against it (V-1‴). " +
         "Evidence, not a refusal — bind a command that can fail, or confirm this is what you meant.",
-    )
+    );
   }
   return notices;
 }
 
-export async function bindAll(discovery: Discovery, opts: BindOptions): Promise<BindReport> {
+export async function bindAll(discovery: Discovery, opts: BindAllOptions): Promise<BindReport> {
   const outcomes: SlotOutcome[] = [];
   for (const slot of GATE_SLOTS) {
     outcomes.push(await bindSlot(slot, discovery.candidates, { ...opts, facts: opts.facts ?? { pm: discovery.stack.pm } }));
@@ -355,7 +386,7 @@ export async function bindAll(discovery: Discovery, opts: BindOptions): Promise<
       (o): o is ChoiceRequiredOutcome | RejectedOutcome => o.kind === "choice-required" || o.kind === "rejected",
     ),
     unbound: outcomes.filter((o): o is UnboundOutcome => o.kind === "unbound").map((o) => o.slot),
-    notices: vacuousGateNotices(outcomes, opts.redact ?? ((t) => t)),
+    notices: vacuousGateNotices(outcomes, opts.redact),
   };
 }
 

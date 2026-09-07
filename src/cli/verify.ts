@@ -1,9 +1,10 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
 import { discover } from "../adapter/discover/index.js";
-import { bindAll, type BindOptions, type BindReport } from "../adapter/bind.js";
+import { bindAll, type BindAllOptions, type BindReport } from "../adapter/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
+import { scrub } from "../kernel/scrub.js";
 
 /**
  * T-027 — `detent verify sync` (C-12 plumbing, V-3).
@@ -28,7 +29,7 @@ type ConsentPrompt = (summary: SyncSummary) => Promise<boolean>;
 
 export interface VerifySyncDeps {
   readonly consent: ConsentPrompt;
-  readonly bind?: (report: ReturnType<typeof discover>, opts: BindOptions) => Promise<BindReport>;
+  readonly bind?: (report: ReturnType<typeof discover>, opts: BindAllOptions) => Promise<BindReport>;
   readonly now?: () => string;
   readonly user?: string;
   readonly write?: boolean;
@@ -57,8 +58,18 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
     root,
     approvedBy: deps.user ?? "auto",
     status: "approved",
+    /* SEC-4 (PRDR-163): notices quote the project's own command output and this path prints them. */
+    redact: scrub,
     ...(deps.now === undefined ? {} : { now: deps.now }),
   });
+
+  /**
+   * V-1‴ (PRDR-163): `sync` is the ONE path whose purpose is accepting a
+   * CHANGED verification binding, which is precisely where a real gate can be
+   * replaced by a vacuous one — and it discarded `report.notices` entirely, so
+   * it would re-baseline `"test": "echo no tests"` and say nothing.
+   */
+  for (const notice of report.notices) messages.push(notice);
 
   for (const interrupt of report.interrupts) {
     messages.push(

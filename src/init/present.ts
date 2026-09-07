@@ -44,6 +44,16 @@ export interface PresentInput {
   readonly findings?: PlanReview["findings"];
   /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
   readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
+  /**
+   * V-1‴ (PRDR-163): bound gates that may verify nothing.
+   *
+   * Also rendered here, not only printed at bind time. The `note` callback
+   * fires once, inside `DETERMINE_VERIFICATION.run` — and a reused phase never
+   * calls `run`, while `init` interrupts at AWAIT_APPROVAL and therefore almost
+   * always resumes. Without this the operator saw the warning on the first
+   * `init` and never again, including in the summary they actually approve.
+   */
+  readonly gateNotices?: readonly string[];
   /** S-3″: absent means unconfigured, which is what earns the reminder. */
   readonly symbols?: SymbolsConfig;
 }
@@ -51,7 +61,7 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges"> {
+): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices"> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -67,6 +77,23 @@ export function presentInputsFromOutputs(
     typeof q === "object" && q !== null && typeof (q as PlanQuestion).question === "string" && typeof (q as PlanQuestion).id === "string";
   const isSlice = (s: unknown): s is NonNullable<PresentInput["slices"]>[number] =>
     typeof s === "object" && s !== null && typeof (s as { id?: unknown }).id === "string" && Array.isArray((s as { tickets?: unknown }).tickets);
+  /**
+   * PRDR-164: the other two fields.
+   *
+   * The first pass filtered the ELEMENTS of `questions` and `slices` and
+   * checked only the container type for these — so `review_findings: [null]`
+   * survived the builder and `renderPresentation` died on `f.tag`, and
+   * `symbol-reminder.ts` iterates the same array. "Returns something
+   * renderable or nothing" has to hold for everything it returns.
+   */
+  const isFinding = (f: unknown): f is PlanReview["findings"][number] =>
+    typeof f === "object" && f !== null && typeof (f as { tag?: unknown }).tag === "string" && typeof (f as { finding?: unknown }).finding === "string";
+  const isEdge = (e: unknown): e is NonNullable<PresentInput["derivedEdges"]>[number] =>
+    typeof e === "object" &&
+    e !== null &&
+    typeof (e as { consumer?: unknown }).consumer === "string" &&
+    typeof (e as { provider?: unknown }).provider === "string" &&
+    typeof (e as { contract?: unknown }).contract === "string";
   const seen = new Set<string>();
   const takenIds = new Set<string>();
   const questions: PlanQuestion[] = [];
@@ -99,8 +126,9 @@ export function presentInputsFromOutputs(
   return {
     slices,
     questions,
-    findings: list<PlanReview["findings"][number]>("PLAN", "review_findings"),
-    derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges"),
+    findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
+    derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges").filter(isEdge),
+    gateNotices: list<unknown>("DETERMINE_VERIFICATION", "gate_notices").filter((n): n is string => typeof n === "string"),
   };
 }
 
@@ -122,6 +150,11 @@ export function renderPresentation(input: PresentInput): string {
   if (input.slices !== undefined && input.slices.length > 1) {
     lines.push("", `Slices (${input.slices.length}, in order — a slice cannot start before the ones it thickens are DONE):`);
     for (const s of input.slices) lines.push(`  ${s.id}  ${s.title}  — ${s.tickets.length} ticket(s)`);
+  }
+  const gateNotices = input.gateNotices ?? [];
+  if (gateNotices.length > 0) {
+    lines.push("", `Gates that may verify nothing (${gateNotices.length}) — evidence, not a refusal (V-1‴):`);
+    for (const n of gateNotices) lines.push(`  ${n}`);
   }
   if (input.bootstrap !== null) {
     lines.push(

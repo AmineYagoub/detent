@@ -527,6 +527,17 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
     { ANALYZE: { open_questions: [null] } },
     { ANALYZE: { open_questions: [{}] } },
     { PLAN: { review_findings: "not an array", derived_edges: 7 } },
+    /**
+     * PRDR-164: ELEMENT shapes for the other two fields. The first pass
+     * filtered the elements of `questions` and `slices` and checked only the
+     * container type for `findings` and `derivedEdges` — so the builder's own
+     * comment, "it returns something renderable or nothing", was true of half
+     * its return value, and the renderer still died on `[null]`.
+     */
+    { PLAN: { review_findings: [null] } },
+    { PLAN: { review_findings: [{}, "a string"] } },
+    { PLAN: { derived_edges: [null] } },
+    { PLAN: { derived_edges: [{ consumer: "t-1" }] } },
   ];
 
   it("survives outputs that are missing, empty, or the wrong shape", () => {

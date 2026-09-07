@@ -69,7 +69,7 @@ export async function makeRunRepo(): Promise<RunRepo> {
     pinned: { agent_sdk: "0.3.258", claude_code: "2.1.191" },
   });
 
-  const report = await bindAll(discover(root), { root, timeoutMs: 30_000 });
+  const report = await bindAll(discover(root), { root, timeoutMs: 30_000 , redact: (t) => t });
   if (report.interrupts.length > 0) throw new Error(`fixture binding interrupted: ${JSON.stringify(report.interrupts)}`);
   writeBindings(root, { bindings: [...report.bindings], skips: [] });
 

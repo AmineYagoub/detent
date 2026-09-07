@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildPipeline } from "../../src/init/pipeline.js";
+import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { vacuousGateNotices } from "../../src/adapter/bind.js";
 import { scrub } from "../../src/kernel/scrub.js";
 import type { Candidate } from "../../src/adapter/discover/types.js";
@@ -79,6 +80,30 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
     );
   }, 20_000);
 
+  /**
+   * PRDR-163: the notice must survive a resume.
+   *
+   * `note` fires once, inside `DETERMINE_VERIFICATION.run`. A reused phase
+   * never calls `run`, and `init` interrupts at AWAIT_APPROVAL and therefore
+   * almost always resumes — so the operator saw it on the first `init` and
+   * never again, including in the summary they actually approve against.
+   */
+  it("renders in the PRESENT summary, not only in the one-shot note", () => {
+    const rendered = renderPresentation({
+      root: "/tmp",
+      tickets: [],
+      bindings: [],
+      skips: [],
+      assignments: {},
+      bootstrap: null,
+      ...presentInputsFromOutputs({
+        DETERMINE_VERIFICATION: { gate_notices: ["test: `npm run test` runs `echo hi` — every statement in it exits 0 having done nothing."] },
+      }),
+    });
+    expect(rendered, "the summary an operator approves must carry the warning").toContain("may verify nothing");
+    expect(rendered).toContain("exits 0 having done nothing");
+  });
+
   it("says nothing about a gate that does real work", async () => {
     const shown = await noticesShownTo(repoWithVacuousTest("node -e \"if (1 + 1 !== 2) process.exit(1)\""));
     expect(shown, "a real command must not be accused").toEqual([]);
@@ -89,7 +114,7 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
 
 const CAND: Candidate = {
   slot: "test",
-  adapter: "node",
+  adapter: "node-scripts",
   ref: "test",
   resolved: "npm run test",
   pm: "npm",
@@ -102,7 +127,7 @@ const CAND: Candidate = {
 const BINDING: Binding = {
   schema_version: 1,
   slot: "test",
-  adapter: "node",
+  adapter: "node-scripts",
   ref: "test",
   resolved: "npm run test",
   pm: "npm",
@@ -112,7 +137,7 @@ const BINDING: Binding = {
   status: "approved",
 };
 
-function bound(region: string, durationMs: number, output = ""): Parameters<typeof vacuousGateNotices>[0][number] {
+function bound(region: string, durationMs: number, output = "", adapter = "node-scripts"): Parameters<typeof vacuousGateNotices>[0][number] {
   const result: GateResult = {
     slot: "test",
     command: "npm run test",
@@ -127,7 +152,7 @@ function bound(region: string, durationMs: number, output = ""): Parameters<type
     truncated: false,
     durationMs,
   };
-  return { kind: "bound", slot: "test", binding: BINDING, candidate: { ...CAND, config_region: region }, result };
+  return { kind: "bound", slot: "test", binding: BINDING, candidate: { ...CAND, adapter, config_region: region }, result };
 }
 
 /**
@@ -140,31 +165,57 @@ function bound(region: string, durationMs: number, output = ""): Parameters<type
  */
 describe("V-1‴ what counts as verifying nothing", () => {
   it("flags a command whose every statement is a no-op, however long it took", () => {
-    for (const region of [
-      "scripts.test=echo no tests here",
-      "scripts.test=echo 'no tests' && echo done",
-      "scripts.test=true",
-      "scripts.test=:",
-      "scripts.test=exit 0",
-      "scripts.test=",
-      "test:\n\t@echo \"TODO\"",
-    ]) {
+    for (const [adapter, region] of [
+      ["node-scripts", "scripts.test=echo no tests here"],
+      ["node-scripts", "scripts.test=echo 'no tests' && echo done"],
+      ["node-scripts", "scripts.test=true"],
+      ["node-scripts", "scripts.test=:"],
+      ["node-scripts", "scripts.test=exit 0"],
+      ["node-scripts", "scripts.test="],
+      ["make", "test:\n\t@echo \"TODO\""],
+      ["just", "test:\n    echo nothing"],
+    ] as [string, string][]) {
       /* 9000 ms: slow and still vacuous. Duration is not the signal. */
-      expect(vacuousGateNotices([bound(region, 9000)], scrub), region).toHaveLength(1);
+      expect(vacuousGateNotices([bound(region, 9000, "", adapter)], scrub), `${adapter} ${region}`).toHaveLength(1);
+    }
+  });
+
+  /**
+   * PRDR-161: the regions that are NOT commands.
+   *
+   * `commandBody` enumerated three shapes and there are five: the pyproject
+   * engine puts a TOML TABLE in `config_region` and the workspace engine puts
+   * a `workspace:<kind>:<marker>` string. A table whose body is all comments
+   * left zero statements, which read as vacuous — so `pytest` and
+   * `ruff check .` were both accused, with a TOML comment quoted back as the
+   * command. Which adapters carry a command body is knowable; it is a
+   * whitelist, not something to infer from the text.
+   */
+  it("says nothing about an adapter whose config_region is not a command at all", () => {
+    for (const [adapter, region] of [
+      ["pyproject", "[tool.ruff]\n# see ruff.toml"],
+      ["pyproject", "[tool.pytest.ini_options]\n# configuration lives in pytest.ini for legacy reasons"],
+      ["pyproject", "[build-system]\nrequires = [\"setuptools\"]"],
+      ["workspace:npm", "workspace:npm:packages/app/package.json"],
+      ["go", "exists:go.mod"],
+      ["cargo", "exists:Cargo.toml"],
+      ["tsc", "exists:tsconfig.json"],
+    ] as [string, string][]) {
+      expect(vacuousGateNotices([bound(region, 9000, "", adapter)], scrub), `${adapter} ${region}`).toEqual([]);
     }
   });
 
   it("says nothing about a real command, however fast it ran", () => {
-    for (const region of [
-      "scripts.test=vitest run",
-      "scripts.build=tsc --noEmit",
-      "exists:go.mod",
-      "test:\n\tgo test ./...",
-      "scripts.test=echo running && vitest run",
-      "scripts.lint=eslint .",
-    ]) {
+    for (const [adapter, region] of [
+      ["node-scripts", "scripts.test=vitest run"],
+      ["node-scripts", "scripts.build=tsc --noEmit"],
+      ["go", "exists:go.mod"],
+      ["make", "test:\n\tgo test ./..."],
+      ["node-scripts", "scripts.test=echo running && vitest run"],
+      ["node-scripts", "scripts.lint=eslint ."],
+    ] as [string, string][]) {
       /* 3 ms: instant and legitimate — a warm no-op `make` measures 12 ms. */
-      expect(vacuousGateNotices([bound(region, 3)], scrub), region).toEqual([]);
+      expect(vacuousGateNotices([bound(region, 3, "", adapter)], scrub), `${adapter} ${region}`).toEqual([]);
     }
   });
 

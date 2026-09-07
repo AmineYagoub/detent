@@ -50,7 +50,7 @@ const FIXTURE = {
 };
 
 async function bound(root: string): Promise<Binding[]> {
-  const report = await bindAll(discover(root), { root, runner, now: NOW });
+  const report = await bindAll(discover(root), { root, runner, now: NOW , redact: (t) => t });
   return [...report.bindings];
 }
 
@@ -183,7 +183,7 @@ describe("T-027 V-3 drift halting", () => {
 
   it("provisional bindings are exempt until C-4 finalises them", async () => {
     const root = tree(FIXTURE);
-    const report = await bindAll(discover(root), { root, runner, now: NOW, status: "provisional" });
+    const report = await bindAll(discover(root), { root, runner, now: NOW, status: "provisional" , redact: (t) => t });
     writeTree(root, { "package.json": JSON.stringify({ name: "svc", scripts: { test: "vitest run --ui" } }, null, 2) });
 
     const check = checkBinding(report.bindings.find((b) => b.slot === "test")!, discover(root));
@@ -193,7 +193,7 @@ describe("T-027 V-3 drift halting", () => {
 
   it("finalising takes the current hash as the baseline (C-4)", async () => {
     const root = tree(FIXTURE);
-    const report = await bindAll(discover(root), { root, runner, now: NOW, status: "provisional" });
+    const report = await bindAll(discover(root), { root, runner, now: NOW, status: "provisional" , redact: (t) => t });
     writeTree(root, { "package.json": JSON.stringify({ name: "svc", scripts: { test: "vitest run --coverage" } }, null, 2) });
 
     const finalized = finalize(report.bindings.find((b) => b.slot === "test")!, discover(root));
@@ -238,7 +238,7 @@ describe("T-027 `verify sync` (C-12)", () => {
         offered = summary.drift.filter((d) => d.status === "drifted").length;
         return true;
       },
-      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW }),
+      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW , redact: (t) => t }),
       now: NOW,
     });
 
@@ -256,7 +256,7 @@ describe("T-027 `verify sync` (C-12)", () => {
 
     const result = await verifySync(root, {
       consent: async () => false,
-      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW }),
+      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW , redact: (t) => t }),
     });
 
     expect(result.exitCode).toBe(EXIT_NOT_READY);
@@ -289,7 +289,7 @@ describe("T-027 `verify sync` (C-12)", () => {
     const root = tree({ ...FIXTURE, Makefile: "test:\n\techo hi\n" });
     const result = await verifySync(root, {
       consent: async () => true,
-      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW }),
+      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW , redact: (t) => t }),
     });
     expect(result.exitCode).toBe(EXIT_NOT_READY);
     expect(result.messages.join(" ")).toContain("plausible candidates");
@@ -300,7 +300,7 @@ describe("T-027 `verify sync` (C-12)", () => {
     writeBindings(root, { bindings: await bound(root), skips: [{ slot: "e2e", acknowledged_by: "alice", at: NOW() }] });
     await verifySync(root, {
       consent: async () => true,
-      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW }),
+      bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW , redact: (t) => t }),
     });
     expect(readBindings(root).skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
   });

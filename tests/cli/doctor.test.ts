@@ -186,11 +186,39 @@ describe("PRDR-143 doctor's own entry point", () => {
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
-      await main([root, "--smoke"], { hasAuth: () => true, buildBackend: buildLiveBackend });
+      /**
+       * PRDR-162: the real builder runs, and CANNOT return one.
+       *
+       * Handing `main` a bare `buildLiveBackend` restored the exact defect
+       * PRDR-158 set out to remove, and widened it: `buildLiveBackend` returns
+       * a real ClaudeCodeBackend on a valid bindings.json AND on a missing one,
+       * so the only thing between `npm test` and a billed `maxTurns: 1` session
+       * was again the corrupt fixture on the line above — now reached on every
+       * machine, CI included, because `hasAuth` is forced. Here the builder
+       * either throws (the property under test) or this throws for it, so no
+       * path reaches `backend.run`, and `builderThrew` is what says which
+       * happened — `main` catches both, so the stderr line alone cannot tell
+       * them apart.
+       */
+      let builderThrew: unknown = null;
+      await main([root, "--smoke"], {
+        hasAuth: () => true,
+        buildBackend: (r): SessionBackend => {
+          try {
+            buildLiveBackend(r);
+          } catch (e) {
+            builderThrew = e;
+            throw e;
+          }
+          throw new Error("buildLiveBackend returned a live backend on an unreadable bindings.json");
+        },
+      });
       const printed = out.mock.calls.join("");
       expect(printed, "doctor must still report").toContain("detent doctor");
       expect(printed).toContain("config");
       expect(err.mock.calls.join(""), "and must say why the live checks are missing").toContain("live checks unavailable");
+      expect(builderThrew, "the REAL builder must be what refused, not this test's backstop").toBeInstanceOf(Error);
+      expect((builderThrew as Error).message).toContain("schema_version 99");
     } finally {
       out.mockRestore();
       err.mockRestore();
