@@ -119,7 +119,11 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
 
   try {
     const runBranch = ensureRunBranch(root, opts.runId ?? `${process.pid}-${Date.now().toString(36)}`);
-    installTrailerHook(root);
+    const preservedHook = installTrailerHook(root);
+    if (preservedHook !== null) {
+      /* B-1′ (PRDR-146): a hook we did not write is kept, and the operator is told where. */
+      opts.announce?.(`your existing prepare-commit-msg hook was preserved at ${preservedHook} (B-1′)`);
+    }
     /**
      * PRDR-092: the run records the configuration it actually loaded. A
      * setting that stops applying between runs — the field report this ticket

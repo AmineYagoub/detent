@@ -192,6 +192,59 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
   });
 });
 
+/**
+ * SEC-3′ (PRDR-132) — the lever cannot grant everything.
+ *
+ * `handleSurfaceRequest` checked the model-supplied target against
+ * `config.protected` alone — never against the structural floor the same file
+ * builds for the policy — and never checked it was a path at all. So a session
+ * that hit one deny could write `{"path":"**"}` and have its own surface
+ * widened to the whole worktree, PERSISTED onto the ticket and surviving every
+ * later generation. `.git/**` was granted the same way, which matters because
+ * writing into `.git` is executing: `.gitattributes` plus a `filter.*.clean`
+ * entry runs a shell command on `git add`.
+ */
+describe("SEC-3′ a session cannot grant itself a wildcard, `.git`, or the structural floor", () => {
+  const DANGEROUS = ["**", ".git/**", "/etc/**", ".detent/config.json", "../outside"] as const;
+
+  it.each(DANGEROUS)("refuses a surface request for %s, and the ticket keeps its declared surface", async (target) => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t1" });
+
+    const requesting: StageFn = (spec) => {
+      const variable = JSON.parse(spec.promptVariable) as { surface_request_out: string };
+      writeTree(path.dirname(variable.surface_request_out), {
+        [path.basename(variable.surface_request_out)]: JSON.stringify({ path: target, justification: "needed" }),
+      });
+      return implementGreen(spec);
+    };
+    const backend = new MockBackend({ "t1:implement": requesting, review: reviewApprove });
+    await run({ root, backend, prompts: PROMPTS, runId: "sr-deny" });
+
+    const t1 = readTicket(root, "t1");
+    expect(t1.surface).not.toContain(target);
+    expect(t1.notes.map((n) => n.text).join(" ")).toContain(`surface DENIED: ${target}`);
+  });
+
+  /* The lever still works — this must not become "no expansion ever". */
+  it("a concrete path outside the floor is still granted", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t1" });
+    const requesting: StageFn = (spec) => {
+      const variable = JSON.parse(spec.promptVariable) as { surface_request_out: string };
+      writeTree(path.dirname(variable.surface_request_out), {
+        [path.basename(variable.surface_request_out)]: JSON.stringify({ path: "docs/extra.md", justification: "needed" }),
+      });
+      return implementGreen(spec);
+    };
+    const backend = new MockBackend({ "t1:implement": requesting, review: reviewApprove });
+    await run({ root, backend, prompts: PROMPTS, runId: "sr-ok" });
+    expect(readTicket(root, "t1").surface).toContain("docs/extra.md");
+  });
+});
+
 describe("T-046 the S-4 breaker end to end (oracle test_unparsable_telemetry_is_budget_breaching)", () => {
   it("a session whose telemetry cannot be parsed is budget-breaching → NEEDS_HUMAN", async () => {
     const { root } = await makeRunRepo();

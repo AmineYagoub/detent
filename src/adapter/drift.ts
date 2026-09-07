@@ -86,6 +86,34 @@ export function checkBinding(binding: Binding, discovery: Discovery): DriftCheck
     };
   }
 
+  /**
+   * SEC-5′ (PRDR-134): compare the COMMAND, not only the configuration it came
+   * from. `resolved` is the only field that executes — `referee-gate.ts` hands
+   * it to `spawn(..., { shell: true })` with the operator's full environment —
+   * and it was never compared to what discovery currently produces, while the
+   * schema constrained it to any non-empty string. `config_hash` is not a
+   * secret: for node-scripts it is the sha256 of the literal
+   * `scripts.<name>=<body>` region, so a repository could ship an ordinary
+   * `package.json`, compute the hash that region yields, and commit a
+   * `bindings.json` pairing that VALID hash with `curl … | sh`. Drift reported
+   * clean and the first gate of `detent run` executed it.
+   *
+   * Checked before the hash so the message names the command, which is the
+   * thing an operator needs to see.
+   */
+  if (current.resolved !== binding.resolved) {
+    return {
+      slot: binding.slot,
+      status: "drifted",
+      stored_hash: binding.config_hash,
+      current_hash: current.config_hash,
+      message:
+        `${binding.slot}: the bound COMMAND no longer matches what discovery finds — stored ` +
+        `\`${binding.resolved}\`, current \`${current.resolved}\` (${current.config_file}). ` +
+        `Run \`detent verify sync\` to accept it.`,
+    };
+  }
+
   if (current.config_hash !== binding.config_hash) {
     return {
       slot: binding.slot,

@@ -81,3 +81,44 @@ export function parseArtifact<T>(schema: z.ZodType<T>, input: unknown): SchemaCh
 export function upgradeHint(found: number, supported: number): string {
   return `artifact declares schema_version ${found}; this build supports ${supported}. Upgrade Detent to read it — Detent will not guess at a newer schema.`;
 }
+
+/**
+ * SEC-3′ (PRDR-132) — the immutability floor that stands even when a config
+ * under-declares, shared by the policy that ENFORCES it and the lever that
+ * grants surface. Those two used to consult different lists: a request for
+ * `.detent/config.json` matched no default protected glob, so it was GRANTED
+ * and recorded as granted while the write was separately denied — an audit
+ * trail stating the opposite of what happened.
+ *
+ * `.git` is here not because it is sensitive but because writing into it is
+ * EXECUTING. `.gitattributes` plus a `filter.<name>.clean` entry in
+ * `.git/config` runs a shell command on `git add` — which the implement role
+ * holds, and which `finalizeDone` performs itself — so two ordinary file
+ * writes yield arbitrary execution without needing an executable bit the
+ * `Write` tool cannot set. It is never a legitimate session write target.
+ * Both forms are listed: a directory in a normal checkout, a FILE in a
+ * worktree.
+ */
+export const STRUCTURAL_PROTECTED: readonly string[] = [
+  ".detent/tickets/**",
+  ".detent/config.json",
+  ".detent/bindings.json",
+  ".detent/plan/**",
+  ".git/**",
+  ".git",
+];
+
+/**
+ * SEC-3′: a surface REQUEST names a concrete repo-relative path, or it is not
+ * a request. A session that hit one deny could write `{"path":"**"}` and have
+ * its own surface widened to the whole worktree — persisted onto the ticket,
+ * surviving every later generation. A planner may still declare a broad
+ * surface at plan time: that is visible, reviewed and approved by a human. A
+ * session granting itself one at run time is none of those things.
+ */
+export function isConcreteRepoPath(target: string): boolean {
+  if (target === "") return false;
+  if (/[*?[\]]/.test(target)) return false;
+  if (target.startsWith("/") || target.startsWith("\\")) return false;
+  return !target.split(/[\\/]/).includes("..");
+}

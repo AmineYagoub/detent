@@ -8,7 +8,9 @@ import { REDACTED, containsSecrets, scrub } from "../../src/kernel/scrub.js";
 import { EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
+import { STRUCTURAL_PROTECTED } from "../../src/schemas/common.js";
 import { EXTENDED_CACHE_HEADER, SESSION_ENV_ALLOWLIST, buildSessionEnv } from "../../src/sessions/env.js";
+import { buildOptions } from "../../src/sessions/sdk.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, removeTree, writeTree } from "../helpers.js";
@@ -128,6 +130,45 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
     });
   });
 
+  /**
+   * SEC-3′ (PRDR-132) — asserted against the PRODUCT's floor.
+   *
+   * The evasion row above named "tamper with the git hooks" and passed only
+   * because THIS FILE's own `POLICY` adds `.git/**` at the top. Nothing in
+   * `src/` did: `.git` appeared in no protected set anywhere, so under a broad
+   * surface — which the C-4 bootstrap ticket declares, and which the surface
+   * lever used to grant on request — `.git/config` and `.gitattributes` were
+   * writable. That is not a sensitive-file problem; it is an execution one:
+   * git runs `filter.<name>.clean` through a shell on `git add`.
+   *
+   * `STRUCTURAL_PROTECTED` is imported rather than retyped, so this test cannot
+   * pass on a floor the product does not actually enforce.
+   */
+  describe("SEC-3′: `.git` is closed by the product's own structural floor", () => {
+    const productPolicy: GuardPolicy = {
+      /* The broadest surface the product can produce — the bootstrap ticket's. */
+      surface: ["**"],
+      /* Exactly what referee-session.ts builds, on a config that declares nothing. */
+      protectedGlobs: [...STRUCTURAL_PROTECTED],
+      workRoot: "/wt",
+    };
+    const GIT_TARGETS = [
+      "/wt/.git/config",
+      "/wt/.git/hooks/pre-commit",
+      "/wt/.git/HEAD",
+      "/wt/.git",
+    ] as const;
+
+    it.each(GIT_TARGETS)("denies a write to %s even with surface `**`", (target) => {
+      expect(guardToolUse("Write", { file_path: target }, productPolicy, (x) => x).decision).toBe("deny");
+    });
+
+    it("ordinary work under the same broad surface is unaffected", () => {
+      expect(guardToolUse("Write", { file_path: "/wt/src/a.ts" }, productPolicy, (x) => x).decision).toBe("allow");
+      expect(guardToolUse("Write", { file_path: "/wt/README.md" }, productPolicy, (x) => x).decision).toBe("allow");
+    });
+  });
+
   it("a Bash tool call that names no path is not an escape hatch — the kernel re-verifies (P2)", () => {
     /**
      * S-2‴ (PRDR-122): containment of what Bash *does* is the allowlist plus
@@ -207,23 +248,64 @@ describe("T-052 SEC-4: secrets never reach ledger/logs", () => {
  */
 
 describe("T-052 SEC-4: the session env is an allowlist", () => {
-  it("only allowlisted variables cross into a session; everything else is stripped", () => {
-    const parent = {
+  /**
+   * SEC-4′ (PRDR-133). This block used to call `buildSessionEnv` directly. It
+   * proved the filter filters — which it does — and nothing about sessions,
+   * because `buildOptions` never called it: the SDK inherits `process.env` when
+   * `env` is omitted, so every session held the operator's cloud credentials
+   * while this test stayed green. It now asserts on the ENTRY POINT, which is
+   * the only place the property is either true or false.
+   */
+  it("only allowlisted variables cross into a session — asserted on the options a session is actually built with", () => {
+    const before = { ...process.env };
+    process.env["AWS_SECRET_ACCESS_KEY"] = "must-not-cross";
+    process.env["DEPLOY_TOKEN"] = "must-not-cross";
+    process.env["GITHUB_TOKEN"] = "must-not-cross";
+    try {
+      const options = buildOptions(
+        {
+          role: "implement",
+          ticketId: "t1",
+          promptPrefix: "p",
+          promptVariable: "v",
+          cwd: "/wt",
+          artifactOut: "/wt/.detent/runs/t1/out.json",
+          allowedTools: ["Read"],
+          permissionMode: "",
+          model: "",
+          policy: { surface: ["src/**"], protectedGlobs: [], workRoot: "/wt" },
+        },
+        { policy: { surface: ["**"], protectedGlobs: [], workRoot: "/wt" } },
+      );
+      const env = options.env as Record<string, string> | undefined;
+      expect(env, "buildOptions must set env, or the session inherits process.env").toBeDefined();
+      expect(env?.["AWS_SECRET_ACCESS_KEY"]).toBeUndefined();
+      expect(env?.["DEPLOY_TOKEN"]).toBeUndefined();
+      expect(env?.["GITHUB_TOKEN"]).toBeUndefined();
+      expect(env?.["PATH"]).toBe(process.env["PATH"]);
+      /** S-6: the extended cache TTL rides on the same call, and had never been requested. */
+      expect(env?.["ANTHROPIC_CUSTOM_HEADERS"]).toBe(EXTENDED_CACHE_HEADER);
+      /** Not in the allowlist, so it cannot leak — a positive assertion. */
+      expect(SESSION_ENV_ALLOWLIST).not.toContain("AWS_SECRET_ACCESS_KEY");
+    } finally {
+      for (const k of ["AWS_SECRET_ACCESS_KEY", "DEPLOY_TOKEN", "GITHUB_TOKEN"]) {
+        if (before[k] === undefined) delete process.env[k];
+        else process.env[k] = before[k];
+      }
+    }
+  });
+
+  /** The filter's own unit behaviour, kept — but it is no longer the SEC-4 evidence. */
+  it("buildSessionEnv strips what is not allowlisted", () => {
+    const env = buildSessionEnv({
       PATH: "/usr/bin",
       HOME: "/home/dev",
       ANTHROPIC_API_KEY: "sk-ant-test",
       AWS_SECRET_ACCESS_KEY: "must-not-cross",
-      DEPLOY_TOKEN: "must-not-cross",
-      GITHUB_TOKEN: "must-not-cross",
-    };
-    const env = buildSessionEnv(parent);
+    });
     expect(env["PATH"]).toBe("/usr/bin");
     expect(env["ANTHROPIC_API_KEY"]).toBe("sk-ant-test");
     expect(env["AWS_SECRET_ACCESS_KEY"]).toBeUndefined();
-    expect(env["DEPLOY_TOKEN"]).toBeUndefined();
-    expect(env["GITHUB_TOKEN"]).toBeUndefined();
-    /** Not in the allowlist, so it cannot leak — a positive assertion. */
-    expect(SESSION_ENV_ALLOWLIST).not.toContain("AWS_SECRET_ACCESS_KEY");
   });
 
   it("the extended prompt-cache TTL is set explicitly, not left to inheritance (PRDR-054)", () => {

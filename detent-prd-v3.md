@@ -385,6 +385,53 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **SEC-3′ (3.1.1, PRDR-132).** `.git/**` is in the STRUCTURAL protected floor, and the
+  surface-expansion lever cannot grant a wildcard. `.git` appeared in no protected set at all,
+  and a session could widen its own surface to `**` by writing a `surface_request.json` — the
+  target was checked against `config.protected` only, never against the structural floor, and
+  never checked to be a path. `ticketSchema.surface` accepted any non-empty string, so `**` was
+  granted and PERSISTED onto the ticket for every later generation. `.git` matters not because
+  it is sensitive but because writing into it is executing: `.gitattributes` plus a
+  `filter.<name>.clean` entry in `.git/config` runs a shell command on `git add`, which the
+  implement role holds and which `finalizeDone` performs itself — arbitrary execution outside
+  the guard, without needing an executable bit the `Write` tool cannot set. The grant path and
+  the enforcement path also disagreed: a request for `.detent/config.json` matched no default
+  protected glob, so it was GRANTED and recorded as granted while the write was separately
+  denied, leaving an audit trail that stated the opposite of what happened. Two checks on one
+  question must not disagree — PRDR-120's `resolveOwner` lesson, in a different place.
+
+- **SEC-4′ (3.1.1, PRDR-133).** The session-environment allowlist is APPLIED. `buildSessionEnv`
+  had no production caller: `buildOptions` never set `env`, and the pinned SDK inherits
+  `process.env` when it is omitted, so every session — holding `Edit`, `Write` and
+  `Bash(git commit:*)` — inherited the operator's cloud credentials, deploy keys and tokens,
+  and `git commit -m "$AWS_SECRET_ACCESS_KEY"` matches the prefix rule. SEC-4's own words were
+  *"cloud credentials, tokens, deploy keys never cross into a session"*; the filter existed,
+  was tested, was green, and was not wired. Its test asserted the helper rather than
+  `buildOptions`, which is the third instance of that shape in this line and the reason the
+  remediation rule is now explicit: assert on the entry point, never on the helper the entry
+  point forgot to call. The same missing call also dropped `EXTENDED_CACHE_HEADER`, so S-6's
+  extended prompt-cache TTL had never once been requested.
+
+- **SEC-5′ (3.1.1, PRDR-134).** The drift check compares the COMMAND, not only the
+  configuration it came from. `checkBinding` compared `config_hash` alone, and `resolved` — the
+  only field that executes — was never compared to what discovery currently produces, while
+  the schema constrained it to any non-empty string. `config_hash` is computable from the
+  repository's own config region, so a committed `bindings.json` could pair a validating hash
+  with an arbitrary command; `assertNoDrift` reported clean and the first gate of `detent run`
+  executed it through a shell with the operator's full environment. The binding still names
+  the command discovery found, or it has drifted — which is what SEC-5 was always described as
+  checking.
+
+- **B-1′ (3.1.1, PRDR-146).** The trailer hook preserves what it finds. `installTrailerHook`
+  wrote `prepare-commit-msg` unconditionally at the start of every run, destroying an
+  operator's commit linting, signing or issue-tracker hook with nothing said and nothing kept.
+  Detent's posture is that it discovers tooling and refuses to install it (D-4, F-2); silently
+  replacing a user's git hook is that posture broken in the place a user is least likely to
+  look. A foreign hook is moved aside under a name that says what happened and the move is
+  announced; Detent's own is recognised by its marker so re-installation stays idempotent.
+  Note this writes to `--git-common-dir`, so it reaches the MAIN repository even in worktree
+  mode — per-ticket worktrees do not cover it.
+
 - **D-27″ (3.1.1, PRDR-128).** The plugin hook no longer executes a command from repository
   content, because it never had one to execute. The Stop path read `gate_cmd` out of
   `<cwd>/.detent/stage.json` and ran it through a shell, and `expired()` treated an ABSENT

@@ -10,6 +10,7 @@ import {
   type SessionSpec,
 } from "../sessions/backend.js";
 import { toolsForRole } from "../sessions/guard.js";
+import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger } from "../kernel/ledger.js";
 
@@ -101,7 +102,8 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
      */
     policy: {
       surface: [path.relative(deps.root, request.artifactOut).split(path.sep).join("/")],
-      protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json", ".detent/tickets/**"],
+      /** SEC-3′ (PRDR-132): the same structural floor the run loop enforces, `.git/**` included. */
+      protectedGlobs: [...STRUCTURAL_PROTECTED],
       workRoot: deps.root,
     },
   };

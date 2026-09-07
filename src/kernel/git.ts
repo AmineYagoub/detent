@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -102,15 +102,40 @@ export function ensureRunBranch(root: string, runId: string): RunBranch {
  * The current ticket is recorded inside `.git/` — run state, never the
  * project tree (F-2).
  */
-export function installTrailerHook(root: string): void {
+/** B-1′: how Detent recognises its own hook, so re-installing is idempotent. */
+const TRAILER_HOOK_MARKER = "# Written by Detent (B-1).";
+
+/**
+ * B-1′ (PRDR-146): returns the path a FOREIGN hook was preserved at, or null.
+ *
+ * This used to `writeFileSync` unconditionally, at the start of every run,
+ * destroying an operator's commit linting, signing or issue-tracker hook with
+ * nothing said and nothing kept. Detent's posture is that it discovers tooling
+ * and refuses to install it (D-4, F-2); silently replacing a user's git hook is
+ * that posture broken in the place they are least likely to look.
+ *
+ * Note this resolves `--git-common-dir`, so it writes into the MAIN repository
+ * even in worktree mode — per-ticket worktrees do not cover it.
+ */
+export function installTrailerHook(root: string): string | null {
   const gitDir = git(root, "rev-parse", "--git-common-dir").trim();
   const hooksDir = path.resolve(root, gitDir, "hooks");
   mkdirSync(hooksDir, { recursive: true });
   const hook = path.join(hooksDir, "prepare-commit-msg");
+
+  let preserved: string | null = null;
+  if (existsSync(hook) && !readFileSync(hook, "utf8").includes(TRAILER_HOOK_MARKER)) {
+    /* Never clobber an earlier rescue either: the first one is the operator's original. */
+    let backup = `${hook}.before-detent`;
+    for (let n = 2; existsSync(backup); n += 1) backup = `${hook}.before-detent.${n}`;
+    renameSync(hook, backup);
+    preserved = backup;
+  }
+
   writeFileSync(
     hook,
     `#!/bin/sh
-# Written by Detent (B-1). Appends the claimed ticket's trailer.
+${TRAILER_HOOK_MARKER} Appends the claimed ticket's trailer.
 marker="$(git rev-parse --git-common-dir)/DETENT_TICKET"
 [ -f "$marker" ] || exit 0
 tid="$(cat "$marker")"
@@ -119,6 +144,7 @@ grep -q "^${TICKET_TRAILER}: $tid$" "$1" || printf '\\n${TICKET_TRAILER}: %s\\n'
 `,
   );
   chmodSync(hook, 0o755);
+  return preserved;
 }
 
 export function markCurrentTicket(root: string, ticketId: string): void {

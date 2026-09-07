@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import type { Options, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
 import { guardToolUse, stopGate, type GuardPolicy } from "./guard.js";
+import { buildSessionEnv } from "./env.js";
 
 /**
  * T-046 — the Claude Agent SDK backend (S-1…S-6, D-21, D-22).
@@ -99,6 +100,17 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
   return {
     cwd: spec.cwd,
     settingSources: [],
+    /**
+     * SEC-4′ (PRDR-133): the allowlist is APPLIED here, and this line is the
+     * whole control. `buildSessionEnv` existed, was tested and was green, and
+     * had no production caller — the SDK inherits `process.env` when `env` is
+     * omitted, so every session held the operator's cloud credentials, deploy
+     * keys and tokens while SEC-4 said they "never cross into a session".
+     * `git commit -m "$AWS_SECRET_ACCESS_KEY"` matches the prefix allowlist.
+     * It also carries S-6's extended cache header, which had likewise never
+     * been requested by any run.
+     */
+    env: buildSessionEnv(),
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
     /**

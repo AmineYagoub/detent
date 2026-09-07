@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   changedFiles,
   commitPatch,
+  installTrailerHook,
   commitsOn,
   ensureRunBranch,
   parseTicketTrailers,
@@ -287,5 +288,62 @@ describe("P7′ git output over 1 MB, and failure that is not absence", () => {
     git(root, "commit", "-q", "-m", "root");
     /* `diff <sha>^ <sha>` exits non-zero here; `show` answers instead. */
     expect(commitPatch(root, git(root, "rev-parse", "HEAD").trim(), [])).toContain("a.txt");
+  });
+});
+
+/**
+ * B-1′ (PRDR-146) — the trailer hook preserves what it finds.
+ *
+ * `installTrailerHook` wrote `prepare-commit-msg` unconditionally at the start
+ * of every run, destroying an operator's commit linting, signing or
+ * issue-tracker hook with nothing said and nothing kept.
+ */
+describe("B-1′ installTrailerHook does not destroy a hook the operator already had", () => {
+  function bareRepo(): string {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-hook-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "a.txt": "1\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "init");
+    return root;
+  }
+  const hookPath = (root: string): string =>
+    path.resolve(root, git(root, "rev-parse", "--git-common-dir").trim(), "hooks", "prepare-commit-msg");
+
+  it("a foreign hook is moved aside, recoverable, and the caller is told where", () => {
+    const root = bareRepo();
+    const theirs = "#!/bin/sh\n# the operator's own commit linter\nexit 0\n";
+    const hook = hookPath(root);
+    mkdirSync(path.dirname(hook), { recursive: true });
+    writeFileSync(hook, theirs);
+
+    const preserved = installTrailerHook(root);
+    expect(preserved, "a foreign hook must be reported, not silently replaced").not.toBeNull();
+    expect(readFileSync(preserved as string, "utf8")).toBe(theirs);
+    /* And Detent's own hook is in place. */
+    expect(readFileSync(hook, "utf8")).toContain("Detent-Ticket");
+  });
+
+  it("re-installing over Detent's own hook is idempotent — no backup accumulates", () => {
+    const root = bareRepo();
+    expect(installTrailerHook(root)).toBeNull();
+    expect(installTrailerHook(root)).toBeNull();
+    expect(installTrailerHook(root)).toBeNull();
+    expect(existsSync(`${hookPath(root)}.before-detent`)).toBe(false);
+  });
+
+  it("a second foreign hook does not overwrite the first rescue — the original survives", () => {
+    const root = bareRepo();
+    const hook = hookPath(root);
+    mkdirSync(path.dirname(hook), { recursive: true });
+    writeFileSync(hook, "#!/bin/sh\n# original\n");
+    const first = installTrailerHook(root) as string;
+    writeFileSync(hook, "#!/bin/sh\n# a later foreign hook\n");
+    const second = installTrailerHook(root) as string;
+    expect(second).not.toBe(first);
+    expect(readFileSync(first, "utf8")).toContain("# original");
   });
 });

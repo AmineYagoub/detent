@@ -3,6 +3,7 @@ import path from "node:path";
 import picomatch from "picomatch";
 import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
+import { STRUCTURAL_PROTECTED, isConcreteRepoPath } from "../schemas/common.js";
 import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
 import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
@@ -132,13 +133,7 @@ export class SessionArm {
        */
       policy: {
         surface: [...ticket.surface, ".detent/runs/**"],
-        protectedGlobs: [
-          ...ctx.loaded.config.protected,
-          ".detent/tickets/**",
-          ".detent/config.json",
-          ".detent/bindings.json",
-          ".detent/plan/**",
-        ],
+        protectedGlobs: [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED],
         workRoot: workDir,
       },
     };
@@ -267,8 +262,15 @@ export class SessionArm {
     const ticket = readTicket(ctx.root, ticketId);
     const grants = ticket.notes.filter((n) => n.text.startsWith("surface granted:")).length;
 
-    const isProtected = target !== "" && picomatch.isMatch(target, [...ctx.loaded.config.protected], { dot: true });
-    if (target === "" || isProtected || grants >= 3) {
+    /**
+     * SEC-3′ (PRDR-132): the same floor the POLICY enforces, plus the
+     * requirement that a request name a path at all. This consulted
+     * `config.protected` alone and never checked the value's shape, so `**`,
+     * `.git/**` and `/etc/**` were all granted.
+     */
+    const isProtected =
+      target !== "" && picomatch.isMatch(target, [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED], { dot: true });
+    if (!isConcreteRepoPath(target) || isProtected || grants >= 3) {
       appendNote(ctx.root, ticketId, { author: "kernel", text: `surface DENIED: ${target} (${why}) (SEC-3)` });
       return;
     }
