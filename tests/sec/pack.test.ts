@@ -295,6 +295,34 @@ describe("T-052 SEC-4: the session env is an allowlist", () => {
     }
   });
 
+  /**
+   * PRDR-148 — the allowlist must carry every transport the product accepts.
+   *
+   * `hasLiveBackendAuth` names three; the allowlist carried one. While
+   * `buildSessionEnv` had no caller that was inert — sessions inherited the
+   * token and worked — so wiring the allowlist turned a harmless staleness
+   * into an outage on the documented subscription-CI path. This ties the two
+   * together so a fourth transport cannot be added to one and forgotten in
+   * the other.
+   */
+  it("every auth transport the product accepts survives the allowlist", () => {
+    const source = readFileSync(new URL("../../src/sessions/live.ts", import.meta.url), "utf8");
+    const transports = [...source.matchAll(/env\["([A-Z_]+)"\]/g)]
+      .map((m) => m[1] as string)
+      .filter((name) => name !== "DETENT_NO_LIVE");
+    expect(transports.length, "no transports found — the regex has drifted from live.ts").toBeGreaterThan(1);
+    for (const name of transports) {
+      expect(SESSION_ENV_ALLOWLIST, `${name} is an accepted transport but is stripped from sessions`).toContain(name);
+    }
+  });
+
+  it("a session can still reach the network an operator's environment requires", () => {
+    /* Stripping these does not make a session safer; it makes it unable to call the API. */
+    for (const name of ["HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS"]) {
+      expect(SESSION_ENV_ALLOWLIST).toContain(name);
+    }
+  });
+
   /** The filter's own unit behaviour, kept — but it is no longer the SEC-4 evidence. */
   it("buildSessionEnv strips what is not allowlisted", () => {
     const env = buildSessionEnv({
