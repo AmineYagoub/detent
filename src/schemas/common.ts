@@ -106,6 +106,21 @@ export const STRUCTURAL_PROTECTED: readonly string[] = [
   ".detent/plan/**",
   ".git/**",
   ".git",
+  /**
+   * PRDR-149: the run's own audit trail and the hook's containment files. A
+   * granted `.detent` surface reached `ledger.jsonl` — the spend record the
+   * D-25 launch gate reads back — and `active_surface.json`, the policy the
+   * ambient hook enforces. `.detent/runs/**` stays writable: it is where a
+   * session's artifacts legitimately land, and the surface adds it explicitly.
+   */
+  ".detent/ledger.jsonl",
+  ".detent/transitions.jsonl",
+  ".detent/state/**",
+  ".detent/claims/**",
+  ".detent/active_surface.json",
+  ".detent/stage.json",
+  /** Writing a dependency is writing an executable the gate will run. */
+  "node_modules/**",
 ];
 
 /**
@@ -115,10 +130,51 @@ export const STRUCTURAL_PROTECTED: readonly string[] = [
  * surviving every later generation. A planner may still declare a broad
  * surface at plan time: that is visible, reviewed and approved by a human. A
  * session granting itself one at run time is none of those things.
+ *
+ * PRDR-149: this was a BLACKLIST of `* ? [ ]`, and a blacklist of a glob
+ * grammar is a losing game. `"."` sailed through and permits everything, which
+ * is the exact bypass `**` was blocked for; so did picomatch's extglob
+ * (`!(zzz)`) and brace (`{src,.detent}`) forms, which are on by default. It is
+ * a whitelist now: ordinary path segments, nothing else. Anything a glob can
+ * express is refused by construction rather than by enumeration.
  */
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
 export function isConcreteRepoPath(target: string): boolean {
-  if (target === "") return false;
-  if (/[*?[\]]/.test(target)) return false;
-  if (target.startsWith("/") || target.startsWith("\\")) return false;
-  return !target.split(/[\\/]/).includes("..");
+  if (target === "" || target.startsWith("/") || target.startsWith("\\")) return false;
+  const segments = target.split(/[\\/]/);
+  return segments.every((seg) => seg !== "." && seg !== ".." && SAFE_SEGMENT.test(seg));
 }
+
+/**
+ * PRDR-149: one spelling for the protected comparison. `.git\config` split
+ * into safe segments and then matched nothing, because picomatch treats a
+ * backslash as a literal on POSIX — so the request was granted while the
+ * enforcement layer would deny it on Windows and not on macOS. Normalising
+ * once removes the disagreement rather than teaching two matchers about it.
+ */
+export function repoPathKey(target: string): string {
+  return target.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+/**
+ * PRDR-149: would this requested surface reach anything the floor protects?
+ *
+ * PRDR-132 unified the LIST and left the MATCHERS apart: the grant used bare
+ * `picomatch.isMatch`, enforcement uses `matchAny`, which additionally tries
+ * `<bare>/**`. So `.detent` matched no protected glob at grant time — it is
+ * their PARENT, not one of them — and then permitted `.detent/ledger.jsonl` at
+ * write time. The N-5 audit ledger and the hook's own policy file became
+ * session-writable through a request that read as innocuous.
+ *
+ * Asking the question the other way round settles it: a grant is refused when
+ * the surface it would create covers a protected location.
+ */
+export function coversProtected(target: string, protectedGlobs: readonly string[]): boolean {
+  return protectedGlobs.some((glob) => {
+    const bare = glob.replace(/\/\*\*$/, "").replace(/\/$/, "");
+    return bare === target || bare.startsWith(`${target}/`);
+  });
+}
+
+

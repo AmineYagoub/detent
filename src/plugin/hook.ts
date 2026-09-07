@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/hook-files.js";
 import { guardToolUse, pathOf } from "../sessions/guard.js";
@@ -66,8 +66,33 @@ function denyJson(reason: string): string {
 }
 
 /** An `expires_at_ms` in the past makes a policy file ABSENT, not broken (crash hygiene). */
+/**
+ * PRDR-149: an ABSENT expiry is expired, on BOTH policy files. The Stop path
+ * got this rule and the PreToolUse path, one function away, did not — so a
+ * repository could commit an `active_surface.json` with no expiry and deny
+ * every path-bearing tool call, forever, in every session of every user who
+ * installed the plugin. Every legitimate writer stamps the field.
+ */
 function expired(doc: { expires_at_ms?: unknown } | null, nowMs: number): boolean {
-  return typeof doc?.expires_at_ms === "number" && nowMs > doc.expires_at_ms;
+  return typeof doc?.expires_at_ms !== "number" || nowMs > doc.expires_at_ms;
+}
+
+/**
+ * PRDR-149: a policy file is a small regular file, or it is not read.
+ * A committed symlink to `/dev/zero` — git stores mode 120000 quite happily —
+ * hung `readFileSync` and stalled every tool call in the directory against a
+ * 900-second registered timeout.
+ */
+const POLICY_MAX_BYTES = 256 * 1024;
+
+function readPolicyFile(file: string): string | null {
+  try {
+    const st = statSync(file);
+    if (!st.isFile() || st.size > POLICY_MAX_BYTES) return null;
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function commandOf(toolInput: unknown): string {
@@ -85,22 +110,53 @@ interface SurfaceDoc {
   readonly expires_at_ms?: unknown;
 }
 
+/**
+ * PRDR-149: the re-feed text the hook emits, stated HERE rather than taken
+ * from the file it reads.
+ *
+ * A literal, not an import: ARCH-1 keeps `src/plugin/**` on the accelerant
+ * side and the bundle deliberately free of the kernel — the same reason
+ * `GATE_TIMEOUT_MS` was a literal. `tests/plugin/hook.test.ts` asserts this
+ * equals `hook-policy.ts`'s `RUN_REFEED_TEXT`, so the two cannot drift.
+ */
+const REFEED_TEXT =
+  "Detent run in flight: tickets are still claimable or claimed. Continue the loop — " +
+  "call the referee's `next` tool and proceed with the next legal move; end the session " +
+  "only when the pool is empty and the outcome has been presented. " +
+  "(This gate fires once; the referee re-verifies everything regardless — P2.)";
+
 /** The PreToolUse decision; `null` means silence (no opinion — never an explicit allow). */
 function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
   const cwd = payloadCwd(payload);
-  let raw: string;
-  try {
-    raw = readFileSync(path.join(cwd, ".detent", HOOK_SURFACE_FILE), "utf8");
-  } catch {
-    /* Absent surface: no Detent attempt in flight — the ambient hook stays silent. */
-    return null;
-  }
+  /* Absent surface: no Detent attempt in flight — the ambient hook stays silent. */
+  const raw = readPolicyFile(path.join(cwd, ".detent", HOOK_SURFACE_FILE));
+  if (raw === null) return null;
   let cfg: SurfaceDoc | null;
   try {
     cfg = JSON.parse(raw) as SurfaceDoc | null;
   } catch {
+    /**
+     * PRDR-149 considered treating this as ABSENT, because a repository can
+     * commit a malformed file and brick every session in the directory. Kept
+     * as fail-closed deliberately: that denial-of-service is LOUD — the reason
+     * names the file, and deleting it is the remedy — whereas a corrupted
+     * policy read as absent stops containing SILENTLY. A visible refusal beats
+     * an invisible gap (P5). The bounded read above removes the variant that
+     * was neither: a file that hangs rather than answers.
+     */
     return denyJson(
       `DENY: ${path.join(".detent", HOOK_SURFACE_FILE)} exists but is unreadable — a declared surface that cannot be honored fails closed (P5).`,
+    );
+  }
+  /**
+   * PRDR-149: a document that parses to `null` or a non-object is not a policy
+   * — it is as unusable as unparseable text, and takes the same fail-closed
+   * answer. Checked BEFORE the expiry rule, because a non-object cannot carry
+   * an expiry and would otherwise slip through as "expired".
+   */
+  if (typeof cfg !== "object" || cfg === null) {
+    return denyJson(
+      `DENY: ${path.join(".detent", HOOK_SURFACE_FILE)} exists but declares no surface — a policy that cannot be honored fails closed (P5).`,
     );
   }
   if (expired(cfg, nowMs)) return null;
@@ -155,21 +211,24 @@ function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
  */
 async function decideStop(payload: HookPayload, nowMs: number): Promise<string | null> {
   const cwd = payloadCwd(payload);
-  let refeed = "";
+  const rawStage = readPolicyFile(path.join(cwd, ".detent", HOOK_STAGE_FILE));
+  if (rawStage === null) return null;
   let parsed: { run_refeed?: unknown; expires_at_ms?: unknown } | null;
   try {
-    parsed = JSON.parse(readFileSync(path.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8")) as typeof parsed;
-    refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";
+    parsed = JSON.parse(rawStage) as typeof parsed;
   } catch {
     return null;
   }
+  /* D-27″ (PRDR-128): an absent expiry is expired — a planted file cannot linger. */
+  if (expired(parsed, nowMs)) return null;
   /**
-   * D-27″ (PRDR-128): an ABSENT expiry is EXPIRED. It used to mean eternal, so
-   * a file a repository committed never lapsed. Every legitimate writer stamps
-   * one (`hook-policy.ts`), so requiring it costs nothing and removes the only
-   * way a planted file could persist.
+   * PRDR-149: whether to re-feed comes from the file; WHAT IS SAID does not.
+   * The string used to be echoed verbatim and unbounded into a `block` reason
+   * that lands in every session of every plugin user who opens the directory —
+   * a stranger's text arriving as an instruction. Detent is the only
+   * legitimate writer and it writes a constant, so echoing bought nothing.
    */
-  if (typeof parsed?.expires_at_ms !== "number" || nowMs > parsed.expires_at_ms) return null;
+  const refeed = typeof parsed?.run_refeed === "string" && parsed.run_refeed !== "" ? REFEED_TEXT : "";
   const stopHookActive = Boolean(payload.stop_hook_active);
   /**
    * T-120 loop persistence: while the referee says work remains, ending the

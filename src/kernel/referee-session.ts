@@ -3,7 +3,7 @@ import path from "node:path";
 import picomatch from "picomatch";
 import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
-import { STRUCTURAL_PROTECTED, isConcreteRepoPath } from "../schemas/common.js";
+import { STRUCTURAL_PROTECTED, coversProtected, isConcreteRepoPath, repoPathKey } from "../schemas/common.js";
 import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
 import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
@@ -268,8 +268,9 @@ export class SessionArm {
      * `config.protected` alone and never checked the value's shape, so `**`,
      * `.git/**` and `/etc/**` were all granted.
      */
-    const isProtected =
-      target !== "" && picomatch.isMatch(target, [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED], { dot: true });
+    const floor = [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED];
+    const key = repoPathKey(target);
+    const isProtected = key !== "" && (picomatch.isMatch(key, floor, { dot: true }) || coversProtected(key, floor));
     if (!isConcreteRepoPath(target) || isProtected || grants >= 3) {
       appendNote(ctx.root, ticketId, { author: "kernel", text: `surface DENIED: ${target} (${why}) (SEC-3)` });
       return;

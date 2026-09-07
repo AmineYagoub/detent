@@ -35,6 +35,28 @@ const NETWORK_VARS = [
   "SSL_CERT_DIR",
 ] as const;
 
+/**
+ * PRDR-149: git identity. An implement session holds `Bash(git add:*)` and
+ * `Bash(git commit:*)`, and on a CI machine — the subscription-CI path
+ * PRDR-148 was written for — identity comes from these, not from
+ * `~/.gitconfig`. Without them every commit fails with "Please tell me who
+ * you are", so PRDR-148 fixed the transport and left the session unable to do
+ * the one thing it is allowed to do.
+ */
+const GIT_VARS = [
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "EMAIL",
+  /** An operator relocating the CLI's config takes its credentials with it. */
+  "CLAUDE_CONFIG_DIR",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+] as const;
+
 /** The backend's own credentials and knobs Detent sanctions. */
 const BACKEND_VARS = [
   "ANTHROPIC_API_KEY",
@@ -55,7 +77,7 @@ const BACKEND_VARS = [
   "ANTHROPIC_CUSTOM_HEADERS",
 ] as const;
 
-export const SESSION_ENV_ALLOWLIST: readonly string[] = [...RUNTIME_VARS, ...NETWORK_VARS, ...BACKEND_VARS];
+export const SESSION_ENV_ALLOWLIST: readonly string[] = [...RUNTIME_VARS, ...NETWORK_VARS, ...GIT_VARS, ...BACKEND_VARS];
 
 /** S-6: the value Detent sets on the TTL carrier when nothing else did. */
 export const EXTENDED_CACHE_HEADER = "anthropic-beta: extended-cache-ttl-2025-04-11";

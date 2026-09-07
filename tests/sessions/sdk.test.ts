@@ -205,7 +205,29 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
  * entry runs a shell command on `git add`.
  */
 describe("SEC-3′ a session cannot grant itself a wildcard, `.git`, or the structural floor", () => {
-  const DANGEROUS = ["**", ".git/**", "/etc/**", ".detent/config.json", "../outside"] as const;
+  /**
+   * PRDR-149 widened this list. `isConcreteRepoPath` was a BLACKLIST of
+   * `* ? [ ]`, and a blacklist of a glob grammar is a losing game: `"."`
+   * contains none of them and, as a surface, permits every path in the tree —
+   * the exact bypass `**` was blocked for. picomatch's extglob and brace forms
+   * walked through the same gap, `"./"` made `matchAny` throw on every later
+   * call, and `.detent` was granted as the PARENT of the floor's entries and
+   * then permitted the run's own spend ledger.
+   */
+  const DANGEROUS = [
+    "**",
+    ".",
+    "./",
+    "!(zzz)",
+    "{src,.detent}",
+    ".detent",
+    ".detent/ledger.jsonl",
+    "node_modules",
+    ".git/**",
+    "/etc/**",
+    ".detent/config.json",
+    "../outside",
+  ] as const;
 
   it.each(DANGEROUS)("refuses a surface request for %s, and the ticket keeps its declared surface", async (target) => {
     const { root } = await makeRunRepo();

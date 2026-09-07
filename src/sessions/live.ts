@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
+import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { readBindings } from "../adapter/drift.js";
 import { CEILINGS } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "./sdk.js";
@@ -59,7 +60,8 @@ function cliLoggedIn(): boolean {
 export function buildLiveBackend(root: string): ClaudeCodeBackend {
   const gateCmd = readBindings(root).bindings.find((b) => b.slot === "test")?.resolved ?? null;
   return new ClaudeCodeBackend({
-    policy: { surface: ["**"], protectedGlobs: [".detent/tickets/**", ".detent/plan/**"], workRoot: root },
+    /** PRDR-149: the same structural floor the per-session policies carry. */
+    policy: { surface: ["**"], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root },
     gateCmd,
     runScopedGate: (command) => runGate(command, root),
   });

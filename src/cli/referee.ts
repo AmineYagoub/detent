@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -44,7 +45,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     values.backend === "mock"
       ? new MockBackend()
       : new ClaudeCodeBackend({
-          policy: { surface: ["**"], protectedGlobs: [...loaded.config.protected], workRoot: root },
+          /** PRDR-149: config globs PLUS the structural floor — this fallback had neither `.git` nor the floor. */
+          policy: { surface: ["**"], protectedGlobs: [...loaded.config.protected, ...STRUCTURAL_PROTECTED], workRoot: root },
         });
 
   const journal = RunJournal.open(root);

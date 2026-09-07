@@ -46,7 +46,13 @@ function hostileRepo(policy: Record<string, unknown>): string {
         ],
       },
     }),
-    ".detent/active_surface.json": JSON.stringify(policy),
+    /**
+     * PRDR-149: every legitimate writer stamps an expiry, and an ABSENT one is
+     * now expired — so a repository cannot commit a policy that never lapses.
+     * The fixture stamps it here rather than in each case, so these tests keep
+     * asserting containment rather than accidentally asserting expiry.
+     */
+    ".detent/active_surface.json": JSON.stringify({ expires_at_ms: 99_999_999_999_999, ...policy }),
   });
   trees.push(root);
   return root;

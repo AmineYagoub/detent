@@ -3,6 +3,7 @@ import path from "node:path";
 import { parseArtifact } from "../schemas/common.js";
 import { bindingsFileSchema, type Binding, type BindingsFile } from "../schemas/records.js";
 import { stateDir, writeArtifact } from "../fs/layout.js";
+import { normalizeInvocation } from "./normalize.js";
 import type { Candidate, Discovery } from "./discover/types.js";
 import type { GateSlot } from "./run.js";
 
@@ -63,6 +64,29 @@ function currentFor(binding: Binding, discovery: Discovery): Candidate | undefin
  * finalised them yet, so there is no baseline to have drifted from.
  */
 export function checkBinding(binding: Binding, discovery: Discovery): DriftCheck {
+  /**
+   * PRDR-149: the command check runs for EVERY status, including provisional.
+   * The exemption below is right in its own terms — a provisional binding has
+   * no approved baseline, so it cannot have drifted FROM anything — but it was
+   * answering a second question it was never asked: whether the command is the
+   * one discovery found. It returned `exempt` before any comparison, `exempt`
+   * is not in the halting filter, and `runScopedGates` never looks at status,
+   * so one extra field in a committed `bindings.json` bypassed SEC-5′ whole.
+   */
+  const discovered = currentFor(binding, discovery);
+  if (discovered !== undefined && normalizeInvocation(discovered).command !== binding.resolved) {
+    return {
+      slot: binding.slot,
+      status: "drifted",
+      stored_hash: binding.config_hash,
+      current_hash: discovered.config_hash,
+      message:
+        `${binding.slot}: the bound COMMAND no longer matches what discovery finds — stored ` +
+        `\`${binding.resolved}\`, current \`${normalizeInvocation(discovered).command}\` ` +
+        `(${discovered.config_file}). Run \`detent verify sync\` to accept it.`,
+    };
+  }
+
   if (binding.status === "provisional") {
     return {
       slot: binding.slot,
@@ -101,19 +125,6 @@ export function checkBinding(binding: Binding, discovery: Discovery): DriftCheck
    * Checked before the hash so the message names the command, which is the
    * thing an operator needs to see.
    */
-  if (current.resolved !== binding.resolved) {
-    return {
-      slot: binding.slot,
-      status: "drifted",
-      stored_hash: binding.config_hash,
-      current_hash: current.config_hash,
-      message:
-        `${binding.slot}: the bound COMMAND no longer matches what discovery finds — stored ` +
-        `\`${binding.resolved}\`, current \`${current.resolved}\` (${current.config_file}). ` +
-        `Run \`detent verify sync\` to accept it.`,
-    };
-  }
-
   if (current.config_hash !== binding.config_hash) {
     return {
       slot: binding.slot,

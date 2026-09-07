@@ -1663,27 +1663,39 @@ function denyJson(reason) {
   });
 }
 function expired(doc, nowMs) {
-  return typeof doc?.expires_at_ms === "number" && nowMs > doc.expires_at_ms;
+  return typeof doc?.expires_at_ms !== "number" || nowMs > doc.expires_at_ms;
+}
+var POLICY_MAX_BYTES = 256 * 1024;
+function readPolicyFile(file) {
+  try {
+    const st = (0, import_node_fs2.statSync)(file);
+    if (!st.isFile() || st.size > POLICY_MAX_BYTES) return null;
+    return (0, import_node_fs2.readFileSync)(file, "utf8");
+  } catch {
+    return null;
+  }
 }
 function commandOf(toolInput) {
   if (typeof toolInput !== "object" || toolInput === null) return "";
   const command = toolInput["command"];
   return typeof command === "string" ? command : "";
 }
+var REFEED_TEXT = "Detent run in flight: tickets are still claimable or claimed. Continue the loop \u2014 call the referee's `next` tool and proceed with the next legal move; end the session only when the pool is empty and the outcome has been presented. (This gate fires once; the referee re-verifies everything regardless \u2014 P2.)";
 function decidePreToolUse(payload, nowMs) {
   const cwd = payloadCwd(payload);
-  let raw;
-  try {
-    raw = (0, import_node_fs2.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_SURFACE_FILE), "utf8");
-  } catch {
-    return null;
-  }
+  const raw = readPolicyFile(import_node_path2.default.join(cwd, ".detent", HOOK_SURFACE_FILE));
+  if (raw === null) return null;
   let cfg;
   try {
     cfg = JSON.parse(raw);
   } catch {
     return denyJson(
       `DENY: ${import_node_path2.default.join(".detent", HOOK_SURFACE_FILE)} exists but is unreadable \u2014 a declared surface that cannot be honored fails closed (P5).`
+    );
+  }
+  if (typeof cfg !== "object" || cfg === null) {
+    return denyJson(
+      `DENY: ${import_node_path2.default.join(".detent", HOOK_SURFACE_FILE)} exists but declares no surface \u2014 a policy that cannot be honored fails closed (P5).`
     );
   }
   if (expired(cfg, nowMs)) return null;
@@ -1717,15 +1729,16 @@ function decidePreToolUse(payload, nowMs) {
 }
 async function decideStop(payload, nowMs) {
   const cwd = payloadCwd(payload);
-  let refeed = "";
+  const rawStage = readPolicyFile(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE));
+  if (rawStage === null) return null;
   let parsed;
   try {
-    parsed = JSON.parse((0, import_node_fs2.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8"));
-    refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";
+    parsed = JSON.parse(rawStage);
   } catch {
     return null;
   }
-  if (typeof parsed?.expires_at_ms !== "number" || nowMs > parsed.expires_at_ms) return null;
+  if (expired(parsed, nowMs)) return null;
+  const refeed = typeof parsed?.run_refeed === "string" && parsed.run_refeed !== "" ? REFEED_TEXT : "";
   const stopHookActive = Boolean(payload.stop_hook_active);
   if (refeed !== "" && !stopHookActive) {
     return JSON.stringify({ decision: "block", reason: refeed });
