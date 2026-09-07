@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Ticket } from "../schemas/ticket.js";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
@@ -202,7 +203,17 @@ export interface ApprovalState {
  * it already made a re-init after a partial run call an untouched plan stale.
  * An approval is a statement about the PLAN; the plan is not the counters.
  */
-const APPROVED_FIELDS = [
+/**
+ * PRDR-152: this listed `depends_on`, which is a DRAFTED ticket's field name —
+ * a `Ticket` on disk carries `blockers` and `waits_on`. So the projection
+ * hashed a key that is always absent and IGNORED the two that hold the
+ * dependency graph: a ticket's edges could be rewritten after approval and
+ * C-9's check would not notice. Third instance in this line of the same
+ * mistake — reasoning about a format without reading what writes it — and the
+ * one that makes the case for asserting against the schema rather than a
+ * remembered field list.
+ */
+const APPROVED_FIELDS: readonly (keyof Ticket)[] = [
   "id",
   "type",
   "title",
@@ -210,12 +221,15 @@ const APPROVED_FIELDS = [
   "acceptance_criteria",
   "non_goals",
   "surface",
-  "depends_on",
+  "blockers",
+  "waits_on",
+  "links",
   "provides",
   "consumes",
   "risk_label",
   "priority",
 ] as const;
+
 
 function approvedProjection(raw: unknown): string {
   const t = (raw ?? {}) as Record<string, unknown>;

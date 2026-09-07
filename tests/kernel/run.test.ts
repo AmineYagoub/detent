@@ -18,6 +18,7 @@ import { requeueTicket } from "../../src/kernel/plumbing.js";
 import { acquireRunLock } from "../../src/kernel/run-lock.js";
 import { claim } from "../../src/kernel/tickets/mutations.js";
 import { writePlan } from "../../src/init/plan-write.js";
+import { planHash } from "../../src/init/machine.js";
 import { mkdirSync } from "node:fs";
 import { tmpTree } from "../helpers.js";
 import { prefixHash } from "../../src/sessions/backend.js";
@@ -220,6 +221,34 @@ describe("C-9′ a run executes only the plan a human approved", () => {
     addTicket(root, { id: "t2" });
     const resumed = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
     expect(resumed.exitCode, "a rewritten ticket file must not read as an edited plan").toBe(EXIT_OK);
+  });
+
+  /**
+   * PRDR-152: `APPROVED_FIELDS` listed `depends_on` — a DRAFTED ticket's field
+   * name — so it hashed a key that is always absent and ignored `blockers` and
+   * `waits_on`, the two that hold the dependency graph. A ticket's edges could
+   * be rewritten after approval and C-9's check would not notice.
+   *
+   * This asserts against the SCHEMA rather than a remembered list, so a field
+   * added to a ticket later cannot be silently left out of what a human is
+   * taken to have approved.
+   */
+  it("every ticket field is either approved-content or declared run state — nothing is silently ignored", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    const file = path.join(root, ".detent/plan/t1.json");
+    const ticket = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    /* The fields that legitimately change DURING a run and are not part of the approval. */
+    const runState = new Set(["schema_version", "state", "generations", "notes"]);
+
+    for (const field of Object.keys(ticket)) {
+      if (runState.has(field)) continue;
+      const before = planHash(root);
+      const mutated = { ...ticket, [field]: Array.isArray(ticket[field]) ? [...(ticket[field] as unknown[]), "x"] : `${String(ticket[field])}-edited` };
+      writeFileSync(file, JSON.stringify(mutated, null, 2));
+      expect(planHash(root), `editing \`${field}\` after approval is invisible to C-9`).not.toBe(before);
+      writeFileSync(file, JSON.stringify(ticket, null, 2));
+    }
   });
 
   it("a replan refuses to delete a ticket a live process has claimed", async () => {
