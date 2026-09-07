@@ -192,13 +192,56 @@ export interface ApprovalState {
 }
 
 /** The hash an approval covers: every ticket file's content, order-independent. */
+/**
+ * C-9′ (PRDR-139): the fields a human APPROVES. Everything else in a ticket
+ * file is run state.
+ *
+ * This hashed whole ticket files, and `writeTicket` rewrites them on every
+ * transition, counter bump and note — so the hash changed within seconds of a
+ * run starting. Checking it at run start would have refused every RESUME, and
+ * it already made a re-init after a partial run call an untouched plan stale.
+ * An approval is a statement about the PLAN; the plan is not the counters.
+ */
+const APPROVED_FIELDS = [
+  "id",
+  "type",
+  "title",
+  "description",
+  "acceptance_criteria",
+  "non_goals",
+  "surface",
+  "depends_on",
+  "provides",
+  "consumes",
+  "risk_label",
+  "priority",
+] as const;
+
+function approvedProjection(raw: unknown): string {
+  const t = (raw ?? {}) as Record<string, unknown>;
+  return JSON.stringify(APPROVED_FIELDS.map((k) => [k, t[k] ?? null]));
+}
+
 export function planHash(root: string): string {
   const dir = path.join(stateDir(root), "plan");
   if (!existsSync(dir)) return createHash("sha256").update("").digest("hex");
   const h = createHash("sha256");
   for (const name of readdirSync(dir).sort()) {
     if (!name.endsWith(".json") || name === "approval.json") continue;
-    h.update(`${name}\0`).update(createHash("sha256").update(readFileSync(path.join(dir, name))).digest("hex")).update("\n");
+    let projected: string;
+    try {
+      projected = approvedProjection(JSON.parse(readFileSync(path.join(dir, name), "utf8")));
+    } catch {
+      /**
+       * An unreadable ticket is DAMAGE, not an edit, and the difference matters
+       * in the message a human gets. Hashing its bytes made a corrupt file read
+       * as "the plan changed since you approved it", which misdiagnoses; and it
+       * is safe to skip, because an unparseable ticket cannot be executed —
+       * `readTicket` refuses it by name, which is the error worth surfacing.
+       */
+      continue;
+    }
+    h.update(`${name}\0`).update(createHash("sha256").update(projected).digest("hex")).update("\n");
   }
   return h.digest("hex");
 }

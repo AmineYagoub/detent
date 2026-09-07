@@ -16,6 +16,8 @@ import { RunJournal } from "../../src/kernel/journal.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { requeueTicket } from "../../src/kernel/plumbing.js";
 import { acquireRunLock } from "../../src/kernel/run-lock.js";
+import { claim } from "../../src/kernel/tickets/mutations.js";
+import { writePlan } from "../../src/init/plan-write.js";
 import { mkdirSync } from "node:fs";
 import { tmpTree } from "../helpers.js";
 import { prefixHash } from "../../src/sessions/backend.js";
@@ -183,6 +185,85 @@ describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => 
     expect(JSON.stringify(outcome.summary)).toContain("no `test` gate is bound");
     expect(readTicket(root, "t1").state).toBe("READY");
     expect(backend.rolesLaunched()).toEqual([]);
+  });
+});
+
+/**
+ * C-9′ (PRDR-139) / X-1⁗ (PRDR-140) / B-2″ (PRDR-145b) — phase 3.
+ */
+describe("C-9′ a run executes only the plan a human approved", () => {
+  it("refuses when a ticket's approved content changed after the approval", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    /* Edit what a human approved — not the run state stored beside it. */
+    const file = path.join(root, ".detent/plan/t1.json");
+    const t = JSON.parse(readFileSync(file, "utf8")) as { acceptance_criteria: string[] };
+    t.acceptance_criteria = [...t.acceptance_criteria, "and something nobody approved"];
+    writeFileSync(file, JSON.stringify(t, null, 2));
+
+    const outcome = await run(opts(root, new MockBackend()));
+    expect(outcome.exitCode).toBe(EXIT_NOT_READY);
+    expect(JSON.stringify(outcome.summary)).toContain("different plan");
+  });
+
+  /**
+   * The check is only safe because `planHash` covers the APPROVED fields. It
+   * used to hash whole ticket files, which `writeTicket` rewrites on every
+   * transition — so this check would have refused every resume.
+   */
+  it("a resume of an approved plan still runs, though the run has rewritten its tickets", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    const first = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
+    expect(first.exitCode).toBe(EXIT_OK);
+    /* The ticket file now carries a DONE state, counters and notes it did not have at approval. */
+    addTicket(root, { id: "t2" });
+    const resumed = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
+    expect(resumed.exitCode, "a rewritten ticket file must not read as an edited plan").toBe(EXIT_OK);
+  });
+
+  it("a replan refuses to delete a ticket a live process has claimed", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    /* A live claim: this process. */
+    expect(claim(root, "t1", "w1")).toBe(true);
+    /* A plan that no longer contains t1, so the orphan sweep reaches it. */
+    const replacement = [
+      {
+        id: "t9",
+        type: "feature" as const,
+        title: "replacement",
+        description: "",
+        acceptance_criteria: ["it works"],
+        non_goals: [],
+        surface: ["src/**"],
+        depends_on: [],
+        provides: [],
+        consumes: [],
+        risk_label: false,
+        slice: "s01",
+      },
+    ];
+    expect(() =>
+      writePlan({ root, greenfield: false, analysis: null, docs: [], boundSlots: [] }, replacement, []),
+    ).toThrow(/claimed by a live process/);
+    expect(existsSync(path.join(root, ".detent/plan/t1.json")), "the ticket must survive").toBe(true);
+  });
+});
+
+describe("X-1⁗ the wall clock is enforced where the work is launched", () => {
+  it("breaches through the referee rather than only through the headless loop", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    /*
+     * Advance the clock rather than backdate the claim: the run takes its own
+     * claim with `wx`, so a pre-existing one makes the ticket read as held by
+     * someone else and it is skipped entirely. A zero ceiling is refused by the
+     * X-1 worst-case check at config load, so that route is closed too.
+     */
+    const future = (): number => Date.now() + 86_400_000;
+    const outcome = await run({ ...opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })), now: future });
+    expect(JSON.stringify(outcome.summary)).toContain("wall clock");
   });
 });
 

@@ -3,6 +3,8 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { newTicket as buildTicket, writeTicket } from "../kernel/tickets/mutations.js";
+import { claimBreakable, pidAlive, readClaim } from "../kernel/tickets/mutations.js";
+import { hostname } from "node:os";
 import { claimPath, ticketPath } from "../kernel/tickets/paths.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Analysis, PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
@@ -178,6 +180,21 @@ export function writePlan(
    */
   for (const stale of existing) {
     if (ids.has(stale.id) || stale.state === "DONE") continue;
+    /**
+     * C-9′ (PRDR-139): never break a LIVE claim. This was the only claim
+     * breaker in the tree that skipped `claimBreakable` — `plumbing.ts` checks
+     * a dead pid on a matching host in both of its breakers — while the
+     * `inFlightTickets` guard upstream is a check-then-act separated from this
+     * act by an entire model-driven planning run. A `run` that claimed a ticket
+     * in that window had its lock deleted underneath it.
+     */
+    const claim = readClaim(deps.root, stale.id);
+    if (claim !== null && !claimBreakable(claim, pidAlive, hostname())) {
+      throw new Error(
+        `${stale.id} is claimed by a live process (pid ${claim.pid} on ${claim.host}) and this plan no longer contains it — ` +
+          "stop the run before re-planning; removing a ticket a session is working in would delete its lock (C-9/R-3).",
+      );
+    }
     rmSync(ticketPath(deps.root, stale.id), { force: true });
     rmSync(claimPath(deps.root, stale.id), { force: true });
     deps.note?.(`${stale.id} removed — the new plan does not contain it (PRDR-085)`);

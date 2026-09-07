@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
@@ -7,6 +7,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
 import { acquireRunLock, runLockRefusal } from "./run-lock.js";
+import { approvalState } from "../init/machine.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
 import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
@@ -111,6 +112,26 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   const { root } = opts;
   const approval = readApproval(root);
   if (approval !== "ok") return notReady(approval);
+  /**
+   * C-9′ (PRDR-139): the approval must be OF THIS PLAN. `run` parsed the file
+   * and never compared it, so tickets edited after approval executed
+   * unreviewed. Safe to check at run start only because `planHash` now covers
+   * the approved fields rather than whole ticket files — the whole-file hash
+   * changed on every transition and would have refused every resume.
+   *
+   * A DAMAGED plan is not a stale one, and conflating them misdiagnoses: an
+   * unreadable ticket changes the hash either way, so the check would report
+   * "the tickets have changed since you approved" for a file that is merely
+   * corrupt. `readTicket` refuses it by name a moment later, which is the error
+   * worth surfacing.
+   */
+  const approved = planFilesReadable(root) ? approvalState(root) : { stale: false };
+  if (approved.stale) {
+    return notReady(
+      "the approval in .detent/plan/approval.json is for a different plan — the tickets have changed since it was " +
+        "given. Re-approve with `detent init` (C-9); a run executes only what a human approved.",
+    );
+  }
   /**
    * V-1″ (PRDR-135): a run with no bound test gate verifies nothing. Checked
    * beside the config and approval preconditions, so it refuses before
@@ -225,4 +246,19 @@ function readApproval(root: string): string {
   const parsed = parseArtifact(approvalSchema, JSON.parse(readFileSync(file, "utf8")));
   if (!parsed.ok) return `plan approval is invalid — re-approve (C-7)`;
   return "ok";
+}
+
+/** C-9′: every ticket in the plan parses, so a hash comparison means what it says. */
+function planFilesReadable(root: string): boolean {
+  const dir = path.join(stateDir(root), "plan");
+  if (!existsSync(dir)) return true;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json") || name === "approval.json") continue;
+    try {
+      JSON.parse(readFileSync(path.join(dir, name), "utf8"));
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }

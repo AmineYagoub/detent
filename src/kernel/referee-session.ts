@@ -11,7 +11,7 @@ import { currentCounters, currentGeneration, withCurrentCounters } from "./gener
 import { Breach, KernelBoundaryError, SessionRefusal, publicTicket, type RefereeContext } from "./referee-context.js";
 import type { FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
-import { appendNote, writeTicket } from "./tickets/mutations.js";
+import { appendNote, readClaim, writeTicket } from "./tickets/mutations.js";
 
 /**
  * T-104 — the session arm (R-4, S-2…S-6, D-25, B-3/P7, SEC-3).
@@ -72,6 +72,30 @@ export class SessionArm {
      * mid-flight — overshoot is bounded by the one session in flight.
      */
     ctx.spend.assertLaunchAllowed();
+
+    /**
+     * X-1⁗ (PRDR-140): the wall clock is enforced HERE, at the launch seam,
+     * where `sessions` above and `run_spend_usd` already live — so both drivers
+     * inherit it. It had exactly one enforcement site, `driver.ts`'s headless
+     * loop, while `skills/run/SKILL.md` — the published program the model-driven
+     * driver executes — has no time check at all. ARCH-2's parity is proved on
+     * an all-green fixture, so the drivers agreeing there said nothing about a
+     * ceiling only one of them implemented.
+     *
+     * The clock is the CLAIM's own timestamp: the generation's `started_at`
+     * would date from a requeue that may be days old, and a ticket planned last
+     * week must not breach the moment it is first claimed.
+     */
+    const claimedAt = readClaim(ctx.root, id)?.at;
+    if (claimedAt !== undefined) {
+      const elapsed = Date.parse(ctx.iso()) - Date.parse(claimedAt);
+      if (Number.isFinite(elapsed) && elapsed > ctx.budgets.ticket_wall_clock_ms) {
+        throw new Breach(
+          `ticket wall clock ceiling (X-1): ${Math.round(elapsed / 1000)}s since the claim exceeds ` +
+            `${Math.round(ctx.budgets.ticket_wall_clock_ms / 1000)}s`,
+        );
+      }
+    }
 
     let current = readTicket(ctx.root, id);
     const counters = currentCounters(current);

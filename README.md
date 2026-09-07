@@ -136,6 +136,17 @@ release must build Detent's own walking skeleton from its own PRD.
 | `2` | not ready (no or unapproved plan, binding drift) |
 | `1` | error |
 
+## Your working tree
+
+During a run Detent works in a per-ticket git worktree under
+`.detent/worktrees/`, merged `--no-ff` into the run branch when the ticket is
+done — never into your base branch. Your own checkout is left alone.
+
+`--no-worktree` runs in your checkout instead. Say so deliberately: in that mode
+Detent resets uncommitted tracked changes at resume, moves untracked files it
+does not own aside, and stages the tree when a ticket finalizes. Those are the
+right behaviours for a tree Detent owns and the wrong ones for yours.
+
 ## Plumbing
 
 Documented, scriptable, and never required on the golden path:

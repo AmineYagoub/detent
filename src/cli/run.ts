@@ -31,8 +31,19 @@ export async function main(argv: readonly string[]): Promise<number> {
        */
       backend: { type: "string", default: "claude" },
       worker: { type: "string", default: "w1" },
-      /* B-2: per-ticket worktrees, merged --no-ff into the run branch on DONE. */
-      worktree: { type: "boolean", default: false },
+      /**
+       * B-2″ (PRDR-145b): per-ticket worktrees are the DEFAULT, `--no-worktree`
+       * the escape. `workDir` was the operator's own checkout unless a flag
+       * said otherwise, which turned three behaviours that are correct for a
+       * tree Detent owns into destructive ones: `resetDirtyTracked` ran
+       * `git checkout HEAD --` on uncommitted work, `parkForeignUntracked`
+       * relocated untracked files on every claim, and `finalizeDone`'s
+       * `git add -A` staged whatever else was in the tree under the ticket's
+       * name. One posture — Detent owns the working tree during a run — applied
+       * where it was false.
+       */
+      worktree: { type: "boolean", default: true },
+      "no-worktree": { type: "boolean", default: false },
     },
   });
 
@@ -66,7 +77,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     backend,
     prompts: loadPromptSet(),
     worker: values.worker,
-    worktree: values.worktree,
+    worktree: values.worktree === true && values["no-worktree"] !== true,
     announce: (message) => process.stdout.write(`${message}\n`),
     ...(interactive ? { escalate: makeTtyEscalation(process.env["USER"] ?? "operator") } : {}),
     ...(maxTickets === undefined || Number.isNaN(maxTickets) ? {} : { maxTickets }),

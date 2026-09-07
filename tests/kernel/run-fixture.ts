@@ -5,6 +5,7 @@ import { bindAll } from "../../src/adapter/bind.js";
 import { discover } from "../../src/adapter/discover/index.js";
 import { writeBindings } from "../../src/adapter/drift.js";
 import { initLayout, writeArtifact } from "../../src/fs/layout.js";
+import { planHash } from "../../src/init/machine.js";
 import { createTicket, type NewTicket } from "../../src/kernel/tickets/mutations.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
 import { git, gitInit, tmpTree, writeTree } from "../helpers.js";
@@ -75,7 +76,7 @@ export async function makeRunRepo(): Promise<RunRepo> {
   writeArtifact(root, "plan/approval.json", {
     approved_by: "fixture",
     at: "2026-08-18T09:00:00.000Z",
-    plan_hash: createHash("sha256").update("fixture-plan").digest("hex"),
+    plan_hash: planHash(root),
   });
 
   git(root, "add", "-A");
@@ -90,6 +91,24 @@ export function addTicket(root: string, input: Partial<NewTicket> & { readonly i
     acceptance_criteria: ["scripts/test.sh exits 0"],
     surface: ["src/**", "tests/**"],
     ...input,
+  });
+  /**
+   * C-9′ (PRDR-139): re-approve the plan that now exists.
+   *
+   * The fixture used to write `plan_hash: sha256("fixture-plan")` once, before
+   * any ticket existed — a value that could never equal `planHash(root)`. It
+   * was viable only because `run` parsed the approval and never compared it.
+   * A human approves a plan AFTER it is drafted, so the fixture does too.
+   */
+  approveFixturePlan(root);
+}
+
+/** The approval a human would have given for the plan currently on disk. */
+export function approveFixturePlan(root: string): void {
+  writeArtifact(root, "plan/approval.json", {
+    approved_by: "fixture",
+    at: "2026-08-18T09:00:00.000Z",
+    plan_hash: planHash(root),
   });
 }
 

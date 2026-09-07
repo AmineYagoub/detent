@@ -385,6 +385,39 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **C-9′ (3.1.1, PRDR-139).** "Executes only an approved plan" is CHECKED, and the approval is
+  a statement about the plan rather than about the files that carry it. `run` schema-parsed
+  `approval.json` and never compared `plan_hash`, so tickets edited after approval executed
+  unreviewed. The obvious repair — call the existing `approvalState` at run start — would have
+  refused every RESUME, and reading the writer is what shows it: `planHash` hashed every ticket
+  file, and `writeTicket` rewrites those on every transition, counter bump and note, so the hash
+  changes within seconds of a run starting. It was already a latent defect on the init side, where
+  a re-init after a partial run called an untouched plan stale. The hash now covers each ticket's
+  plan-defining fields — what a human approved — and not the run state stored beside them.
+  Separately, `writePlan` deleted a claim without asking whether its holder was alive: the only
+  claim breaker in the tree that skipped `claimBreakable`, while a check-then-act guard sat an
+  entire planning run away from the act.
+
+- **X-1⁗ (3.1.1, PRDR-140).** `ticket_wall_clock_ms` is enforced where the work is LAUNCHED, so
+  both drivers inherit it. It had exactly one enforcement site — the headless loop — while
+  `skills/run/SKILL.md`, the published program the model-driven driver executes, contains no time
+  check at all. `sessions` and `run_spend_usd` already live at the launch seam and are free to
+  both drivers for that reason; the wall clock now joins them, and ARCH-2's parity becomes true by
+  construction rather than by duplication. The outage BACKOFF is deliberately not moved: waiting
+  is something a loop does and the referee has none, so the plugin path needs its own instruction
+  — named here rather than half-solved.
+
+- **B-2″ (3.1.1, PRDR-145b).** Per-ticket worktrees are the DEFAULT, with `--no-worktree` as the
+  documented escape. `workDir` was the operator's own checkout unless a flag said otherwise, which
+  turned three behaviours that are correct for a tree Detent owns into destructive ones:
+  `resetDirtyTracked` ran `git checkout HEAD --` on uncommitted work, `parkForeignUntracked`
+  relocated untracked files on every claim, and `finalizeDone`'s `git add -A` staged whatever else
+  was in the tree under the ticket's name. Not three bugs — one posture, *Detent owns the working
+  tree during a run*, applied where it was false. The posture is defensible; what was not is that
+  it went unstated while the dangerous mode was the default. B-2′ hardened the merge path first,
+  so this promotes a mode that has been tested rather than trading a known hazard for an untested
+  one. `--no-worktree` still carries those surfaces, now as an explicit choice.
+
 - **V-1″ (3.1.1, PRDR-135).** No bound gate is UNVERIFIABLE, not green. `runScopedGates`
   returned `null` when no binding matched any requested slot and the caller read it as a pass,
   minting a real `GATE_GREEN` carrying the evidence string "no bound gates" — so a
