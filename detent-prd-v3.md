@@ -385,6 +385,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **S-2⁗ (3.1.1, PRDR-127).** Containment is judged against the RESOLVED destination of a path,
+  not the path a session typed. `path.resolve` normalises `..` lexically and does not follow
+  symbolic links, so a link inside the worktree walked past the boundary, past the declared
+  surface, and past the SEC-3 protected globs — three escapes, of which the protected one is a
+  straight bypass of the immutability floor. The worktree bound, the protected match and the
+  surface match now all run on the destination. The destination is what is judged, never the
+  mechanism: a link whose target is still inside the worktree and inside the surface is allowed,
+  because denying links as a class would refuse `node_modules/.bin` and every monorepo workspace
+  link. Resolution walks up to the nearest ancestor that exists — a `Write` creating a new file
+  is the ordinary case and `realpath` throws on it — and both sides are resolved, since `/tmp` is
+  itself a link on macOS and comparing a resolved target against an unresolved root would call
+  every temp worktree an escape. The resolver is injected with a filesystem-backed default so the
+  decision stays testable without a session, and a resolver that throws denies. The TOCTOU window
+  between the decision and the write is not closed by this and is bounded by the kernel re-running
+  verification (P2).
+
 - **A-1⁗ (3.1.1, PRDR-121).** A ticket that declares it provides a symbol is checked against the
   diff it produced: the identifier appears in what the ticket changed, or it does not. The precise
   answer is a symbol-table lookup and needs a client Detent does not have; this needs nothing, and

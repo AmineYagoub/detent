@@ -1549,7 +1549,7 @@ var require_picomatch2 = __commonJS({
 
 // src/plugin/hook.ts
 var import_node_child_process = require("node:child_process");
-var import_node_fs = require("node:fs");
+var import_node_fs2 = require("node:fs");
 var import_node_path2 = __toESM(require("node:path"), 1);
 
 // src/fs/hook-files.ts
@@ -1558,6 +1558,7 @@ var HOOK_STAGE_FILE = "stage.json";
 
 // src/sessions/guard.ts
 var import_node_path = __toESM(require("node:path"), 1);
+var import_node_fs = require("node:fs");
 var import_picomatch = __toESM(require_picomatch2(), 1);
 function matchAny(rel, patterns) {
   const clean = rel.replace(/^\.\//, "");
@@ -1577,26 +1578,70 @@ function pathOf(toolInput) {
   return typeof candidate === "string" && candidate !== "" ? candidate : null;
 }
 var MUTATING_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-function guardToolUse(toolName, toolInput, policy) {
+function realpathNearest(target, maxHops = 40) {
+  const absolute = import_node_path.default.resolve(target);
+  const trailing = [];
+  const below = (base) => trailing.length === 0 ? base : import_node_path.default.join(base, ...[...trailing].reverse());
+  let current = absolute;
+  let hops = 0;
+  for (; ; ) {
+    try {
+      return below(import_node_fs.realpathSync.native(current));
+    } catch {
+    }
+    let link = null;
+    try {
+      link = (0, import_node_fs.readlinkSync)(current);
+    } catch {
+      link = null;
+    }
+    if (link !== null) {
+      if (hops >= maxHops) return below(current);
+      hops += 1;
+      current = import_node_path.default.resolve(import_node_path.default.dirname(current), link);
+      continue;
+    }
+    const parent = import_node_path.default.dirname(current);
+    if (parent === current) return absolute;
+    trailing.push(import_node_path.default.basename(current));
+    current = parent;
+  }
+}
+function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest) {
   const target = pathOf(toolInput);
   if (target === null) return { decision: "abstain", reason: "no path in tool input \u2014 the allowlist decides" };
-  const rel = import_node_path.default.relative(import_node_path.default.resolve(policy.workRoot), import_node_path.default.resolve(policy.workRoot, target));
-  if (rel.startsWith("..") || import_node_path.default.isAbsolute(rel)) {
+  const root = import_node_path.default.resolve(policy.workRoot);
+  const absolute = import_node_path.default.resolve(root, target);
+  const typed = import_node_path.default.relative(root, absolute);
+  if (typed.startsWith("..") || import_node_path.default.isAbsolute(typed)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
+  }
+  let rel;
+  try {
+    rel = import_node_path.default.relative(resolveReal(root), resolveReal(absolute));
+  } catch (err) {
+    return {
+      decision: "deny",
+      reason: `DENY: ${typed} could not be resolved to a real path (${err.message}) \u2014 containment cannot be established.`
+    };
+  }
+  if (rel.startsWith("..") || import_node_path.default.isAbsolute(rel)) {
+    return { decision: "deny", reason: `DENY: ${typed} resolves through a symbolic link to a path outside the worktree.` };
   }
   if (!MUTATING_TOOLS.has(toolName)) {
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2\u2033)` };
   }
+  const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;
   if (matchAny(rel, policy.protectedGlobs)) {
     return {
       decision: "deny",
-      reason: `DENY: ${rel} is protected (protected globs and ticket criteria are immutable to sessions \u2014 SEC-3).`
+      reason: `DENY: ${rel} is protected${via} (protected globs and ticket criteria are immutable to sessions \u2014 SEC-3).`
     };
   }
   if (!matchAny(rel, policy.surface)) {
     return {
       decision: "deny",
-      reason: `DENY: ${rel} is outside this ticket's declared surface. If genuinely required, request a surface expansion with a one-line justification by writing surface_request.json at the path given in your inputs (SEC-3).`
+      reason: `DENY: ${rel} is outside this ticket's declared surface${via}. If genuinely required, request a surface expansion with a one-line justification by writing surface_request.json at the path given in your inputs (SEC-3).`
     };
   }
   return { decision: "allow", reason: `${rel} is inside the declared surface` };
@@ -1648,7 +1693,7 @@ function decidePreToolUse(payload, nowMs) {
   const cwd = payloadCwd(payload);
   let raw;
   try {
-    raw = (0, import_node_fs.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_SURFACE_FILE), "utf8");
+    raw = (0, import_node_fs2.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_SURFACE_FILE), "utf8");
   } catch {
     return null;
   }
@@ -1707,7 +1752,7 @@ async function decideStop(payload, nowMs) {
   let refeed = "";
   let parsed;
   try {
-    parsed = JSON.parse((0, import_node_fs.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8"));
+    parsed = JSON.parse((0, import_node_fs2.readFileSync)(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE), "utf8"));
     stage = typeof parsed?.stage === "string" ? parsed.stage : "";
     gateCmd = typeof parsed?.gate_cmd === "string" ? parsed.gate_cmd : null;
     refeed = typeof parsed?.run_refeed === "string" ? parsed.run_refeed : "";

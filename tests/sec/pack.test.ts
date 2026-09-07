@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -62,6 +62,70 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   it("all ten are denied — zero protected writes reach the tree", () => {
     const allowed = EVASIONS.filter(([, t]) => guardToolUse("Write", { file_path: t }, POLICY).decision === "allow");
     expect(allowed).toEqual([]);
+  });
+
+  /**
+   * S-2⁗ (PRDR-127) — the same boundary, against REAL symbolic links.
+   *
+   * The ten cases above include one labelled "symlinky nested traversal". It is
+   * `/wt/src/a/../../AGENTS.md`: lexical `..` segments, no link anywhere. The
+   * pack asserted the thing it was named for and never tested it, and a link
+   * inside the worktree walked past all three checks — the boundary, the
+   * declared surface, and the SEC-3 protected globs.
+   *
+   * The temp root is deliberately NOT resolved here: on macOS it sits under
+   * `/var/folders`, itself a link to `/private/var`, so this also proves the
+   * guard resolves BOTH sides rather than calling every temp worktree an escape.
+   */
+  describe("SEC-3: a symbolic link is judged by where it LANDS, not by what it is called", () => {
+    function linkedRepo(): { readonly root: string; readonly policy: GuardPolicy } {
+      const root = mkdtempSync(path.join(tmpdir(), "detent-sym-"));
+      const outside = mkdtempSync(path.join(tmpdir(), "detent-out-"));
+      roots.push(root, outside);
+      for (const d of ["src", "src/real", ".detent", "forbidden"]) mkdirSync(path.join(root, d), { recursive: true });
+      symlinkSync(outside, path.join(root, "src", "escape"));
+      symlinkSync(path.join(root, "forbidden"), path.join(root, "src", "inward"));
+      symlinkSync(path.join(root, ".detent"), path.join(root, "src", "cfg"));
+      symlinkSync(path.join(root, "src", "real"), path.join(root, "src", "legit"));
+      /* Dangling on purpose: the Write tool creates parent directories. */
+      symlinkSync(path.join(outside, "not-created-yet"), path.join(root, "src", "dangling"));
+      return { root, policy: { surface: ["src/**"], protectedGlobs: [".detent/**", "AGENTS.md"], workRoot: root } };
+    }
+
+    const ESCAPES: ReadonlyArray<readonly [string, string]> = [
+      ["out of the worktree entirely", "src/escape/stolen.txt"],
+      ["out of the declared surface", "src/inward/x.txt"],
+      ["through the SEC-3 protected floor", "src/cfg/config.json"],
+      ["through a DANGLING link, out of the worktree", "src/dangling/x.txt"],
+    ];
+
+    it.each(ESCAPES)("denies a write that lands %s", (_label, rel) => {
+      const { root, policy } = linkedRepo();
+      expect(guardToolUse("Write", { file_path: path.join(root, rel) }, policy).decision).toBe("deny");
+    });
+
+    it("all four escapes are denied — zero writes land outside where the ticket may write", () => {
+      const { root, policy } = linkedRepo();
+      const allowed = ESCAPES.filter(([, rel]) => guardToolUse("Write", { file_path: path.join(root, rel) }, policy).decision === "allow");
+      expect(allowed).toEqual([]);
+    });
+
+    it("the destination is judged, never the mechanism: a link INSIDE the surface still works", () => {
+      const { root, policy } = linkedRepo();
+      /* Denying links as a class would refuse node_modules/.bin and every monorepo workspace link. */
+      expect(guardToolUse("Write", { file_path: path.join(root, "src/legit/a.ts") }, policy).decision).toBe("allow");
+      expect(guardToolUse("Write", { file_path: path.join(root, "src/real/brand-new.ts") }, policy).decision).toBe("allow");
+      expect(guardToolUse("Write", { file_path: path.join(root, "src/plain.ts") }, policy).decision).toBe("allow");
+    });
+
+    it("the worktree bound covers reads too (P7), and says which path the verdict is about", () => {
+      const { root, policy } = linkedRepo();
+      expect(guardToolUse("Read", { file_path: path.join(root, "src/escape/stolen.txt") }, policy).decision).toBe("deny");
+      expect(guardToolUse("Read", { file_path: path.join(root, "src/legit/a.ts") }, policy).decision).toBe("abstain");
+      const protectedWrite = guardToolUse("Write", { file_path: path.join(root, "src/cfg/config.json") }, policy);
+      expect(protectedWrite.reason).toContain("reached through a symbolic link from src/cfg/config.json");
+      expect(protectedWrite.reason).toContain(".detent/config.json is protected");
+    });
   });
 
   it("a Bash tool call that names no path is not an escape hatch — the kernel re-verifies (P2)", () => {

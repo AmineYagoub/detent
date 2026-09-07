@@ -3,6 +3,7 @@ import {
   READ_ONLY_STAGES,
   guardToolUse,
   matchAny,
+  realpathNearest,
   researchTools,
   stopGate,
   toolsForRole,
@@ -24,6 +25,54 @@ const POLICY: GuardPolicy = {
 };
 
 const edit = (file: string) => guardToolUse("Edit", { file_path: file }, POLICY);
+
+/**
+ * S-2⁗ (PRDR-127) — containment is judged on where a path LANDS.
+ *
+ * These stay hermetic by injecting the resolver, which is why it is a parameter
+ * at all: `guardToolUse` was pure, and that purity is what lets the seven oracle
+ * hook ports run with no session and no filesystem. The escapes themselves are
+ * proved against real links on disk in the SEC pack.
+ */
+describe("S-2⁗ the resolved destination is what is judged (PRDR-127)", () => {
+  it("uses the injected resolver: a path that RESOLVES outside the worktree is denied", () => {
+    const escaping = (p: string): string => (p.startsWith("/wt/src/link") ? p.replace("/wt/src/link", "/elsewhere") : p);
+    const decision = guardToolUse("Write", { file_path: "/wt/src/link/a.ts" }, POLICY, escaping);
+    expect(decision.decision).toBe("deny");
+    expect(decision.reason).toContain("resolves through a symbolic link");
+    /* Same call, nothing resolved: the lexical path is inside the surface. */
+    expect(guardToolUse("Write", { file_path: "/wt/src/link/a.ts" }, POLICY, (p) => p).decision).toBe("allow");
+  });
+
+  it("a link that lands on a PROTECTED path is denied, and the reason names both paths", () => {
+    const toProtected = (p: string): string => (p === "/wt/src/cfg" ? "/wt/AGENTS.md" : p);
+    const decision = guardToolUse("Write", { file_path: "/wt/src/cfg" }, POLICY, toProtected);
+    expect(decision.decision).toBe("deny");
+    expect(decision.reason).toContain("AGENTS.md is protected");
+    expect(decision.reason).toContain("reached through a symbolic link from src/cfg");
+  });
+
+  it("a resolver that throws denies — containment that cannot be established has not passed", () => {
+    const broken = (): string => {
+      throw new Error("EIO");
+    };
+    const decision = guardToolUse("Write", { file_path: "/wt/src/a.ts" }, POLICY, broken);
+    expect(decision.decision).toBe("deny");
+    expect(decision.reason).toContain("containment cannot be established");
+  });
+
+  it("resolution is invisible when nothing is a link — every decision above is unchanged", () => {
+    expect(guardToolUse("Edit", { file_path: "/wt/src/calc.py" }, POLICY, (p) => p).decision).toBe("allow");
+    expect(guardToolUse("Edit", { file_path: "/wt/AGENTS.md" }, POLICY, (p) => p).decision).toBe("deny");
+    expect(guardToolUse("Edit", { file_path: "/etc/hosts" }, POLICY, (p) => p).decision).toBe("deny");
+  });
+
+  it("realpathNearest falls back to the lexical path when no ancestor exists — the fictional root above still works", () => {
+    expect(realpathNearest("/wt/.detent/state/plan-draft.json")).toBe("/wt/.detent/state/plan-draft.json");
+    /* And it resolves a real one, including the ancestor link macOS puts under /tmp. */
+    expect(realpathNearest("/tmp")).toBe(realpathNearest("/private/tmp"));
+  });
+});
 
 describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
   it("test_allows_in_surface", () => {

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readlinkSync, realpathSync } from "node:fs";
 import picomatch from "picomatch";
 
 /**
@@ -70,13 +71,84 @@ export function pathOf(toolInput: unknown): string | null {
 const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
 /**
+ * S-2⁗ (PRDR-127): where a path actually LANDS, with symbolic links followed.
+ *
+ * `path.resolve` normalises `..` lexically and follows nothing, so the guard
+ * used to judge the path a session typed rather than the file it would open.
+ *
+ * Two things make this more than a `realpathSync` call. A `Write` usually names
+ * a file that does not exist yet, and `realpath` throws on those — so this walks
+ * up to the nearest ancestor that DOES exist, resolves that, and rejoins the
+ * segments below it. And a path with no existing ancestor at all resolves to its
+ * lexical form, because a tree that is not on disk has no links to follow; that
+ * is what keeps the oracle hook tests meaningful against their fictional root.
+ *
+ * It does not throw. An unresolvable path degrades to the lexical answer, which
+ * is exactly the pre-existing behaviour rather than a new way to fail.
+ */
+export function realpathNearest(target: string, maxHops = 40): string {
+  const absolute = path.resolve(target);
+  const trailing: string[] = [];
+  const below = (base: string): string => (trailing.length === 0 ? base : path.join(base, ...[...trailing].reverse()));
+  let current = absolute;
+  let hops = 0;
+  for (;;) {
+    try {
+      return below(realpathSync.native(current));
+    } catch {
+      /* not resolvable as it stands — it may still be a link, or not exist at all */
+    }
+    /**
+     * A DANGLING link still names a destination. `realpathSync` throws on one,
+     * and stopping here would fall back to the lexical path — which is a hole,
+     * not a degradation: the Write tool creates parent directories, so a link
+     * to a not-yet-existing directory OUTSIDE the worktree would be created and
+     * written to. It is read manually and followed.
+     */
+    let link: string | null = null;
+    try {
+      link = readlinkSync(current);
+    } catch {
+      link = null;
+    }
+    if (link !== null) {
+      /* A cycle of links resolves to nothing on any filesystem; stop and let the boundary judge. */
+      if (hops >= maxHops) return below(current);
+      hops += 1;
+      current = path.resolve(path.dirname(current), link);
+      continue;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return absolute;
+    trailing.push(path.basename(current));
+    current = parent;
+  }
+}
+
+/**
  * The PreToolUse decision (oracle `pretooluse_guard.py`, S-2″). Deny-by-default
  * outside the declared surface FOR MUTATION; protected denies mutation always
  * (SEC-3 is immutability, not unreadability); the worktree bounds every tool,
  * reads included (P7). Surface expansion is a KERNEL decision — the guard only
  * points at the lever (SEC-3).
+ *
+ * S-2⁗ (PRDR-127): every one of those checks runs on the RESOLVED destination.
+ * A symbolic link inside the worktree used to walk past all three — the
+ * boundary, the surface, and the SEC-3 protected globs, which is an
+ * immutability bypass. The destination is what is judged, never the mechanism:
+ * a link pointing somewhere the session may already write stays allowed,
+ * because refusing links as a class would refuse `node_modules/.bin` and every
+ * monorepo workspace link.
+ *
+ * `resolveReal` is a parameter so the decision stays testable without a
+ * filesystem — production passes nothing, tests inject identity or a fake map.
  */
-export function guardToolUse(toolName: string, toolInput: unknown, policy: GuardPolicy): GuardDecision {
+export function guardToolUse(
+  toolName: string,
+  toolInput: unknown,
+  policy: GuardPolicy,
+  resolveReal: (p: string) => string = realpathNearest,
+): GuardDecision {
   const target = pathOf(toolInput);
   /**
    * A tool call naming no path is not this guard's business — it governs WHERE
@@ -85,25 +157,49 @@ export function guardToolUse(toolName: string, toolInput: unknown, policy: Guard
    */
   if (target === null) return { decision: "abstain", reason: "no path in tool input — the allowlist decides" };
 
-  const rel = path.relative(path.resolve(policy.workRoot), path.resolve(policy.workRoot, target));
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+  const root = path.resolve(policy.workRoot);
+  const absolute = path.resolve(root, target);
+  /* Lexical `..` is refused before any filesystem work, exactly as before. */
+  const typed = path.relative(root, absolute);
+  if (typed.startsWith("..") || path.isAbsolute(typed)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
+  }
+
+  /**
+   * BOTH sides are resolved. On macOS `/tmp` is itself a link to `/private/tmp`,
+   * so comparing a resolved target against an unresolved root would report every
+   * temp-directory worktree as an escape — a fix noisier than the bug.
+   */
+  let rel: string;
+  try {
+    rel = path.relative(resolveReal(root), resolveReal(absolute));
+  } catch (err) {
+    /* Containment that cannot be established is not containment that passed. */
+    return {
+      decision: "deny",
+      reason: `DENY: ${typed} could not be resolved to a real path (${(err as Error).message}) — containment cannot be established.`,
+    };
+  }
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    return { decision: "deny", reason: `DENY: ${typed} resolves through a symbolic link to a path outside the worktree.` };
   }
   if (!MUTATING_TOOLS.has(toolName)) {
     /* Inside the worktree and not a mutation: bounded by P7 above, granted by the allowlist. */
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2″)` };
   }
+  /* Where the two disagree, the human is told which path the verdict is about. */
+  const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;
   if (matchAny(rel, policy.protectedGlobs)) {
     return {
       decision: "deny",
-      reason: `DENY: ${rel} is protected (protected globs and ticket criteria are immutable to sessions — SEC-3).`,
+      reason: `DENY: ${rel} is protected${via} (protected globs and ticket criteria are immutable to sessions — SEC-3).`,
     };
   }
   if (!matchAny(rel, policy.surface)) {
     return {
       decision: "deny",
       reason:
-        `DENY: ${rel} is outside this ticket's declared surface. If genuinely required, request a surface ` +
+        `DENY: ${rel} is outside this ticket's declared surface${via}. If genuinely required, request a surface ` +
         `expansion with a one-line justification by writing surface_request.json at the path given in your inputs (SEC-3).`,
     };
   }
