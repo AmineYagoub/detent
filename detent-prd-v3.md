@@ -385,6 +385,36 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **V-3′ / S-5′ / R-10′ (3.1.1, PRDR-141).** Five features were implemented, tested, documented
+  and unreachable, and each is now wired at its ENTRY POINT or its claim withdrawn.
+  `detent verify sync` — the only sanctioned V-3 recovery, which the drift halt message itself
+  names — was absent from the dispatcher, so every drift-blocked ticket sat behind an instruction
+  that answered `unknown command`. `doctor`'s `main` passed no deps, so the S-5 pin check and the
+  R-10 smoke session pushed `ok: true` unconditionally while the CLI advertised a live smoke
+  session it structurally could not run. `preferOrchestrator` had no caller, so a monorepo bound a
+  per-package command instead of the orchestrator's root one and the notice explaining that never
+  printed. Two latent defects in the unwired consent engine are fixed regardless of when it is
+  wired: `proposeConfigWrite` had no traversal guard where both its siblings do, and the
+  allowlist admitted `npm install ../../evil`, which runs a local package's lifecycle scripts.
+  **The rule this ran under is PRDR-148's:** wiring a dead control exposes every latent defect in
+  it at once, so each was checked against what the system now does before being connected — and
+  that immediately found `doctor` keyed on `ANTHROPIC_API_KEY`, stale since the transports
+  broadened to three, and then that `hasLiveBackendAuth` probes the live CLI so an injected
+  environment cannot make it answer no. The entry point decides liveness; the backend's presence
+  is the signal.
+
+- **P6′ (3.1.1, PRDR-142).** A bound that cannot be read is refused rather than dropped, the
+  routing's keys are validated against the real role set, and the enforcement map names where each
+  ceiling is actually enforced. `--max-tickets tenn` yielded `NaN` and the option was silently
+  omitted, so the full pool ran against the full ceiling having been asked for a limit.
+  `model_routing` accepted any key, so a typo routed that role to the runtime default forever —
+  `roles.ts` claims the typing makes that a compile error, which is true of the default table and
+  false of the config a human is invited to edit. And `ENFORCEMENT_SITES` was tested for
+  TOTALITY, which `satisfies Record<CeilingKey, string>` already guarantees at compile time, so it
+  could not notice an entry becoming untrue — two had: `ticket_wall_clock_ms` after X-1⁗ moved it,
+  and `failure_research_tool_calls`, which the new test found. The test now reads the named module
+  and requires it to mention the ceiling.
+
 - **C-9′ (3.1.1, PRDR-139).** "Executes only an approved plan" is CHECKED, and the approval is
   a statement about the plan rather than about the files that carry it. `run` schema-parsed
   `approval.json` and never compared `plan_hash`, so tickets edited after approval executed

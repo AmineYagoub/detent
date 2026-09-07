@@ -117,6 +117,16 @@ export async function proposeConfigWrite(
 ): Promise<ConfigWriteOutcome> {
   const now = deps.now ?? (() => Date.now());
   const at = new Date(now()).toISOString();
+  /**
+   * PRDR-141: a traversal guard, which `layout.ts`'s `assertContained` and
+   * `paths.ts`'s `safeId` both have and this outlier did not. The engine is
+   * unwired today (C-6a/T-065), so this was latent rather than exploitable —
+   * and fixing it now is the point: wiring a control exposes every defect in
+   * it at once, so the defects go first.
+   */
+  if (relPath.split(/[\\/]/).some((seg) => seg === ".." || seg === "") || path.isAbsolute(relPath)) {
+    throw new Error(`config write refused: ${JSON.stringify(relPath)} is not a repo-relative path (SEC-3)`);
+  }
   const target = path.join(deps.root, ...relPath.split("/"));
 
   if (existsSync(target)) {

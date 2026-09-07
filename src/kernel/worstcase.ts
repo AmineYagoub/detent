@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ROLE_IDS } from "../schemas/roles.js";
 import { budgetsSchema, type Budgets } from "../schemas/budgets.js";
 import { SCHEMA_VERSION, glob, nonEmptyString } from "../schemas/common.js";
 import type { State } from "../schemas/states.js";
@@ -172,7 +173,26 @@ const configSchema = z.strictObject({
     .refine((v) => v.max >= v.min, "slice_size.max must be at least slice_size.min")
     .default({ min: 12, max: 18 }),
   risk: z.array(glob).default([]),
-  model_routing: z.record(z.string(), nonEmptyString).default({}),
+  /**
+   * PRDR-142: the KEYS are roles. This accepted any string, and `roles.ts`
+   * claims the typing makes a bad role "a compile error here, not a silent
+   * runtime default" — true of `DEFAULT_MODEL_ROUTING`, false of the config a
+   * human edits, which `cli/init.ts` explicitly invites them to edit. A typo
+   * routed that role to the runtime default forever, at whatever the runtime
+   * charges, with nothing printed and no `doctor` check.
+   */
+  model_routing: z
+    .record(z.string(), nonEmptyString)
+    .default({})
+    .superRefine((routing, ctx) => {
+      for (const key of Object.keys(routing)) {
+        if (ROLE_IDS.includes(key as (typeof ROLE_IDS)[number])) continue;
+        ctx.addIssue({
+          code: "custom",
+          message: `model_routing has no role \`${key}\` — expected one of ${ROLE_IDS.join(", ")}`,
+        });
+      }
+    }),
   pinned: z.strictObject({
     agent_sdk: nonEmptyString,
     claude_code: nonEmptyString,

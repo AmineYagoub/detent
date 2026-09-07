@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
+import { detectWorkspace, preferOrchestrator, workspaceNotice } from "../workspace.js";
 import path from "node:path";
 import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { goEngine } from "./go.js";
@@ -89,10 +90,21 @@ export function discover(root: string): Discovery {
   const candidates: Candidate[] = [];
   for (const engine of ENGINES) candidates.push(...engine.discover(facts));
   candidates.sort(compareCandidates);
+  /**
+   * PRDR-141: prefer the orchestrator's ROOT command where one exists.
+   *
+   * `adapter/workspace.ts` has been implemented, tested and documented since
+   * T-021 with no caller, so on a turbo/nx/lerna/pnpm-workspace repository
+   * Detent bound a per-package command instead of the root one and the notice
+   * explaining that gates run workspace-wide never printed. Its own header
+   * states the rule this line finally applies.
+   */
+  const workspace = detectWorkspace(facts);
   return {
     schema_version: SCHEMA_VERSION,
     stack: { markers: facts.markers, pm: facts.pm },
-    candidates,
+    candidates: preferOrchestrator(candidates, workspace),
+    ...(workspace === null ? {} : { workspace_notice: workspaceNotice(workspace) }),
   };
 }
 

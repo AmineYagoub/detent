@@ -31,7 +31,7 @@ describe("PRDR-096 doctor reads the real installed SDK version", () => {
    */
   it("resolves a version without throwing, and the pin check actually runs", async () => {
     const root = await fixture();
-    const report = await doctor(root, { env: {} });
+    const report = await doctor(root, {});
     const check = named(report, "agent-sdk-pin");
     expect(check).toBeDefined();
     expect(check?.detail).not.toContain("is not defined by");
@@ -45,10 +45,10 @@ describe("T-050 pin checks (S-5)", () => {
   it("a matching SDK pin passes; a mismatch fails naming BOTH versions", async () => {
     /** fixture pins agent_sdk 0.3.258 == installed */
     const root = await fixture();
-    const ok = await doctor(root, { installedSdkVersion: () => "0.3.258", env: {} });
+    const ok = await doctor(root, { installedSdkVersion: () => "0.3.258" });
     expect(named(ok, "agent-sdk-pin")?.ok).toBe(true);
 
-    const bad = await doctor(root, { installedSdkVersion: () => "0.4.0", env: {} });
+    const bad = await doctor(root, { installedSdkVersion: () => "0.4.0" });
     const check = named(bad, "agent-sdk-pin");
     expect(check?.ok).toBe(false);
     expect(check?.detail).toContain("0.3.258");
@@ -60,7 +60,7 @@ describe("T-050 pin checks (S-5)", () => {
     const root = await fixture();
     const backend = new MockBackend();
     /** The mock accepts any pin (version-free) — passes. */
-    const ok = await doctor(root, { backend, installedSdkVersion: () => "0.3.258", env: {} });
+    const ok = await doctor(root, { backend, installedSdkVersion: () => "0.3.258" });
     expect(named(ok, "claude-code-pin")?.ok).toBe(true);
 
     const failing = {
@@ -71,7 +71,7 @@ describe("T-050 pin checks (S-5)", () => {
         throw new Error(`backend version mismatch (S-5): pinned=${pinned} installed=9.9.9`);
       },
     };
-    const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.258", env: {} });
+    const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.258" });
     const check = named(bad, "claude-code-pin");
     expect(check?.ok).toBe(false);
     /** the pin from config */
@@ -83,7 +83,7 @@ describe("T-050 pin checks (S-5)", () => {
 describe("T-050 config reporting (X-1: the computation is authoritative)", () => {
   it("reports the computed worst case beside the configured net", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258", env: {} });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
     const check = named(report, "config");
     expect(check?.ok).toBe(true);
     /** Moved with PRDR-108/109 (three review-fix rounds, one review relaunch per entry). */
@@ -94,7 +94,7 @@ describe("T-050 config reporting (X-1: the computation is authoritative)", () =>
   it("a missing config is a failing check, not a crash", async () => {
     const root = await fixture();
     rmSync(`${root}/.detent/config.json`);
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258", env: {} });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
     expect(named(report, "config")?.ok).toBe(false);
     expect(report.exitCode).toBe(1);
   });
@@ -103,15 +103,21 @@ describe("T-050 config reporting (X-1: the computation is authoritative)", () =>
 describe("T-050 WebFetch rule form (S-3/PRDR-050)", () => {
   it("the composed domain-scoped form matches the pinned syntax", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258", env: {} });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
     expect(named(report, "webfetch-rule-form")?.ok).toBe(true);
   });
 });
 
 describe("T-050 smoke session (R-10)", () => {
-  it("without a key the smoke SKIPS with the reason — the mock suite stays green keyless", async () => {
+  /**
+   * PRDR-141: the gate is the BACKEND, not the key. It used to test
+   * `env["ANTHROPIC_API_KEY"]`, stale since the transports broadened to three,
+   * and this test supplied a backend while calling itself "without a key" — so
+   * it asserted the skip through a condition that no longer decides it.
+   */
+  it("without a live backend the smoke SKIPS with the reason — the mock suite stays green", async () => {
     const root = await fixture();
-    const report = await doctor(root, { backend: new MockBackend(), installedSdkVersion: () => "0.3.258", env: {} });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
     const check = named(report, "smoke-session");
     expect(check?.ok).toBe(true);
     expect(check?.detail).toContain("R-10");
@@ -122,8 +128,7 @@ describe("T-050 smoke session (R-10)", () => {
     const backend = new MockBackend({ review: () => okResult({ costEstimateUsd: 0.0003, turns: 1 }) });
     const report = await doctor(root, {
       backend,
-      installedSdkVersion: () => "0.3.258",
-      env: { ANTHROPIC_API_KEY: "test-key" },
+      installedSdkVersion: () => "0.3.258"
     });
     const check = named(report, "smoke-session");
     expect(check?.ok).toBe(true);
@@ -135,8 +140,7 @@ describe("T-050 smoke session (R-10)", () => {
     const failing = new MockBackend({ review: () => okResult({ telemetryParsed: false }) });
     const bad = await doctor(root, {
       backend: failing,
-      installedSdkVersion: () => "0.3.258",
-      env: { ANTHROPIC_API_KEY: "test-key" },
+      installedSdkVersion: () => "0.3.258"
     });
     expect(named(bad, "smoke-session")?.ok).toBe(false);
     expect(bad.exitCode).toBe(1);
@@ -144,7 +148,7 @@ describe("T-050 smoke session (R-10)", () => {
 
   it("renderDoctor marks failures loudly", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "9.9.9", env: {} });
+    const report = await doctor(root, { installedSdkVersion: () => "9.9.9" });
     const rendered = renderDoctor(report);
     expect(rendered).toContain("[FAIL] agent-sdk-pin");
     expect(rendered).toContain("[ok] config");

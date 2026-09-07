@@ -54,6 +54,17 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const root = positionals[0] ?? process.cwd();
   const maxTickets = values["max-tickets"] === undefined ? undefined : Number(values["max-tickets"]);
+  /**
+   * PRDR-142: a bound that cannot be read is refused, not dropped.
+   * `--max-tickets tenn` yielded `NaN`, the option was silently omitted below,
+   * and the FULL pool ran against the full spend ceiling — having been asked
+   * for a limit. `cli/init.ts` validates `--spend-cap-usd` and exits 1; the
+   * same care simply was not applied here.
+   */
+  if (maxTickets !== undefined && (!Number.isInteger(maxTickets) || maxTickets <= 0)) {
+    process.stderr.write("--max-tickets must be a positive whole number\n");
+    return EXIT_ERROR;
+  }
   const backend = values.backend === "mock" ? new MockBackend() : buildLiveBackend(root);
   /**
    * C-14″: a fixture run writes real ledger rows and real journal events against
@@ -80,7 +91,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     worktree: values.worktree === true && values["no-worktree"] !== true,
     announce: (message) => process.stdout.write(`${message}\n`),
     ...(interactive ? { escalate: makeTtyEscalation(process.env["USER"] ?? "operator") } : {}),
-    ...(maxTickets === undefined || Number.isNaN(maxTickets) ? {} : { maxTickets }),
+    ...(maxTickets === undefined ? {} : { maxTickets }),
   });
 
   if (outcome.exitCode === 10 || outcome.exitCode === 2 || outcome.exitCode === 1) {

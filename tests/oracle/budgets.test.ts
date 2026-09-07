@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ALL_CEILING_KEYS,
@@ -41,9 +42,23 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(countReviewFix(countReviewFix(ZERO_COUNTERS)).review_fix_attempts).toBe(2);
   });
 
-  it("every X-1 ceiling has a named enforcement site — no ceiling routes nowhere (P6)", () => {
+  /**
+   * PRDR-142: this asserted `toBeTruthy()` over a record declared
+   * `satisfies Record<CeilingKey, string>`, plus that its keys equal the
+   * ceiling keys — both facts TypeScript already guarantees at compile time,
+   * re-asserted at runtime. So it could not notice that an entry had become
+   * untrue, and one had: `ticket_wall_clock_ms` still said `kernel/run` after
+   * X-1⁗ moved that enforcement to the launch seam. A map read as
+   * documentation is worse than no map when it documents the wrong module.
+   */
+  it("every X-1 ceiling's named site actually reads that ceiling (P6)", () => {
     for (const key of ALL_CEILING_KEYS) {
-      expect(ENFORCEMENT_SITES[key], `${key} has no enforcement site`).toBeTruthy();
+      const site = ENFORCEMENT_SITES[key];
+      expect(site, `${key} has no enforcement site`).toBeTruthy();
+      /* The one honest exception, and the map says so beside it. */
+      if (key === "turns_per_stage") continue;
+      const source = readFileSync(new URL(`../../src/${site}.ts`, import.meta.url), "utf8");
+      expect(source, `${site} is named as enforcing ${key} but never mentions it`).toContain(key);
     }
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());
   });

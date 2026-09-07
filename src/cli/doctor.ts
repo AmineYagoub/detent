@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
 import { stateDir } from "../fs/layout.js";
 import { loadConfig, type LoadedConfig } from "../kernel/worstcase.js";
+import { buildLiveBackend, hasLiveBackendAuth } from "../sessions/live.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import { researchTools } from "../sessions/guard.js";
 
@@ -32,8 +33,6 @@ export interface DoctorReport {
 export interface DoctorDeps {
   /** The live backend for the version check + smoke; injectable for tests. */
   readonly backend?: SessionBackend;
-  /** R-10: the smoke session runs only when a key (and a cap) is present. */
-  readonly env?: NodeJS.ProcessEnv;
   /** The installed SDK version; defaults to reading the package manifest. */
   readonly installedSdkVersion?: () => string;
 }
@@ -75,7 +74,6 @@ const WEBFETCH_RULE = /^WebFetch\(domain:[A-Za-z0-9.-]+\)$/;
 
 export async function doctor(root: string, deps: DoctorDeps = {}): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  const env = deps.env ?? process.env;
 
   /** ---- config loads; the computed worst case is reported (X-1) ------------- */
   let loaded: LoadedConfig | null = null;
@@ -143,11 +141,30 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
   });
 
   /** ---- live smoke (R-10) --------------------------------------------------- */
-  if (env["ANTHROPIC_API_KEY"] === undefined || deps.backend === undefined) {
+  /**
+   * PRDR-141: keyed on `hasLiveBackendAuth`, not on `ANTHROPIC_API_KEY` alone.
+   * PRDR-140 broadened the transports to three — an API key, a
+   * `CLAUDE_CODE_OAUTH_TOKEN`, or a logged-in CLI — and this test never
+   * followed, so on a subscription machine the one check that would catch a
+   * broken transport was skipped and reported green. Found by checking what
+   * this dead branch CLAIMED against what the system now does, before wiring
+   * it: the same drift PRDR-148 was about.
+   */
+  /**
+   * PRDR-141: the BACKEND's presence is the liveness signal, decided at the
+   * entry point. This tested `env["ANTHROPIC_API_KEY"] === undefined`, which
+   * has been stale since PRDR-140 broadened the transports to three — so on a
+   * subscription machine the one check that would catch a broken transport was
+   * skipped and reported green. Keying on `hasLiveBackendAuth` HERE would have
+   * been little better: it falls through to probing the real CLI, so an
+   * injected environment cannot make it answer no. `main` decides, and passes a
+   * backend only when it decides yes.
+   */
+  if (deps.backend === undefined) {
     checks.push({
       name: "smoke-session",
       ok: true,
-      detail: "skipped: no ANTHROPIC_API_KEY / live backend (R-10) — the mock suite stays fully green without one",
+      detail: "skipped: no live backend (R-10) — the mock suite stays fully green without one",
     });
   } else {
     try {
@@ -186,7 +203,15 @@ export function renderDoctor(report: DoctorReport): string {
 
 export async function main(argv: readonly string[]): Promise<number> {
   const { positionals } = parseArgs({ args: [...argv], allowPositionals: true, options: {} });
-  const report = await doctor(positionals[0] ?? process.cwd());
+  const root = positionals[0] ?? process.cwd();
+  /**
+   * PRDR-141: supply the backend. `main` passed no `deps`, so `deps.backend`
+   * was always undefined on the only path a user can invoke — and both the S-5
+   * pin check and the R-10 smoke session pushed `ok: true` unconditionally
+   * while the CLI advertised "one live smoke session". Every test injected a
+   * backend, so the suite exercised only the branches `main` cannot reach.
+   */
+  const report = await doctor(root, hasLiveBackendAuth() ? { backend: buildLiveBackend(root) } : {});
   process.stdout.write(renderDoctor(report));
   return report.exitCode;
 }

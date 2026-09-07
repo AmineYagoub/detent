@@ -38,7 +38,15 @@ export const COMMAND_TEMPLATES: readonly CommandTemplate[] = [
   {
     id: "npm-install-package",
     category: "dependency-install",
-    pattern: /^npm install (?:--save-dev |-D )?[@a-z0-9._/-]+$/i,
+    /**
+     * PRDR-141: a package NAME, never a path. The character class admitted `/`
+     * and `.`, so `npm install ../../evil` matched — and npm runs a local
+     * package's lifecycle scripts, which is arbitrary execution through a rule
+     * whose whole purpose is to bound what may run. Latent today because the
+     * consent engine is unwired (C-6a/T-065); fixed before it is, because
+     * wiring a control exposes every defect in it at once (PRDR-148).
+     */
+    pattern: /^npm install (?:--save-dev |-D )?(?!\.)(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.^~*-]+)?$/i,
     description: "install a named node package through npm",
   },
   {

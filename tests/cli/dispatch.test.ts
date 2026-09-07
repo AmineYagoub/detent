@@ -51,3 +51,39 @@ describe("detent CLI dispatch", () => {
     }
   });
 });
+
+/**
+ * PRDR-141 — routed, asserted at the DISPATCHER.
+ *
+ * `verifySync` was implemented, tested and documented since T-027 and absent
+ * from `VERBS` the whole time, while `adapter/drift.ts` tells an operator to
+ * run it to clear a drift halt. Every drift-blocked ticket was therefore stuck
+ * behind an instruction that answered `unknown command`. Asserting through
+ * `main` is the point: the function had tests, and the routing did not.
+ */
+describe("PRDR-141 the sanctioned drift recovery is reachable", () => {
+  it("`detent verify` routes rather than answering `unknown command`", async () => {
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      const code = await main(["verify"]);
+      const text = err.mock.calls.join("") + out.mock.calls.join("");
+      expect(text, "the dispatcher must know this verb").not.toContain("unknown command");
+      expect(text).toContain("detent verify sync");
+      expect(code).toBe(2);
+    } finally {
+      err.mockRestore();
+      out.mockRestore();
+    }
+  });
+
+  it("the usage banner and the README both name it, and now so does the table", async () => {
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      await main(["--help"]);
+      expect(out.mock.calls.join("")).toContain("verify");
+    } finally {
+      out.mockRestore();
+    }
+  });
+});

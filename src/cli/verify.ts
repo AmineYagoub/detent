@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import { discover } from "../adapter/discover/index.js";
 import { bindAll, type BindOptions, type BindReport } from "../adapter/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
@@ -85,4 +86,66 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   }
   messages.push(`re-baselined ${report.bindings.length} binding(s).`);
   return { exitCode: EXIT_OK, summary, rebaselined: true, messages };
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The verb (PRDR-141)
+ */
+
+/**
+ * V-3 (PRDR-141): `detent verify sync`, routed at last.
+ *
+ * `verifySync` has been implemented, tested and documented since T-027, and
+ * absent from the dispatcher the whole time — while `adapter/drift.ts` tells an
+ * operator to run it to clear a drift halt. Every drift-blocked ticket has
+ * therefore been stuck behind an instruction that answers `unknown command`.
+ *
+ * The consent is a real prompt on a TTY and a refusal elsewhere: re-baselining
+ * a verification binding is a human decision (C-6a), and a non-interactive
+ * caller must not be taken to have made it.
+ */
+export async function main(argv: readonly string[]): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    allowPositionals: true,
+    options: { yes: { type: "boolean", default: false } },
+  });
+  const [sub, maybeRoot] = positionals;
+  if (sub !== "sync") {
+    process.stderr.write("usage: detent verify sync [root] [--yes]\n");
+    return 2;
+  }
+  const root = maybeRoot ?? process.cwd();
+  const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
+
+  const result = await verifySync(root, {
+    user: process.env["USER"] ?? "operator",
+    consent: async (summary) => {
+      if (values.yes === true) return true;
+      if (!interactive) {
+        process.stderr.write(
+          "re-baselining a verification binding is a human decision (C-6a) — re-run on a terminal, or pass --yes.\n",
+        );
+        return false;
+      }
+      process.stdout.write(`${renderSyncSummary(summary)}\nAccept these bindings? [y/N] `);
+      return await new Promise<boolean>((resolve) => {
+        process.stdin.setEncoding("utf8");
+        process.stdin.once("data", (chunk) => {
+          resolve(String(chunk).trim().toLowerCase().startsWith("y"));
+        });
+      });
+    },
+  });
+  for (const message of result.messages) process.stdout.write(`${message}\n`);
+  return result.exitCode;
+}
+
+/** What a human is shown before they accept a re-baseline. */
+export function renderSyncSummary(summary: SyncSummary): string {
+  const lines = ["", "verification bindings to re-baseline (V-3):"];
+  for (const check of summary.drift) lines.push(`  [${check.status}] ${check.message}`);
+  for (const b of summary.proposed) lines.push(`  ${b.slot}: \`${b.resolved}\` (${b.adapter}:${b.ref})`);
+  return lines.join("\n");
 }

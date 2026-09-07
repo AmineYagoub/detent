@@ -1,5 +1,6 @@
 import { main as initMain } from "./init.js";
 import { main as refereeMain } from "./referee.js";
+import { main as verifyMain } from "./verify.js";
 import { main as runMain } from "./run.js";
 import { main as statusMain } from "./status.js";
 import { main as reportMain } from "./report.js";
@@ -28,6 +29,8 @@ const VERBS: Record<string, Verb> = {
   unclaim: unclaimMain,
   init: initMain,
   referee: refereeMain,
+  /** V-3 (PRDR-141): the sanctioned drift recovery, which `drift.ts` has always named and the table never routed. */
+  verify: verifyMain,
 };
 
 const USAGE = `detent <command>
@@ -40,6 +43,7 @@ const USAGE = `detent <command>
   approve <id>         re-enter APPROVED for kernel re-verification (plumbing)
   requeue <id>         open a fresh attempt generation (plumbing)
   unclaim <id>|--stale release a dead owner claim lock (plumbing)
+  verify sync [root]   re-baseline drifted verification bindings (plumbing, V-3)
   referee --root <p>   serve the R-1 tool set over MCP stdio (plumbing, MP1's plugin entry)
 `;
 
