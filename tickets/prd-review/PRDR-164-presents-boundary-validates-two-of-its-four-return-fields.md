@@ -7,7 +7,7 @@ category: defect
 labels: ["prd-review", "found-by-audit"]
 surface: ["src/init/present.ts", "tests/init/slicing.test.ts"]
 prd_refs: ["C-8", "F-4"]
-acceptance_criteria: ["Every field the builder returns is renderable, element by element, not merely an array — which is what its own comment already claims.", "The test's foreign-shape list covers element-level shapes for all four fields, and each new case is observed to throw before the fix."]
+acceptance_criteria: ["Every field the builder returns is renderable, element by element, not merely an array — which is what its own comment already claims. That is FIVE fields, not four: `gateNotices` was added by PRDR-163 in the same commit.", "The foreign-shape list covers element-level shapes for every field. Two of the four cases added for this ticket (`review_findings: [{}, \"a string\"]` and `derived_edges: [{consumer}]`) pass against the unfixed code and are over-correction guards, not reproductions — labelled as such rather than counted as evidence (V-6)."]
 non_goals: []
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-157", "PRDR-144"]
@@ -17,6 +17,12 @@ depends_on: []
 # PRDR-164 — "returns something renderable or nothing", for half its fields
 
 **Severity:** major · **Category:** defect · **Found by:** the audit of `bdafdb5`
+
+> **PRDR-165 correction.** This ticket's second acceptance criterion claimed every new case was
+> observed to throw before the fix. Two of the four were not — they pass against the unfixed
+> builder and guard against over-correction instead. The criterion above now says so. The field
+> count was also wrong: the builder returns five fields, and the fifth was added by the sibling
+> ticket in the same commit.
 
 ## Problem
 

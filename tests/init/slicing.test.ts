@@ -535,9 +535,23 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
      * its return value, and the renderer still died on `[null]`.
      */
     { PLAN: { review_findings: [null] } },
-    { PLAN: { review_findings: [{}, "a string"] } },
     { PLAN: { derived_edges: [null] } },
+    /**
+     * PRDR-165: these two pass against the UNFIXED builder. They guard against
+     * over-correction rather than reproducing a defect, and are labelled so
+     * rather than counted as evidence — the ticket claimed all four were
+     * observed to throw first, and two were not (V-6).
+     */
+    { PLAN: { review_findings: [{}, "a string"] } },
     { PLAN: { derived_edges: [{ consumer: "t-1" }] } },
+    /**
+     * PRDR-165: the FIFTH field. `gateNotices` was added by the sibling ticket
+     * in the same commit and the list still covered four — the exact
+     * field-count omission PRDR-164 exists to fix, against the field added
+     * beside it.
+     */
+    { DETERMINE_VERIFICATION: { gate_notices: "not an array" } },
+    { DETERMINE_VERIFICATION: { gate_notices: [null, 7, { a: 1 }] } },
   ];
 
   it("survives outputs that are missing, empty, or the wrong shape", () => {

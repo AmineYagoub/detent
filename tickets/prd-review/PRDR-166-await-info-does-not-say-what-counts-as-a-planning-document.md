@@ -1,5 +1,5 @@
 ---
-id: PRDR-103
+id: PRDR-166
 title: "AWAIT_INFO tells the operator to answer in the planning documents without saying what DISCOVER will accept as one"
 state: READY
 severity: minor
@@ -14,7 +14,11 @@ links: ["PRDR-101"]
 depends_on: []
 ---
 
-# PRDR-103 — AWAIT_INFO does not say what counts as a planning document
+# PRDR-166 — AWAIT_INFO does not say what counts as a planning document
+
+> **Renumbered by PRDR-165.** This was filed as PRDR-103, an id already held by "an acceptance
+> criterion can depend on a ticket scheduled after it" — which is what `C-4‴` in the PRD and the
+> links in PRDR-111, 117 and 120 all mean by PRDR-103. Nothing referenced this one, so it moves.
 
 **Severity:** minor · **Category:** usability · **Found by:** answering an AWAIT_INFO
 question during the PRDR-101 replan

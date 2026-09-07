@@ -68,9 +68,10 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
 
   /**
    * PRDR-156: the redactor is injected (N-1 keeps `scrub` out of the adapter),
-   * and `bindAll`'s default is identity — so proving `vacuousGateNotices` can
-   * scrub proves nothing about whether production asks it to. This asserts on
-   * what actually reaches the operator.
+   * so proving `vacuousGateNotices` can scrub proves nothing about whether
+   * production asks it to. This asserts on what actually reaches the operator.
+   * (PRDR-163 later made it required, so the identity default this comment
+   * used to warn about no longer exists.)
    */
   it("scrubs a secret the gate echoed, on the path the operator actually sees", async () => {
     const shown = await noticesShownTo(repoWithVacuousTest("echo token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
@@ -103,6 +104,36 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
     expect(rendered, "the summary an operator approves must carry the warning").toContain("may verify nothing");
     expect(rendered).toContain("exits 0 having done nothing");
   });
+
+  /**
+   * PRDR-165: through `presentPhase.run`, not a hand-composed render.
+   *
+   * The first version of this composed `renderPresentation(
+   * presentInputsFromOutputs(…))` directly — one layer below the pipeline
+   * spread that carries the field — so deleting that spread left the suite
+   * green. That is verbatim the defect this feature has now shipped three
+   * times: an assertion one hop below the hop that drops it.
+   */
+  it("carries the notice through the PRESENT pipeline hop, not just the builder", async () => {
+    const root = repoWithVacuousTest("echo 'no tests here'");
+    let shown = "";
+    const handlers = buildPipeline({
+      root,
+      backend: new MockBackend(),
+      prompts: PROMPTS,
+      budgets: BUDGETS,
+      print: (text) => {
+        shown += text;
+      },
+    });
+    const determine = handlers.find((h) => h.phase === "DETERMINE_VERIFICATION");
+    const present = handlers.find((h) => h.phase === "PRESENT");
+    if (determine === undefined || present === undefined) throw new Error("missing handler");
+    const determined = await determine.run({ root, outputs: {}, now: () => 0 });
+    if (determined.kind !== "complete") throw new Error(`DETERMINE_VERIFICATION did not complete: ${determined.kind}`);
+    await present.run({ root, outputs: { DETERMINE_VERIFICATION: determined.outputs }, now: () => 0 });
+    expect(shown, "the summary the operator approves must carry the warning").toContain("may verify nothing");
+  }, 20_000);
 
   it("says nothing about a gate that does real work", async () => {
     const shown = await noticesShownTo(repoWithVacuousTest("node -e \"if (1 + 1 !== 2) process.exit(1)\""));

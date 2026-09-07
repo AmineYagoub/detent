@@ -23,6 +23,17 @@ interface SyncSummary {
   readonly drift: readonly DriftCheck[];
   readonly proposed: readonly Binding[];
   readonly stored: readonly Binding[];
+  /**
+   * V-1‴ (PRDR-165): bound gates that may verify nothing, IN the summary.
+   *
+   * These were pushed into `messages`, which `main` prints after `verifySync`
+   * returns — i.e. after the consent prompt and after `writeBindings`. So the
+   * operator approved a re-baseline, the halt cleared, and only then were they
+   * told the new gate is `echo`. `sync` is the one path whose purpose is
+   * accepting a CHANGED binding, which is exactly where a real gate can be
+   * swapped for a vacuous one, so this belongs in the text they decide on.
+   */
+  readonly notices: readonly string[];
 }
 
 type ConsentPrompt = (summary: SyncSummary) => Promise<boolean>;
@@ -63,14 +74,6 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
     ...(deps.now === undefined ? {} : { now: deps.now }),
   });
 
-  /**
-   * V-1‴ (PRDR-163): `sync` is the ONE path whose purpose is accepting a
-   * CHANGED verification binding, which is precisely where a real gate can be
-   * replaced by a vacuous one — and it discarded `report.notices` entirely, so
-   * it would re-baseline `"test": "echo no tests"` and say nothing.
-   */
-  for (const notice of report.notices) messages.push(notice);
-
   for (const interrupt of report.interrupts) {
     messages.push(
       interrupt.kind === "choice-required"
@@ -81,13 +84,13 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   if (report.interrupts.length > 0) {
     return {
       exitCode: EXIT_NOT_READY,
-      summary: { drift, proposed: report.bindings, stored: stored.bindings },
+      summary: { drift, proposed: report.bindings, stored: stored.bindings, notices: report.notices },
       rebaselined: false,
       messages,
     };
   }
 
-  const summary: SyncSummary = { drift, proposed: report.bindings, stored: stored.bindings };
+  const summary: SyncSummary = { drift, proposed: report.bindings, stored: stored.bindings, notices: report.notices };
   if (!(await deps.consent(summary))) {
     messages.push("sync declined — bindings unchanged, verification still halted (V-3).");
     return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
@@ -183,5 +186,10 @@ export function renderSyncSummary(summary: SyncSummary): string {
   const lines = ["", "verification bindings to re-baseline (V-3):"];
   for (const check of summary.drift) lines.push(`  [${check.status}] ${check.message}`);
   for (const b of summary.proposed) lines.push(`  ${b.slot}: \`${b.resolved}\` (${b.adapter}:${b.ref})`);
+  /** PRDR-165: before the decision, not after it. */
+  if (summary.notices.length > 0) {
+    lines.push("", `Gates that may verify nothing (${summary.notices.length}) — evidence, not a refusal (V-1‴):`);
+    for (const n of summary.notices) lines.push(`  ${n}`);
+  }
   return lines.join("\n");
 }

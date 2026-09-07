@@ -236,7 +236,6 @@ export async function bindSlot(
 }
 
 export interface BindReport {
-  readonly outcomes: readonly SlotOutcome[];
   readonly bindings: readonly Binding[];
   /** Outcomes a human must resolve: C-3b's two interrupt conditions. */
   readonly interrupts: readonly (ChoiceRequiredOutcome | RejectedOutcome)[];
@@ -293,8 +292,19 @@ export interface BindReport {
  * the text for a recipe header would work today and break on the next engine;
  * the adapter's own name is the fact, and `BoundOutcome` carries it.
  *
- * The others are `exists:<file>` (go, cargo, tsc, and pyproject's fallback):
- * the command follows from a real tool, never from a body someone wrote.
+ * The others are `exists:<file>` (go, cargo, tsc, and pyproject's fallback) —
+ * the command follows from a real tool, never from a body someone wrote — plus
+ * `pyproject`'s TOML tables and `workspace:*`'s marker strings, which are not
+ * commands at all.
+ *
+ * PRDR-165 records the one uncomfortable exclusion: `workspace:*` names
+ * `npm run test --workspaces --if-present`, which `discover/index.ts` itself
+ * describes as exiting 0 having run NOTHING when no package carries the
+ * script — "the 'greened on nothing' class V-1″ closed once already". That
+ * orchestrator form is deliberately not wired into `discover()` today, so
+ * there is no live silence; if it is ever connected, this classifier will be
+ * silent by name on the exact gate class V-1‴ exists for, and the answer is a
+ * check on the orchestrator flag rather than on a shell grammar.
  */
 const COMMAND_REGION: Readonly<Record<string, "script" | "recipe">> = {
   "node-scripts": "script",
@@ -304,6 +314,15 @@ const COMMAND_REGION: Readonly<Record<string, "script" | "recipe">> = {
 
 /** The executable half of a `config_region`, or null when this adapter has none. */
 function commandBody(candidate: Candidate): string | null {
+  /**
+   * PRDR-165: `Object.hasOwn`, because bracket access consults the prototype
+   * chain. An adapter named `constructor`, `toString`, `valueOf`,
+   * `hasOwnProperty` or `__proto__` returned a non-undefined `shape`, skipped
+   * the guard and took the recipe branch — reproducing the very defect this
+   * whitelist replaced, for eight names nobody enumerated. No engine emits one
+   * today; a whitelist that silently succeeds off-list is not a whitelist.
+   */
+  if (!Object.hasOwn(COMMAND_REGION, candidate.adapter)) return null;
   const shape = COMMAND_REGION[candidate.adapter];
   if (shape === undefined) return null;
   if (shape === "script") {
@@ -362,8 +381,14 @@ export function vacuousGateNotices(outcomes: readonly SlotOutcome[], redact: Red
      * `curl -H "Authorization: Bearer …"` is an ordinary thing to find in one
      * — and this notice quotes it back verbatim.
      */
-    /* PRDR-161: capped like the output tail — a long recipe should not go to stdout whole. */
-    const body = redact(commandBody(outcome.candidate)?.trim() ?? "").slice(0, 120);
+    /**
+     * PRDR-161: capped like the output tail — a long recipe should not go to
+     * stdout whole. PRDR-165: with a marker, because the sentence around it
+     * asserts the quoted text IS the command, and a silent truncation can drop
+     * the very statement that made it non-vacuous.
+     */
+    const full = redact(commandBody(outcome.candidate)?.trim() ?? "");
+    const body = full.length > 120 ? `${full.slice(0, 120)}…` : full;
     notices.push(
       `${outcome.slot}: \`${outcome.binding.resolved}\` runs \`${body}\` — every statement in it exits 0 having ` +
         `done nothing. It printed: ${tail === "" ? "(nothing)" : tail} (${outcome.result.durationMs}ms). ` +
@@ -379,8 +404,15 @@ export async function bindAll(discovery: Discovery, opts: BindAllOptions): Promi
   for (const slot of GATE_SLOTS) {
     outcomes.push(await bindSlot(slot, discovery.candidates, { ...opts, facts: opts.facts ?? { pm: discovery.stack.pm } }));
   }
+  /**
+   * PRDR-165: `outcomes` is gone. It had zero consumers anywhere in `src/`,
+   * `tests/` or `scripts/`, and PRDR-156 widened it to carry the `Candidate` —
+   * raw `config_region`, i.e. script bodies and TOML tables — alongside an
+   * unscrubbed `GateResult.output`. A dead field is harmless; a dead field
+   * that accumulates project text is one `JSON.stringify(report)` from being
+   * an exposure. What callers need is derived below.
+   */
   return {
-    outcomes,
     bindings: outcomes.filter((o): o is BoundOutcome => o.kind === "bound").map((o) => o.binding),
     interrupts: outcomes.filter(
       (o): o is ChoiceRequiredOutcome | RejectedOutcome => o.kind === "choice-required" || o.kind === "rejected",

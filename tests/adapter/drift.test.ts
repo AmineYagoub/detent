@@ -10,7 +10,7 @@ import {
   writeBindings,
 } from "../../src/adapter/drift.js";
 import { bindAll, type GateRunner } from "../../src/adapter/bind.js";
-import { EXIT_NOT_READY, EXIT_OK, verifySync } from "../../src/cli/verify.js";
+import { EXIT_NOT_READY, EXIT_OK, renderSyncSummary, verifySync } from "../../src/cli/verify.js";
 import { initLayout } from "../../src/fs/layout.js";
 import type { Binding } from "../../src/schemas/records.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
@@ -304,4 +304,66 @@ describe("T-027 `verify sync` (C-12)", () => {
     });
     expect(readBindings(root).skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
   });
+});
+
+/**
+ * V-1‴ (PRDR-165) — `sync` is where a real gate can be swapped for a vacuous
+ * one, so the warning has to be in the text the operator decides on.
+ *
+ * It was pushed into `messages`, which `main` prints AFTER `verifySync`
+ * returns — after the consent prompt and after `writeBindings`. The operator
+ * approved the re-baseline, the drift halt cleared, and only then were they
+ * told the new gate is `echo`.
+ */
+describe("PRDR-165 verify sync warns before the decision, not after it", () => {
+  function repoWithScript(script: string): string {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "syncy", scripts: { test: script } }, null, 2) });
+    return root;
+  }
+
+  it("puts the vacuous-gate notice in the summary the operator consents to", async () => {
+    const root = repoWithScript("vitest run");
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    /* The gate is swapped for one that verifies nothing — the case sync exists to catch. */
+    writeTree(root, { "package.json": JSON.stringify({ name: "syncy", scripts: { test: "echo no tests here" } }, null, 2) });
+
+    let sawAtConsent = "";
+    const result = await verifySync(root, {
+      consent: async (summary) => {
+        sawAtConsent = renderSyncSummary(summary);
+        return true;
+      },
+      now: NOW,
+      write: false,
+    });
+    expect(sawAtConsent, "the text the human approves must name the vacuous gate").toContain("may verify nothing");
+    expect(sawAtConsent).toContain("no tests here");
+    expect(result.rebaselined).toBe(true);
+  }, 30_000);
+
+  /**
+   * PRDR-165/M1: `verify.ts` passes `scrub`, and nothing asserted it. Every
+   * injected test caller spreads `...opts` and then overrides with identity,
+   * so the production redactor was covered by no test at all.
+   */
+  it("scrubs a secret the swapped gate echoes, on the path that prints it", async () => {
+    const root = repoWithScript("vitest run");
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    writeTree(root, {
+      "package.json": JSON.stringify({ name: "syncy", scripts: { test: "echo token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } }, null, 2),
+    });
+
+    let sawAtConsent = "";
+    await verifySync(root, {
+      consent: async (summary) => {
+        sawAtConsent = renderSyncSummary(summary);
+        return false;
+      },
+      now: NOW,
+      write: false,
+    });
+    expect(sawAtConsent, "the notice must be delivered at all").toContain("may verify nothing");
+    expect(sawAtConsent, "a secret echoed by the gate must not reach the operator").not.toContain("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    expect(sawAtConsent).toContain("REDACTED");
+  }, 30_000);
 });
