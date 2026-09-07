@@ -116,7 +116,21 @@ export class GateArm {
     }
 
     const result = await this.runScopedGates(bindings, slots, workDir);
-    if (result === null || result.green) {
+    /**
+     * V-1″ (PRDR-135): no bound gate is UNVERIFIABLE, not green. `null` here
+     * means no binding matched any requested slot, and this read it as a pass —
+     * minting a real GATE_GREEN carrying "no bound gates". A `bindings.json`
+     * deleted, gitignored or never committed therefore sent every ticket to
+     * DONE with zero verification commands executed. P2's "only exit codes
+     * count" is vacuous when nothing runs.
+     */
+    if (result === null) {
+      throw new Breach(
+        `no gate is bound for ${slots.join(", ")} — nothing would be verified. Run \`detent init\` to bind the project's ` +
+          "verification commands (V-1); a run cannot judge a diff it never tested.",
+      );
+    }
+    if (result.green) {
       return gateGreen(result);
     }
 

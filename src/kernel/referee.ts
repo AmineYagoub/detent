@@ -15,21 +15,14 @@ import {
 } from "./events.js";
 import { finalizeBootstrap } from "../init/plan.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
-import { clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
+import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
 import { requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
-import {
-  type ATTEMPT_STATES,
-  EscrowError,
-  RESUMABLE,
-  RefereeContext,
-  lastNote,
-  type CoreOptions,
-} from "./referee-context.js";
+import { Breach, EscrowError, RESUMABLE, RefereeContext, lastNote, type ATTEMPT_STATES, type CoreOptions } from "./referee-context.js";
 import { GateArm } from "./referee-gate.js";
 import { SessionArm } from "./referee-session.js";
 import { runRefereeStage } from "./referee-stage.js";
@@ -339,7 +332,20 @@ export class RefereeCore {
     const dirty = git(workDir, "status", "--porcelain").trim();
     if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
     /** B-2: worktree mode merges --no-ff into the RUN branch — never the base. */
-    if (this.ctx.worktree) mergeWorktree(this.root, ticket.id);
+    if (this.ctx.worktree) {
+      try {
+        mergeWorktree(this.root, ticket.id);
+      } catch (err) {
+        /**
+         * B-2′ (PRDR-145a): a conflict routes to the human as a breach rather
+         * than escaping as an unclassified throw. It used to exit 1 with the
+         * ticket already DONE, its work unmerged and its worktree orphaned.
+         */
+        if (!(err instanceof WorktreeConflictError)) throw err;
+        appendNote(this.root, ticket.id, { author: "kernel", text: err.message });
+        throw new Breach(err.message);
+      }
+    }
   }
 
   /* -------------------------------------------------------------- admit */

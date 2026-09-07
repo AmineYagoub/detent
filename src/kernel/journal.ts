@@ -104,7 +104,19 @@ export class RunJournal {
     let ends = 0;
     for (const line of readFileSync(file, "utf8").split("\n")) {
       if (line.trim() === "") continue;
-      const record = JSON.parse(line) as { stage?: string; event?: string; generation?: unknown };
+      /**
+       * F-3′ (PRDR-137): a torn line is skipped. This is read on the resume
+       * path a crash produces, and a crash is exactly what tears the last line
+       * of an append-only file — so an unguarded parse killed the recovery it
+       * exists to serve. `readRecordedSpend` guarded the identical parse with
+       * "a torn line cannot subtract money"; the journal readers were missed.
+       */
+      let record: { stage?: string; event?: string; generation?: unknown };
+      try {
+        record = JSON.parse(line) as typeof record;
+      } catch {
+        continue;
+      }
       if (record.stage !== role) continue;
       if ((typeof record.generation === "number" ? record.generation : 0) !== generation) continue;
       if (record.event === "start") starts += 1;

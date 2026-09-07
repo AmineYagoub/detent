@@ -29,7 +29,21 @@ export class TicketInvalidError extends Error {
 export function readTicket(root: string, id: string): Ticket {
   const p = ticketPath(root, id);
   if (!existsSync(p)) throw new TicketNotFoundError(id);
-  return unwrap(id, parseArtifact(ticketSchema, JSON.parse(readFileSync(p, "utf8"))));
+  /**
+   * F-3′ (PRDR-137): the parse is INSIDE the guard. `JSON.parse` threw a bare
+   * `SyntaxError` before `parseArtifact` ran, so `TicketInvalidError` — which
+   * exists to name the file — was never constructed. `allTickets` maps the whole
+   * directory, so one torn ticket took `ready`, `pool`, `status`, `report` and
+   * `doctor` down together with "Unexpected end of JSON input" and no filename,
+   * and an unattended run died on an unreadable error.
+   */
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(p, "utf8"));
+  } catch (err) {
+    throw new TicketInvalidError(id, `is not readable JSON (${(err as Error).message})`);
+  }
+  return unwrap(id, parseArtifact(ticketSchema, raw));
 }
 
 function unwrap(id: string, result: SchemaCheck<Ticket>): Ticket {

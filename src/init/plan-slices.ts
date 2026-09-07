@@ -35,7 +35,29 @@ export interface SlicePlan {
 const sliceCacheSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   key: z.string(),
-  tickets: z.array(z.looseObject({ id: z.string(), depends_on: z.array(z.string()).default([]), slice: z.string() })),
+  /**
+   * F-3′ (PRDR-137): the fields this file CASTS to `DraftedTicket`, validated.
+   * It checked 3 of 11 while its own header promised "a shape this does not
+   * recognise is a miss, not a crash" — so a cache from an older build, a merge
+   * or a hand edit was a HIT that crashed `init` mid-PLAN with
+   * `TypeError: t.provides is not iterable`. `sliceKey` hashes what the slice
+   * READ and not the code that read it, which is what lets an older cache still
+   * match its key.
+   */
+  tickets: z.array(
+    z.looseObject({
+      id: z.string(),
+      type: z.string(),
+      title: z.string(),
+      slice: z.string(),
+      depends_on: z.array(z.string()).default([]),
+      acceptance_criteria: z.array(z.string()).default([]),
+      non_goals: z.array(z.string()).default([]),
+      surface: z.array(z.string()).default([]),
+      provides: z.array(z.unknown()).default([]),
+      consumes: z.array(z.unknown()).default([]),
+    }),
+  ),
   questions: z.array(planQuestionSchema),
   remaining: z.array(z.looseObject({ tag: z.string(), finding: z.string() })),
   /**

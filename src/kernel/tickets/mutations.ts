@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { ticketSchema, type Generation, type Ticket } from "../../schemas/ticket.js";
 import type { ContractConsume, ContractProvide } from "../../schemas/init.js";
@@ -88,7 +88,16 @@ export function release(root: string, id: string): void {
 export function writeTicket(root: string, ticket: Ticket): Ticket {
   const validated = ticketSchema.parse(ticket);
   mkdirSync(ticketsDir(root), { recursive: true });
-  writeFileSync(ticketPath(root, validated.id), `${JSON.stringify(validated, null, 2)}\n`);
+  /**
+   * F-3′ (PRDR-137): temp file plus rename. This truncated in place on every
+   * transition, counter bump and note — thousands of writes per run — so a kill
+   * between the truncate and the write left a zero-byte ticket, and `allTickets`
+   * maps the whole directory.
+   */
+  const target = ticketPath(root, validated.id);
+  const tmp = `${target}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(validated, null, 2)}\n`);
+  renameSync(tmp, target);
   return validated;
 }
 

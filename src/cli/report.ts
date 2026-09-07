@@ -155,7 +155,14 @@ function crashResume(root: string, tickets: readonly ReturnType<typeof allTicket
     const lines = readFileSync(journal, "utf8")
       .split("\n")
       .filter((l) => l.trim() !== "")
-      .map((l) => JSON.parse(l) as { stage?: string; event?: string });
+      /* F-3′ (PRDR-137): a torn last line must not take `detent report` with it. */
+    .map((l) => {
+      try {
+        return JSON.parse(l) as { stage?: string; event?: string };
+      } catch {
+        return {};
+      }
+    });
     if (!lines.some((l) => l.event === "skipped_after_crash")) continue;
     crashes += 1;
     const blindStarts = lines.filter((l) => l.stage === "blind_fix" && l.event === "start").length;

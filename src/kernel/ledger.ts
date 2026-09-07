@@ -48,9 +48,20 @@ export class SpendLedger {
     return this.accumulated;
   }
 
-  /** D-25: evaluated at session launch, never mid-flight. */
+  /**
+   * D-25: evaluated at session launch, never mid-flight.
+   *
+   * X-1‴ (PRDR-136): re-reads the FILE. `accumulated` was seeded once at
+   * construction and incremented in memory, so two runs on one root each
+   * enforced the full ceiling and jointly spent past it — silently, because
+   * per-ticket claims correctly kept them off the same ticket, so nothing else
+   * looked wrong. A launch gate fires a few dozen times a run; the file is the
+   * shared truth and reading it is not the expensive part of a session.
+   */
   assertLaunchAllowed(): void {
-    if (this.accumulated >= this.ceiling) throw new SpendExhaustedError(this.accumulated, this.ceiling);
+    const spent = Math.max(this.accumulated, readRecordedSpend(this.root));
+    this.accumulated = spent;
+    if (spent >= this.ceiling) throw new SpendExhaustedError(spent, this.ceiling);
   }
 
   /**
@@ -85,19 +96,46 @@ export class SpendLedger {
   }
 }
 
-/** The whole file: cumulative across generations and resumed runs (X-8). */
+/**
+ * The whole file: cumulative across generations and resumed runs (X-8).
+ *
+ * X-1‴ (PRDR-136): every row is VALIDATED with the schema that wrote it. This
+ * was `JSON.parse(line) as { cost_estimate_usd?: number }` followed by
+ * `?? 0` — so a string cost concatenated (`5, "5", 3` gives `"553"`, not 13),
+ * a negative subtracted, and `1e999` became `Infinity` and refused every
+ * launch. The write side is strict (`journal.ts`) and its test covers only the
+ * write; this is the cross-generation financial backstop and was the looser
+ * half. A row that does not validate is a halt, not a zero.
+ *
+ * The torn-LAST-line tolerance stays: that is the one shape a crash actually
+ * produces, and the justification for it was always sound.
+ */
 export function readRecordedSpend(root: string): number {
   const file = path.join(stateDir(root), "ledger.jsonl");
   if (!existsSync(file)) return 0;
+  const lines = readFileSync(file, "utf8").split("\n");
   let total = 0;
-  for (const line of readFileSync(file, "utf8").split("\n")) {
+  for (const [index, line] of lines.entries()) {
     if (line.trim() === "") continue;
+    let raw: unknown;
     try {
-      const row = JSON.parse(line) as { cost_estimate_usd?: number };
-      total += row.cost_estimate_usd ?? 0;
+      raw = JSON.parse(line);
     } catch {
-      /* a torn line cannot subtract money; N-5 reconstruction reports it */
+      /* A torn line cannot subtract money — but only the LAST one can be torn by a crash. */
+      if (lines.slice(index + 1).every((rest) => rest.trim() === "")) continue;
+      throw new Error(
+        `.detent/ledger.jsonl line ${index + 1} is unparseable and is not the last line — the spend record is damaged, ` +
+          "and a run cannot be bounded by a total it cannot read (X-1).",
+      );
     }
+    const parsed = ledgerRowSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(
+        `.detent/ledger.jsonl line ${index + 1} does not validate as a ledger row (${parsed.error.issues[0]?.message ?? "invalid"}) — ` +
+          "the spend ceiling is enforced against this file and cannot trust a shape it did not write (X-1).",
+      );
+    }
+    total += parsed.data.cost_estimate_usd;
   }
   return total;
 }

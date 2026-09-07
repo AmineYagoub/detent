@@ -271,11 +271,47 @@ export function ensureWorktree(root: string, ticketId: string): string {
 }
 
 /** B-2: merged `--no-ff` into the RUN branch on DONE — never the base (P7). */
+export class WorktreeConflictError extends Error {
+  constructor(
+    readonly ticketId: string,
+    readonly conflicts: readonly string[],
+  ) {
+    super(
+      `merging ${ticketId} into the run branch conflicts${conflicts.length === 0 ? "" : ` in ${conflicts.join(", ")}`} — ` +
+        `the worktree and branch \`${TICKET_BRANCH_PREFIX}${ticketId}\` are kept for you to resolve, and the ticket ` +
+        "is not finalized. Nothing enforces surface disjointness, so two tickets can legitimately reach one file (A-1‴ " +
+        "reports the contention at plan time).",
+    );
+    this.name = "WorktreeConflictError";
+  }
+}
+
+/**
+ * B-2′ (PRDR-145a): a conflict is an OUTCOME, not a defect.
+ *
+ * This ran `git merge --no-ff` unguarded and then removed the worktree and
+ * deleted the branch unconditionally — so two tickets touching one file left
+ * the ticket DONE with its work unmerged, an orphaned worktree and a stale
+ * branch, surfacing as exit 1 from an unclassified throw. The cleanup now only
+ * happens when the merge did.
+ */
 export function mergeWorktree(root: string, ticketId: string): void {
   const wt = worktreePath(root, ticketId);
-  git(root, "merge", "--no-ff", "-q", "-m", `merge ${ticketId}`, `${TICKET_BRANCH_PREFIX}${ticketId}`);
+  const branch = `${TICKET_BRANCH_PREFIX}${ticketId}`;
+  try {
+    git(root, "merge", "--no-ff", "-q", "-m", `merge ${ticketId}`, branch);
+  } catch (err) {
+    if (gitCouldNotRun(err)) throw err;
+    const conflicts = (tryGit(root, "diff", "--name-only", "--diff-filter=U") ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "");
+    /* Leave the run branch as it was; the worktree and its branch stay for a human. */
+    tryGit(root, "merge", "--abort");
+    throw new WorktreeConflictError(ticketId, conflicts);
+  }
   git(root, "worktree", "remove", "--force", wt);
-  tryGit(root, "branch", "-q", "-D", `${TICKET_BRANCH_PREFIX}${ticketId}`);
+  tryGit(root, "branch", "-q", "-D", branch);
 }
 
 /**

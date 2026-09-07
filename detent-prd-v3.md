@@ -385,6 +385,54 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **V-1″ (3.1.1, PRDR-135).** No bound gate is UNVERIFIABLE, not green. `runScopedGates`
+  returned `null` when no binding matched any requested slot and the caller read it as a pass,
+  minting a real `GATE_GREEN` carrying the evidence string "no bound gates" — so a
+  `bindings.json` that was deleted, gitignored or never committed sent every ticket to DONE with
+  zero verification commands executed, merged each into the run branch, and exited 0. A corrupt
+  bindings file correctly threw; it was specifically ABSENCE that failed open, because
+  `readBindings` answers an empty set for a missing file and `run` checked config and approval
+  at startup but never bindings. P2's "only exit codes count" is vacuous when nothing runs.
+
+- **X-1‴ (3.1.1, PRDR-136/PRDR-147).** The run ceiling is enforced against the FILE, and a root
+  has one writer. `SpendLedger` seeded its total once at construction and thereafter counted in
+  memory, so two runs on one root each enforced the full `run_spend_usd` and jointly spent past
+  it — silently, because per-ticket claims correctly kept them off the same ticket, so nothing
+  else looked wrong. The launch gate is not hot; it re-reads. The ledger it reads is now
+  validated with the schema that wrote it, rather than cast: a string cost concatenated
+  (`5, "5", 3` → `"553"`), a negative subtracted, and `1e999` refused every launch. And a run
+  now takes an exclusive root lock on the `O_EXCL` primitive the claim mechanism already proves,
+  breakable on the same dead-pid-and-matching-host terms, so a second run REFUSES and names its
+  holder. NG4 stands — concurrent runs are not made safe, they are made to decline.
+
+- **F-3′ (3.1.1, PRDR-137).** An artifact is read with the schema that wrote it. Four were
+  validated on write and cast on read, and each failed in its own way: the slice cache
+  advertised itself as a validated trust boundary while checking 3 of 11 fields, so a cache from
+  an older build was a HIT that crashed `init` mid-PLAN; ticket writes truncated in place and
+  `readTicket` parsed OUTSIDE the guard that names the file, so one torn ticket took `ready`,
+  `pool`, `status`, `report` and `doctor` down together with no filename; and the two journal
+  readers parsed unguarded, one of which — `unfinished` — exists to be read after a crash, which
+  is exactly what tears the last line of an append-only file. The pattern to copy was already
+  present: `readCheckpoint` returns `invalid` and the caller re-executes. Crash-safe by
+  validation rather than by durability.
+
+- **S-4″ (3.1.1, PRDR-138).** A stream that ends with no result message is a CRASH on the kernel
+  path, as it already is on the init path (S-4′). It parsed as `ok: true` with
+  `telemetryParsed: false` and no `crashed` flag, so the ledger took a $0 row with no
+  `partial: "crash"`, the journal recorded a successful end for a session that died on the wire,
+  and — the part that matters — the success branch RESET the outage streak. A repeated backend
+  outage therefore could never reach `CRASH_STREAK_HALT`, and `requeueOutageVictims` never
+  recognised its victims; the operator was told "budget breach", at $0, about an outage. PRDR-090
+  and PRDR-112 exist to make an outage legible, and this was the path they did not cover.
+
+- **B-2′ (3.1.1, PRDR-145a).** A worktree merge that CONFLICTS is an outcome, not a defect.
+  `mergeWorktree` ran `git merge --no-ff` unguarded and then removed the worktree and deleted the
+  branch unconditionally, so two tickets touching one file left a ticket DONE with its work
+  unmerged, an orphaned worktree and a stale branch, surfacing as exit 1. Nothing enforces
+  surface disjointness, so this is reachable by ordinary planning. Hardened here as the
+  precondition for making per-ticket worktrees the default (PRDR-145b), because promoting a mode
+  with one happy-path test would trade a known hazard for an untested one.
+
 - **V-6 (3.1.1, PRDR-150).** A test that would pass WITHOUT the change it ships with is not
   evidence that the change works, and Detent checks it mechanically. After a green gate, when a
   ticket's diff touches both source and test files, the SOURCE half is reverted, the bound test

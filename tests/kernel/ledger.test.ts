@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RunJournal } from "../../src/kernel/journal.js";
@@ -8,7 +8,7 @@ import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { ledgerRowSchema } from "../../src/schemas/records.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
-import { removeTree, writeTree } from "../helpers.js";
+import { removeTree, tmpTree, writeTree } from "../helpers.js";
 import { addTicket, implementRed, makeRunRepo } from "./run-fixture.js";
 
 /** T-048 — the ledger and the cross-generation spend backstop (S-4, X-8, D-25). */
@@ -165,5 +165,63 @@ describe("T-048 field discipline (S-4, PRDR-052/053)", () => {
     } finally {
       journal.close();
     }
+  });
+});
+
+/**
+ * X-1‴ (PRDR-136) — the READ path is as strict as the write.
+ *
+ * `readRecordedSpend` was `JSON.parse(line) as { cost_estimate_usd?: number }`
+ * followed by `?? 0`, and it is the cross-generation financial backstop the
+ * D-25 launch gate compares against. The existing test above covers `record`,
+ * the write side, on files the code itself wrote.
+ */
+describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () => {
+  const row = (over: Record<string, unknown>): string =>
+    JSON.stringify({
+      at: "2026-09-01T00:00:00.000Z",
+      ticket: "t-1",
+      generation: 0,
+      role: "implement",
+      cost_estimate_usd: 1,
+      input_tokens: 1,
+      output_tokens: 1,
+      turns: 1,
+      ...over,
+    });
+
+  function rootWith(lines: string[]): string {
+    const root = tmpTree({});
+    roots.push(root);
+    mkdirSync(path.join(root, ".detent"), { recursive: true });
+    writeFileSync(path.join(root, ".detent", "ledger.jsonl"), `${lines.join("\n")}\n`);
+    return root;
+  }
+
+  it("sums valid rows", () => {
+    expect(readRecordedSpend(rootWith([row({ cost_estimate_usd: 5 }), row({ cost_estimate_usd: 3 })]))).toBe(8);
+  });
+
+  it("refuses a string cost rather than concatenating it", () => {
+    /* `5 + "5" + 3` produced the string "553", which then compared against the ceiling. */
+    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: 5 }), row({ cost_estimate_usd: "5" })]))).toThrow(/does not validate/);
+  });
+
+  it("refuses a negative cost rather than subtracting it", () => {
+    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: -1000 })]))).toThrow(/does not validate/);
+  });
+
+  it("still tolerates a torn LAST line — the one shape a crash produces", () => {
+    const root = rootWith([row({ cost_estimate_usd: 4 })]);
+    appendFileSync(path.join(root, ".detent", "ledger.jsonl"), '{"at":"2026-09-01T00:00:0');
+    expect(readRecordedSpend(root)).toBe(4);
+  });
+
+  it("refuses a torn line that is NOT last — that is damage, not a crash", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    mkdirSync(path.join(root, ".detent"), { recursive: true });
+    writeFileSync(path.join(root, ".detent", "ledger.jsonl"), `{"at":"tor\n${row({ cost_estimate_usd: 4 })}\n`);
+    expect(() => readRecordedSpend(root)).toThrow(/not the last line/);
   });
 });

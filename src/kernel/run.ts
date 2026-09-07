@@ -5,6 +5,8 @@ import { parseArtifact } from "../schemas/common.js";
 import { approvalSchema } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
+import { readBindings } from "../adapter/drift.js";
+import { acquireRunLock, runLockRefusal } from "./run-lock.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
 import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
@@ -109,11 +111,34 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   const { root } = opts;
   const approval = readApproval(root);
   if (approval !== "ok") return notReady(approval);
+  /**
+   * V-1″ (PRDR-135): a run with no bound test gate verifies nothing. Checked
+   * beside the config and approval preconditions, so it refuses before
+   * spending rather than at the first gate — where it used to mint a GREEN.
+   */
+  if (!readBindings(root).bindings.some((b) => b.slot === "test")) {
+    return notReady(
+      "no `test` gate is bound in .detent/bindings.json — a run would verify nothing. " +
+        "Run `detent init` to bind the project's verification commands (V-1).",
+    );
+  }
+
+
+  /**
+   * X-1‴ (PRDR-147): one run per root. Taken before the journal, so a refused
+   * second run touches nothing; released on every exit path below.
+   */
+  const lock = acquireRunLock(root);
+  if (!lock.ok) return notReady(runLockRefusal(lock.heldBy));
+  if (lock.brokeStale !== null) {
+    opts.announce?.(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)`);
+  }
 
   let journal: RunJournal;
   try {
     journal = RunJournal.open(root);
   } catch (err) {
+    lock.release();
     return notReady((err as Error).message);
   }
 
@@ -146,6 +171,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       protected: loaded.config.protected,
       risk: loaded.config.risk,
     });
+
     const core = new RefereeCore(
       {
         root,
@@ -170,6 +196,8 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
     };
   } finally {
     journal.close();
+    /** X-1‴: released on every exit path, including a throw. */
+    lock.release();
   }
 }
 

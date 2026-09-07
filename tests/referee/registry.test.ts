@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
+import { ledgerRowSchema } from "../../src/schemas/records.js";
 import { ensureRunBranch, installTrailerHook } from "../../src/kernel/git.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { RefereeCore } from "../../src/kernel/referee.js";
@@ -220,8 +221,29 @@ describe("T-104 R-4: attempt is metered", () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     addTicket(root, { id: "t-1" });
-    /** The ledger IS the record: a prior run spent past the ceiling. */
-    appendFileSync(path.join(stateDir(root), "ledger.jsonl"), `${JSON.stringify({ cost_estimate_usd: 1000 })}\n`);
+    /**
+     * The ledger IS the record: a prior run spent past the ceiling.
+     *
+     * X-1‴ (PRDR-136): a FULL row, validated by `ledgerRowSchema` on read. This
+     * used to write `{ cost_estimate_usd: 1000 }` alone — a shape the product
+     * cannot produce, since `journal.appendLedger` parses every row it writes.
+     * The fixture was only viable while the reader was an unvalidated cast.
+     */
+    appendFileSync(
+      path.join(stateDir(root), "ledger.jsonl"),
+      `${JSON.stringify(
+        ledgerRowSchema.parse({
+          at: "2026-09-01T00:00:00.000Z",
+          ticket: "t-0",
+          generation: 0,
+          role: "implement",
+          cost_estimate_usd: 1000,
+          input_tokens: 10,
+          output_tokens: 10,
+          turns: 1,
+        }),
+      )}\n`,
+    );
     const core = await openCore(root);
 
     const acquired = (await callTool(core, "claim", { op: "acquire", ticket_id: "t-1" })) as { claimed_ref: string };

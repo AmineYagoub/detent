@@ -174,15 +174,26 @@ export class SessionArm {
       });
       ctx.journal.appendTicketEvent(id, { stage: role, event: "mcp_unavailable", at: ctx.iso(), servers: lost });
     }
+    /**
+     * S-4″ (PRDR-138): a stream that ended with no result message parses as
+     * `ok: true` with `telemetryParsed: false` and no `crashed` flag — so the
+     * ledger took a $0 row with no `partial: "crash"`, the journal recorded a
+     * successful end for a session that died on the wire, and the success
+     * branch below RESET the outage streak. A repeated backend outage could
+     * therefore never reach CRASH_STREAK_HALT. The init path already treats
+     * this as a death (S-4′); this brings the kernel to the same rule rather
+     * than inventing a second one.
+     */
+    const outcome = result.telemetryParsed ? result : { ...result, ok: false, crashed: true };
     const generationNow = currentGeneration(readTicket(ctx.root, id));
-    ctx.spend.record(id, generationNow.index, role, result, ctx.iso());
+    ctx.spend.record(id, generationNow.index, role, outcome, ctx.iso());
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "end",
       at: ctx.iso(),
       generation: generationNow.index,
-      ok: result.ok,
-      cost: result.costEstimateUsd,
+      ok: outcome.ok,
+      cost: outcome.costEstimateUsd,
     });
     /**
      * T-140 (PRDR-072): crashed with ZERO turns = the backend refused the
@@ -193,7 +204,7 @@ export class SessionArm {
      * (recorded above); the run halts. A crash WITH turns keeps PRDR-053's
      * behavior — real partial work exists and the tree is judged as-is.
      */
-    if (result.crashed === true && result.turns === 0) {
+    if (outcome.crashed === true && outcome.turns === 0) {
       throw new SessionRefusal(
         `backend refused ${role} session for ${id} (crashed, zero turns): ${result.rawTail.slice(-300)}`,
       );
@@ -209,7 +220,7 @@ export class SessionArm {
      * distinguishing signal is consecutiveness, so that is what is counted; any
      * session that returns real work resets it.
      */
-    if (result.crashed === true) {
+    if (outcome.crashed === true) {
       this.consecutiveCrashes += 1;
       this.streak.push({ id, role, at: ctx.iso() });
       if (this.consecutiveCrashes >= CRASH_STREAK_HALT) {

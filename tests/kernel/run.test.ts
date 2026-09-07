@@ -15,6 +15,9 @@ import {
 import { RunJournal } from "../../src/kernel/journal.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { requeueTicket } from "../../src/kernel/plumbing.js";
+import { acquireRunLock } from "../../src/kernel/run-lock.js";
+import { mkdirSync } from "node:fs";
+import { tmpTree } from "../helpers.js";
 import { prefixHash } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
@@ -165,6 +168,79 @@ describe("T-041 oracle full ladder (test_ladder_exhausts_to_needs_human_with_dos
  * remedy — could not clear it. Both halves are asserted here, because the
  * within-generation skip is B-5 working and must survive the fix.
  */
+/**
+ * Phase-2 remediation: V-1″ (PRDR-135), X-1‴ (PRDR-147), S-4″ (PRDR-138).
+ */
+describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => {
+  it("refuses at startup when no `test` gate is bound, rather than greening every gate", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    /* The gate used to read "no binding matched" as a pass and march the ticket to DONE. */
+    writeFileSync(path.join(root, ".detent", "bindings.json"), JSON.stringify({ schema_version: 1, bindings: [], skips: [] }));
+    const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
+    const outcome = await run(opts(root, backend));
+    expect(outcome.exitCode).toBe(EXIT_NOT_READY);
+    expect(JSON.stringify(outcome.summary)).toContain("no `test` gate is bound");
+    expect(readTicket(root, "t1").state).toBe("READY");
+    expect(backend.rolesLaunched()).toEqual([]);
+  });
+});
+
+describe("X-1‴ one run per root", () => {
+  it("a second run against the same root refuses and names the holder", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    const held = acquireRunLock(root);
+    expect(held.ok).toBe(true);
+    try {
+      const outcome = await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
+      expect(outcome.exitCode).toBe(EXIT_NOT_READY);
+      expect(JSON.stringify(outcome.summary)).toContain("another run holds this root");
+    } finally {
+      if (held.ok) held.release();
+    }
+  });
+
+  it("a completed run leaves no lock behind", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    await run(opts(root, new MockBackend({ implement: implementGreen, review: reviewApprove })));
+    expect(existsSync(path.join(root, ".detent", "state", "run.lock"))).toBe(false);
+  });
+
+  it("a lock left by a dead process on this host is breakable; a live one is not", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    mkdirSync(path.join(root, ".detent", "state"), { recursive: true });
+    const mine = acquireRunLock(root, { pid: 4242, alive: () => false });
+    expect(mine.ok).toBe(true);
+    /* Dead holder, same host: broken and taken. */
+    const after = acquireRunLock(root, { pid: 5, alive: () => false });
+    expect(after.ok).toBe(true);
+    expect(after.ok && after.brokeStale?.pid).toBe(4242);
+    /* Live holder: refused. */
+    expect(acquireRunLock(root, { pid: 6, alive: () => true }).ok).toBe(false);
+  });
+});
+
+describe("S-4″ a transport death is a crash, not a success", () => {
+  it("three telemetry-less sessions trip the outage halt instead of resetting it", async () => {
+    const root = await fixture();
+    for (const id of ["t1", "t2", "t3", "t4"]) addTicket(root, { id });
+    /* `ok: true, telemetryParsed: false` is what a stream ending with no result message parses as. */
+    const backend = new MockBackend({ implement: () => okResult({ telemetryParsed: false }) });
+    const sleeps: number[] = [];
+    const outcome = await run({ ...opts(root, backend), sleep: async (ms) => void sleeps.push(ms) });
+    /*
+     * The streak used to be RESET by every one of these, because a
+     * telemetry-less result parsed as ok:true with no `crashed` flag — so the
+     * halt could never fire and the operator was told "budget breach" instead.
+     */
+    expect(JSON.stringify(outcome.summary)).toContain("outage");
+    expect(sleeps.length, "the outage backoff must engage").toBeGreaterThan(0);
+  });
+});
+
 describe("B-5′ a crash suppresses the relaunch within its generation, and not beyond it", () => {
   it("the implement session is skipped on resume, then LAUNCHES again after a requeue opens a new generation", async () => {
     const root = await fixture();

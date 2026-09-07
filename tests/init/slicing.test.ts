@@ -206,6 +206,30 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
   });
 
+  /**
+   * F-3′ (PRDR-137): the cache advertises itself as a validated trust boundary
+   * — "a shape this does not recognise is a miss, not a crash" — and validated
+   * 3 of the 11 fields it casts to `DraftedTicket`. `sliceKey` hashes what the
+   * slice READ, not the code that read it, so a cache from an older build still
+   * matches its key and was a HIT that crashed `init` mid-PLAN with
+   * `TypeError: t.provides is not iterable`.
+   */
+  it("a cache whose tickets are missing the fields it casts to is a MISS, not a crash", async () => {
+    const root = repo(DOCS);
+    const handlers = (): ReturnType<typeof buildPipeline> =>
+      buildPipeline({ root, backend: new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, []) }), prompts: PROMPTS, budgets: BUDGETS });
+    await runInit(root, handlers());
+
+    const cacheFile = path.join(sliceCacheDir(root), "s01.json");
+    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as { tickets: Record<string, unknown>[] };
+    /* An older build's shape: the ids are there, the contract fields are not. */
+    cached.tickets = cached.tickets.map((t) => ({ id: t["id"], depends_on: t["depends_on"], slice: t["slice"] }));
+    writeFileSync(cacheFile, JSON.stringify(cached));
+
+    /* A miss re-plans the slice; it must not throw. */
+    await expect(runInit(root, handlers())).resolves.toBeDefined();
+  });
+
   it("C-8‴: a re-analysis does not re-plan slices whose own documents never moved", async () => {
     const root = repo(DOCS);
     let summary = "the first analysis";

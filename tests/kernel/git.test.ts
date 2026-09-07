@@ -2,9 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  WorktreeConflictError,
   changedFiles,
   commitPatch,
+  ensureWorktree,
   installTrailerHook,
+  mergeWorktree,
   commitsOn,
   ensureRunBranch,
   parseTicketTrailers,
@@ -345,5 +348,73 @@ describe("B-1′ installTrailerHook does not destroy a hook the operator already
     const second = installTrailerHook(root) as string;
     expect(second).not.toBe(first);
     expect(readFileSync(first, "utf8")).toContain("# original");
+  });
+});
+
+/**
+ * B-2′ (PRDR-145a) — a worktree merge that conflicts is an outcome.
+ *
+ * `mergeWorktree` ran `git merge --no-ff` unguarded and then removed the
+ * worktree and deleted the branch unconditionally, so two tickets touching one
+ * file left a ticket DONE with its work unmerged, an orphaned worktree and a
+ * stale branch — surfacing as exit 1 from an unclassified throw. Nothing
+ * enforces surface disjointness, so ordinary planning reaches this.
+ */
+describe("B-2′ a conflicting worktree merge keeps the work and says so", () => {
+  it("raises WorktreeConflictError, leaves the branch and worktree, and does not move the run branch", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-wt-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "shared.txt": "base\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "base");
+
+    /* The ticket's worktree edits the file one way... */
+    const wt = ensureWorktree(root, "t1");
+    writeTree(wt, { "shared.txt": "from the ticket\n" });
+    git(wt, "add", "-A");
+    git(wt, "commit", "-q", "-m", "t1: work");
+    /* ...and the run branch edits it another. */
+    writeTree(root, { "shared.txt": "from the run branch\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "run branch work");
+    const before = git(root, "rev-parse", "HEAD").trim();
+
+    let thrown: unknown = null;
+    try {
+      mergeWorktree(root, "t1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(WorktreeConflictError);
+    expect((thrown as WorktreeConflictError).conflicts).toContain("shared.txt");
+    /* The work survives for a human: branch kept, worktree kept, run branch unmoved. */
+    expect(git(root, "rev-parse", "HEAD").trim()).toBe(before);
+    expect(git(root, "branch", "--list", "ticket/t1").trim()).not.toBe("");
+    expect(existsSync(wt)).toBe(true);
+    /* And the tree is not left mid-merge. */
+    expect(existsSync(path.join(root, ".git", "MERGE_HEAD"))).toBe(false);
+  });
+
+  it("a clean merge still removes the worktree and deletes the branch", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-wt-ok-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "a.txt": "base\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "base");
+    const wt = ensureWorktree(root, "t2");
+    writeTree(wt, { "b.txt": "new\n" });
+    git(wt, "add", "-A");
+    git(wt, "commit", "-q", "-m", "t2: work");
+
+    expect(() => mergeWorktree(root, "t2")).not.toThrow();
+    expect(existsSync(wt)).toBe(false);
+    expect(git(root, "branch", "--list", "ticket/t2").trim()).toBe("");
+    expect(existsSync(path.join(root, "b.txt"))).toBe(true);
   });
 });
