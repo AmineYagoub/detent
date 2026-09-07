@@ -38,10 +38,21 @@ const sliceCacheSchema = z.strictObject({
   tickets: z.array(z.looseObject({ id: z.string(), depends_on: z.array(z.string()).default([]), slice: z.string() })),
   questions: z.array(planQuestionSchema),
   remaining: z.array(z.looseObject({ tag: z.string(), finding: z.string() })),
-  /** Ids in EARLIER slices these tickets depend on; if one is gone, the cache is stale. */
-  external_deps: z.array(z.string()).default([]),
-  /** Whether a review actually produced a verdict. A slice cached unreviewed must say so. */
-  reviewed: z.boolean().default(true),
+  /**
+   * Ids in EARLIER slices these tickets depend on; if one is gone, the cache is
+   * stale. REQUIRED, not defaulted: `sliceKey` hashes what the slice READ, not
+   * the code that read it, so a cache written before this field existed still
+   * matches its key. Defaulting it to `[]` told the staleness check that such a
+   * slice reached into nothing, which is the one answer that always passes.
+   */
+  external_deps: z.array(z.string()),
+  /**
+   * Whether a review actually produced a verdict. REQUIRED for the same reason,
+   * and it defaulted to `true` — so an older cache was assumed reviewed, which
+   * is exactly the claim this field exists to stop anyone from assuming. An
+   * absent field now misses the cache and re-plans one slice: cheap, and honest.
+   */
+  reviewed: z.boolean(),
 });
 type SliceCache = {
   readonly key: string;
@@ -140,10 +151,23 @@ export function normaliseDraft(
   const findings: PlanReview["findings"] = [];
   const retagged = tickets.map((t) => {
     let id = t.id;
-    if (taken.has(id) || own.has(id) || !isSafeTicketId(id)) {
+    /**
+     * A duplicate INSIDE this slice is a different thing from a collision with
+     * an earlier one, and it is the ambiguous case: two tickets claimed one
+     * name, so every edge naming it has two possible meanings.
+     */
+    const duplicate = own.has(id);
+    if (taken.has(id) || duplicate || !isSafeTicketId(id)) {
       id = fresh();
       renamed.set(t.id, id);
       note?.(`${slice.id}: ticket id ${JSON.stringify(t.id)} is unusable or already planned — renamed ${id}`);
+      if (duplicate) {
+        findings.push({
+          tag: "coherence",
+          ticket: id,
+          finding: `was drafted as \`${t.id}\`, an id another ticket in this slice already holds — renamed ${id}. Edges naming \`${t.id}\` were read as the ticket that KEPT the id, so check none of them meant this one`,
+        });
+      }
       /**
        * C-4 reserves the bootstrap ticket for Detent, so a draft carrying its
        * id has probably drafted the scaffolding it was told not to. The
@@ -166,13 +190,21 @@ export function normaliseDraft(
   const known = new Set([...earlierIds, ...own]);
   const result = retagged.map((t) => {
     /**
-     * A reference to an id that ALSO names a real earlier ticket means that
-     * earlier ticket. Rewriting it to this slice's renamed local would destroy
-     * the only cross-slice edge the draft declared, and silently: the rename
-     * exists because the draft reused a name, not because the reference was
-     * wrong.
+     * A reference is rewritten ONLY when the name it uses no longer belongs to
+     * anything. Two cases must survive untouched, and each was a real defect:
+     *
+     * - an id that ALSO names a real earlier ticket means that earlier ticket.
+     *   Rewriting it to this slice's renamed local destroyed the only
+     *   cross-slice edge the draft declared, and silently.
+     * - an id another ticket in THIS slice kept means that ticket. When the
+     *   planner drafted one id twice, the rename map pointed at the SECOND,
+     *   renamed copy, so every edge naming it was redirected away from the
+     *   ticket still holding the name — a silently rewired plan.
+     *
+     * `renamed` is therefore the last resort, for names nothing answers to.
      */
-    const deps = [...new Set(t.depends_on.map((d) => (earlierIds.has(d) ? d : renamed.get(d) ?? d)))].filter((d) => d !== t.id);
+    const survives = (d: string): boolean => earlierIds.has(d) || own.has(d);
+    const deps = [...new Set(t.depends_on.map((d) => (survives(d) ? d : renamed.get(d) ?? d)))].filter((d) => d !== t.id);
     const unknown = deps.filter((d) => !known.has(d));
     if (unknown.length === 0) return { ...t, depends_on: deps };
     findings.push({

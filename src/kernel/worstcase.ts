@@ -184,7 +184,21 @@ const configSchema = z.strictObject({
    */
   symbols: z
     .strictObject({
-      enabled: z.boolean().default(false),
+      /**
+       * S-3″ (PRDR-121): TRI-STATE on purpose — absent is NOT `false`.
+       *
+       * This defaulted to `false`, and the default made the reminder dead code
+       * in every real project. `init` writes a config before it reads one, so
+       * `symbols` always parsed to the default object, and the reminder — whose
+       * whole contract is "a user who declined once is never asked again" —
+       * read that default as an explicit decline. It could only ever fire when
+       * the config was `undefined`, which the production path never produces,
+       * and its test passed because that is the only case the test passed in.
+       *
+       * Undefined means nobody has said anything yet; `false` means a person
+       * said no. Only the second one silences.
+       */
+      enabled: z.boolean().optional(),
       /**
        * S-3‴ (PRDR-123): a bare executable NAME, resolved on PATH — never a
        * path. `.detent/config.json` is repository content, and an unrestricted
@@ -200,7 +214,7 @@ const configSchema = z.strictObject({
         .default("serena-agent"),
       pinned: nonEmptyString.default("0.1.4"),
     })
-    .default({ enabled: false, command: "serena-agent", pinned: "0.1.4" }),
+    .default({ command: "serena-agent", pinned: "0.1.4" }),
   /**
    * S-1: sessions are constructed with no external setting sources. Recorded in
    * config so `doctor` can report it and a backend upgrade cannot silently

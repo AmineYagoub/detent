@@ -54,7 +54,8 @@ export const SYMBOL_EDITING_TOOLS: readonly string[] = [
 ];
 
 export interface SymbolsConfig {
-  readonly enabled: boolean;
+  /** Undefined until a person decides: absent is "not asked yet", `false` is "no". */
+  readonly enabled?: boolean | undefined;
   readonly command: string;
   readonly pinned: string;
 }

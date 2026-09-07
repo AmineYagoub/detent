@@ -101,14 +101,41 @@ export async function wholePlanReview(
     questions.push(...drafted.questions);
   }
 
+  /**
+   * PRDR-119: every question reaching the human needs a unique id. The slice
+   * path numbers its own; these did not, so each redrafted slice's session
+   * numbered from one and the human could be shown several different `q1`s —
+   * the same defect PRDR-119 removed one level down.
+   */
+  const numbered = questions.map((q, i) => ({ ...q, id: `whole-q${i + 1}` }));
+
   const second = await reviewPlan(deps, updated, { kind: "whole", slices });
-  const remaining = second !== null && second.verdict === "changes" ? second.findings : [];
+  /**
+   * The same hole the FIRST review's absence had, in the same function: a null
+   * verdict here left `remaining` empty and printed "approve", so a plan that
+   * was redrafted and then never re-checked reached the human as an approved
+   * one. A review that did not run is not a review that passed.
+   */
+  if (second === null) {
+    deps.note?.("whole-plan review after revision: NO VERDICT after the relaunch — the redrafted plan was never re-reviewed as one thing");
+    return {
+      tickets: updated,
+      questions: numbered,
+      remaining: [
+        {
+          tag: "coherence",
+          finding: `the plan was redrafted for ${first.findings.length} whole-plan finding(s), but the re-review produced no usable verdict — nothing checked whether the redraft resolved them or broke something else`,
+        },
+      ],
+    };
+  }
+  const remaining = second.verdict === "changes" ? second.findings : [];
   deps.note?.(
     remaining.length === 0
       ? "whole-plan review after revision: approve"
       : `whole-plan review after revision: ${remaining.length} finding(s) remain — ${remaining.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; ")}`,
   );
-  return { tickets: updated, questions, remaining };
+  return { tickets: updated, questions: numbered, remaining };
 }
 
 function sliceOrder(slices: readonly SliceSpec[], id: string): number {

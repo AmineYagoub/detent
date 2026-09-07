@@ -226,4 +226,27 @@ describe("S-3″ the reminder is earned, and silenceable", () => {
     expect(symbolReminder({ ...CONFIG, enabled: false }, evidence)).toBeNull();
     expect(symbolReminder(CONFIG, evidence)).toBeNull();
   });
+
+  /**
+   * The regression that matters. Every assertion above hands the reminder
+   * `undefined`, and the PRODUCTION path never does: `init` writes a config
+   * before it reads one, and the schema filled `symbols` in. So the reminder
+   * was unreachable in every real project while its tests stayed green —
+   * they were only ever exercising the one input production cannot produce.
+   *
+   * This test therefore goes through `loadConfig`, the way `init` does.
+   */
+  it("fires for a real project config that has never mentioned symbols — the path init actually takes", () => {
+    const { config } = loadConfig({ ...BASE_CONFIG });
+    expect(config.symbols?.enabled).toBeUndefined();
+    const message = symbolReminder(config.symbols, evidence) ?? "";
+    expect(message).toContain("Symbol intelligence is not configured");
+    expect(message).toContain("t-s01-016 → v1.TerminalStates");
+  });
+
+  it("a config that explicitly declined still silences it, through the same path", () => {
+    const { config } = loadConfig({ ...BASE_CONFIG, symbols: { enabled: false } });
+    expect(config.symbols?.enabled).toBe(false);
+    expect(symbolReminder(config.symbols, evidence)).toBeNull();
+  });
 });

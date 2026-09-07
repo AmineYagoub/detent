@@ -277,6 +277,36 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(notes.join("\n")).toContain("edge dropped");
   });
 
+  /**
+   * The cross-slice case above proves a reference to an EARLIER ticket survives
+   * the rename. This is the other half, and it was broken: when the planner
+   * drafted one id twice inside a slice, the rename map pointed at the second,
+   * RENAMED copy — so every edge naming that id was redirected away from the
+   * ticket that still held it. The plan stayed well-formed and silently meant
+   * something else.
+   */
+  it("a duplicated id inside one slice: edges naming it mean the ticket that KEPT it, and the collision is a finding", () => {
+    const slice: SliceSpec = { id: "s02", title: "billing", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" };
+    const out = normaliseDraft(
+      slice,
+      [
+        { ...ticket("t-s02-001"), type: "feature" as const, slice: "s02" },
+        { ...ticket("t-s02-001"), type: "feature" as const, slice: "s02" },
+        { ...ticket("t-s02-009", ["t-s02-001"]), type: "feature" as const, slice: "s02" },
+      ],
+      [],
+      undefined,
+    );
+    expect(out.tickets.map((t) => t.id)).toEqual(["t-s02-001", "t-s02-002", "t-s02-009"]);
+    /* The survivor, not the renamed duplicate. */
+    expect(out.tickets[2]!.depends_on).toEqual(["t-s02-001"]);
+    expect(out.findings).toContainEqual({
+      tag: "coherence",
+      ticket: "t-s02-002",
+      finding: expect.stringContaining("an id another ticket in this slice already holds"),
+    });
+  });
+
   it("a finding a slice's own review still holds after its revision reaches the presentation — the single-slice case, where no whole-plan review runs", async () => {
     const root = repo(DOCS);
     const held = { tag: "sizing", ticket: "t-s01-002", finding: "still larger than one session after the revision" };
@@ -295,6 +325,42 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     /** One slice means no whole-plan review, so the slice's own leftover is the ONLY finding there is. */
     expect(result.interrupt?.message).toContain("Review findings held after revision (1)");
     expect(result.interrupt?.message).toContain("sizing (t-s01-002): still larger than one session");
+  });
+
+  /**
+   * `wholePlanReview` guards the FIRST review's absence carefully and then, in
+   * the same function, read a null SECOND verdict as an empty finding list —
+   * printing "approve" for a re-review that never ran. A plan redrafted for
+   * coherence findings and then never re-checked reached the human as approved.
+   */
+  it("a whole-plan re-review that produced no verdict is reported, never read as approval", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    let whole = 0;
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          draft: twoSliceDraft,
+          review: (inputs) => {
+            if (inputs["scope"] !== "whole") return APPROVE_PLAN;
+            whole += 1;
+            /* The first whole review faults a ticket, which forces the redraft. */
+            if (whole === 1) {
+              return { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] };
+            }
+            /* The re-review and its one relaunch both come back unusable. */
+            return { not: "a review at all" };
+          },
+        },
+        [],
+      ),
+    });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+
+    expect(notes.join("\n")).toContain("whole-plan review after revision: NO VERDICT");
+    expect(notes.join("\n")).not.toContain("whole-plan review after revision: approve");
+    /* And the human is told, rather than shown a plan that looks reviewed. */
+    expect(result.interrupt?.message).toContain("no usable verdict");
   });
 
   it("a dependency dropped as impossible is presented as a finding, not swallowed", async () => {

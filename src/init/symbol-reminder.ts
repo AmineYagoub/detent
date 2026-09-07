@@ -36,7 +36,13 @@ export function symbolReminder(
   findings: readonly PlanReview["findings"][number][],
 ): string | null {
   if (config?.enabled === true) return null;
-  if (config !== undefined && !config.enabled) return null;
+  /**
+   * `false` is a person's answer and is honoured absolutely. Absent is not an
+   * answer — and it used to be treated as one, which is what made this function
+   * unreachable in production: the config schema defaulted `enabled` to false,
+   * so every project looked like it had already declined.
+   */
+  if (config?.enabled === false) return null;
 
   const evidence = symbolEvidence(findings);
   if (evidence.length === 0) return null;
