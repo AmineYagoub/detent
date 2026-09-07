@@ -10,6 +10,7 @@ import type { SessionArm } from "./referee-session.js";
 import type { KernelEvent } from "./events.js";
 import { runsDir } from "./journal.js";
 import { contractEvidence } from "./contract-verify.js";
+import { boundTestRunner, falsificationProbe, falsifyEvidence } from "./falsify.js";
 import { diagnoseStage } from "./stages/diagnose.js";
 import { reviewStage } from "./stages/review.js";
 import { researchStage } from "./stages/research.js";
@@ -102,11 +103,29 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
   const hypothesis = hypothesisParsed !== null && hypothesisParsed.ok ? hypothesisParsed.value : null;
   const diff = ctx.diff(workDir, ctx.claimBase(id), ticket.surface, id);
   /** A-1⁗: whether the interface the ticket promised is actually in the diff. */
-  const evidence = contractEvidence(ticket, diff);
-  if (Object.keys(evidence).length > 0) {
+  const contract = contractEvidence(ticket, diff);
+  /**
+   * V-6 (PRDR-150): were this ticket's tests sensitive to its own change? The
+   * source half is reverted, the bound tests re-run, and the tree restored.
+   * Evidence for the reviewer, never a verdict — see `falsify.ts`.
+   */
+  const probe = await falsificationProbe({
+    workDir,
+    base: ctx.claimBase(id),
+    runTests: () => boundTestRunner(ctx.root, ctx.runBranch.base, ctx.budgets.gate_timeout_ms)(workDir),
+  });
+  if (probe.skipped !== null) ctx.journal.appendTicketEvent(id, { event: "falsify_skipped", at: ctx.iso(), reason: probe.skipped });
+  const evidence = { ...contract, ...falsifyEvidence(probe) };
+  if (probe.unfalsified.length > 0) {
     appendNote(ctx.root, id, {
       author: "kernel",
-      text: `declared provides not found in the changed files: ${(evidence["unverified_provides"] as string[]).join(", ")} — passed to the review as evidence (A-1⁗)`,
+      text: `tests still pass with this ticket's source changes reverted: ${probe.unfalsified.join(", ")} — passed to the review as evidence (V-6)`,
+    });
+  }
+  if (Object.keys(contract).length > 0) {
+    appendNote(ctx.root, id, {
+      author: "kernel",
+      text: `declared provides not found in the changed files: ${(contract["unverified_provides"] as string[]).join(", ")} — passed to the review as evidence (A-1⁗)`,
     });
   }
   const deps = {

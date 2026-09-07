@@ -385,6 +385,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
+- **V-6 (3.1.1, PRDR-150).** A test that would pass WITHOUT the change it ships with is not
+  evidence that the change works, and Detent checks it mechanically. After a green gate, when a
+  ticket's diff touches both source and test files, the SOURCE half is reverted, the bound test
+  gate is re-run, and the tree is restored; tests that stay green are named to the review. The
+  measurement that motivates it: three of the 7 September audit's critical blockers had a
+  passing test asserting the property they violated, and the remediation's own SEC-5′ test
+  passed because its fixture was already CI-safe, making the mismatch it should have caught a
+  no-op. Every one of those is the same mechanical property. It is EVIDENCE, never a gate — the
+  A-1⁗ precedent, for the same reason: a check whose false-positive rate has not been measured
+  must not be able to fail a ticket, and there are honest reasons a test stays green (it guards
+  against over-correction rather than reproducing a defect; it covers a path the revert did not
+  reach). A reviewer weighs that in a sentence; a red build cannot. The probe reverts with
+  `git apply -R`, which refuses cleanly rather than half-applying, and restores in a `finally`;
+  a missed restore is bounded by B-5's existing dirty-tracked reset on the next claim.
+
 - **SEC-3′ (3.1.1, PRDR-132).** `.git/**` is in the STRUCTURAL protected floor, and the
   surface-expansion lever cannot grant a wildcard. `.git` appeared in no protected set at all,
   and a session could widen its own surface to `**` by writing a `surface_request.json` — the
