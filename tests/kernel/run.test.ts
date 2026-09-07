@@ -243,21 +243,57 @@ describe("X-1‴ one run per root", () => {
   });
 });
 
+/**
+ * PRDR-151 — `finalize` breaching, and a COVERAGE GAP recorded rather than
+ * papered over.
+ *
+ * `finalize` sat outside `processTicket`'s breach handler, so a worktree merge
+ * conflict escaped, `loop()` rethrew it, and the run exited 1 with the
+ * generation left `in_flight` and `detent status` showing nothing wrong. That
+ * is fixed in `driver.ts`, and `mergeWorktree`'s half is covered by
+ * `tests/kernel/git.test.ts` ("B-2′ a conflicting worktree merge…").
+ *
+ * The DRIVER-level routing is NOT covered here. Forcing a conflict through the
+ * real loop needs two worktrees alive at once, and the driver is sequential —
+ * t1 merges before t2's worktree can diverge from it. The resume shape (a
+ * worktree surviving from an earlier claim) was tried and did not reproduce it
+ * either. Rather than ship a test that passes without exercising the condition
+ * it names — the defect this line has spent a day removing — the gap is written
+ * down. It belongs with PRDR-144's worktree coverage, where a fixture can be
+ * built deliberately instead of squeezed out of the happy path.
+ */
+
 describe("S-4″ a transport death is a crash, not a success", () => {
-  it("three telemetry-less sessions trip the outage halt instead of resetting it", async () => {
+  it("a telemetry-less session is recorded as a crash and halts the run, rather than as a success", async () => {
     const root = await fixture();
     for (const id of ["t1", "t2", "t3", "t4"]) addTicket(root, { id });
     /* `ok: true, telemetryParsed: false` is what a stream ending with no result message parses as. */
-    const backend = new MockBackend({ implement: () => okResult({ telemetryParsed: false }) });
+    /**
+     * PRDR-151: the PRODUCTION shape. `parseResultMessage` hard-codes
+     * `turns: 0` whenever telemetry is absent, and it is the only producer of
+     * `telemetryParsed: false` — so `okResult({ telemetryParsed: false })`,
+     * whose `turns` defaults to 1, is a shape the product cannot emit. The
+     * first version of this test used it, which is the unrealistic-fixture
+     * pattern this line has been auditing for, in the test written to close it.
+     */
+    const backend = new MockBackend({ implement: () => okResult({ telemetryParsed: false, turns: 0 }) });
     const sleeps: number[] = [];
     const outcome = await run({ ...opts(root, backend), sleep: async (ms) => void sleeps.push(ms) });
+
     /*
-     * The streak used to be RESET by every one of these, because a
-     * telemetry-less result parsed as ok:true with no `crashed` flag — so the
-     * halt could never fire and the operator was told "budget breach" instead.
+     * The substance of S-4″: it used to parse as ok:true with no `crashed`
+     * flag, so the ledger took an unflagged $0 row, the journal recorded a
+     * successful end for a session that died on the wire, and the run marched
+     * on. It now halts, and the row says what happened.
      */
-    expect(JSON.stringify(outcome.summary)).toContain("outage");
-    expect(sleeps.length, "the outage backoff must engage").toBeGreaterThan(0);
+    expect(outcome.exitCode).not.toBe(0);
+    const rows = readFileSync(path.join(root, ".detent", "ledger.jsonl"), "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as { partial?: string; role: string });
+    const implementRows = rows.filter((r) => r.role === "implement");
+    expect(implementRows.length).toBeGreaterThan(0);
+    for (const r of implementRows) expect(r.partial, "a session that died on the wire is a crash").toBe("crash");
   });
 });
 

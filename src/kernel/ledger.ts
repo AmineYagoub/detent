@@ -121,17 +121,30 @@ export function readRecordedSpend(root: string): number {
     try {
       raw = JSON.parse(line);
     } catch {
-      /* A torn line cannot subtract money — but only the LAST one can be torn by a crash. */
-      if (lines.slice(index + 1).every((rest) => rest.trim() === "")) continue;
-      throw new Error(
-        `.detent/ledger.jsonl line ${index + 1} is unparseable and is not the last line — the spend record is damaged, ` +
-          "and a run cannot be bounded by a total it cannot read (X-1).",
-      );
+      /**
+       * PRDR-151: unparseable TEXT is a crash artifact, at any position, and is
+       * skipped. The first version of this refused any torn line that was not
+       * last — which sounds right and bricks a root: `appendLedger` writes
+       * `JSON.stringify(row) + "\n"`, so a line torn mid-append has no trailing
+       * newline and the NEXT append concatenates onto it. One `kill -9` then
+       * cost a run its next session's spend silently, and the run after that
+       * refused at startup forever, with no repair instruction. Reproduced.
+       *
+       * The distinction that matters is not WHERE the damage is but WHAT it is:
+       * text that is not JSON is a torn write; a well-formed object that is not
+       * a ledger row is a shape the writer cannot produce. Only the second is
+       * worth halting for, and it is the one X-1‴ was actually about.
+       *
+       * The cost is an under-count of at most the row glued to the torn one —
+       * a lower bound, the safe direction, and bounded further by the `Math.max`
+       * against this process's own total.
+       */
+      continue;
     }
     const parsed = ledgerRowSchema.safeParse(raw);
     if (!parsed.success) {
       throw new Error(
-        `.detent/ledger.jsonl line ${index + 1} does not validate as a ledger row (${parsed.error.issues[0]?.message ?? "invalid"}) — ` +
+        `.detent/ledger.jsonl line ${index + 1} is well-formed JSON but not a ledger row (${parsed.error.issues[0]?.message ?? "invalid"}) — ` +
           "the spend ceiling is enforced against this file and cannot trust a shape it did not write (X-1).",
       );
     }

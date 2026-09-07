@@ -174,7 +174,35 @@ export class Driver {
     } else if (state === "BLOCKED") {
       await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "blocked" });
     } else if (state === "DONE") {
-      await this.tool("record", { kind: "finalize", ticket_id: id });
+      /**
+       * B-2′ (PRDR-151): finalize can BREACH — a worktree merge conflict is the
+       * case that exists. It sat outside the handler above, so the breach
+       * escaped `processTicket`, `loop()` rethrew it, and the run exited 1 with
+       * the ticket already DONE, its generation left `in_flight`, and `status`
+       * showing nothing wrong. Routing it here reaches the human the same way
+       * every other breach does.
+       */
+      try {
+        await this.tool("record", { kind: "finalize", ticket_id: id });
+      } catch (err) {
+        if (!(err instanceof DriverBreach)) throw err;
+        /**
+         * B-2′ (PRDR-151): finalize can breach — a worktree merge conflict is
+         * the case that exists — and this sat OUTSIDE the handler above, so it
+         * escaped `processTicket`, `loop()` rethrew it, and the run exited 1
+         * with the generation left `in_flight` and `detent status` showing
+         * nothing wrong.
+         *
+         * The ticket stays DONE, and that is correct rather than a compromise:
+         * the work was implemented, gated and reviewed, and DONE is terminal by
+         * design (X-3 offers no edge out). What failed is INTEGRATING it. So
+         * the generation closes as done, the branch and worktree survive for a
+         * human, and the run stops with a summary naming the conflict instead
+         * of an unclassified throw.
+         */
+        await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
+        throw new DriverRefusal(err.message);
+      }
       await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
     }
   }

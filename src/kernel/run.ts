@@ -116,7 +116,19 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
    * beside the config and approval preconditions, so it refuses before
    * spending rather than at the first gate — where it used to mint a GREEN.
    */
-  if (!readBindings(root).bindings.some((b) => b.slot === "test")) {
+  let bound: boolean;
+  try {
+    bound = readBindings(root).bindings.some((b) => b.slot === "test");
+  } catch (err) {
+    /**
+     * PRDR-151: `readBindings` throws on an invalid or newer-schema file, and
+     * this sits outside the try below — so it REJECTED the promise instead of
+     * returning a `RunOutcome`, and the CLI printed a bare message with no
+     * machine-readable summary. Every sibling precondition returns `notReady`.
+     */
+    return notReady((err as Error).message);
+  }
+  if (!bound) {
     return notReady(
       "no `test` gate is bound in .detent/bindings.json — a run would verify nothing. " +
         "Run `detent init` to bind the project's verification commands (V-1).",

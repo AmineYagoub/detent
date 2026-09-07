@@ -204,11 +204,11 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
 
   it("refuses a string cost rather than concatenating it", () => {
     /* `5 + "5" + 3` produced the string "553", which then compared against the ceiling. */
-    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: 5 }), row({ cost_estimate_usd: "5" })]))).toThrow(/does not validate/);
+    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: 5 }), row({ cost_estimate_usd: "5" })]))).toThrow(/not a ledger row/);
   });
 
   it("refuses a negative cost rather than subtracting it", () => {
-    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: -1000 })]))).toThrow(/does not validate/);
+    expect(() => readRecordedSpend(rootWith([row({ cost_estimate_usd: -1000 })]))).toThrow(/not a ledger row/);
   });
 
   it("still tolerates a torn LAST line — the one shape a crash produces", () => {
@@ -217,11 +217,28 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
     expect(readRecordedSpend(root)).toBe(4);
   });
 
-  it("refuses a torn line that is NOT last — that is damage, not a crash", () => {
+  /**
+   * PRDR-151: this used to assert that a torn line anywhere but the end was
+   * FATAL, which sounds right and bricked a root. `appendLedger` writes
+   * `JSON.stringify(row) + "\n"`, so a line torn mid-append has no trailing
+   * newline and the NEXT append concatenates onto it — one `kill -9` then made
+   * every later run refuse at startup, forever, with no repair instruction.
+   *
+   * Unparseable TEXT is a crash artifact at any position and is skipped. The
+   * cost is an under-count of the row glued to the torn one: a lower bound,
+   * the safe direction, and the same shape S-4 already takes for a crashed
+   * session's telemetry.
+   */
+  it("survives a torn line that a later append glued a real row onto", () => {
     const root = tmpTree({});
     roots.push(root);
     mkdirSync(path.join(root, ".detent"), { recursive: true });
-    writeFileSync(path.join(root, ".detent", "ledger.jsonl"), `{"at":"tor\n${row({ cost_estimate_usd: 4 })}\n`);
-    expect(() => readRecordedSpend(root)).toThrow(/not the last line/);
+    const f = path.join(root, ".detent", "ledger.jsonl");
+    /* The crash shape: a torn last line with no newline. */
+    writeFileSync(f, `${row({ cost_estimate_usd: 10 })}\n{"at":"2026`);
+    appendFileSync(f, `${row({ cost_estimate_usd: 7 })}\n`);
+    appendFileSync(f, `${row({ cost_estimate_usd: 3 })}\n`);
+    /* 10 + 3; the 7 was swallowed by the torn line — a lower bound, not a halt. */
+    expect(readRecordedSpend(root)).toBe(13);
   });
 });
