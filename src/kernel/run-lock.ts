@@ -1,4 +1,4 @@
-import { closeSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
@@ -37,8 +37,18 @@ export type RunLockResult =
   | { readonly ok: true; readonly release: () => void; readonly brokeStale: RunLockInfo | null }
   | { readonly ok: false; readonly heldBy: RunLockInfo | null };
 
+/**
+ * Under `state/`, which `fs/layout.ts` declares `tracking: "local"` and the
+ * generated `.gitignore` excludes.
+ *
+ * It sat at `.detent/run.lock` — committed territory — and `finalizeDone` runs
+ * `git add -A` in the default non-worktree mode, so a run would have COMMITTED
+ * its own lock. On another machine the host would not match, so
+ * `runLockBreakable` would refuse to break it: a lock that travels is a lock
+ * nobody can clear. Local run state never travels between machines (F-1).
+ */
 function lockPath(root: string): string {
-  return path.join(stateDir(root), "run.lock");
+  return path.join(stateDir(root), "state", "run.lock");
 }
 
 function readLock(root: string): RunLockInfo | null {
@@ -75,6 +85,7 @@ export function acquireRunLock(
 
   const take = (): boolean => {
     try {
+      mkdirSync(path.dirname(file), { recursive: true });
       const fd = openSync(file, "wx");
       closeSync(fd);
       /* Written after the atomic create: a lock that exists but is empty still reads as held. */

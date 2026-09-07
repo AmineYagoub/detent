@@ -208,6 +208,26 @@ describe("X-1‴ one run per root", () => {
     expect(existsSync(path.join(root, ".detent", "state", "run.lock"))).toBe(false);
   });
 
+  /**
+   * The lock sat at `.detent/run.lock` — committed territory — and
+   * `finalizeDone` runs `git add -A` in the default non-worktree mode, so a run
+   * would have COMMITTED its own lock. On another machine the host would not
+   * match, so `runLockBreakable` refuses to break it: a lock that travels is a
+   * lock nobody can clear.
+   */
+  it("the lock is local run state and never travels — git does not see it", async () => {
+    const root = await fixture();
+    const held = acquireRunLock(root);
+    expect(held.ok).toBe(true);
+    try {
+      const tracked = git(root, "status", "--porcelain", "--untracked-files=all");
+      expect(tracked, "the run lock must be gitignored").not.toContain("run.lock");
+      expect(existsSync(path.join(root, ".detent", "state", "run.lock"))).toBe(true);
+    } finally {
+      if (held.ok) held.release();
+    }
+  });
+
   it("a lock left by a dead process on this host is breakable; a live one is not", () => {
     const root = tmpTree({});
     roots.push(root);
