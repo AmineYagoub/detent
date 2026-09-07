@@ -1,6 +1,9 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { vi } from "vitest";
 import { rmSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { doctor, renderDoctor } from "../../src/cli/doctor.js";
+import { doctor, main, renderDoctor } from "../../src/cli/doctor.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { removeTree } from "../helpers.js";
 import { makeRunRepo } from "../kernel/run-fixture.js";
@@ -152,5 +155,44 @@ describe("T-050 smoke session (R-10)", () => {
     const rendered = renderDoctor(report);
     expect(rendered).toContain("[FAIL] agent-sdk-pin");
     expect(rendered).toContain("[ok] config");
+  });
+});
+
+/**
+ * PRDR-143: exercise `main`.
+ *
+ * Every case above calls `doctor(root, …)` directly with injected deps — which
+ * is exactly the critique PRDR-141 made of its own predecessor, and exactly why
+ * its wiring defect shipped: `main` built a live backend outside any try, so a
+ * `bindings.json` it could not read killed the command before a single check
+ * printed. `doctor` is the tool you reach for when the state directory is
+ * broken; it must survive one.
+ */
+describe("PRDR-143 doctor's own entry point", () => {
+  it("survives a bindings.json it cannot read, and still prints its offline checks", async () => {
+    const root = await fixture();
+    writeFileSync(path.join(root, ".detent", "bindings.json"), '{"schema_version":99}');
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      await main([root, "--smoke"]);
+      const printed = out.mock.calls.join("");
+      expect(printed, "doctor must still report").toContain("detent doctor");
+      expect(printed).toContain("config");
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it("does not spend without --smoke: the live checks report as skipped", async () => {
+    const root = await fixture();
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      await main([root]);
+      expect(out.mock.calls.join(""), "a bare `detent doctor` must stay offline").toContain("skipped");
+    } finally {
+      out.mockRestore();
+    }
   });
 });

@@ -53,11 +53,27 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
         tickets: Array.from({ length: PER_SLICE }, (_, j) => ({
           id: `t-${id}-${String(j + 1).padStart(3, "0")}`,
           type: "feature",
-          title: `${id} ticket ${j + 1}`,
-          description: "",
-          acceptance_criteria: ["it works"],
-          non_goals: [],
-          surface: ["src/**"],
+          title: `${id} ticket ${j + 1}: wire the ${id} handler and its persistence path`,
+          /**
+           * PRDR-143: REALISTIC content. These carried `description: ""` and a
+           * single "it works" criterion, and the assertion below is described
+           * by this file as "the tripwire" for the largest paid session in the
+           * product. Measured through the same `JSON.stringify` the spec
+           * builder uses, a 500-ticket whole-plan review is 171.9 KB on the
+           * empty shape and 465 KB on this one — so the `< 400 KB` bound passed
+           * only because the fixture carried nothing. A tripwire calibrated on
+           * a payload the product cannot produce is not a tripwire.
+           */
+          description:
+            `Implement the ${id} handler so the request path terminates in a persisted record, ` +
+            "including the validation the interface contract names and the error mapping the caller expects.",
+          acceptance_criteria: [
+            "the handler persists a record and returns its id",
+            "an invalid payload is rejected with the mapped error, not a 500",
+            "the persistence path is covered by a test that fails without it",
+          ],
+          non_goals: ["no migration of existing records", "no changes to the public schema"],
+          surface: ["src/**", "tests/**"],
           depends_on: j === 0 ? previous : [`t-${id}-${String(j).padStart(3, "0")}`],
           risk_label: false,
         })),
@@ -170,7 +186,21 @@ describe("C-2‴ at product scale", () => {
     const widest = (stage: string): number => Math.max(...seen.filter((s) => s.stage === stage).map((s) => s.kb));
     expect(widest("SLICE")).toBeLessThan(50);
     expect(widest("PLAN")).toBeLessThan(150);
-    expect(widest("REVIEW:whole")).toBeLessThan(400);
+    /**
+     * PRDR-143: 500 tickets of REALISTIC content measure ~484 KB here — roughly
+     * 120k tokens of JSON in one prompt variable. The previous bound was 400 KB
+     * and passed only because the fixture tickets were empty (171.9 KB); the
+     * tripwire fired the moment they were given real descriptions and criteria.
+     *
+     * The number is recorded rather than merely raised, because it is a
+     * PRODUCT limit and not a test parameter: the whole-plan review is the one
+     * stage whose input grows with the entire product, and at this scale it is
+     * approaching what a single session can hold. The gate's own plan is ~205
+     * tickets (~200 KB), so there is headroom today. Making the review
+     * incremental — or scoping it to the slices a finding names — is the real
+     * answer, and it belongs with PRDR-144.
+     */
+    expect(widest("REVIEW:whole")).toBeLessThan(600);
   }, 120_000);
 
   it("a failure nine slices in costs those nine slices nothing: the re-run re-plans the one that died and the ones after it", async () => {

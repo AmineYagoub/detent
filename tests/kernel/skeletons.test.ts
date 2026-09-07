@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { reviewInputsNote } from "../../src/kernel/stages/review.js";
+import { reviewTags } from "../../src/schemas/ticket.js";
 import { hypothesisSkeleton, researchBriefSkeleton, reviewSkeleton } from "../../src/kernel/referee-stage.js";
 import { hypothesisSchema, researchBriefSchema, reviewSchema } from "../../src/schemas/records.js";
 
@@ -24,6 +26,28 @@ describe("T-140 worker artifact skeletons cannot drift from their schemas", () =
         changes: [{ tag: "correctness", finding: "off by one" }],
       }).changes,
     ).toHaveLength(1);
+  });
+
+  /**
+   * PRDR-143: read what the SESSION is taught, not a hand-retyped copy of it.
+   *
+   * This file's stated purpose is that "the contract a live session sees cannot
+   * drift from the validator that judges it". The `approve` half honoured that
+   * by parsing `reviewSkeleton()` from source. The `changes` half retyped the
+   * shape by hand — so `expected_output_note`, which is the actual instruction
+   * a reviewer receives, was compared to nothing. Change `reviewTags` and the
+   * note desynchronises silently, reproducing the T-140 defect this file exists
+   * to prevent.
+   */
+  it("the note the reviewer is given names exactly the tags the validator accepts", () => {
+    const note = reviewInputsNote();
+    for (const tag of reviewTags) {
+      expect(note, `the note omits the tag \`${tag}\`, which the validator accepts`).toContain(tag);
+    }
+    /* And it teaches no tag the validator would reject. */
+    const taught = (/\{tag: ([a-z|]+)/.exec(note)?.[1] ?? "").split("|").filter((t) => t !== "");
+    expect(taught.length, "the note's tag list could not be read — the format drifted").toBeGreaterThan(0);
+    expect([...taught].sort()).toEqual([...reviewTags].sort());
   });
 
   it("research brief (A-4) — including the X-6a local-search rule", () => {

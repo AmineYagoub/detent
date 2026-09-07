@@ -1,6 +1,7 @@
 import { parseArtifact } from "../../schemas/common.js";
 import { reviewSchema, type Hypothesis } from "../../schemas/records.js";
 import type { Ticket } from "../../schemas/ticket.js";
+import { reviewTags } from "../../schemas/ticket.js";
 import { reviewApprove, reviewChanges, type KernelEvent } from "../events.js";
 
 /**
@@ -54,8 +55,7 @@ function buildReviewerInputs(
     },
     operator_record: ticket.notes.slice(-OPERATOR_RECORD_NOTES).map((n) => ({ author: n.author, text: n.text })),
     expected_output: reviewSkeleton(),
-    expected_output_note:
-      'verdict "changes" requires at least one {tag: correctness|requirement|scope|rules, finding, file?} entry; the validator is strict — no extra keys, and schema_version is required.',
+    expected_output_note: reviewInputsNote(),
     diff,
     hypothesis,
   };
@@ -89,4 +89,17 @@ export async function reviewStage(
   }
   deps.note(`review changes: ${parsed.value.changes.map((c) => c.tag).join(",")}`);
   return { kind: "event", event: reviewChanges(parsed.value) };
+}
+
+/**
+ * PRDR-143: the instruction a reviewer is given, exported so a test can compare
+ * it against `reviewTags` rather than against a hand-retyped copy. It was an
+ * inline literal listing the four tags, and nothing checked it against the
+ * validator that judges the artifact it describes.
+ */
+export function reviewInputsNote(): string {
+  return (
+    `verdict "changes" requires at least one {tag: ${reviewTags.join("|")}, finding, file?} entry; ` +
+    "the validator is strict — no extra keys, and schema_version is required."
+  );
 }

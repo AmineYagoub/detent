@@ -125,7 +125,7 @@ describe("T-046 PreToolUse guard (oracle test_hooks ports)", () => {
     expect(guardToolUse("Read", { file_path: "../secrets.txt" }, POLICY).decision).toBe("deny");
   });
 
-  it("a tool call naming no path is allowed — the kernel re-verifies regardless (P2)", () => {
+  it("a tool call naming no path ABSTAINS — the allowlist decides, and an `allow` here overrode it (S-2‴)", () => {
     /**
      * S-2‴ (PRDR-122): these ABSTAIN rather than allow. A hook decision of
      * `allow` is terminal in the SDK's permission order, so answering it for a

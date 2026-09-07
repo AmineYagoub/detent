@@ -55,6 +55,33 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     }
   });
 
+  /**
+   * PRDR-143: a count, so deleting a ported case cannot stay 52/52.
+   *
+   * `statusOf` returns green iff `entry.ts !== undefined` — iff a path was
+   * typed into a map. The only honesty check was that the file mentions the
+   * ticket id, which appears once, in a `describe` title, and the mapping is
+   * many-to-one: eight parity entries point at one guard test file. Deleting
+   * four of five ported cases left the map reporting complete.
+   *
+   * Anchoring to individual test NAMES would be stronger and is a data change
+   * across 52 entries; requiring each file to hold at least as many `it(`
+   * blocks as entries claiming it is the cheap half that closes the deletion
+   * hole, and it is honest about being a lower bound.
+   */
+  it("a mapped file holds at least as many tests as parity entries claim it", () => {
+    const byFile = new Map<string, number>();
+    for (const e of PARITY) {
+      if (e.ts === undefined) continue;
+      byFile.set(e.ts, (byFile.get(e.ts) ?? 0) + 1);
+    }
+    expect(byFile.size, "no green entries found — the map shape drifted").toBeGreaterThan(0);
+    for (const [file, claimed] of byFile) {
+      const cases = (readFileSync(file, "utf8").match(/\n\s*it(?:\.each\([^)]*\))?\(/g) ?? []).length;
+      expect(cases, `${file} is claimed by ${claimed} parity entries but holds ${cases} tests`).toBeGreaterThanOrEqual(claimed);
+    }
+  });
+
   it("the status vocabulary needed four values — mode-1 closes in M3, past the {green,M1,M2} range", () => {
     /**
      * R-2 assumed {green, pending-M1, pending-M2}. test_mode1_stub_detected maps
