@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { createInterface } from "node:readline/promises";
 import { discover } from "../adapter/discover/index.js";
 import { bindAll, type BindOptions, type BindReport } from "../adapter/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
@@ -119,23 +120,47 @@ export async function main(argv: readonly string[]): Promise<number> {
   const root = maybeRoot ?? process.cwd();
   const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
 
+  /**
+   * PRDR-154: refuse BEFORE `verifySync`, not inside its consent callback.
+   *
+   * V-1/P4 require the replacement candidates to be EXECUTED before they may be
+   * approved — a sync that approved an unexecuted binding would be approving a
+   * guess — so `verifySync` binds before it asks. That is correct, and it means
+   * a consent callback that answers "no" has already let every discovered gate
+   * command run. Off a terminal the refusal has to happen here, where it can
+   * still prevent the running.
+   */
+  if (!interactive && values.yes !== true) {
+    process.stderr.write(
+      "re-baselining a verification binding executes the candidate commands and is a human decision (C-6a, V-1) — " +
+        "re-run on a terminal, or pass --yes to accept that.\n",
+    );
+    return 2;
+  }
+
   const result = await verifySync(root, {
     user: process.env["USER"] ?? "operator",
     consent: async (summary) => {
       if (values.yes === true) return true;
-      if (!interactive) {
-        process.stderr.write(
-          "re-baselining a verification binding is a human decision (C-6a) — re-run on a terminal, or pass --yes.\n",
-        );
-        return false;
+      /**
+       * PRDR-154: `readline/promises`, matching `makeTtyApproval` and
+       * `makeTtyEscalation` rather than being a third transport — and with a
+       * `close` handler, because a raw `stdin.once("data")` never settles on
+       * Ctrl-D and left the stream flowing with a listener attached.
+       *
+       * The wording says the commands have already run: V-1 requires it, and a
+       * prompt that implies otherwise misdescribes the decision being made.
+       */
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        const answered = await Promise.race([
+          rl.question(`${renderSyncSummary(summary)}\nThese commands have been executed (V-1). Accept them as the new baseline? [y/N] `),
+          new Promise<string>((resolve) => rl.once("close", () => resolve("n"))),
+        ]);
+        return answered.trim().toLowerCase().startsWith("y");
+      } finally {
+        rl.close();
       }
-      process.stdout.write(`${renderSyncSummary(summary)}\nAccept these bindings? [y/N] `);
-      return await new Promise<boolean>((resolve) => {
-        process.stdin.setEncoding("utf8");
-        process.stdin.once("data", (chunk) => {
-          resolve(String(chunk).trim().toLowerCase().startsWith("y"));
-        });
-      });
     },
   });
   for (const message of result.messages) process.stdout.write(`${message}\n`);

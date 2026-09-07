@@ -202,7 +202,11 @@ export function renderDoctor(report: DoctorReport): string {
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
-  const { positionals } = parseArgs({ args: [...argv], allowPositionals: true, options: {} });
+  const { positionals, values } = parseArgs({
+    args: [...argv],
+    allowPositionals: true,
+    options: { smoke: { type: "boolean", default: false } },
+  });
   const root = positionals[0] ?? process.cwd();
   /**
    * PRDR-141: supply the backend. `main` passed no `deps`, so `deps.backend`
@@ -211,7 +215,30 @@ export async function main(argv: readonly string[]): Promise<number> {
    * while the CLI advertised "one live smoke session". Every test injected a
    * backend, so the suite exercised only the branches `main` cannot reach.
    */
-  const report = await doctor(root, hasLiveBackendAuth() ? { backend: buildLiveBackend(root) } : {});
+  /**
+   * PRDR-154, both halves found by auditing PRDR-141:
+   *
+   * - `buildLiveBackend` reads `bindings.json`, which THROWS on an invalid or
+   *   newer-schema file — so `doctor`, the one command you reach for when the
+   *   state directory is broken, became the one command that could not survive
+   *   a broken state directory. It printed nothing at all: no config check, no
+   *   pin check, no WebFetch check.
+   * - The smoke session spends real tokens. It is behind `--smoke` now, because
+   *   `doctor` was a free offline diagnostic and wiring it silently turned every
+   *   invocation on a logged-in machine into a billable one, with no consent, no
+   *   cap and no ledger row — while `live.ts` asserts R-10's gate is "consent
+   *   plus a cap". `hasLiveBackendAuth()` also spawns the `claude` CLI with a
+   *   10s timeout, so the probe itself only runs when asked for.
+   */
+  let deps: DoctorDeps = {};
+  if (values.smoke === true) {
+    try {
+      deps = hasLiveBackendAuth() ? { backend: buildLiveBackend(root) } : {};
+    } catch (err) {
+      process.stderr.write(`live checks unavailable: ${(err as Error).message}\n`);
+    }
+  }
+  const report = await doctor(root, deps);
   process.stdout.write(renderDoctor(report));
   return report.exitCode;
 }

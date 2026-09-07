@@ -39,7 +39,7 @@ const USAGE = `detent <command>
   run [root]           execute the approved plan
   status [root]        show ticket status (C-13 vocabulary)
   report [root]        emit the §14 metrics
-  doctor [root]        check pins, config, and one live smoke session
+  doctor [root] [--smoke]  check pins and config; --smoke also runs one live session
   approve <id>         re-enter APPROVED for kernel re-verification (plumbing)
   requeue <id>         open a fresh attempt generation (plumbing)
   unclaim <id>|--stale release a dead owner claim lock (plumbing)

@@ -1,5 +1,4 @@
 import { existsSync, readdirSync } from "node:fs";
-import { detectWorkspace, preferOrchestrator, workspaceNotice } from "../workspace.js";
 import path from "node:path";
 import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { goEngine } from "./go.js";
@@ -91,20 +90,33 @@ export function discover(root: string): Discovery {
   for (const engine of ENGINES) candidates.push(...engine.discover(facts));
   candidates.sort(compareCandidates);
   /**
-   * PRDR-141: prefer the orchestrator's ROOT command where one exists.
+   * PRDR-154: `preferOrchestrator` is deliberately NOT wired here, and this
+   * comment is the record of why rather than a silence.
    *
-   * `adapter/workspace.ts` has been implemented, tested and documented since
-   * T-021 with no caller, so on a turbo/nx/lerna/pnpm-workspace repository
-   * Detent bound a per-package command instead of the root one and the notice
-   * explaining that gates run workspace-wide never printed. Its own header
-   * states the rule this line finally applies.
+   * PRDR-141 wired it, and the audit of that commit found two ways it breaks a
+   * repository, both invisible to the suite:
+   *
+   * 1. It DEDUPS by command string and DROPS the collider. `go-work`'s root
+   *    gates are byte-identical to what `discover/go.ts` emits, so the
+   *    `adapter: "go"` candidate vanished from discovery — and `currentFor`
+   *    matches on slot+adapter+ref, so an existing `bindings.json` reported
+   *    `vanished`, which halts. Every ticket on a `go.work` repo bricked at
+   *    exit 2 against a binding that was valid the day before.
+   * 2. Its npm-workspaces root gate is `npm run test --workspaces --if-present`,
+   *    which exits 0 having run NOTHING when the packages carry no `test`
+   *    script and the root config covers them — the commonest monorepo layout.
+   *    `bindSlot` probes it, sees green, and binds a gate that can never fail.
+   *    That is the "greened on nothing" class V-1″ closed once already.
+   *
+   * The module needs its command table and its dedup reconsidered before it is
+   * connected — demote the collider rather than dropping it, and never prefer a
+   * sweep that can pass vacuously. That is a design change with its own
+   * evidence, not a wiring line.
    */
-  const workspace = detectWorkspace(facts);
   return {
     schema_version: SCHEMA_VERSION,
     stack: { markers: facts.markers, pm: facts.pm },
-    candidates: preferOrchestrator(candidates, workspace),
-    ...(workspace === null ? {} : { workspace_notice: workspaceNotice(workspace) }),
+    candidates,
   };
 }
 
