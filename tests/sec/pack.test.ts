@@ -69,8 +69,9 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   /**
    * S-2⁗ (PRDR-127) — the same boundary, against REAL symbolic links.
    *
-   * The ten cases above include one labelled "symlinky nested traversal". It is
-   * `/wt/src/a/../../AGENTS.md`: lexical `..` segments, no link anywhere. The
+   * The cases above include `/wt/src/a/../../AGENTS.md`, which was labelled
+   * "symlinky nested traversal" until PRDR-153 renamed it to what it is:
+   * lexical `..` segments, no link anywhere. The
    * pack asserted the thing it was named for and never tested it, and a link
    * inside the worktree walked past all three checks — the boundary, the
    * declared surface, and the SEC-3 protected globs.
@@ -464,7 +465,54 @@ describe("T-052 SEC-* aggregate invariants", () => {
 
     /* The guard restored the base — and the metric still says a write happened. */
     expect(git(root, "rev-parse", "main").trim(), "the base must be restored").toBe(baseSha);
-    expect(baseReflogWrites(root, "main"), "a reverted write is still a write").toBeGreaterThan(0);
+    /**
+     * PRDR-159: TWO, not "greater than zero".
+     *
+     * The hostile commit is one entry and the guard's restore is another, and
+     * `toBeGreaterThan(0)` was satisfied by the commit alone — so the metric
+     * could drop the restore entirely and this still passed. The restore is
+     * the half the docstring is actually about.
+     */
+    expect(baseReflogWrites(root, "main"), "the tamper AND the guard's own restore").toBeGreaterThanOrEqual(2);
+    /**
+     * PRDR-159: and the restore says who did it. The metric counts entries by
+     * hash now, so it no longer depends on the message — which would leave the
+     * `-m` untested decoration. The reflog is EVIDENCE, and evidence a person
+     * reads: "detent: base guard restore" is the difference between knowing
+     * something moved the base back and knowing what did.
+     */
+    expect(git(root, "reflog", "show", "--format=%gs", "main"), "the guard signs its own restore").toContain(
+      "detent: base guard restore",
+    );
+  });
+
+  /**
+   * PRDR-159: a tamper that leaves no commit at all.
+   *
+   * `git update-ref` without `-m` writes a reflog entry whose MESSAGE is
+   * empty, and the metric filtered empty lines before counting — so a base
+   * that demonstrably moved and came back reported 0. The filter was there to
+   * drop the trailing newline of `--format=%gs`; it took the real entries with
+   * it.
+   */
+  it("counts a base tamper performed with update-ref alone, which leaves no commit behind", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    const baseSha = git(root, "rev-parse", "main").trim();
+    /* On a side branch, so building the target commit does not move `main` itself. */
+    git(root, "checkout", "-q", "-b", "scratch");
+    writeTree(root, { "other.txt": "x\n" });
+    git(root, "add", "other.txt");
+    git(root, "commit", "-q", "-m", "elsewhere");
+    const moved = git(root, "rev-parse", "HEAD").trim();
+    git(root, "checkout", "-q", "main");
+    const before = baseReflogWrites(root, "main");
+
+    git(root, "update-ref", "refs/heads/main", moved);
+    git(root, "update-ref", "refs/heads/main", baseSha);
+
+    expect(git(root, "rev-parse", "main").trim(), "the base is back where it started").toBe(baseSha);
+    expect(baseReflogWrites(root, "main") - before, "two moves the metric must not be blind to").toBe(2);
   });
 });
 

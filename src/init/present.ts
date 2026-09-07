@@ -52,11 +52,29 @@ export interface PresentInput {
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
 ): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges"> {
-  const list = <T>(phase: string, key: string): T[] => (outputs[phase]?.[key] as T[] | undefined) ?? [];
+  /**
+   * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
+   * came straight back — a string was spread into characters and `q.question`
+   * dereferenced `undefined`. This function's whole reason to exist is reading
+   * a checkpoint an older build wrote, where every value is `unknown`.
+   */
+  const list = <T>(phase: string, key: string): T[] => {
+    const value = outputs[phase]?.[key];
+    return Array.isArray(value) ? (value as T[]) : [];
+  };
+  /** A question a person can actually be shown: both fields present and stringy. */
+  const isQuestion = (q: unknown): q is PlanQuestion =>
+    typeof q === "object" && q !== null && typeof (q as PlanQuestion).question === "string" && typeof (q as PlanQuestion).id === "string";
+  const isSlice = (s: unknown): s is NonNullable<PresentInput["slices"]>[number] =>
+    typeof s === "object" && s !== null && typeof (s as { id?: unknown }).id === "string" && Array.isArray((s as { tickets?: unknown }).tickets);
   const seen = new Set<string>();
   const takenIds = new Set<string>();
   const questions: PlanQuestion[] = [];
-  for (const q of [...list<PlanQuestion>("ANALYZE", "open_questions"), ...list<PlanQuestion>("SLICE", "questions"), ...list<PlanQuestion>("PLAN", "questions")]) {
+  for (const q of [
+    ...list<PlanQuestion>("ANALYZE", "open_questions"),
+    ...list<PlanQuestion>("SLICE", "questions"),
+    ...list<PlanQuestion>("PLAN", "questions"),
+  ].filter(isQuestion)) {
     const key = q.question.trim().toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -70,9 +88,16 @@ export function presentInputsFromOutputs(
     takenIds.add(id);
     questions.push({ ...q, id });
   }
-  const plan = outputs["PLAN"]?.["plan"] as { slices?: PresentInput["slices"] } | undefined;
+  const plan = outputs["PLAN"]?.["plan"] as { slices?: unknown } | undefined;
+  /**
+   * PRDR-157: `slices: "not an array"` used to pass straight through, and
+   * `renderPresentation` then read `.length` on the string (12, so the block
+   * rendered) and iterated its characters until `s.tickets.length` threw. The
+   * builder is the boundary; it returns something renderable or nothing.
+   */
+  const slices = (Array.isArray(plan?.slices) ? plan.slices : []).filter(isSlice);
   return {
-    slices: plan?.slices ?? [],
+    slices,
     questions,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings"),
     derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges"),

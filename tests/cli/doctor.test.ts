@@ -4,6 +4,8 @@ import { vi } from "vitest";
 import { rmSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { doctor, main, renderDoctor } from "../../src/cli/doctor.js";
+import { buildLiveBackend } from "../../src/sessions/live.js";
+import type { SessionBackend } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { removeTree } from "../helpers.js";
 import { makeRunRepo } from "../kernel/run-fixture.js";
@@ -169,19 +171,60 @@ describe("T-050 smoke session (R-10)", () => {
  * broken; it must survive one.
  */
 describe("PRDR-143 doctor's own entry point", () => {
+  /**
+   * PRDR-158: `hasAuth` is FORCED here.
+   *
+   * Left to the machine, this test proved nothing on any runner without live
+   * auth: `hasLiveBackendAuth()` returns false, `buildLiveBackend` is never
+   * called, and the corrupt fixture is never read. Reverting the fix and
+   * running under `DETENT_NO_LIVE=1` — the CI environment — passed in 136ms.
+   * Forcing the decision makes the assertion true everywhere or nowhere.
+   */
   it("survives a bindings.json it cannot read, and still prints its offline checks", async () => {
     const root = await fixture();
     writeFileSync(path.join(root, ".detent", "bindings.json"), '{"schema_version":99}');
     const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
-      await main([root, "--smoke"]);
+      await main([root, "--smoke"], { hasAuth: () => true, buildBackend: buildLiveBackend });
       const printed = out.mock.calls.join("");
       expect(printed, "doctor must still report").toContain("detent doctor");
       expect(printed).toContain("config");
+      expect(err.mock.calls.join(""), "and must say why the live checks are missing").toContain("live checks unavailable");
     } finally {
       out.mockRestore();
       err.mockRestore();
+    }
+  });
+
+  /**
+   * PRDR-158: the suite must not be able to spend, and not because a fixture
+   * happens to be corrupt.
+   *
+   * With a VALID bindings.json — which `makeRunRepo` writes — `buildLiveBackend`
+   * succeeds on any logged-in machine, and `doctor` then runs a real billed
+   * `maxTurns: 1` session. The only thing that used to prevent it was the
+   * `{"schema_version":99}` line in the test above. This asserts the seam
+   * instead: the backend `main` uses is the one it was handed.
+   */
+  it("spends only through the backend it is given, never one it builds itself", async () => {
+    const root = await fixture();
+    let ran = 0;
+    const fake = {
+      name: "fake",
+      checkVersion: async () => undefined,
+      run: async () => {
+        ran += 1;
+        return okResult({ telemetryParsed: true });
+      },
+    } as unknown as SessionBackend;
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      await main([root, "--smoke"], { hasAuth: () => true, buildBackend: () => fake });
+      expect(ran, "the injected backend is the one that ran").toBe(1);
+      expect(out.mock.calls.join(""), "and its result is what doctor reports").toContain("smoke OK");
+    } finally {
+      out.mockRestore();
     }
   });
 

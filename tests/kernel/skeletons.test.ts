@@ -35,9 +35,15 @@ describe("T-140 worker artifact skeletons cannot drift from their schemas", () =
    * drift from the validator that judges it". The `approve` half honoured that
    * by parsing `reviewSkeleton()` from source. The `changes` half retyped the
    * shape by hand — so `expected_output_note`, which is the actual instruction
-   * a reviewer receives, was compared to nothing. Change `reviewTags` and the
-   * note desynchronises silently, reproducing the T-140 defect this file exists
-   * to prevent.
+   * a reviewer receives, was compared to nothing.
+   *
+   * PRDR-160: what this DOES guard, stated correctly. The note is derived from
+   * `reviewTags`, so "adding a tag without updating the note" is unreachable —
+   * mutating `reviewTags` leaves all four tests here green, and the commit
+   * message that claimed otherwise was wrong. The derivation is the fix; these
+   * assertions guard the derivation's survival, catching a future hand-retyped
+   * list (drop `rules` and the first expectation fires) and a format change
+   * that would make the note unreadable to this check.
    */
   it("the note the reviewer is given names exactly the tags the validator accepts", () => {
     const note = reviewInputsNote();
@@ -45,7 +51,8 @@ describe("T-140 worker artifact skeletons cannot drift from their schemas", () =
       expect(note, `the note omits the tag \`${tag}\`, which the validator accepts`).toContain(tag);
     }
     /* And it teaches no tag the validator would reject. */
-    const taught = (/\{tag: ([a-z|]+)/.exec(note)?.[1] ?? "").split("|").filter((t) => t !== "");
+    /* PRDR-160: `[a-z|]+` truncated at `_`, so a tag like `cross_slice` failed with a message accusing the note of omitting it. */
+    const taught = (/\{tag: ([a-z_|-]+)/.exec(note)?.[1] ?? "").split("|").filter((t) => t !== "");
     expect(taught.length, "the note's tag list could not be read — the format drifted").toBeGreaterThan(0);
     expect([...taught].sort()).toEqual([...reviewTags].sort());
   });

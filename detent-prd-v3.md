@@ -457,10 +457,19 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   Deliberately EVIDENCE, on the A-1⁗ and V-6 precedent: a fast zero-exit command is genuinely
   ambiguous — a small build and a clean lint are both — so refusing it would make `init` unusable
   on the projects it should serve, and the decisive check (break the tree, require red) is what
-  V-6 does at review time where a diff exists to revert. The signal is DURATION, measured rather
-  than guessed: a vacuous `echo` probes in 96 ms and a script doing real work in 344 ms, while
-  output is useless because npm echoes the script line either way. The notice carries the
-  command's own output so a person settles it in a second.
+  V-6 does at review time where a diff exists to revert. The signal is the COMMAND TEXT, not its
+  duration (PRDR-156): a command whose every statement is a no-op — `echo …`, `true`, `:`,
+  `exit 0`, empty — is vacuous by inspection, and `Candidate.config_region` already carries the
+  script body or recipe block the engine read. Duration was tried first and does not discriminate.
+  A vacuous `echo` probes in 96 ms of which ~94 ms is npm's own startup, while a no-op `make` takes
+  12 ms and is legitimate: the populations overlap, and a 500 ms cut flagged all four gates of an
+  ordinary small project — including the 344 ms script this rule's own evidence calls real work.
+  Narrow and true beats broad and wrong, and the miss direction is the safe one, because an
+  undetected vacuous gate is the status quo whereas a notice on every gate is a new harm. What
+  this cannot see — `jest --passWithNoTests`, a suite with no assertions — is undecidable here and
+  belongs to V-6. The notice carries the command's own output, SCRUBBED (SEC-4), plus its duration
+  as context, and it reaches the operator through `PipelineDeps.note`, the seam `init` already
+  uses to speak to them: a notice the pipeline does not forward is not a notice.
 
 - **V-1″ (3.1.1, PRDR-135).** No bound gate is UNVERIFIABLE, not green. `runScopedGates`
   returned `null` when no binding matched any requested slot and the caller read it as a pass,

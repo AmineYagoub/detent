@@ -218,6 +218,13 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         analysis: analysisFromOutputs(ctx.outputs),
+        /**
+         * PRDR-156: this was the one handler in this file that did not forward
+         * `note`, so V-1‴'s vacuous-gate notice was emitted into an undefined
+         * callback and no operator ever saw it. The feature was complete,
+         * tested at the adapter layer, and unreachable.
+         */
+        ...(deps.note === undefined ? {} : { note: deps.note }),
       }),
   };
 }

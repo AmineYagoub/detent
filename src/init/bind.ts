@@ -8,6 +8,7 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { createHash } from "node:crypto";
 import type { Analysis } from "../schemas/init.js";
 import type { PhaseOutcome } from "./machine.js";
+import { scrub } from "../kernel/scrub.js";
 
 /**
  * T-064 — DETERMINE_VERIFICATION and auto-binding (C-3b, D-10, V-1).
@@ -168,6 +169,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
       outputs: {
         bindings: bindings as unknown as Record<string, unknown>[],
         skips: [],
+        /**
+         * PRDR-156: greenfield executes nothing (C-4), so there is nothing to
+         * call vacuous — but the KEY is present, because a phase whose output
+         * shape depends on which branch produced it is the same "foreign shape
+         * an older build left behind" hazard PRDR-144 is about.
+         */
+        gate_notices: [],
         status: "provisional",
       },
     };
@@ -183,6 +191,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     approvedBy: "auto",
     ...(deps.timeoutMs === undefined ? {} : { timeoutMs: deps.timeoutMs }),
     ...(deps.now === undefined ? {} : { now: deps.now }),
+    /**
+     * SEC-4 (PRDR-156): the notices from here are both PRINTED to the operator
+     * and written into this phase's `gate_notices` output, and they quote the
+     * project's own command output. N-1 keeps `scrub` out of the adapter, so
+     * this is where it enters.
+     */
+    redact: scrub,
   });
 
   /** ---- C-3b interrupt 1: two plausible candidates — never a guess (V-1) ---- */

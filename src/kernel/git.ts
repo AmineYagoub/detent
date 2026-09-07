@@ -228,7 +228,8 @@ export function enforceBaseGuard(root: string, snapshot: RefSnapshot, runBranch:
     const became = now.get(ref) ?? null;
     if (became !== was) {
       violations.push({ ref, was, became });
-      git(root, "update-ref", `refs/heads/${ref}`, was);
+      /* PRDR-159: labelled, so a person reading the reflog can see who moved it back. */
+      git(root, "update-ref", "-m", "detent: base guard restore", `refs/heads/${ref}`, was);
     }
   }
   /** A brand-new non-run branch created by a session is also a write. */
@@ -332,7 +333,17 @@ export function changedFiles(root: string, baseRef: string): string[] {
  * — the guard's own restore is honest evidence that a write happened).
  */
 export function baseReflogWrites(root: string, base: string): number {
-  const raw = tryGit(root, "reflog", "show", "--format=%gs", base);
+  /**
+   * PRDR-159: `%H`, not `%gs`.
+   *
+   * `git update-ref` without `-m` writes an entry whose MESSAGE is empty, and
+   * filtering empty lines — which was there to drop the trailing newline —
+   * dropped those entries with it. The guard's own restore is a bare
+   * `update-ref`, so the one write this metric's docstring is about counted as
+   * zero, and a base tampered with by `update-ref` alone reported untouched.
+   * Every entry has a commit hash; not every entry has a message.
+   */
+  const raw = tryGit(root, "reflog", "show", "--format=%H", base);
   if (raw === null) return 0;
   const entries = raw.split("\n").filter((l) => l.trim() !== "");
   return Math.max(0, entries.length - 1);

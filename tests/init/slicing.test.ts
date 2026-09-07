@@ -9,7 +9,7 @@ import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { PLAN_FINDING_TAGS, slicesSchema, type SliceSpec } from "../../src/schemas/init.js";
 import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
-import { presentInputsFromOutputs } from "../../src/init/present.js";
+import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 
@@ -505,18 +505,60 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
  * rendering, AFTER the expensive phases have been skipped as reusable.
  */
 describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () => {
+  /**
+   * PRDR-157: these must hit the keys the builder actually READS.
+   *
+   * The first version of this list carried `ANALYZE.questions`, which
+   * `presentInputsFromOutputs` never reads — so its one wrong-type case was
+   * structurally equivalent to `{}`, and the five others were shapes the
+   * function already tolerated before the commit that introduced them. The
+   * keys below are the three question sources it does read, and the shapes are
+   * the ones that were observed to throw.
+   */
+  const FOREIGN: Record<string, Record<string, unknown>>[] = [
+    {},
+    { PLAN: {} },
+    { PLAN: { plan: null } },
+    { PLAN: { plan: { slices: "not an array" } } },
+    { SLICE: { slices: [] }, PLAN: { plan: { slices: [] } } },
+    { ANALYZE: { open_questions: "not an array" } },
+    { SLICE: { questions: "not an array" } },
+    { PLAN: { questions: "not an array" } },
+    { ANALYZE: { open_questions: [null] } },
+    { ANALYZE: { open_questions: [{}] } },
+    { PLAN: { review_findings: "not an array", derived_edges: 7 } },
+  ];
+
   it("survives outputs that are missing, empty, or the wrong shape", () => {
-    for (const outputs of [
-      {},
-      { PLAN: {} },
-      { PLAN: { plan: null } },
-      { PLAN: { plan: { slices: "not an array" } } },
-      { SLICE: { slices: [] }, PLAN: { plan: { slices: [] } } },
-      { ANALYZE: { questions: "not an array" } },
-    ] as Record<string, Record<string, unknown>>[]) {
+    for (const outputs of FOREIGN) {
       expect(
         () => presentInputsFromOutputs(outputs),
         `presentInputsFromOutputs threw on ${JSON.stringify(outputs).slice(0, 60)}`,
+      ).not.toThrow();
+    }
+  });
+
+  /**
+   * PRDR-157: carried to the end of the pipeline, because the hazard this
+   * block's own comment names is "throws inside RENDERING". A builder that
+   * returns `slices: "not an array"` has not survived anything — the renderer
+   * reads `.length` on it, finds 12, and then iterates its characters.
+   */
+  it("returns a shape the renderer can actually render", () => {
+    for (const outputs of FOREIGN) {
+      const built = presentInputsFromOutputs(outputs);
+      expect(
+        () =>
+          renderPresentation({
+            ...built,
+            root: "/tmp",
+            tickets: [],
+            bindings: [],
+            skips: [],
+            assignments: {},
+            bootstrap: null,
+          }),
+        `renderPresentation threw on ${JSON.stringify(outputs).slice(0, 60)}`,
       ).not.toThrow();
     }
   });

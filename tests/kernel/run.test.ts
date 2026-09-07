@@ -206,15 +206,24 @@ describe("PRDR-144 a review handed an empty diff", () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
     let sawDiff: string | null = null;
+    let hadDiffKey = false;
     /* A session that commits nothing: the gate is green on the unchanged tree. */
     const implementNothing: StageFn = () => okResult();
     const capturing: StageFn = (spec) => {
-      sawDiff = (JSON.parse(spec.promptVariable) as { inputs: { diff?: string } }).inputs.diff ?? "";
+      /**
+       * PRDR-160: no `?? ""`. It made a MISSING `diff` key indistinguishable
+       * from an empty one, so a refactor that dropped the key entirely would
+       * leave this green and the guarantee would evaporate silently. The key
+       * being present is half of what this asserts.
+       */
+      const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
+      hadDiffKey = Object.hasOwn(inputs, "diff");
+      sawDiff = inputs["diff"] as string | undefined ?? null;
       return reviewApprove(spec);
     };
     await run(opts(root, new MockBackend({ implement: implementNothing, review: capturing })));
 
-    expect(sawDiff, "the reviewer must be launched at all").not.toBeNull();
+    expect(hadDiffKey, "the reviewer must be launched, and its inputs must carry a `diff` key at all").toBe(true);
     expect(sawDiff, "an empty diff reaches the reviewer as empty — not as a banner, not as a throw").toBe("");
     /*
      * And the verdict is what decides: Detent does not second-guess an approve

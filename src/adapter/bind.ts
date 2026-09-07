@@ -65,6 +65,12 @@ interface BoundOutcome {
   readonly kind: "bound";
   readonly slot: GateSlot;
   readonly binding: Binding;
+  /**
+   * V-1‴ (PRDR-156): the candidate the binding came from. `Binding` carries
+   * `config_hash` but not `config_region`, and the region is the script body
+   * or recipe block — the only place the command's actual TEXT survives.
+   */
+  readonly candidate: Candidate;
   readonly result: GateResult;
 }
 
@@ -117,6 +123,13 @@ export interface BindOptions {
   readonly status?: Binding["status"];
   readonly facts?: Pick<StackFacts, "pm">;
   readonly normalize?: (candidate: Candidate, facts?: Pick<StackFacts, "pm">) => Invocation;
+  /**
+   * SEC-4 (PRDR-156): how command output embedded in a notice is redacted.
+   * `src/init/bind.ts` — the only production caller — passes `scrub`. Absent,
+   * notices stay in memory and are never written or printed, which is all a
+   * direct `bindAll` caller in a test does.
+   */
+  readonly redact?: Redact;
 }
 
 const defaultRunner: GateRunner = (spec) =>
@@ -196,6 +209,7 @@ export async function bindSlot(
   return {
     kind: "bound",
     slot,
+    candidate,
     binding: bindingSchema.parse({
       schema_version: SCHEMA_VERSION,
       slot,
@@ -241,25 +255,90 @@ export interface BindReport {
  * records, and hands it to the human, who settles it in a second.
  */
 /**
- * Measured, not guessed: `"test": "echo 'no tests here'"` probes in 96 ms
- * through npm, while a script doing real work takes 344 ms and a real suite
- * takes seconds. Output is NOT a usable signal — npm echoes the script line, so
- * even a vacuous gate prints something — which is why this keys on duration and
- * hands the operator the output to judge rather than judging it here.
+ * PRDR-156: the signal is the command's TEXT, not how long it took.
+ *
+ * Duration was tried first and does not discriminate. A vacuous `echo` probes
+ * in 96 ms of which ~94 ms is npm's own startup, while a warm no-op `make` is
+ * 12 ms and legitimate — the populations overlap, and the 500 ms cut flagged
+ * all four gates of an ordinary small project, including the 344 ms script the
+ * rule's own evidence called real work. A warning that fires on every slot
+ * every time is one nobody reads.
+ *
+ * `config_region` is "the smallest canonical text that determines `resolved`",
+ * so the node engine holds `scripts.test=echo no tests here` and make and just
+ * hold the recipe block. That text is decidable where a stopwatch is not.
+ *
+ * Narrow on purpose. `jest --passWithNoTests`, or a suite with no assertions,
+ * is not visible here and is not meant to be — V-6 catches those at review
+ * time, where a diff exists to revert. A miss leaves the status quo standing;
+ * a false accusation on every gate would be a new harm.
  */
-const QUIET_GATE_MS = 500;
 
-export function vacuousGateNotices(outcomes: readonly SlotOutcome[]): string[] {
+/** The executable half of a `config_region`, with each engine's own shape stripped off. */
+function commandBody(region: string): string | null {
+  /* `exists:<file>` — go, rust, tsc. The command follows from a real tool, never from a script body. */
+  if (region.startsWith("exists:")) return null;
+  const script = /^scripts\.[^=]+=([\s\S]*)$/.exec(region);
+  if (script !== null) return script[1] ?? "";
+  /* A make or just recipe block: the first line is the target header, the rest is the recipe. */
+  const lines = region.split("\n");
+  if (lines.length > 1) return lines.slice(1).join("\n");
+  return region;
+}
+
+/** Shell statements that exit 0 having done nothing. */
+const NO_OP = /^(?:echo|printf|true|exit\s+0)\b|^:$/;
+
+/**
+ * True when EVERY statement in the command is a no-op. Splitting is
+ * quote-blind on purpose: over-splitting a real command yields fragments that
+ * are not no-ops, so it can only cause a miss, never a false accusation.
+ */
+export function verifiesNothing(region: string): boolean {
+  const body = commandBody(region);
+  if (body === null) return false;
+  const statements = body
+    .split(/&&|\|\||;|\n/)
+    .map((part) => part.trim().replace(/^[@-]+/, "").trim())
+    .filter((part) => part !== "" && !part.startsWith("#"));
+  /* An empty script body is the emptiest gate of all. */
+  if (statements.length === 0) return true;
+  return statements.every((part) => NO_OP.test(part));
+}
+
+/**
+ * The redaction the caller supplies. REQUIRED, not defaulted to identity:
+ * this notice quotes a project's own command output, and a default that does
+ * nothing is a default that leaks. N-1 forbids the adapter importing
+ * `kernel/scrub.ts`, so the layer that composes them passes it in — which is
+ * the same shape `runner` and `normalize` already take here.
+ */
+export type Redact = (text: string) => string;
+
+export function vacuousGateNotices(outcomes: readonly SlotOutcome[], redact: Redact): string[] {
   const notices: string[] = [];
   for (const outcome of outcomes) {
-    if (outcome.kind !== "bound" || outcome.result.durationMs >= QUIET_GATE_MS) continue;
-    const tail = outcome.result.output.trim().split("\n").slice(-2).join(" / ").slice(0, 120);
+    if (outcome.kind !== "bound" || !verifiesNothing(outcome.candidate.config_region)) continue;
+    /**
+     * SEC-4: scrubbed BEFORE it can reach a file, a stream or a prompt — the
+     * same rule `referee-gate.ts` applies to gate output it writes. A project
+     * whose test script echoes a token would otherwise put that token into a
+     * phase output verbatim.
+     */
+    const tail = redact(outcome.result.output.trim()).split("\n").slice(-2).join(" / ").slice(0, 120);
+    /**
+     * The COMMAND too, not just its output. Caught by the pipeline-layer test:
+     * a script body is project configuration and can carry a credential —
+     * `curl -H "Authorization: Bearer …"` is an ordinary thing to find in one
+     * — and this notice quotes it back verbatim.
+     */
+    const body = redact(commandBody(outcome.candidate.config_region)?.trim() ?? "");
     notices.push(
-      `${outcome.slot}: \`${outcome.binding.resolved}\` exited 0 in ${outcome.result.durationMs}ms — ` +
-        `confirm it actually runs your checks. It printed: ${tail === "" ? "(nothing)" : tail}. ` +
+      `${outcome.slot}: \`${outcome.binding.resolved}\` runs \`${body}\` — every statement in it exits 0 having ` +
+        `done nothing. It printed: ${tail === "" ? "(nothing)" : tail} (${outcome.result.durationMs}ms). ` +
         "A gate that always passes verifies nothing, and every ticket goes green against it (V-1‴). " +
-        "Fast can be legitimate — a small build, a clean lint — so this is evidence, not a refusal.",
-    );
+        "Evidence, not a refusal — bind a command that can fail, or confirm this is what you meant.",
+    )
   }
   return notices;
 }
@@ -276,7 +355,7 @@ export async function bindAll(discovery: Discovery, opts: BindOptions): Promise<
       (o): o is ChoiceRequiredOutcome | RejectedOutcome => o.kind === "choice-required" || o.kind === "rejected",
     ),
     unbound: outcomes.filter((o): o is UnboundOutcome => o.kind === "unbound").map((o) => o.slot),
-    notices: vacuousGateNotices(outcomes),
+    notices: vacuousGateNotices(outcomes, opts.redact ?? ((t) => t)),
   };
 }
 

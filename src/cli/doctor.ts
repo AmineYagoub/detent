@@ -201,7 +201,27 @@ export function renderDoctor(report: DoctorReport): string {
   return `detent doctor\n${lines.join("\n")}\n`;
 }
 
-export async function main(argv: readonly string[]): Promise<number> {
+/**
+ * PRDR-158: the auth decision and the backend builder are seams.
+ *
+ * Without them the test that proves `doctor` survives an unreadable
+ * `bindings.json` only proves it on a machine that HAS live auth — everywhere
+ * else `hasLiveBackendAuth()` short-circuits, `buildLiveBackend` is never
+ * called, the corrupt fixture is never read, and the test passes having
+ * exercised nothing. That is the environment CI runs in.
+ *
+ * The second reason is spend. `main([root, "--smoke"])` was the one call in
+ * the suite reaching `buildLiveBackend` un-injected, and on the pristine
+ * fixture it SUCCEEDS — the only thing standing between `npm test` and a
+ * billed session was a corrupt-bindings fixture written for another purpose.
+ * A dependency is a seam; a fixture detail is a coincidence.
+ */
+export interface DoctorMainDeps {
+  readonly hasAuth?: () => boolean;
+  readonly buildBackend?: (root: string) => SessionBackend;
+}
+
+export async function main(argv: readonly string[], mainDeps: DoctorMainDeps = {}): Promise<number> {
   const { positionals, values } = parseArgs({
     args: [...argv],
     allowPositionals: true,
@@ -232,8 +252,10 @@ export async function main(argv: readonly string[]): Promise<number> {
    */
   let deps: DoctorDeps = {};
   if (values.smoke === true) {
+    const hasAuth = mainDeps.hasAuth ?? hasLiveBackendAuth;
+    const build = mainDeps.buildBackend ?? buildLiveBackend;
     try {
-      deps = hasLiveBackendAuth() ? { backend: buildLiveBackend(root) } : {};
+      deps = hasAuth() ? { backend: build(root) } : {};
     } catch (err) {
       process.stderr.write(`live checks unavailable: ${(err as Error).message}\n`);
     }

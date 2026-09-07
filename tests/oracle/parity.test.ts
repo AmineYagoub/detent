@@ -77,7 +77,18 @@ describe("T-018 oracle parity report (M0 exit)", () => {
     }
     expect(byFile.size, "no green entries found — the map shape drifted").toBeGreaterThan(0);
     for (const [file, claimed] of byFile) {
-      const cases = (readFileSync(file, "utf8").match(/\n\s*it(?:\.each\([^)]*\))?\(/g) ?? []).length;
+      /**
+       * PRDR-160: `it(` was not the only way to declare one.
+       *
+       * The previous pattern was `\n\s*it(?:\.each\([^)]*\))?\(` — it missed
+       * `test(`, every `it.<modifier>(` form, and any `it.each(...)` whose
+       * argument contained a `)` of its own, such as
+       * `it.each(Object.entries(F))`. Those are UNDERCOUNTS, so they fail the
+       * assertion spuriously rather than passing it vacuously; no mapped file
+       * hits one today, which is why nobody noticed. It also anchors on `\n`,
+       * so a declaration on line 1 of a file is invisible.
+       */
+      const cases = (readFileSync(file, "utf8").match(/(^|\n)\s*(?:it|test)(?:\.\w+)*(?:\([^)]*\))?\s*\(/g) ?? []).length;
       expect(cases, `${file} is claimed by ${claimed} parity entries but holds ${cases} tests`).toBeGreaterThanOrEqual(claimed);
     }
   });

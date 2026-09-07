@@ -58,11 +58,14 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
            * PRDR-143: REALISTIC content. These carried `description: ""` and a
            * single "it works" criterion, and the assertion below is described
            * by this file as "the tripwire" for the largest paid session in the
-           * product. Measured through the same `JSON.stringify` the spec
-           * builder uses, a 500-ticket whole-plan review is 171.9 KB on the
-           * empty shape and 465 KB on this one — so the `< 400 KB` bound passed
-           * only because the fixture carried nothing. A tripwire calibrated on
-           * a payload the product cannot produce is not a tripwire.
+           * product. The `< 400 KB` bound passed only because the fixture
+           * carried nothing; a tripwire calibrated on a payload the product
+           * cannot produce is not a tripwire.
+           *
+           * PRDR-160: the numbers that were here — 171.9 KB empty, 465 KB
+           * realistic — were wrong, and the file gave two different values for
+           * the same measurement. See the table at the assertions below, which
+           * records what this fixture actually produces.
            */
           description:
             `Implement the ${id} handler so the request path terminates in a persisted record, ` +
@@ -184,13 +187,35 @@ describe("C-2‴ at product scale", () => {
      * that will strain a context window, and this is the tripwire.
      */
     const widest = (stage: string): number => Math.max(...seen.filter((s) => s.stage === stage).map((s) => s.kb));
+    /**
+     * PRDR-160: every number below was measured through this test's own
+     * instrumentation, at 500 tickets, on one machine. The prior figures were
+     * recorded from nothing reproducible and were wrong by a third.
+     *
+     *   stage          this fixture   prior shape   bound   % of bound
+     *   ANALYZE            1.51 KB       1.51 KB      —         —
+     *   SLICE              8.00 KB       8.00 KB    < 50       16%
+     *   PLAN             106.64 KB     106.64 KB   < 150     71.1%
+     *   REVIEW:slice     125.39 KB     116.25 KB   < 200     62.7%
+     *   REVIEW:whole     484.11 KB     255.59 KB   < 600     80.7%
+     *
+     * "Prior shape" is this fixture with `description: ""`, a single "it works"
+     * criterion and no non-goals — the content PRDR-143 replaced. Reproduce it
+     * by making those three edits and re-running. Note that PLAN does not move
+     * between the two: its payload is titles and ids, which PRDR-143 did not
+     * change.
+     */
     expect(widest("SLICE")).toBeLessThan(50);
+    /** 71.1% of its bound. The next content increase reaches it before REVIEW:whole reaches 600. */
     expect(widest("PLAN")).toBeLessThan(150);
     /**
-     * PRDR-143: 500 tickets of REALISTIC content measure ~484 KB here — roughly
-     * 120k tokens of JSON in one prompt variable. The previous bound was 400 KB
-     * and passed only because the fixture tickets were empty (171.9 KB); the
-     * tripwire fired the moment they were given real descriptions and criteria.
+     * PRDR-160: the second-largest payload, and it was asserted by nothing —
+     * in the file that calls itself the tripwire. Only REVIEW:whole was
+     * re-baselined when the fixture grew, so this one grew 8% unwatched.
+     */
+    expect(widest("REVIEW:slice")).toBeLessThan(200);
+    /**
+     * PRDR-143: ~484 KB is roughly 120k tokens of JSON in one prompt variable.
      *
      * The number is recorded rather than merely raised, because it is a
      * PRODUCT limit and not a test parameter: the whole-plan review is the one

@@ -304,18 +304,23 @@ describe("V-1‴ a gate that runs cleanly and verifies nothing is flagged, not r
     return root;
   }
 
-  it("flags a script that exits instantly, and hands the operator its output to judge", async () => {
+  it("flags a script whose every statement is a no-op, and quotes it back", async () => {
     const root = repoWith({ test: "echo 'no tests here'" });
     const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
     /* Still BOUND — this is evidence, never a refusal. */
     expect(report.bindings.map((b) => b.slot)).toContain("test");
-    expect(report.notices.join("\n")).toContain("confirm it actually runs your checks");
-    expect(report.notices.join("\n"), "the operator needs the output to judge in one second").toContain("no tests here");
+    expect(report.notices.join("\n")).toContain("exits 0 having done nothing");
+    expect(report.notices.join("\n"), "the operator needs the command named to judge in one second").toContain("no tests here");
   });
 
-  it("says nothing about a gate that took real time", async () => {
-    /* Output is not a usable signal — npm echoes the script line either way — so duration is. */
-    const root = repoWith({ test: "node -e \"const t=Date.now();while(Date.now()-t<900);console.log('ran')\"" });
+  /**
+   * PRDR-156: this is the case the duration heuristic got backwards. A real
+   * command that finishes instantly is the NORM — a warm no-op `make` is 12 ms
+   * — and the 500 ms cut accused all four gates of an ordinary project. The
+   * test that used to stand here burned a 900 ms busy-wait to buy its pass.
+   */
+  it("says nothing about a real command, however fast it returns", async () => {
+    const root = repoWith({ test: "node -e \"if (1 + 1 !== 2) process.exit(1)\"" });
     const report = await bindAll(discover(root), { root, timeoutMs: 20_000 });
     expect(report.bindings.map((b) => b.slot)).toContain("test");
     expect(report.notices, "a gate that did work must not be accused").toEqual([]);
