@@ -7,6 +7,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { buildOptions, buildPreToolUseHook, parseResultMessage, type SdkBackendConfig } from "../../src/sessions/sdk.js";
+import { isOutage } from "../../src/init/session.js";
 import { removeTree, writeTree } from "../helpers.js";
 import { addTicket, implementGreen, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 
@@ -356,4 +357,57 @@ describe("SEC-3 a refused surface request says which rule refused it", () => {
     expect(note).toContain("the request named no path");
     expect(note, "an absent justification is absent, not an empty pair of brackets").not.toContain("()");
   }, 60_000);
+});
+
+/**
+ * S-4 / PRDR-187 — an absent-telemetry result keeps its REASON.
+ *
+ * The no-telemetry branch returned `rawTail: ""`, discarding `result` along
+ * with the usage — so a session limit arriving before any tokens were spent
+ * surfaced as "planner session failed" with nothing after the colon, and
+ * PRDR-185's outage retry, which reads that message, could not fire. The one
+ * shape it exists for was the one shape it could not see.
+ *
+ * PRDR-181 caused it: before that fix, `total_cost_usd` with an empty
+ * `modelUsage` counted as telemetry and the tail came from the path below.
+ * Tightening the check correctly moved this shape here — and here threw the
+ * reason away.
+ */
+describe("S-4 a result with no telemetry still carries why it failed", () => {
+  const limit = "Claude Code returned an error result: You've hit your session limit · resets 5:20pm";
+
+  it("keeps `result` as the tail when the usage breakdown is empty", () => {
+    const parsed = parseResultMessage({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      result: limit,
+      total_cost_usd: 0,
+      modelUsage: {},
+      num_turns: 1,
+    } as never);
+    expect(parsed.ok, "an error result is not ok").toBe(false);
+    expect(parsed.telemetryParsed, "and its telemetry is still absent").toBe(false);
+    expect(parsed.rawTail, "but the reason is not telemetry and must survive").toContain("session limit");
+  });
+
+  it("is what makes the init outage retry reachable at all", () => {
+    const parsed = parseResultMessage({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      result: limit,
+      total_cost_usd: 0,
+      modelUsage: {},
+      num_turns: 1,
+    } as never);
+    /* Verbatim the message `launchOnce` throws, which `launchInitSession` matches on. */
+    const thrown = `planner session failed${parsed.rawTail === "" ? "" : `: ${parsed.rawTail.slice(-300)}`}`;
+    expect(isOutage(thrown), "PRDR-185 reads this message; an empty tail makes it blind").toBe(true);
+  });
+
+  it("still reports no tail when the result genuinely carries none", () => {
+    const parsed = parseResultMessage({ type: "result", subtype: "success", total_cost_usd: 0, modelUsage: {} } as never);
+    expect(parsed.rawTail).toBe("");
+  });
 });

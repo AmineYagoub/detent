@@ -178,7 +178,23 @@ export function parseResultMessage(message: unknown): SessionResult {
       cacheReadInputTokens: 0,
       cacheCreationInputTokens: 0,
       turns: 0,
-      rawTail: "",
+      /**
+       * PRDR-187: the REASON survives, even when the telemetry does not.
+       *
+       * This branch is about absent telemetry, and it discarded `result` along
+       * with it — so a session limit arriving before any tokens were spent
+       * produced `ok: false` with an empty tail, and the operator was told
+       * "planner session failed" with nothing after the colon. PRDR-185's
+       * outage retry reads that message, so it could not fire either: the one
+       * shape it exists for was the one shape it could not see.
+       *
+       * PRDR-181 caused this. Before it, `total_cost_usd` with an empty
+       * `modelUsage` counted as telemetry, so the tail was populated by the
+       * path below; tightening the check correctly moved this shape here, and
+       * here threw the reason away. Telemetry absence is not a reason to
+       * discard the reason.
+       */
+      rawTail: typeof (m as { result?: unknown }).result === "string" ? (m as { result: string }).result.slice(-2000) : "",
     };
   }
 
