@@ -1,4 +1,8 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { stateDir } from "../../src/fs/layout.js";
+import { createTicket } from "../../src/kernel/tickets/mutations.js";
+import { gitInit, tmpTree } from "../helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { METRIC_KEYS, buildReport, renderReport } from "../../src/cli/report.js";
 import { LABEL_FOR_STATE, renderStatus } from "../../src/cli/status.js";
@@ -184,5 +188,52 @@ describe("T-053 C-13: the five-label vocabulary", () => {
     for (const state of STATES) {
       expect(announcements.join(" "), `announcement leaked ${state}`).not.toContain(state);
     }
+  });
+});
+
+/**
+ * PRDR-173 — `crash_resume_correctness` had a denominator of zero everywhere.
+ *
+ * Its only assertion was the `.toBeNull()` no-crash branch, so inverting the
+ * clean-resume predicate (`blindStarts <= 1` → `> 1`) — turning a 100%-correct
+ * signal into 0%, or the reverse — left the entire 909-test suite green. The
+ * one test that produces a real `skipped_after_crash` event never calls
+ * `buildReport`. This is the metric an operator reads to judge whether resume
+ * works.
+ */
+describe("PRDR-173 the crash-resume metric, on a journal that actually crashed", () => {
+  function journalFor(root: string, id: string, events: readonly Record<string, unknown>[]): void {
+    const dir = path.join(stateDir(root), "runs", id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "journal.jsonl"), `${events.map((e) => JSON.stringify(e)).join("\n")}\n`);
+  }
+
+  it("scores a clean resume 100% and a duplicated blind fix 0%", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    gitInit(root);
+    createTicket(root, { id: "t-clean", type: "bug", title: "clean", acceptance_criteria: ["x"] });
+    createTicket(root, { id: "t-dupe", type: "bug", title: "dupe", acceptance_criteria: ["x"] });
+
+    /* Crashed, then resumed with exactly one blind fix — the correct behaviour. */
+    journalFor(root, "t-clean", [
+      { stage: "implement", event: "skipped_after_crash" },
+      { stage: "blind_fix", event: "start" },
+      { stage: "blind_fix", event: "end" },
+    ]);
+    const clean = buildReport(root, { baseBranch: "main" }).crash_resume_correctness;
+    expect(clean.denominator, "one crashed ticket is one observation").toBe(1);
+    expect(clean.value, "a single blind fix after a crash is a correct resume").toBe(1);
+
+    /* Crashed and blind-fixed TWICE — the duplicate the metric exists to catch. */
+    journalFor(root, "t-dupe", [
+      { stage: "implement", event: "skipped_after_crash" },
+      { stage: "blind_fix", event: "start" },
+      { stage: "blind_fix", event: "start" },
+    ]);
+    const mixed = buildReport(root, { baseBranch: "main" }).crash_resume_correctness;
+    expect(mixed.denominator, "both crashed tickets are counted").toBe(2);
+    expect(mixed.numerator, "only the clean one scores").toBe(1);
+    expect(mixed.value).toBe(0.5);
   });
 });

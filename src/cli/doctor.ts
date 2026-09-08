@@ -7,6 +7,7 @@ import { loadConfig, type LoadedConfig } from "../kernel/worstcase.js";
 import { buildLiveBackend, hasLiveBackendAuth } from "../sessions/live.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import { researchTools } from "../sessions/guard.js";
+import { recordOutOfBandSpend } from "../kernel/ledger.js";
 
 /**
  * T-050 — `detent doctor` (S-5, C-12, X-1, S-3).
@@ -181,6 +182,16 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
         /** X-1″: the only session that carries a turn bound — a probe, one turn. */
         maxTurns: 1,
       });
+      /**
+       * X-1 (PRDR-173): a billed session leaves a row.
+       *
+       * This was the only one of the repo's three `backend.run` sites with no
+       * ledger wrapping — the file was not even created. PRDR-154's ticket
+       * names "no consent, no cap and no ledger row" as the problem and closed
+       * the first two. Recorded after the call, so a session that threw is not
+       * charged for tokens it never reported.
+       */
+      recordOutOfBandSpend(root, "doctor-smoke", result, new Date().toISOString());
       checks.push({
         name: "smoke-session",
         ok: result.telemetryParsed,

@@ -13,6 +13,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
+import { readTicket } from "../../src/kernel/tickets/readers.js";
 
 /**
  * T-140 — the per-ticket D-21 policy reaches the hook (S-2′, SEC-3).
@@ -128,5 +129,68 @@ describe("T-140 buildOptions prefers the spec's policy (S-2′)", () => {
 
   it("without a spec policy, the constructor policy still applies (init sessions, fixtures)", async () => {
     expect(await decideWith(base, "/anywhere/README.md")).toBe("allow");
+  });
+});
+
+/**
+ * PRDR-173 — the kernel wiring that TELLS an operator a session degraded.
+ *
+ * `isModelUnavailable` and the `mcpFailures` parsing are tested at the session
+ * layer; the translation into `appendNote` + `appendTicketEvent` — the only
+ * place an operator learns their session ran on the wrong model or without its
+ * configured tools — was not. Deleting the entire 18-line wiring block left the
+ * suite green.
+ */
+describe("PRDR-173 a degraded session is recorded where a human will see it", () => {
+  it("notes a model fallback on the ticket and in the journal", async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({
+      implement: () => okResult({ modelFallback: { requested: "claude-fable-5-1", reason: "not served on this runtime" } }),
+    });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "degraded"),
+    );
+    installTrailerHook(repo.root);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+
+    const notes = readTicket(repo.root, "t-1").notes.map((n) => n.text).join("\n");
+    expect(notes, "the operator must be told the routed model was not the one that ran").toContain("model fallback");
+    expect(notes).toContain("claude-fable-5-1");
+    const events = readFileSync(journal.ticketJournalPath("t-1"), "utf8");
+    expect(events, "and the journal carries it as a machine-readable event").toContain("model_fallback");
+  });
+
+  it("notes an MCP server that was configured and unavailable", async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({
+      implement: () => okResult({ mcpFailures: [{ name: "serena", status: "failed" }] }),
+    });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "degraded-mcp"),
+    );
+    installTrailerHook(repo.root);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+
+    const notes = readTicket(repo.root, "t-1").notes.map((n) => n.text).join("\n");
+    expect(notes, "a session that ran without its configured tools is not a silent success").toContain("MCP server unavailable");
+    expect(notes).toContain("serena");
   });
 });

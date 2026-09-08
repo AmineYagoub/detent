@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { ledgerRowSchema, type LedgerRow } from "../schemas/records.js";
@@ -31,6 +31,38 @@ export class SpendExhaustedError extends Error {
     );
     this.name = "SpendExhaustedError";
   }
+}
+
+/**
+ * X-1 (PRDR-173): record a billed session outside a run.
+ *
+ * `SpendLedger.record` needs a `RunJournal`, which `doctor --smoke` has no
+ * business opening — it is a diagnostic, not a run. But its smoke session is a
+ * real, consented, billed `maxTurns: 1` call, and it was the only one of the
+ * repo's three `backend.run` sites with no ledger wrapping at all: the file was
+ * not even created. PRDR-154's ticket names "no consent, no cap and no ledger
+ * row" as the problem and closed the first two.
+ *
+ * The row is written through the same schema and to the same file, so
+ * `readRecordedSpend` and `detent report` count it like any other.
+ */
+export function recordOutOfBandSpend(root: string, role: string, result: SessionResult, at: string): LedgerRow {
+  const row = ledgerRowSchema.parse({
+    at,
+    ticket: "(out-of-band)",
+    generation: 0,
+    role,
+    cost_estimate_usd: result.costEstimateUsd,
+    input_tokens: result.inputTokens,
+    output_tokens: result.outputTokens,
+    cache_read_input_tokens: result.cacheReadInputTokens,
+    cache_creation_input_tokens: result.cacheCreationInputTokens,
+    turns: result.turns,
+    models: result.perModel === undefined ? [] : Object.keys(result.perModel),
+  });
+  mkdirSync(stateDir(root), { recursive: true });
+  appendFileSync(path.join(stateDir(root), "ledger.jsonl"), `${JSON.stringify(row)}\n`);
+  return row;
 }
 
 export class SpendLedger {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { discover } from "../../src/adapter/discover/index.js";
 import {
   DRIFT_EXIT_CODE,
@@ -10,7 +10,7 @@ import {
   writeBindings,
 } from "../../src/adapter/drift.js";
 import { bindAll, type GateRunner } from "../../src/adapter/bind.js";
-import { EXIT_NOT_READY, EXIT_OK, renderSyncSummary, verifySync } from "../../src/cli/verify.js";
+import { EXIT_NOT_READY, EXIT_OK, main as verifyMain, renderSyncSummary, verifySync } from "../../src/cli/verify.js";
 import { initLayout } from "../../src/fs/layout.js";
 import type { Binding } from "../../src/schemas/records.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
@@ -434,5 +434,61 @@ describe("PRDR-167 verify sync keeps the record it is re-baselining", () => {
     const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
     expect(result.messages.join("\n"), "the log must carry it even when nobody read a prompt").toContain("verifies nothing");
     expect(result.messages.join("\n")).toContain("no tests here");
+  }, 30_000);
+});
+
+/**
+ * PRDR-173 — `verify sync`'s own CLI entry point.
+ *
+ * Every other test in this file calls the pure `verifySync(root, deps)` with a
+ * hand-supplied consent callback. Nothing drove `main()` through `sync --yes`
+ * or the interactive refusal, so disabling the non-interactive refusal entirely
+ * left the whole suite green — and that gap is the direct reason the `--yes`
+ * notice hole (PRDR-167) could exist unnoticed. `dispatch.test.ts` reaches
+ * `main(["verify"])` but only exercises the `sub !== "sync"` exit-2 branch.
+ */
+describe("PRDR-173 verify sync's entry point: TTY refusal, --yes, and what reaches stdout", () => {
+  const noTty = (): (() => void) => {
+    const outWas = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    const inWas = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+    return () => {
+      if (outWas) Object.defineProperty(process.stdout, "isTTY", outWas);
+      if (inWas) Object.defineProperty(process.stdin, "isTTY", inWas);
+    };
+  };
+
+  it("refuses off a terminal without --yes, BEFORE any candidate command runs", async () => {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "ttyless", scripts: { test: "vitest run" } }, null, 2) });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    const restore = noTty();
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const code = await verifyMain(["sync", root]);
+      expect(code, "C-6a: re-baselining is a human decision").toBe(2);
+      expect(err.mock.calls.join(""), "and it says why").toContain("human decision");
+    } finally {
+      err.mockRestore();
+      restore();
+    }
+  }, 30_000);
+
+  it("under --yes, the vacuous-gate notice still reaches stdout", async () => {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "yesy", scripts: { test: "vitest run" } }, null, 2) });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    writeTree(root, { "package.json": JSON.stringify({ name: "yesy", scripts: { test: "echo no tests here" } }, null, 2) });
+    const restore = noTty();
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      const code = await verifyMain(["sync", root, "--yes"]);
+      const printed = out.mock.calls.join("");
+      expect(code).toBe(0);
+      expect(printed, "an unattended run must still get the warning in its log").toContain("verifies nothing");
+      expect(printed).toContain("re-baselined");
+    } finally {
+      out.mockRestore();
+      restore();
+    }
   }, 30_000);
 });

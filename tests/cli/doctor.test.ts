@@ -9,6 +9,8 @@ import type { SessionBackend } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { removeTree } from "../helpers.js";
 import { makeRunRepo } from "../kernel/run-fixture.js";
+import { existsSync, readFileSync } from "node:fs";
+import { stateDir } from "../../src/fs/layout.js";
 
 /** T-050 — `detent doctor` (S-5, X-1 reporting, S-3 rule forms, R-10 smoke). */
 
@@ -251,6 +253,16 @@ describe("PRDR-143 doctor's own entry point", () => {
       await main([root, "--smoke"], { hasAuth: () => true, buildBackend: () => fake });
       expect(ran, "the injected backend is the one that ran").toBe(1);
       expect(out.mock.calls.join(""), "and its result is what doctor reports").toContain("smoke OK");
+      /**
+       * X-1 (PRDR-173): and it left a ledger row. This was the only
+       * `backend.run` site in the repo with no ledger wrapping — a real,
+       * consented, billed session that `.detent/ledger.jsonl` never heard
+       * about; the file was not even created.
+       */
+      const ledger = path.join(stateDir(root), "ledger.jsonl");
+      expect(existsSync(ledger), "a billed session must leave a row").toBe(true);
+      const rows = readFileSync(ledger, "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(rows.map((r) => r["role"]), "named as the smoke session, not a ticket's work").toContain("doctor-smoke");
     } finally {
       out.mockRestore();
     }
