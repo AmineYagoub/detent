@@ -47,6 +47,8 @@ export interface PipelineDeps {
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
   readonly note?: (text: string) => void;
+  /** PRDR-185: injectable wait for the outage backoff; real time by default. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
   readonly print?: (text: string) => void;
@@ -69,6 +71,13 @@ function sessionDeps(deps: PipelineDeps): InitSessionDeps {
      * fed to every session Detent launches.
      */
     rulesText: readRules(deps.root),
+    /**
+     * PRDR-185: the outage seam. Without `note` the wait is silent, and a
+     * command that appears hung for fifteen minutes is worse than one that
+     * fails — the operator is told what is being waited for and for how long.
+     */
+    ...(deps.note === undefined ? {} : { note: deps.note }),
+    ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
     ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
     ...(deps.modelRouting === undefined ? {} : { modelRouting: deps.modelRouting }),
   };

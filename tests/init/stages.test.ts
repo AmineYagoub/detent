@@ -530,3 +530,59 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ question });
   });
 });
+
+/**
+ * PRDR-185 — a backend outage during init is waited out, not fatal.
+ *
+ * Found by a live planning run that hit four session limits, each ending the
+ * command and needing a human to notice and restart. `kernel/driver.ts` has
+ * backed off since PRDR-112; `init` had nothing, so `detent run` waited and
+ * `detent init` died. The sleep is injected so this costs no wall clock.
+ */
+describe("PRDR-185 init waits out a backend outage", () => {
+  const limit = "Claude Code returned an error result: You've hit your session limit · resets 5:20pm";
+
+  it("retries after a session limit and completes on the next attempt", async () => {
+    const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
+    let calls = 0;
+    const waits: number[] = [];
+    const flaky: StageFn = (spec) => {
+      calls += 1;
+      if (calls === 1) return okResult({ ok: false, rawTail: limit });
+      return plannerStage(ANALYSIS_BROWNFIELD, DRAFT)(spec);
+    };
+    const notes: string[] = [];
+    const handlers = buildPipeline({
+      root,
+      backend: new MockBackend({ planner: flaky }),
+      prompts: PROMPTS,
+      budgets: BUDGETS,
+      note: (t) => notes.push(t),
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    });
+    await runInit(root, handlers);
+
+    expect(calls, "the first attempt is the outage, the second is the work").toBeGreaterThanOrEqual(2);
+    expect(waits[0], "PRDR-112's first step is one minute").toBe(60_000);
+    expect(notes.join(" "), "a silent fifteen-minute wait is worse than a failure").toContain("backend outage");
+  }, 30_000);
+
+  it("gives up on a failure that is not an outage, without waiting", async () => {
+    const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
+    const waits: number[] = [];
+    const broken: StageFn = () => okResult({ ok: false, rawTail: "the model refused: the PRD contradicts itself" });
+    const handlers = buildPipeline({
+      root,
+      backend: new MockBackend({ planner: broken }),
+      prompts: PROMPTS,
+      budgets: BUDGETS,
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    });
+    await expect(runInit(root, handlers)).rejects.toThrow(/contradicts itself/);
+    expect(waits, "a real failure must not be retried as though it were transport").toEqual([]);
+  }, 30_000);
+});

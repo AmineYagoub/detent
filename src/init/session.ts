@@ -13,6 +13,7 @@ import { toolsForRole } from "../sessions/guard.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger } from "../kernel/ledger.js";
+import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
 const INIT_TICKET = "init";
@@ -43,6 +44,10 @@ export interface InitSessionDeps {
   /** PRDR-114: the config's `model_routing`; the planner and planning research run on their routed models. */
   readonly modelRouting?: Readonly<Record<string, string>>;
   readonly rulesText?: string;
+  /** PRDR-185: injectable wait for the outage backoff; real time by default. */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** PRDR-185: what an operator is told while init waits out a backend outage. */
+  readonly note?: (text: string) => void;
   /** X-6/S-3 docs domains for research-capable init sessions. */
   readonly docsDomains?: readonly string[];
 }
@@ -128,7 +133,54 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
   };
 }
 
+/**
+ * PRDR-185: a backend outage is waited out, not fatal.
+ *
+ * A session limit is the most ordinary interruption on a subscription plan, and
+ * it is an OUTAGE — nothing about the work was wrong, the transport was briefly
+ * unavailable. `kernel/driver.ts` has known that since PRDR-112: it backs off
+ * 1, 5, 15 minutes and halts only on consecutive outages with no progress
+ * between them. `init` had none of it, so four limit hits across one live
+ * planning run each ended the command and needed a human to notice and restart.
+ * ARCH-2: a control on one driver belongs on both.
+ *
+ * The message is matched rather than a typed error because the SDK returns a
+ * limit as an error RESULT, not an exception — the same shape S-4 already reads
+ * for crashes. Narrow on purpose: a phrase that does not match simply fails as
+ * before, which is the harmless direction.
+ */
+const OUTAGE_MARKERS: readonly RegExp[] = [
+  /session limit/i,
+  /rate limit/i,
+  /overloaded/i,
+  /\b429\b/,
+  /service unavailable/i,
+  /\b50[0-9]\b.*(error|unavailable)/i,
+];
+
+export function isOutage(text: string): boolean {
+  return OUTAGE_MARKERS.some((re) => re.test(text));
+}
+
 export async function launchInitSession(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await launchOnce(deps, request);
+    } catch (err) {
+      const message = (err as Error).message;
+      const wait = OUTAGE_BACKOFF_MS[attempt];
+      if (!isOutage(message) || wait === undefined) throw err;
+      deps.note?.(
+        `backend outage during ${request.role} — waiting ${String(Math.round(wait / 60_000))} min before retrying ` +
+          `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`,
+      );
+      await sleep(wait);
+    }
+  }
+}
+
+async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   mkdirSync(path.dirname(request.artifactOut), { recursive: true });
 
   const journal = RunJournal.open(deps.root);
