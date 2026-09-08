@@ -302,7 +302,20 @@ describe("T-027 `verify sync` (C-12)", () => {
       consent: async () => true,
       bind: (discovery, opts) => bindAll(discovery, { ...opts, runner, now: NOW , redact: (t) => t }),
     });
-    expect(readBindings(root).skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
+    /**
+     * PRDR-167: the property is PROVENANCE, asserted directly now rather than
+     * via an exact-array match. Sync also records the other unbound slots (it
+     * used to drop them from the record entirely), so the array is no longer
+     * just this one — but alice's acknowledgement must come back byte-identical,
+     * never re-stamped `auto`/now, which would launder a human decision into a
+     * machine one.
+     */
+    const kept = readBindings(root).skips;
+    expect(kept.find((s) => s.slot === "e2e"), "alice's acknowledgement survives a re-baseline unchanged").toEqual({
+      slot: "e2e",
+      acknowledged_by: "alice",
+      at: NOW(),
+    });
   });
 });
 
@@ -365,5 +378,61 @@ describe("PRDR-165 verify sync warns before the decision, not after it", () => {
     expect(sawAtConsent, "the notice must be delivered at all").toContain("may verify nothing");
     expect(sawAtConsent, "a secret echoed by the gate must not reach the operator").not.toContain("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     expect(sawAtConsent).toContain("REDACTED");
+  }, 30_000);
+});
+
+/**
+ * PRDR-167 — the recovery command for verification drift, losing verification.
+ *
+ * Found by the full-project audit of `0752fef`. Three defects in one function,
+ * each of which a fully green suite did not catch.
+ */
+describe("PRDR-167 verify sync keeps the record it is re-baselining", () => {
+  it("records a slot that lost its candidate as a skip, rather than dropping it from both lists", async () => {
+    /* Two bound slots, then `lint` loses its script entirely. */
+    const root = tree({
+      ...FIXTURE,
+      "package.json": JSON.stringify({ name: "dropper", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2),
+    });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    writeTree(root, { "package.json": JSON.stringify({ name: "dropper", scripts: { test: "vitest run" } }, null, 2) });
+
+    const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
+    const slots = result.summary.proposed.map((b) => b.slot);
+    expect(slots, "lint really is unbindable now").not.toContain("lint");
+    expect(
+      result.summary.skips.map((s) => s.slot),
+      "a gate that vanished must be recorded as skipped, not dropped from the record entirely",
+    ).toContain("lint");
+  }, 30_000);
+
+  it("does not carry a stale skip forward for a slot it has just bound", async () => {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "staleskip", scripts: { test: "vitest run" } }, null, 2) });
+    writeBindings(root, { bindings: await bound(root), skips: [{ slot: "lint", acknowledged_by: "auto", at: NOW() }] });
+    /* `lint` now has a real command, so the skip is a contradiction the moment it binds. */
+    writeTree(root, { "package.json": JSON.stringify({ name: "staleskip", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2) });
+
+    const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
+    expect(result.summary.proposed.map((b) => b.slot), "lint binds now").toContain("lint");
+    expect(
+      result.summary.skips.map((s) => s.slot),
+      "a slot cannot be bound and skipped at once — bindingTable would render it twice",
+    ).not.toContain("lint");
+  }, 30_000);
+
+  /**
+   * PRDR-167: `--yes` is the one path with no human at a terminal, and PRDR-165
+   * moved the notice into the consent summary — which `--yes` never renders.
+   * The notice went from "printed after the decision" to "printed nowhere".
+   */
+  it("reports the vacuous gate in the result messages, so the --yes path has a record of it", async () => {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "yessy", scripts: { test: "vitest run" } }, null, 2) });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    writeTree(root, { "package.json": JSON.stringify({ name: "yessy", scripts: { test: "echo no tests here" } }, null, 2) });
+
+    /* Exactly what `main` does under --yes: consent granted without rendering the summary. */
+    const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
+    expect(result.messages.join("\n"), "the log must carry it even when nobody read a prompt").toContain("verifies nothing");
+    expect(result.messages.join("\n")).toContain("no tests here");
   }, 30_000);
 });

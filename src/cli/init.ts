@@ -12,6 +12,7 @@ import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
+import { acquireRunLock, runLockRefusal } from "../kernel/run-lock.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -68,127 +69,158 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   /**
-   * `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
-   * and a mock that writes nothing produces no analysis. Unlike `run`, which
-   * has a genuine fixture path, init needs a live backend — so say so plainly
-   * rather than failing three phases later with a confusing artifact error.
-   * T-140 broadened the transports: a subscription login or an OAuth token is
-   * as live as an API key.
+   * X-1‴ (PRDR-168): one pipeline per root, on the terms `run` already uses.
+   *
+   * `acquireRunLock` was built for PRDR-147 — "two runs on one root each
+   * enforce the full ceiling and jointly spend past it" — and wired to `run`
+   * alone. `init` is the FIRST command an operator runs and the one whose
+   * sessions cannot use the fixture backend, so its sessions are the first
+   * genuinely billed ones in a project's life. Two of them raced a shared root
+   * to $16 against a $10 ceiling, neither ever seeing SpendExhaustedError.
+   *
+   * Taken ABOVE the live-auth probe deliberately. `hasLiveBackendAuth()` spawns
+   * the `claude` CLI with a 10s timeout, so a second invocation should refuse
+   * without paying for that — and a test of this refusal must not depend on
+   * whether the machine running it happens to be logged in, which is the trap
+   * PRDR-158 was filed for. Everything above is parsing and repo validation,
+   * and none of it spends or writes.
    */
-  if (!hasLiveBackendAuth()) {
-    process.stderr.write(
-      "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
-        `To fix, ${LIVE_AUTH_HINT}\n(\`detent run\` has a mock path for fixtures; init does not.)\n`,
-    );
+  const lock = acquireRunLock(root);
+  if (!lock.ok) {
+    process.stderr.write(`${runLockRefusal(lock.heldBy)}\n`);
     return EXIT_NOT_READY;
   }
-
-  /**
-   * T-140/X-1: a first init must write config, and `run_spend_usd` has no
-   * defensible universal default — the ceiling is the user's own number.
-   */
-  const capRaw = values["spend-cap-usd"];
-  const cap = capRaw === undefined ? undefined : Number(capRaw);
-  if (cap !== undefined && (!Number.isFinite(cap) || cap <= 0)) {
-    process.stderr.write("--spend-cap-usd must be a positive number\n");
-    return EXIT_ERROR;
-  }
-  const ensured = ensureConfig(root, cap);
-  if (ensured === "written-default") {
-    process.stdout.write(
-      `run spend ceiling defaulted to $${CEILINGS.run_spend_usd.default} (X-1′) — ` +
-        "pass --spend-cap-usd on a first init, or edit .detent/config.json, to change it\n",
-    );
-  }
-  if (ensured !== "exists") {
-    process.stdout.write(
-      "model routing defaulted (PRDR-114, S-5″): planner, review, diagnose, informed_fix → claude-opus-5; " +
-        "implement, blind_fix, review_fix, research → claude-sonnet-5. A routed model this runtime cannot serve falls back " +
-        "to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n",
-    );
-  }
-  if (ensured === "exists" && cap !== undefined) {
-    process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
+  if (lock.brokeStale !== null) {
+    process.stdout.write(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)\n`);
   }
 
-  const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
-  let config: ReturnType<typeof configFor>;
   try {
-    config = configFor(root);
-  } catch (err) {
-    process.stderr.write(`${(err as Error).message}\nFix it (or delete it to start over) — init will not plan against a config it cannot read (R-9′).\n`);
-    return EXIT_ERROR;
-  }
-  const handlers = buildPipeline({
-    root,
-    backend: new ClaudeCodeBackend({
-      /**
-       * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to
-       * every path'd tool — READS included — so a write-area-only surface
-       * blinded the analyst to the very documents it must analyze; it could
-       * only echo stale `.detent/state/` leftovers. Reads-open,
-       * writes-guarded: the surface admits the repo, the SEC-3 floor protects
-       * what sessions may never touch, and write-narrowing is the allowlist's
-       * job — an init session carries exactly one write rule, its artifact.
+    /**
+     * `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
+     * and a mock that writes nothing produces no analysis. Unlike `run`, which
+     * has a genuine fixture path, init needs a live backend — so say so plainly
+     * rather than failing three phases later with a confusing artifact error.
+     * T-140 broadened the transports: a subscription login or an OAuth token is
+     * as live as an API key.
+     */
+    if (!hasLiveBackendAuth()) {
+      process.stderr.write(
+        "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
+          `To fix, ${LIVE_AUTH_HINT}\n(\`detent run\` has a mock path for fixtures; init does not.)\n`,
+      );
+      return EXIT_NOT_READY;
+    }
+
+    /**
+     * T-140/X-1: a first init must write config, and `run_spend_usd` has no
+     * defensible universal default — the ceiling is the user's own number.
+     */
+    const capRaw = values["spend-cap-usd"];
+    const cap = capRaw === undefined ? undefined : Number(capRaw);
+    if (cap !== undefined && (!Number.isFinite(cap) || cap <= 0)) {
+      process.stderr.write("--spend-cap-usd must be a positive number\n");
+      return EXIT_ERROR;
+    }
+    const ensured = ensureConfig(root, cap);
+    if (ensured === "written-default") {
+      process.stdout.write(
+        `run spend ceiling defaulted to $${CEILINGS.run_spend_usd.default} (X-1′) — ` +
+          "pass --spend-cap-usd on a first init, or edit .detent/config.json, to change it\n",
+      );
+    }
+    if (ensured !== "exists") {
+      process.stdout.write(
+        "model routing defaulted (PRDR-114, S-5″): planner, review, diagnose, informed_fix → claude-opus-5; " +
+          "implement, blind_fix, review_fix, research → claude-sonnet-5. A routed model this runtime cannot serve falls back " +
+          "to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n",
+      );
+    }
+    if (ensured === "exists" && cap !== undefined) {
+      process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
+    }
+
+    const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
+    let config: ReturnType<typeof configFor>;
+    try {
+      config = configFor(root);
+    } catch (err) {
+      process.stderr.write(`${(err as Error).message}\nFix it (or delete it to start over) — init will not plan against a config it cannot read (R-9′).\n`);
+      return EXIT_ERROR;
+    }
+    const handlers = buildPipeline({
+      root,
+      backend: new ClaudeCodeBackend({
+        /**
+         * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to
+         * every path'd tool — READS included — so a write-area-only surface
+         * blinded the analyst to the very documents it must analyze; it could
+         * only echo stale `.detent/state/` leftovers. Reads-open,
+         * writes-guarded: the surface admits the repo, the SEC-3 floor protects
+         * what sessions may never touch, and write-narrowing is the allowlist's
+         * job — an init session carries exactly one write rule, its artifact.
+         */
+        policy: {
+          surface: ["**"],
+          protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"],
+          workRoot: root,
+        },
+      }),
+      prompts: loadPromptSet(),
+      budgets: budgetsFor(config),
+      modelRouting: config?.model_routing ?? {},
+      planBaseline: config?.plan_baseline ?? "production",
+      ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
+      ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
+      planDocs: config?.plan_docs ?? [],
+      note: (text) => process.stdout.write(`  ${text}\n`),
+      print: (text) => process.stdout.write(`${text}\n`),
+      /*
+       * C-7: a relayed flag answer wins (T-131 — the plugin path, where the
+       * model presented and the human answered in chat); otherwise approval is
+       * offered inline on a TTY and deferred to `run` everywhere else.
        */
-      policy: {
-        surface: ["**"],
-        protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"],
-        workRoot: root,
-      },
-    }),
-    prompts: loadPromptSet(),
-    budgets: budgetsFor(config),
-    modelRouting: config?.model_routing ?? {},
-    planBaseline: config?.plan_baseline ?? "production",
-    ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
-    ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
-    planDocs: config?.plan_docs ?? [],
-    note: (text) => process.stdout.write(`  ${text}\n`),
-    print: (text) => process.stdout.write(`${text}\n`),
-    /*
-     * C-7: a relayed flag answer wins (T-131 — the plugin path, where the
-     * model presented and the human answered in chat); otherwise approval is
-     * offered inline on a TTY and deferred to `run` everywhere else.
-     */
-    ...(approvalFlag !== undefined
-      ? { askApproval: makeFlagApproval(approvalFlag, values.by ?? process.env["USER"] ?? "operator") }
-      : interactive
-        ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") }
-        : {}),
-  });
+      ...(approvalFlag !== undefined
+        ? { askApproval: makeFlagApproval(approvalFlag, values.by ?? process.env["USER"] ?? "operator") }
+        : interactive
+          ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") }
+          : {}),
+    });
 
-  let result;
-  try {
-    result = await runInit(root, handlers, { replan: values.replan });
-  } catch (err) {
-    /*
-     * A phase that could not complete is an error (C-11's `1`), not an
-     * interrupt — there is nothing for the user to answer.
-     */
-    process.stderr.write(`init failed: ${(err as Error).message}\n`);
-    return EXIT_ERROR;
+    let result;
+    try {
+      result = await runInit(root, handlers, { replan: values.replan });
+    } catch (err) {
+      /*
+       * A phase that could not complete is an error (C-11's `1`), not an
+       * interrupt — there is nothing for the user to answer.
+       */
+      process.stderr.write(`init failed: ${(err as Error).message}\n`);
+      return EXIT_ERROR;
+    }
+
+    for (const message of result.messages) process.stdout.write(`${message}\n`);
+    if (result.reused.length > 0) process.stdout.write(`reused: ${result.reused.join(", ")}\n`);
+    if (result.executed.length > 0) process.stdout.write(`ran: ${result.executed.join(", ")}\n`);
+
+    if (result.interrupt !== undefined) {
+      process.stdout.write(`\n[${result.interrupt.interrupt}]\n${result.interrupt.message}\n`);
+      return EXIT_NOT_READY;
+    }
+
+    /** Honest about the pipeline's own gaps rather than claiming READY. */
+    const pending = pendingPhases(handlers);
+    if (pending.length > 0) {
+      process.stdout.write(
+        `\ninit stopped after ${result.reachedPhase}: ${pending.join(", ")} are not built yet (T-064…T-068).\n`,
+      );
+      return EXIT_NOT_READY;
+    }
+    process.stdout.write("\ninit complete — plan ready for approval.\n");
+    return EXIT_OK;
+  } finally {
+    /* Nine return paths below; one release. */
+    lock.release();
   }
-
-  for (const message of result.messages) process.stdout.write(`${message}\n`);
-  if (result.reused.length > 0) process.stdout.write(`reused: ${result.reused.join(", ")}\n`);
-  if (result.executed.length > 0) process.stdout.write(`ran: ${result.executed.join(", ")}\n`);
-
-  if (result.interrupt !== undefined) {
-    process.stdout.write(`\n[${result.interrupt.interrupt}]\n${result.interrupt.message}\n`);
-    return EXIT_NOT_READY;
-  }
-
-  /** Honest about the pipeline's own gaps rather than claiming READY. */
-  const pending = pendingPhases(handlers);
-  if (pending.length > 0) {
-    process.stdout.write(
-      `\ninit stopped after ${result.reachedPhase}: ${pending.join(", ")} are not built yet (T-064…T-068).\n`,
-    );
-    return EXIT_NOT_READY;
-  }
-  process.stdout.write("\ninit complete — plan ready for approval.\n");
-  return EXIT_OK;
 }
 
 /**

@@ -1,7 +1,8 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
 import { discover } from "../adapter/discover/index.js";
-import { bindAll, type BindAllOptions, type BindReport } from "../adapter/bind.js";
+import { acknowledgeSkip, bindAll, type BindAllOptions, type BindReport, type Skip } from "../adapter/bind.js";
+import { SETUP_REQUIRED_SLOTS } from "../init/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
 import { scrub } from "../kernel/scrub.js";
@@ -23,6 +24,17 @@ interface SyncSummary {
   readonly drift: readonly DriftCheck[];
   readonly proposed: readonly Binding[];
   readonly stored: readonly Binding[];
+  /**
+   * V-1 (PRDR-167): what will be WRITTEN as skipped, not what was stored.
+   *
+   * `verifySync` re-derived all six slots and never read `report.unbound`,
+   * writing the fresh bindings beside the OLD skips array — so a slot that
+   * lost its candidate appeared in neither list, `runScopedGates` skipped it
+   * without consulting `skips`, and tickets reached DONE having never run it.
+   * `src/init/bind.ts` has always done this correctly; this file had none of
+   * that logic, in the command the drift message tells the operator to run.
+   */
+  readonly skips: readonly Skip[];
   /**
    * V-1‴ (PRDR-165): bound gates that may verify nothing, IN the summary.
    *
@@ -64,6 +76,7 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
    * approved, exactly as at init. A sync that skipped execution would approve
    * an unexecuted binding, which P4 calls a guess.
    */
+  const at = deps.now?.() ?? new Date().toISOString();
   const bind = deps.bind ?? bindAll;
   const report = await bind(discovery, {
     root,
@@ -73,6 +86,54 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
     redact: scrub,
     ...(deps.now === undefined ? {} : { now: deps.now }),
   });
+
+  /**
+   * PRDR-167: a setup-required slot with no candidate is a refusal, not a
+   * silent deletion — the same line `init` draws, for the same reason (P2: a
+   * project with no test command cannot be gated).
+   */
+  const missingRequired = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
+  if (missingRequired.length > 0) {
+    messages.push(
+      `no way to run: ${missingRequired.join(", ")} — a project with no test command cannot be gated (P2). ` +
+        "Establish the tooling and re-run `detent verify sync`; syncing now would leave the gate unrecorded.",
+    );
+    return {
+      exitCode: EXIT_NOT_READY,
+      summary: { drift, proposed: report.bindings, stored: stored.bindings, skips: stored.skips, notices: report.notices },
+      rebaselined: false,
+      messages,
+    };
+  }
+
+  /**
+   * Every remaining unbound slot is an ordinary acknowledged skip (V-1), and a
+   * slot that BOUND this time is no longer skipped — `stored.skips` was carried
+   * forward unfiltered, so a re-bound slot was listed as bound and skipped at
+   * once and `bindingTable` rendered it twice.
+   */
+  const storedBySlot = new Map(stored.skips.map((skip) => [skip.slot, skip]));
+  const skips: Skip[] = report.unbound
+    .filter((slot) => !SETUP_REQUIRED_SLOTS.includes(slot))
+    /**
+     * An EXISTING acknowledgement is kept verbatim — who accepted the gap and
+     * when is the whole value of a skip, and re-stamping it `auto`/now would
+     * quietly launder a human decision into a machine one. Only a slot with no
+     * record gets a fresh one. A slot that BOUND this time keeps no skip at
+     * all, which is the contradiction `stored.skips` used to carry forward.
+     */
+    .map((slot) => storedBySlot.get(slot) ?? acknowledgeSkip(slot, deps.user ?? "auto", at));
+
+  /**
+   * V-1‴ (PRDR-167): in `messages` as well as the summary.
+   *
+   * PRDR-165 moved these into `SyncSummary` so they reach the operator BEFORE
+   * they consent — correct, and it left `--yes` with nowhere to show them,
+   * because that branch returns true without ever rendering the summary. That
+   * is the one path with no human at a terminal. The summary is the decision;
+   * `messages` is the log, and an unattended run deserves the log.
+   */
+  for (const notice of report.notices) messages.push(notice);
 
   for (const interrupt of report.interrupts) {
     messages.push(
@@ -84,20 +145,20 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   if (report.interrupts.length > 0) {
     return {
       exitCode: EXIT_NOT_READY,
-      summary: { drift, proposed: report.bindings, stored: stored.bindings, notices: report.notices },
+      summary: { drift, proposed: report.bindings, stored: stored.bindings, skips, notices: report.notices },
       rebaselined: false,
       messages,
     };
   }
 
-  const summary: SyncSummary = { drift, proposed: report.bindings, stored: stored.bindings, notices: report.notices };
+  const summary: SyncSummary = { drift, proposed: report.bindings, stored: stored.bindings, skips, notices: report.notices };
   if (!(await deps.consent(summary))) {
     messages.push("sync declined — bindings unchanged, verification still halted (V-3).");
     return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
   }
 
   if (deps.write !== false) {
-    writeBindings(root, { bindings: [...report.bindings], skips: stored.skips });
+    writeBindings(root, { bindings: [...report.bindings], skips: [...skips] });
   }
   messages.push(`re-baselined ${report.bindings.length} binding(s).`);
   return { exitCode: EXIT_OK, summary, rebaselined: true, messages };

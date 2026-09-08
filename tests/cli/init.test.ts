@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { main } from "../../src/cli/init.js";
-import { removeTree, tmpTree } from "../helpers.js";
+import { gitInit, removeTree, tmpTree } from "../helpers.js";
+import { acquireRunLock } from "../../src/kernel/run-lock.js";
+
 
 /**
  * Port of the oracle's `test_extra.py::test_mode1_stub_detected` (T-060).
@@ -39,5 +41,33 @@ describe("T-060 mode-1 parity: a PRD-only, non-git folder is not a runnable proj
 
     /** C-1's refusal is pure: nothing is written into the folder it declined. */
     expect(existsSync(path.join(root, ".detent"))).toBe(false);
+  });
+});
+
+/**
+ * X-1‴ (PRDR-168) — one pipeline per root.
+ *
+ * `acquireRunLock` was built for PRDR-147's "two runs jointly spend past the
+ * ceiling" and wired to `detent run` alone. `init` is the first command an
+ * operator runs, and the one whose sessions cannot use the fixture backend —
+ * so its sessions are the first genuinely billed ones in a project's life.
+ */
+describe("X-1‴ init refuses a root another process is already planning", () => {
+  it("refuses, names the holder, and does not run the pipeline", async () => {
+    const root = tmpTree({ "PRD.md": "# product\n", "package.json": '{"name":"x","scripts":{"test":"vitest run"}}\n' });
+    roots.push(root);
+    gitInit(root);
+    /* A live lock held by a pid that IS alive — this process. */
+    const held = acquireRunLock(root, { pid: process.pid, host: "otherhost" });
+    expect(held.ok, "the fixture lock must have been taken").toBe(true);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const code = await main([root]);
+      expect(code, "a second init on a held root must refuse (C-11 exit 2)").toBe(2);
+      expect(err.mock.calls.join(""), "and must say who holds it").toContain("another run holds this root");
+    } finally {
+      err.mockRestore();
+      if (held.ok) held.release();
+    }
   });
 });
