@@ -17,6 +17,7 @@ import { SpendLedger } from "./ledger.js";
 import type { Budgets } from "../schemas/budgets.js";
 import type { LoadedConfig } from "./worstcase.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
+import { readRules } from "./rules.js";
 
 /**
  * The referee's shared ground (T-100): one context object carrying the wiring
@@ -434,10 +435,4 @@ export function lastNote(ticket: Ticket): string {
   return ticket.notes.at(-1)?.text ?? "";
 }
 
-function readRules(root: string): string {
-  for (const name of ["AGENTS.md", "CLAUDE.md"]) {
-    const file = path.join(root, name);
-    if (existsSync(file)) return readFileSync(file, "utf8");
-  }
-  return "(no rules file)";
-}
+

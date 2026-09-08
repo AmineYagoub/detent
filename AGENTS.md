@@ -1,11 +1,18 @@
 # Rules
 
 Engineering standards for this repository. Two audiences, one file: agents and
-humans editing this code — and, because `RefereeCore.readRules()` feeds this
-file to every session Detent launches, the agents Detent itself runs during a
-self-build (N-7). Rules marked **[lint]** are enforced by `npm run lint` and
-CI; the rest are enforced by review. When a rule here collides with the PRD or
-the implementation plan, the PRD wins and this file gets fixed.
+humans editing this code — and, because `readRules()` feeds this file to every
+session Detent launches, the agents Detent itself runs during a self-build
+(N-7). That claim was false for the planning pipeline until PRDR-176: init
+sessions were prompted with `(no rules file)` while this line said otherwise.
+
+Rules marked **[lint]** are enforced by `npm run lint`. Seven more are enforced
+by `npm run rules:check` — grab-bag filenames, TODO markers without a ticket,
+`console.*` in `src/`, empty catches with no stated why, `.only`/`.skip`,
+`node:` prefixes, and `.js` specifiers. The rest need a reader, and the checker
+names them rather than implying a green run means full compliance. When a rule
+here collides with the PRD or the implementation plan, the PRD wins and this
+file gets fixed.
 
 ## Files
 

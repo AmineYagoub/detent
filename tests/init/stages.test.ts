@@ -274,6 +274,34 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     ).rejects.toThrow(/invalid analysis|no analysis artifact/);
   });
 
+  /**
+   * PRDR-176 — AGENTS.md reaches init sessions.
+   *
+   * `InitSessionDeps.rulesText` was declared and consumed by
+   * `launchInitSession`, and `pipeline.ts` — the only production caller — never
+   * supplied it, so every planning session was prompted with the literal
+   * `(no rules file)` while the rules file's own header claims it is fed to
+   * every session Detent launches. Asserted on the spec the backend actually
+   * receives, because the defect was precisely that the declared seam had no
+   * supplier.
+   */
+  it("a planning session is told the repository's rules (PRDR-176)", async () => {
+    const marker = "RULE-MARKER-176: named exports only";
+    const root = repo({
+      "PRD.md": "# thing\n",
+      "package.json": '{"scripts":{"test":"vitest run"}}\n',
+      "AGENTS.md": `# Rules\n\n- ${marker}\n`,
+    });
+    const backend = new MockBackend({ planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
+    const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
+    await runInit(root, handlers);
+
+    const call = backend.calls.find((c) => c.role === "planner");
+    expect(call, "a planner session must have run").toBeDefined();
+    expect(call!.spec.promptPrefix, "the session must be told the rules it is expected to follow").toContain(marker);
+    expect(call!.spec.promptPrefix, "and must not be told there are none").not.toContain("(no rules file)");
+  });
+
   it("the planner session gets the read-only surface plus ONE scoped write — its artifact (S-1′, PRDR-067)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
     const backend = new MockBackend({ planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });

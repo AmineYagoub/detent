@@ -20,6 +20,7 @@ import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { type InitSessionDeps, launchInitSession } from "./session.js";
+import { readRules } from "../kernel/rules.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -58,6 +59,16 @@ function sessionDeps(deps: PipelineDeps): InitSessionDeps {
     backend: deps.backend,
     prompts: deps.prompts,
     spendCeiling: deps.budgets.run_spend_usd,
+    /**
+     * PRDR-176: AGENTS.md, which every init session was promised and none
+     * received. `InitSessionDeps.rulesText` was declared and consumed —
+     * `stablePrefix(prompt, deps.rulesText ?? "(no rules file)", preamble)` —
+     * and this, the only production caller, never supplied it. So ANALYZE,
+     * SLICE, PLAN and the plan reviews planned this repository without being
+     * told its engineering rules, while the rules file's own header says it is
+     * fed to every session Detent launches.
+     */
+    rulesText: readRules(deps.root),
     ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
     ...(deps.modelRouting === undefined ? {} : { modelRouting: deps.modelRouting }),
   };
