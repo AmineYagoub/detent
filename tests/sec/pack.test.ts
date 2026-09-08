@@ -9,6 +9,10 @@ import { EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { STRUCTURAL_PROTECTED } from "../../src/schemas/common.js";
+import { fileURLToPath } from "node:url";
+
+/** PRDR-178: the repository root, for the cross-site policy audit below. */
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 import { EXTENDED_CACHE_HEADER, SESSION_ENV_ALLOWLIST, buildSessionEnv } from "../../src/sessions/env.js";
 import { buildOptions } from "../../src/sessions/sdk.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
@@ -567,6 +571,44 @@ describe("SEC-4 scrub redacts secrets without eating ordinary text", () => {
   it("is idempotent", () => {
     for (const text of ["token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Unexpected token: identifier"]) {
       expect(scrub(scrub(text))).toBe(scrub(text));
+    }
+  });
+});
+
+/**
+ * SEC-3 (PRDR-178) — EVERY production GuardPolicy carries the structural floor.
+ *
+ * PRDR-172 fixed one site that omitted it and its commit asserted the floor is
+ * what "every other GuardPolicy construction site in production spreads in".
+ * That was false: `src/cli/init.ts` carried three of the fourteen globs, under a
+ * surface of `**`, and PRDR-172's own fix had no test — reverting it left the
+ * suite green. This asserts the property across the sites rather than at one of
+ * them, so the next site that forgets is named by a failure and not by an audit.
+ */
+describe("SEC-3 the structural floor reaches every policy a session runs under", () => {
+  const sites = [
+    { file: "src/cli/init.ts", label: "the init session policy" },
+    { file: "src/kernel/referee-context.ts", label: "the driver hook policy" },
+    { file: "src/kernel/referee-session.ts", label: "the per-ticket session policy" },
+  ];
+
+  it("each site spreads STRUCTURAL_PROTECTED rather than listing globs by hand", () => {
+    for (const { file, label } of sites) {
+      const source = readFileSync(path.join(REPO_ROOT, file), "utf8");
+      const policies = source.match(/protectedGlobs:\s*\[[^\]]*\]/g) ?? [];
+      expect(policies.length, `${file} builds no GuardPolicy — this map is stale`).toBeGreaterThan(0);
+      for (const policy of policies) {
+        expect(policy, `${label} (${file}) must carry the SEC-3 floor, not a hand-written subset`).toContain(
+          "STRUCTURAL_PROTECTED",
+        );
+      }
+    }
+  });
+
+  /** And the floor itself still holds the four paths writing into which is executing. */
+  it("the floor names .git and the run's own audit trail", () => {
+    for (const glob of [".git/**", ".git", ".detent/ledger.jsonl", ".detent/state/**"]) {
+      expect(STRUCTURAL_PROTECTED, glob).toContain(glob);
     }
   });
 });

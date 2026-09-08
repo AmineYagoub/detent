@@ -183,6 +183,16 @@ export const researchValid: StageFn = (spec) => {
 
 export const reviewApprove: StageFn = writeArtifactStage({ schema_version: 1, verdict: "approve" });
 
+/** A valid A-3 hypothesis, for tests that need a diagnose session to complete (PRDR-178). */
+export const diagnoseValid: StageFn = writeArtifactStage({
+  schema_version: 1,
+  claim: "the handler drops the retry",
+  evidence: [{ file: "src/a.ts", line: 1, what: "no retry branch" }],
+  repro_test: "npm test -- a.test.ts",
+  predicted_failure: "expected 1 retry",
+  status: "proposed",
+});
+
 export const reviewChanges: StageFn = writeArtifactStage({
   schema_version: 1,
   verdict: "changes",

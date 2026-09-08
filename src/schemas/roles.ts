@@ -57,6 +57,22 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
 ]);
 
 /**
+ * S-1′ (PRDR-178) — the read-only roles whose write surface is their ARTIFACT
+ * ALONE, which is not all of them.
+ *
+ * `prompts/diagnose.md` grants, in its first sentence: "you may write ONLY your
+ * artifact **and a reproduction test inside the ticket surface**". PRDR-170
+ * narrowed every read-only role to `.detent/runs/**` and so denied the write
+ * that vendored, hash-pinned prompt promises — its own ticket claiming it "does
+ * not change what a read-only role WRITES", which was false for `diagnose`.
+ * `review` and `research` grant only their artifact, and are narrowed.
+ *
+ * `planner` is absent because it is an init role and never reaches this policy;
+ * `src/init/session.ts` builds its own artifact-only surface.
+ */
+export const ARTIFACT_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["research", "review"]);
+
+/**
  * S-1's role ↔ state mapping. Role identifiers are not derived from state
  * names; this table is the mapping, and `planner` deliberately has no row —
  * it belongs to the init pipeline, which has no execution state.

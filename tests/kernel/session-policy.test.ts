@@ -11,7 +11,7 @@ import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { removeTree } from "../helpers.js";
-import { addTicket, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
+import { addTicket, diagnoseValid, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 
@@ -32,14 +32,14 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-async function specFromAttempt(stage: "implement" | "review" = "implement"): Promise<SessionSpec> {
+async function specFromAttempt(stage: "implement" | "review" | "diagnose" = "implement"): Promise<SessionSpec> {
   const repo = await makeRunRepo();
   cleanups.push(() => removeTree(repo.root));
   addTicket(repo.root, { id: "t-1" });
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
   const journal = RunJournal.open(repo.root);
   cleanups.push(() => journal.close());
-  const backend = new MockBackend({ implement: () => okResult(), review: reviewApprove });
+  const backend = new MockBackend({ implement: () => okResult(), review: reviewApprove, diagnose: diagnoseValid });
   const core = new RefereeCore(
     { root: repo.root, backend, prompts: loadPromptSet() },
     loaded,
@@ -48,8 +48,8 @@ async function specFromAttempt(stage: "implement" | "review" = "implement"): Pro
   );
   installTrailerHook(repo.root);
   expect(core.acquire("t-1").ok).toBe(true);
-  if (stage === "review") await core.recordStage("t-1", "review");
-  else await core.attempt("t-1", "IN_PROGRESS");
+  if (stage === "implement") await core.attempt("t-1", "IN_PROGRESS");
+  else await core.recordStage("t-1", stage);
   const spec = backend.calls[0]?.spec;
   if (spec === undefined) throw new Error("no session launched");
   return spec;
@@ -81,6 +81,30 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
       guardToolUse("Write", { file_path: path.join(spec.cwd, ".detent/runs/t-1/review.json") }, policy).decision,
       "but it still writes its own verdict",
     ).toBe("allow");
+  });
+
+  /**
+   * S-1′ (PRDR-178) — `diagnose` is read-only and still writes a repro test.
+   *
+   * `prompts/diagnose.md` grants "your artifact AND a reproduction test inside
+   * the ticket surface" in its first sentence. PRDR-170 narrowed every
+   * read-only role to its artifact and so denied that write, while its own
+   * ticket claimed it changed nothing about what a read-only role writes. The
+   * prompt is the contract; `review` and `research` grant only the artifact.
+   */
+  it("diagnose keeps the ticket surface its prompt grants, while review does not", async () => {
+    const diagnose = await specFromAttempt("diagnose");
+    expect(diagnose.policy?.surface, "the prompt promises a repro test inside the surface").toEqual([
+      "src/**",
+      "tests/**",
+      ".detent/runs/**",
+    ]);
+    const repro = path.join(diagnose.cwd, "tests/repro_t-1.test.ts");
+    expect(guardToolUse("Write", { file_path: repro }, diagnose.policy as GuardPolicy).decision).toBe("allow");
+
+    const review = await specFromAttempt("review");
+    expect(review.policy?.surface, "review grants only its artifact").toEqual([".detent/runs/**"]);
+    expect(guardToolUse("Write", { file_path: repro }, review.policy as GuardPolicy).decision).toBe("deny");
   });
 
   it("protected carries the project globs PLUS the structural SEC-3 floor", async () => {

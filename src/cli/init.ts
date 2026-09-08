@@ -13,6 +13,7 @@ import { ensureConfig } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 import { acquireRunLock, runLockRefusal } from "../kernel/run-lock.js";
+import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -161,7 +162,19 @@ export async function main(argv: readonly string[]): Promise<number> {
          */
         policy: {
           surface: ["**"],
-          protectedGlobs: [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"],
+          /**
+           * SEC-3 (PRDR-178): the STRUCTURAL floor, not three of its fourteen.
+           *
+           * This listed the plan, config and bindings and omitted `.git/**`,
+           * `.git`, `node_modules/**`, `.detent/ledger.jsonl`,
+           * `.detent/state/**` and the rest — while the surface here is `**`.
+           * Inert only because the per-session spec policy wins at
+           * `sdk.ts`, which is exactly the reasoning PRDR-172 used to fix the
+           * structurally identical site in `referee-context.ts`, and then did
+           * not apply here. Writing into `.git` is executing: `.gitattributes`
+           * plus a clean filter runs a command on `git add`.
+           */
+          protectedGlobs: [...STRUCTURAL_PROTECTED],
           workRoot: root,
         },
       }),

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import picomatch from "picomatch";
-import { READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
+import { ARTIFACT_ONLY_ROLES, READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { STRUCTURAL_PROTECTED, coversProtected, isConcreteRepoPath, repoPathKey } from "../schemas/common.js";
 import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
@@ -168,10 +168,13 @@ export class SessionArm {
          * decision. So the guard, the layer this project treats as
          * authoritative, handed review/diagnose/research an unconditional allow
          * to edit the implementation they exist to judge independently.
-         * PRDR-124 fixed this shape in `init/session.ts` and asserted kernel
-         * worker sessions had always been right; they had not.
+         * PRDR-124 fixed this shape in `init/session.ts`. PRDR-178 then
+         * narrowed the SET: `diagnose` is read-only but its prompt grants a
+         * reproduction test inside the ticket surface, so narrowing it denied a
+         * write the vendored prompt promises. `review` and `research` grant
+         * only their artifact.
          */
-        surface: READ_ONLY_ROLES.has(role) ? [".detent/runs/**"] : [...ticket.surface, ".detent/runs/**"],
+        surface: ARTIFACT_ONLY_ROLES.has(role) ? [".detent/runs/**"] : [...ticket.surface, ".detent/runs/**"],
         protectedGlobs: [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED],
         workRoot: workDir,
       },
@@ -290,7 +293,18 @@ export class SessionArm {
       throw new Breach(`base-branch write detected and reverted (B-3/P7): ${detail}`);
     }
 
-    if (!READ_ONLY_ROLES.has(role)) this.handleSurfaceRequest(id);
+    /**
+     * SEC-3 (PRDR-178): a read-only role's surface request is REMOVED, not left
+     * for someone else to consume.
+     *
+     * The hook's deny message tells a session to write `surface_request.json`,
+     * and this skipped handling it for read-only roles — so the file survived
+     * on disk and the NEXT implement session picked it up, widening the
+     * implementer's surface from a request it never made, with a grant note
+     * reading as though it had.
+     */
+    if (READ_ONLY_ROLES.has(role)) this.discardSurfaceRequest(id);
+    else this.handleSurfaceRequest(id);
     if (!result.telemetryParsed) throw new Breach("telemetry unparsable (S-4 circuit breaker)");
   }
 
@@ -299,6 +313,21 @@ export class SessionArm {
    * Granting appends to the ticket surface (logged); protected paths and a
    * grant budget of three are hard limits.
    */
+  /**
+   * SEC-3 (PRDR-178): a read-only role's surface request never becomes someone
+   * else's grant.
+   *
+   * The hook's deny text names `surface_request.json`, so a read-only session
+   * that hits the boundary writes one — and nothing consumed it, so it sat
+   * there until the next IMPLEMENT session on the same ticket, which did. The
+   * implementer's surface widened from a request it never made. Removing it is
+   * the whole fix: a read-only role has no surface to widen, and the note the
+   * session left is already in the journal.
+   */
+  private discardSurfaceRequest(ticketId: string): void {
+    rmSync(path.join(runsDir(this.ctx.root, ticketId), "surface_request.json"), { force: true });
+  }
+
   private handleSurfaceRequest(ticketId: string): void {
     const ctx = this.ctx;
     const file = path.join(runsDir(ctx.root, ticketId), "surface_request.json");
