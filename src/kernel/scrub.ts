@@ -11,7 +11,13 @@ interface ScrubRule {
 
 const RULES: readonly ScrubRule[] = [
   { name: "anthropic-key", pattern: /sk-ant-[A-Za-z0-9_-]{8,}/g },
-  { name: "openai-key", pattern: /sk-[A-Za-z0-9]{20,}/g },
+  /**
+   * PRDR-177: `\b`, because without it this matched INSIDE words. A
+   * content-hashed build artifact — `dist/assets/task-BX9kL2mQz8vN4pR7tY1wS3dF`
+   * — contains `sk-` at "ta|sk-", and came out as `ta[REDACTED].js`. So did
+   * `infra/risk-0123456789abcdef01234567.tf`. A real key never begins mid-word.
+   */
+  { name: "openai-key", pattern: /\bsk-[A-Za-z0-9]{20,}/g },
   { name: "aws-access-key", pattern: /AKIA[0-9A-Z]{16}/g },
   { name: "github-token", pattern: /gh[pousr]_[A-Za-z0-9]{20,}/g },
   { name: "slack-token", pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/g },
@@ -19,8 +25,30 @@ const RULES: readonly ScrubRule[] = [
   { name: "bearer", pattern: /\b[Bb]earer\s+[A-Za-z0-9._~+/=-]{16,}/g },
   {
     name: "assignment",
-    /* KEY=..., token: "...", password = '...' — the generic shapes. */
-    pattern: /\b(api[_-]?key|access[_-]?key|secret|token|password|passwd|credential)s?\b(["']?\s*[:=]\s*)(["']?)[^\s"'&]{6,}\3/gi,
+    /**
+     * KEY=..., token: "...", password = '...' — the generic shapes.
+     *
+     * PRDR-177 fixed two ways this ate ordinary prose. The plural `s` sat
+     * OUTSIDE the capture group, so `tokens: 128374 in` was rewritten
+     * `token: [REDACTED] in` — redacted AND silently singularised. And the
+     * value was any 6+ non-space run, so `Unexpected token: identifier` and a
+     * human's own `the token: refresh path` were redacted as credentials.
+     *
+     * The value must now look like one: quoted, or containing a digit, or 16+
+     * characters. That is a deliberate loosening and the trade is stated —
+     * an unquoted all-letter secret of 6 to 15 characters is no longer caught
+     * by THIS rule. The shaped rules above still catch every known key format,
+     * and a redactor that mangles compiler errors and operator guidance is one
+     * whose output nobody can trust as evidence.
+     *
+     * Known and deliberately NOT loosened further: a purely numeric value still
+     * redacts, so telemetry prose reads `tokens: [REDACTED] in, 4211 out`. A
+     * third exemption would be a third security judgement, and this one is
+     * cosmetic and fails in the safe direction — the surviving second number
+     * makes the redaction visibly odd rather than misleading.
+     */
+    pattern:
+      /\b((?:api[_-]?key|access[_-]?key|secret|token|password|passwd|credential)s?)\b(["']?\s*[:=]\s*)(["']?)((?=[^\s"'&]*\d)[^\s"'&]{6,}|[^\s"'&]{16,})\3/gi,
   },
 ];
 

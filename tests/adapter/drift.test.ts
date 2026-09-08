@@ -397,12 +397,22 @@ describe("PRDR-167 verify sync keeps the record it is re-baselining", () => {
     writeBindings(root, { bindings: await bound(root), skips: [] });
     writeTree(root, { "package.json": JSON.stringify({ name: "dropper", scripts: { test: "vitest run" } }, null, 2) });
 
-    const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
+    /**
+     * PRDR-177: asserted on DISK, not on the in-memory summary.
+     *
+     * The first version of this test passed `write: false` and read
+     * `result.summary.skips` — which is computed correctly even when the WRITE
+     * still uses `stored.skips`. Putting the original defect back at the
+     * `writeBindings` call left all 23 tests here green, including all three
+     * written for it. The bug lives in what reaches `bindings.json`, so that is
+     * what this reads.
+     */
+    const result = await verifySync(root, { consent: async () => true, now: NOW });
     const slots = result.summary.proposed.map((b) => b.slot);
     expect(slots, "lint really is unbindable now").not.toContain("lint");
     expect(
-      result.summary.skips.map((s) => s.slot),
-      "a gate that vanished must be recorded as skipped, not dropped from the record entirely",
+      readBindings(root).skips.map((s) => s.slot),
+      "a gate that vanished must be recorded as skipped on disk, not dropped from the record entirely",
     ).toContain("lint");
   }, 30_000);
 
@@ -412,10 +422,11 @@ describe("PRDR-167 verify sync keeps the record it is re-baselining", () => {
     /* `lint` now has a real command, so the skip is a contradiction the moment it binds. */
     writeTree(root, { "package.json": JSON.stringify({ name: "staleskip", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2) });
 
-    const result = await verifySync(root, { consent: async () => true, now: NOW, write: false });
+    const result = await verifySync(root, { consent: async () => true, now: NOW });
     expect(result.summary.proposed.map((b) => b.slot), "lint binds now").toContain("lint");
+    /* PRDR-177: on disk — the stale skip that survived was a WRITE defect. */
     expect(
-      result.summary.skips.map((s) => s.slot),
+      readBindings(root).skips.map((s) => s.slot),
       "a slot cannot be bound and skipped at once — bindingTable would render it twice",
     ).not.toContain("lint");
   }, 30_000);

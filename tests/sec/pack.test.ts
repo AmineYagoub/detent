@@ -516,3 +516,57 @@ describe("T-052 SEC-* aggregate invariants", () => {
   });
 });
 
+/**
+ * SEC-4 (PRDR-177) — the redactor must not eat the evidence.
+ *
+ * PRDR-169 put `scrub` on the `appendNote` seam under a comment claiming
+ * "scrubbing kernel-authored text too is harmless". It was not. Two defects in
+ * `scrub` itself — a missing word boundary, and a value pattern that matched
+ * any six non-space characters — corrupted compiler errors, a human operator's
+ * own requeue guidance, and content-hashed build paths on their way into
+ * `.detent/plan/<id>.json`, which is then handed back to the review session as
+ * `operator_record`. A reviewer was judging mangled evidence.
+ *
+ * Both directions are asserted, because a redactor is only as good as the pair.
+ */
+describe("SEC-4 scrub redacts secrets without eating ordinary text", () => {
+  it("leaves real diagnostics, operator guidance and hashed paths intact", () => {
+    for (const text of [
+      "Unexpected token: identifier at src/pay.ts line 42",
+      "requeued with guidance (C-12): the token: refresh path drops the retry",
+      "B-5 resume reset: dist/assets/task-BX9kL2mQz8vN4pR7tY1wS3dF5gH6.js",
+      "risk-labelled by the plan: infra/risk-0123456789abcdef01234567.tf",
+      "surface granted: src/payments/** (the ticket names it)",
+    ]) {
+      expect(scrub(text), text).toBe(text);
+    }
+  });
+
+  it("still redacts every shape it is there for", () => {
+    for (const [text, leak] of [
+      ["deploying with token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+      ["auth.ts hardcodes sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA", "sk-ant-api03-"],
+      ['export API_KEY="s3cr3tvalue123"', "s3cr3tvalue123"],
+      ["AWS key AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLE"],
+      ["Authorization: Bearer abcdefghijklmnop1234", "abcdefghijklmnop1234"],
+      ["slack xoxb-1234567890-abcdefghij", "xoxb-1234567890"],
+    ] as [string, string][]) {
+      const out = scrub(text);
+      expect(out, text).not.toContain(leak);
+      expect(out, text).toContain("REDACTED");
+    }
+  });
+
+  /** The plural was consumed by `s?` outside the capture group and silently dropped. */
+  it("keeps the key name it redacts, plural included", () => {
+    expect(scrub("session ended: tokens: 128374 in, 4211 out")).toContain("tokens:");
+    expect(scrub('export API_KEY="s3cr3tvalue123"')).toContain("API_KEY=");
+  });
+
+  /** A note is evidence a reviewer reads; redaction must be idempotent so a re-scrub cannot compound. */
+  it("is idempotent", () => {
+    for (const text of ["token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Unexpected token: identifier"]) {
+      expect(scrub(scrub(text))).toBe(scrub(text));
+    }
+  });
+});
