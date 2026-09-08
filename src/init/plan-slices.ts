@@ -116,7 +116,7 @@ function readCache(root: string, sliceId: string): SliceCache | null {
  * The earlier index matters only where this slice reached into it, and that is
  * checked separately as `external_deps` — precisely, and without cascading.
  */
-function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly DraftedTicket[]): string {
+export function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly DraftedTicket[]): string {
   const docs = slice.docs.length > 0 ? slice.docs : deps.docs;
   void index;
   return createHash("sha256")
