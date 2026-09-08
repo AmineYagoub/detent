@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
@@ -12,8 +12,9 @@ import { TOOL_NAMES } from "../../src/referee/registry.js";
 import { MockBackend } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
-import { addTicket, implementGreen, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
+import { addTicket, implementGreen, implementRed, makeRunRepo, noopFix, researchValid, reviewApprove } from "../kernel/run-fixture.js";
 import { SKILL_TABLE_STATES, skillDriver } from "./skill-driver.js";
+import { EXIT_HUMAN_GATED } from "../../src/kernel/run.js";
 
 /**
  * T-120/T-123 — the model driver's program, executed scripted (D-27, R-2,
@@ -36,14 +37,14 @@ afterEach(() => {
 
 const GREEN_SCRIPT = () => ({ implement: implementGreen, review: reviewApprove });
 
-async function modelDrive(root: string): Promise<Awaited<ReturnType<typeof skillDriver>>> {
+async function modelDrive(root: string, script: ConstructorParameters<typeof MockBackend>[0] = GREEN_SCRIPT()): Promise<Awaited<ReturnType<typeof skillDriver>>> {
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(root), "config.json"), "utf8")));
   const journal = RunJournal.open(root);
   try {
     const runBranch = ensureRunBranch(root, "parity");
     installTrailerHook(root);
     const core = new RefereeCore(
-      { root, backend: new MockBackend(GREEN_SCRIPT()), prompts: loadPromptSet(), now: () => NOW },
+      { root, backend: new MockBackend(script), prompts: loadPromptSet(), now: () => NOW },
       loaded,
       journal,
       runBranch,
@@ -94,20 +95,19 @@ describe("T-120 the skill's program completes a run over the referee (scripted m
 });
 
 /**
- * PRDR-174 — the gap this file does NOT close, recorded rather than implied.
+ * PRDR-175 — parity on the paths that FAIL, not only the one that succeeds.
  *
- * The parity test below drives two tickets that both complete cleanly, so
- * ARCH-2 is proven only on the all-green path. The model driver's own
- * BREACH / DRIFT_HALT / resume handling in `tests/plugin/skill-driver.ts` is
- * exercised by no automated test, cross-driver or otherwise: planting a
- * divergent BREACH-handler reason string there — the shape of the historical
- * PRDR-140 divergence, whose fix commit names a driver-specific difference of
- * exactly this kind — leaves the full suite green.
+ * ARCH-2 was proven on two tickets that both complete cleanly, so the model
+ * driver's escalation and BREACH branches were exercised by no test at all:
+ * planting a divergent BREACH-handler reason string left the whole suite green.
+ * That is the shape of the historical PRDR-140 divergence — a ceiling one
+ * driver enforced and the other did not — which is precisely the class parity
+ * exists to catch, and precisely the class it could not see.
  *
- * Closing it needs the skill driver to execute its ladder rows against a
- * failing gate, which is a harness build rather than a test, and it is named
- * here so the next person reading "cross-driver parity" knows what that phrase
- * currently covers. It does not cover failure paths.
+ * The claim that closing this needed "a harness build" was wrong, and was
+ * carried forward from an earlier commit without being checked against the
+ * code: `skill-driver.ts` already implements BREACH, DRIFT_HALT and resume in
+ * full. What was missing was a caller that drives a failing script through it.
  */
 describe("T-123 cross-driver parity (ARCH-2)", () => {
   it("twin repos, fixed clock: model-driven and headless journals are byte-identical", { timeout: 120_000 }, async () => {
@@ -143,4 +143,103 @@ describe("T-123 cross-driver parity (ARCH-2)", () => {
     expect(modelJournal.length).toBeGreaterThan(0);
     expect(modelJournal).toBe(journalBytes(headless.root));
   });
+});
+
+/**
+ * PRDR-175 — the failure paths, driven through both drivers.
+ *
+ * `runWithConfig` and `skillDriver` must agree when things go WRONG, which is
+ * where they had never been compared. Both cases below fail the whole suite
+ * when the model driver's handler is perturbed.
+ */
+describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
+  /** implement red, every fix a no-op: the ladder exhausts and the ticket escalates. */
+  const ESCALATING = () => ({ implement: implementRed, blind_fix: noopFix, research: researchValid, informed_fix: noopFix });
+
+  it("an escalation to NEEDS_HUMAN leaves byte-identical journals", async () => {
+    const model = await makeRunRepo();
+    const headless = await makeRunRepo();
+    cleanups.push(() => removeTree(model.root));
+    cleanups.push(() => removeTree(headless.root));
+    for (const root of [model.root, headless.root]) addTicket(root, { id: "t-1" });
+
+    const modelOutcome = await modelDrive(model.root, ESCALATING());
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(headless.root), "config.json"), "utf8")));
+    const headlessOutcome = await runWithConfig(
+      {
+        root: headless.root,
+        backend: new MockBackend(ESCALATING()),
+        prompts: loadPromptSet(),
+        now: () => NOW,
+        runId: "parity",
+        worker: "w1",
+      },
+      loaded,
+    );
+
+    expect(readTicket(model.root, "t-1").state, "the ladder really did exhaust").toBe("NEEDS_HUMAN");
+    expect(readTicket(headless.root, "t-1").state).toBe("NEEDS_HUMAN");
+    expect(modelOutcome.exit).toBe("human-gated");
+    expect(headlessOutcome.exitCode).toBe(EXIT_HUMAN_GATED);
+
+    const modelJournal = journalBytes(model.root);
+    expect(modelJournal.length).toBeGreaterThan(0);
+    expect(modelJournal, "the drivers must agree about a ticket that failed").toBe(journalBytes(headless.root));
+
+    /**
+     * PRDR-175: the DOSSIER too, because the journal does not carry it.
+     *
+     * Deleting the model driver's `record dossier` call left the journal
+     * comparison green — the escalation artifact a human actually reads lands
+     * in `runs/<id>/dossier.json`, not in `transitions.jsonl`. A parity test
+     * that stops at the journal cannot see a driver that escalates without
+     * writing one.
+     */
+    const dossierOf = (root: string): string =>
+      readFileSync(path.join(stateDir(root), "runs", "t-1", "dossier.json"), "utf8");
+    expect(dossierOf(model.root).length, "the model driver must write the escalation dossier").toBeGreaterThan(0);
+    expect(dossierOf(model.root), "and it must be the same dossier the headless driver writes").toBe(dossierOf(headless.root));
+  }, 120_000);
+
+  /**
+   * A spend BREACH, which is the historical PRDR-140 shape exactly: a ceiling
+   * one driver enforced. `SpendExhaustedError` surfaces to a driver as
+   * `RouteError` code BREACH, so this drives the branch the mutation touched.
+   */
+  it("a spend breach is recorded the same way by both drivers", async () => {
+    const model = await makeRunRepo();
+    const headless = await makeRunRepo();
+    cleanups.push(() => removeTree(model.root));
+    cleanups.push(() => removeTree(headless.root));
+    for (const root of [model.root, headless.root]) {
+      addTicket(root, { id: "t-1" });
+      /* A ceiling the first session's own cost estimate already exceeds. */
+      const file = path.join(stateDir(root), "config.json");
+      const config = JSON.parse(readFileSync(file, "utf8")) as { budgets: Record<string, number> };
+      config.budgets["run_spend_usd"] = 0.0001;
+      writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+    }
+
+    await modelDrive(model.root, GREEN_SCRIPT());
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(headless.root), "config.json"), "utf8")));
+    await runWithConfig(
+      {
+        root: headless.root,
+        backend: new MockBackend(GREEN_SCRIPT()),
+        prompts: loadPromptSet(),
+        now: () => NOW,
+        runId: "parity",
+        worker: "w1",
+      },
+      loaded,
+    );
+
+    /* The ceiling really bit: neither driver may report the ticket finished. */
+    expect(readTicket(model.root, "t-1").state, "a ticket cannot reach DONE past the ceiling").not.toBe("DONE");
+    expect(readTicket(headless.root, "t-1").state).toBe(readTicket(model.root, "t-1").state);
+
+    const modelJournal = journalBytes(model.root);
+    expect(modelJournal.length).toBeGreaterThan(0);
+    expect(modelJournal, "and both drivers must record the breach identically").toBe(journalBytes(headless.root));
+  }, 120_000);
 });
