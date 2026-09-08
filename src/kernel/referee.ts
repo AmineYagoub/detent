@@ -22,14 +22,15 @@ import { requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
-import { Breach, EscrowError, RESUMABLE, RefereeContext, lastNote, type ATTEMPT_STATES, type CoreOptions } from "./referee-context.js";
+import { Breach, EscrowError, RESUMABLE, RefereeContext, SessionRefusal, lastNote, type ATTEMPT_STATES, type CoreOptions } from "./referee-context.js";
 import { GateArm } from "./referee-gate.js";
 import { SessionArm } from "./referee-session.js";
 import { runRefereeStage } from "./referee-stage.js";
 import { allTickets, claimRefusal, isClaimed, readTicket, ready } from "./tickets/readers.js";
-import { appendNote, claim, release, writeTicket } from "./tickets/mutations.js";
+import { appendNote, claim, readClaim, release, writeTicket } from "./tickets/mutations.js";
 import { healStaleClaims } from "./plumbing.js";
 import type { LoadedConfig } from "./worstcase.js";
+import { TERMINAL_STATES } from "../schemas/states.js";
 
 /**
  * T-100…T-105 — the REFEREE core (R-1…R-4, D-27, ARCH-1/ARCH-2).
@@ -233,6 +234,37 @@ export class RefereeCore {
   /** R-4: the sole billable path — the session arm meters, this core mints. */
   async attempt(id: string, state: (typeof ATTEMPT_STATES)[number]): Promise<{ falsifiedRef?: string; oversizedRef?: string }> {
     const ticket = readTicket(this.root, id);
+    /**
+     * D-19 (PRDR-181): a session launches only on a ticket THIS worker holds,
+     * in the state being attempted.
+     *
+     * `attempt` is a driver-facing tool and read neither. Calling it on a READY,
+     * unclaimed ticket launched a real backend session from the root checkout —
+     * out of lifecycle order, on work nobody had claimed, with the claim's
+     * work directory, base snapshot and hook policy all absent because
+     * `acquire` establishes them. D-19 calls "no transition on an unverified
+     * claim" the single most important property the referee holds; a launch is
+     * how a transition is earned, so it belongs behind the same check.
+     */
+    const owner = readClaim(this.root, id)?.owner;
+    if (owner !== this.ctx.worker) {
+      throw new SessionRefusal(
+        `attempt refused: ${id} is ${owner === undefined ? "not claimed" : `claimed by ${owner}`} — ` +
+          `acquire it before attempting (D-19). A session costs money and the claim is what makes it legal.`,
+      );
+    }
+    /**
+     * And not on finished work. The first version of this check demanded
+     * `ticket.state === state`, which is wrong: `attempt("IN_PROGRESS")` is
+     * legitimately called while the ticket is READY — the attempt earns the
+     * transition, it does not follow it. What is never legitimate is launching
+     * a session on a ticket the ladder has already left.
+     */
+    if (TERMINAL_STATES.has(ticket.state)) {
+      throw new SessionRefusal(
+        `attempt refused: ${id} is ${ticket.state} — a terminal ticket has no session left to run (X-3).`,
+      );
+    }
     const workDir = this.ctx.workDirFor(id);
     await this.sessions.launch(ticket, state, this.sessions.attemptInputs(ticket, state, workDir), workDir);
     if (state === "IN_PROGRESS") {

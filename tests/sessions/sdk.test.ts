@@ -279,3 +279,38 @@ describe("T-046 the S-4 breaker end to end (oracle test_unparsable_telemetry_is_
     expect(readTicket(root, "t1").notes.map((n) => n.text).join(" ")).toContain("telemetry unparsable");
   });
 });
+
+/**
+ * S-4 (PRDR-181) — a half-formed result message is not telemetry.
+ *
+ * `total_cost_usd` plus an EMPTY `modelUsage: {}` satisfied the presence check
+ * and parsed as telemetry with zero tokens, so a truncated result became a $0
+ * ledger row and a session the spend ceiling never saw. The existing tests
+ * covered telemetry entirely ABSENT and a hand-injected `telemetryParsed:
+ * false` — neither of which is this shape.
+ */
+describe("S-4 partial telemetry is absent telemetry", () => {
+  it("refuses a cost with no usage breakdown at all", () => {
+    const parsed = parseResultMessage({ type: "result", subtype: "success", total_cost_usd: 0.5, modelUsage: {}, num_turns: 3 });
+    expect(parsed.telemetryParsed, "an empty breakdown carries no tokens to bound anything with").toBe(false);
+  });
+
+  it("still accepts a real breakdown, and a flat usage block", () => {
+    const withModels = parseResultMessage({
+      type: "result",
+      subtype: "success",
+      total_cost_usd: 0.5,
+      modelUsage: { "claude-opus-5": { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.5 } },
+      num_turns: 3,
+    });
+    expect(withModels.telemetryParsed).toBe(true);
+    const withUsage = parseResultMessage({
+      type: "result",
+      subtype: "success",
+      total_cost_usd: 0.5,
+      usage: { input_tokens: 10, output_tokens: 5 },
+      num_turns: 3,
+    });
+    expect(withUsage.telemetryParsed).toBe(true);
+  });
+});

@@ -155,7 +155,19 @@ export function parseResultMessage(message: unknown): SessionResult {
   const m = message as Partial<SDKResultMessage> & { modelUsage?: Record<string, ModelUsageLike> };
   const ok = m.is_error !== true;
 
-  const hasTelemetry = m.total_cost_usd !== undefined && (m.modelUsage !== undefined || m.usage !== undefined);
+  /**
+   * S-4 (PRDR-181): telemetry is present only when it carries USAGE, not merely
+   * a `modelUsage` key.
+   *
+   * `total_cost_usd` plus an EMPTY `modelUsage: {}` satisfied this and parsed as
+   * telemetry present with zero tokens — a partial or truncated result message
+   * became a ledger row of $0 and a session the spend ceiling never saw. S-4's
+   * circuit breaker exists for exactly the shape that arrives half-formed, and
+   * the tests only covered telemetry entirely ABSENT or a hand-injected
+   * `telemetryParsed: false`, neither of which is this.
+   */
+  const usageEntries = Object.keys(m.modelUsage ?? {}).length;
+  const hasTelemetry = m.total_cost_usd !== undefined && (usageEntries > 0 || m.usage !== undefined);
   if (!hasTelemetry) {
     return {
       ok,

@@ -861,3 +861,33 @@ describe("T-041 S-4 breaker in the loop", () => {
     expect(t1.notes.map((n) => n.text).join(" ")).toContain("telemetry");
   });
 });
+
+/**
+ * S-5 (PRDR-181) — the pinned CLI version is checked on the path that runs.
+ *
+ * `SessionBackend.checkVersion` had one production caller — `doctor`, behind
+ * `--smoke` — so `detent run` never verified the pin, while `doctor` without
+ * `--smoke` reports it as "checked at run time". It was checked nowhere.
+ */
+describe("S-5 run verifies the pinned backend version before it spends", () => {
+  it("refuses when the backend reports a pin mismatch, without launching", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t-1" });
+    let launched = 0;
+    const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
+    backend.checkVersion = async (): Promise<void> => {
+      throw new Error("claude-code 9.9.9 does not match the pinned 1.0.0 (S-5)");
+    };
+    const spy = backend.run.bind(backend);
+    backend.run = async (spec) => {
+      launched += 1;
+      return spy(spec);
+    };
+
+    const outcome = await run({ root, backend, prompts: PROMPTS, runId: "pin" });
+    expect(outcome.exitCode, "a pin mismatch is a precondition failure, not a crash").toBe(2);
+    expect(outcome.summary.reason ?? "", "and it names the mismatch").toContain("pinned");
+    expect(launched, "nothing may launch behind a failed precondition").toBe(0);
+  });
+});

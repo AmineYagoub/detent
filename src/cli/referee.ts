@@ -14,6 +14,8 @@ import type { SessionBackend } from "../sessions/backend.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
+import { acquireRunLock, runLockRefusal } from "../kernel/run-lock.js";
+import { readBindings } from "../adapter/drift.js";
 
 /**
  * The referee's composition root: `detent referee --root <path>` serves the
@@ -66,6 +68,47 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
 
+  /**
+   * V-1″ (PRDR-181): no bound `test` gate is a refusal BEFORE anything spends.
+   *
+   * `kernel/run.ts` checks this at startup, "before spending rather than at the
+   * first gate — where it used to mint a GREEN". The plugin referee began
+   * serving without it, so the model driver claimed a ticket and launched a
+   * billed implement session before anyone discovered the project had no gate
+   * to judge it with. ARCH-2: a precondition on one driver is a precondition on
+   * both.
+   */
+  try {
+    if (!readBindings(root).bindings.some((b) => b.slot === "test")) {
+      process.stderr.write(
+        "no bound `test` gate — a ticket cannot be verified, and P2 counts only exit codes. " +
+          "Run `detent init`, or `detent verify sync` if the command moved (V-1″)\n",
+      );
+      return 2;
+    }
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    return 2;
+  }
+
+  /**
+   * X-1‴ (PRDR-181): one referee per root, on the terms `run` already uses.
+   *
+   * `acquireRunLock` was wired to `kernel/run.ts` and then to `cli/init.ts`,
+   * and not here — so two plugin referees could serve one root, each enforcing
+   * `run_spend_usd` against its own view and jointly spending past it, which is
+   * the exact shape PRDR-147 exists to refuse. Taken after the preconditions
+   * above so a refusal touches nothing, and released when the server closes.
+   */
+  const lock = acquireRunLock(root);
+  if (!lock.ok) {
+    process.stderr.write(`${runLockRefusal(lock.heldBy)}\n`);
+    return 2;
+  }
+  if (lock.brokeStale !== null) {
+    process.stderr.write(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)\n`);
+  }
+
   const backend: SessionBackend =
     values.backend === "mock"
       ? new MockBackend()
@@ -92,6 +135,10 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const server = buildServer(core);
   const transport = new StdioServerTransport();
+  /* The lock outlives the connection: released when the transport closes, on every exit path. */
+  transport.onclose = (): void => {
+    lock.release();
+  };
   await server.connect(transport);
   /* Serve until the client closes stdin; the journal lock rides the process. */
   await new Promise<void>((resolve) => {

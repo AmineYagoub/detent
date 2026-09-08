@@ -8,6 +8,8 @@ import { git } from "../kernel/git.js";
 import { NON_TICKET_FILES, readTicket, isClaimed } from "../kernel/tickets/readers.js";
 import { ticketsDir } from "../kernel/tickets/paths.js";
 import { INIT_PHASES, type InitPhase, type Interrupt } from "../schemas/init.js";
+import { approvalSchema } from "../schemas/records.js";
+import { parseArtifact } from "../schemas/common.js";
 
 /**
  * T-060 — the `init` phase machine (C-4.1, C-5, C-8, C-1).
@@ -294,8 +296,19 @@ export function approvalState(root: string): ApprovalState {
   const file = path.join(stateDir(root), "plan", "approval.json");
   if (!existsSync(file)) return { approved: false, stale: false, planHash: null };
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as { plan_hash?: string };
-    const recorded = parsed.plan_hash ?? null;
+    /**
+     * C-9 (PRDR-181): the SCHEMA, not a cast.
+     *
+     * This read `as { plan_hash?: string }` and treated any object carrying a
+     * matching hash as approved, while `kernel/run.ts` parses the same file
+     * through `approvalSchema`. So `{"plan_hash": "…"}` — no approver, no
+     * timestamp, no schema version — was refused by the headless path and
+     * accepted by the plugin one, for the same file. An approval is a human's
+     * signature on a plan; the two drivers must read it identically (ARCH-2).
+     */
+    const parsed = parseArtifact(approvalSchema, JSON.parse(readFileSync(file, "utf8")));
+    if (!parsed.ok) return { approved: false, stale: false, planHash: null };
+    const recorded = parsed.value.plan_hash;
     return { approved: true, stale: recorded !== planHash(root), planHash: recorded };
   } catch {
     return { approved: false, stale: false, planHash: null };

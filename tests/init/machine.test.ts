@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
@@ -284,5 +284,39 @@ describe("T-060 digests are honest", () => {
     await runInit(root, [probe("DISCOVER", () => listingDigest(["x"]), log)]);
     expect(log).toEqual(["DISCOVER"]);
     expect(readFileSync(path.join(stateDir(root), "state", "DISCOVER.json"), "utf8")).toContain("inputs_hash");
+  });
+});
+
+/**
+ * C-9 / ARCH-2 (PRDR-181) — both drivers read an approval identically.
+ *
+ * `approvalState` — the plugin referee's reader — cast the file as
+ * `{ plan_hash?: string }` and treated any object carrying a matching hash as
+ * approved, while `kernel/run.ts` parses the same file through
+ * `approvalSchema`. So a hand-written `{"plan_hash": "…"}` with no approver, no
+ * timestamp and no schema version was refused by the headless path and accepted
+ * by the plugin one, for the same file. An approval is a human's signature on a
+ * plan.
+ */
+describe("C-9 the approval reader is the schema, not a cast", () => {
+  it("refuses an approval that only carries a plan hash", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    gitInit(root);
+    mkdirSync(path.join(stateDir(root), "plan"), { recursive: true });
+    writeFileSync(path.join(stateDir(root), "plan", "approval.json"), JSON.stringify({ plan_hash: "a".repeat(64) }));
+    expect(approvalState(root).approved, "a shape the writer cannot produce is not an approval").toBe(false);
+  });
+
+  it("accepts one the product actually writes", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    gitInit(root);
+    mkdirSync(path.join(stateDir(root), "plan"), { recursive: true });
+    writeFileSync(
+      path.join(stateDir(root), "plan", "approval.json"),
+      JSON.stringify({ schema_version: 1, plan_hash: "a".repeat(64), approved_by: "alice", at: "2026-09-08T00:00:00.000Z" }),
+    );
+    expect(approvalState(root).approved).toBe(true);
   });
 });

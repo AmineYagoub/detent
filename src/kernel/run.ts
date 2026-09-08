@@ -180,6 +180,21 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
 
 
   /**
+   * S-5 (PRDR-181): the pinned CLI version is CHECKED, on the path that runs.
+   *
+   * `SessionBackend.checkVersion` had one production caller — `doctor`, behind
+   * `--smoke` — so `detent run` never verified the pin, while `doctor` without
+   * `--smoke` reports the pin as "checked at run time". It was checked nowhere.
+   * A refusal belongs beside the other preconditions, before anything spends.
+   * The fixture backend answers trivially, so this costs a mock run nothing.
+   */
+  try {
+    await opts.backend.checkVersion(loaded.config.pinned.claude_code);
+  } catch (err) {
+    return notReady((err as Error).message);
+  }
+
+  /**
    * X-1‴ (PRDR-147): one run per root. Taken before the journal, so a refused
    * second run touches nothing; released on every exit path below.
    */

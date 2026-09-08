@@ -14,6 +14,7 @@ import { removeTree } from "../helpers.js";
 import { addTicket, diagnoseValid, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
+import { claim } from "../../src/kernel/tickets/mutations.js";
 
 /**
  * T-140 — the per-ticket D-21 policy reaches the hook (S-2′, SEC-3).
@@ -294,5 +295,53 @@ describe("PRDR-173 a degraded session is recorded where a human will see it", ()
     const notes = readTicket(repo.root, "t-1").notes.map((n) => n.text).join("\n");
     expect(notes, "a session that ran without its configured tools is not a silent success").toContain("MCP server unavailable");
     expect(notes).toContain("serena");
+  });
+});
+
+/**
+ * D-19 (PRDR-181) — a session launches only on a claimed ticket.
+ *
+ * `attempt` is driver-facing and read neither the claim nor the state, so
+ * calling it on a READY, unclaimed ticket launched a real backend session from
+ * the root checkout — with the claim's work directory, base snapshot and hook
+ * policy all absent, because `acquire` is what establishes them.
+ */
+describe("D-19 attempt refuses what no claim makes legal", () => {
+  async function coreFor(): Promise<{ core: RefereeCore; backend: MockBackend; root: string }> {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({ implement: () => okResult() });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "unclaimed"),
+    );
+    installTrailerHook(repo.root);
+    return { core, backend, root: repo.root };
+  }
+
+  it("refuses an unclaimed ticket without launching anything", async () => {
+    const { core, backend } = await coreFor();
+    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow(/not claimed/);
+    expect(backend.calls, "a refused attempt must not have spent").toHaveLength(0);
+  });
+
+  it("refuses a ticket another worker holds", async () => {
+    const { core, backend, root } = await coreFor();
+    claim(root, "t-1", "someone-else", () => new Date().toISOString());
+    await expect(core.attempt("t-1", "IN_PROGRESS")).rejects.toThrow(/claimed by someone-else/);
+    expect(backend.calls).toHaveLength(0);
+  });
+
+  it("allows the claim holder, which is the whole point of the claim", async () => {
+    const { core, backend } = await coreFor();
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    expect(backend.calls, "the holder launches normally").toHaveLength(1);
   });
 });
