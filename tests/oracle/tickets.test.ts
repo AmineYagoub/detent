@@ -25,6 +25,8 @@ import {
 } from "../../src/kernel/tickets/mutations.js";
 import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { openGeneration } from "../../src/kernel/generations.js";
+import { readFileSync } from "node:fs";
+import { stateDir } from "../../src/fs/layout.js";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(path.join(tmpdir(), "detent-")); });
@@ -107,6 +109,27 @@ describe("T-017 ticket store (A-1, R-3)", () => {
     appendNote(root, "t-1", { author: "kernel", text: "first" });
     appendNote(root, "t-1", { author: "kernel", text: "second" });
     expect(readTicket(root, "t-1").notes.map((n) => n.text)).toEqual(["first", "second"]);
+  });
+
+  /**
+   * SEC-4 (PRDR-169) — notes land in `.detent/plan/<id>.json`, which
+   * `fs/layout.ts` marks `tracking: "committed"`, and in the default
+   * non-worktree mode `finalizeDone` runs `git add -A`. Text a SESSION authored
+   * reaches here: its final message on a crashed refusal, its model-fallback
+   * reason, and the free-text `note` of the X-4 signal files it writes itself.
+   * `referee-gate.ts` has always scrubbed gate output before writing it; this
+   * direction had nothing.
+   */
+  it("redacts a secret before it can reach a committed ticket file", () => {
+    mk("t-1");
+    appendNote(root, "t-1", {
+      author: "kernel",
+      text: "falsified mid-implementation: auth.ts hardcodes sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    });
+    const written = readFileSync(path.join(stateDir(root), "plan", "t-1.json"), "utf8");
+    expect(written, "a secret the session wrote must not reach the file git will commit").not.toContain("sk-ant-api03-");
+    expect(written).toContain("REDACTED");
+    expect(written, "and the rest survives — this is redaction, not truncation").toContain("falsified mid-implementation");
   });
 
   it("discovered_from links both ends (X-5 quarantine, X-6 upstream bug)", () => {

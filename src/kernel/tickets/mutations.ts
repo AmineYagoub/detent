@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { ZERO_COUNTERS } from "../generations.js";
 import { claimPath, claimsDir, ticketPath, ticketsDir } from "./paths.js";
 import { readTicket } from "./readers.js";
+import { scrub } from "../scrub.js";
 
 /**
  * T-017 write side. `src/sessions/**` may not import this module (ARCH-1): a
@@ -173,9 +174,26 @@ export function appendNote(
   note: { readonly author: string; readonly text: string; readonly at?: string },
 ): Ticket {
   const ticket = readTicket(root, id);
+  /**
+   * SEC-4 (PRDR-169): scrubbed at the SEAM, not at each caller.
+   *
+   * Notes carry text a SESSION authored — its final message on a crashed
+   * refusal, its model-fallback reason, and the free-text `note` of the
+   * `oversized.json`/`falsified.json` signals the session writes itself — and
+   * they land in `.detent/plan/<id>.json`, which `fs/layout.ts` marks
+   * `tracking: "committed"`. In the default non-worktree mode `finalizeDone`
+   * runs `git add -A`, so an unscrubbed note is one DONE transition from the
+   * operator's real git history. `referee-gate.ts` has always scrubbed gate
+   * output before writing it; this is the same rule for the other direction.
+   *
+   * Here rather than at today's four call sites because the next site that
+   * appends session text should inherit it rather than remember it — the rule
+   * this audit chain has now forgotten four times. Scrubbing kernel-authored
+   * text too is harmless, and `scrub` is idempotent.
+   */
   return writeTicket(root, {
     ...ticket,
-    notes: [...ticket.notes, { at: note.at ?? new Date().toISOString(), author: note.author, text: note.text }],
+    notes: [...ticket.notes, { at: note.at ?? new Date().toISOString(), author: note.author, text: scrub(note.text) }],
   });
 }
 

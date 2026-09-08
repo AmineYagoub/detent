@@ -12,6 +12,7 @@ import { Breach, KernelBoundaryError, SessionRefusal, publicTicket, type Referee
 import type { FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
 import { appendNote, readClaim, writeTicket } from "./tickets/mutations.js";
+import { scrub } from "./scrub.js";
 
 /**
  * T-104 — the session arm (R-4, S-2…S-6, D-25, B-3/P7, SEC-3).
@@ -156,7 +157,21 @@ export class SessionArm {
        * under-declares its protected set.
        */
       policy: {
-        surface: [...ticket.surface, ".detent/runs/**"],
+        /**
+         * S-1′ (PRDR-170): a read-only role's surface is its ARTIFACT, not the
+         * ticket's code.
+         *
+         * `allowedTools` is narrowed for these roles three lines above and the
+         * policy was not — while `sdk.ts`'s own comment records that a hook
+         * answering `allow` "ended the evaluation and overrode `allowedTools`",
+         * and that hook emits `permissionDecision` for every non-abstain
+         * decision. So the guard, the layer this project treats as
+         * authoritative, handed review/diagnose/research an unconditional allow
+         * to edit the implementation they exist to judge independently.
+         * PRDR-124 fixed this shape in `init/session.ts` and asserted kernel
+         * worker sessions had always been right; they had not.
+         */
+        surface: READ_ONLY_ROLES.has(role) ? [".detent/runs/**"] : [...ticket.surface, ".detent/runs/**"],
         protectedGlobs: [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED],
         workRoot: workDir,
       },
@@ -182,7 +197,9 @@ export class SessionArm {
     const result = await ctx.backend.run(spec);
     if (result.modelFallback !== undefined) {
       /* PRDR-114: the routing asked for a model this runtime cannot serve; the ledger's `models` says what ran. */
-      const { requested, reason } = result.modelFallback;
+      const { requested } = result.modelFallback;
+      /* SEC-4 (PRDR-169): a runtime string echoed into a committed note and the journal. */
+      const reason = scrub(result.modelFallback.reason);
       appendNote(ctx.root, id, {
         author: "kernel",
         text: `model fallback (PRDR-114): ${role} is routed to ${requested}, unavailable on this runtime (${reason}) — ran on the runtime default`,
@@ -230,7 +247,8 @@ export class SessionArm {
      */
     if (outcome.crashed === true && outcome.turns === 0) {
       throw new SessionRefusal(
-        `backend refused ${role} session for ${id} (crashed, zero turns): ${result.rawTail.slice(-300)}`,
+        /* SEC-4 (PRDR-169): rawTail is the model's own final message. */
+        `backend refused ${role} session for ${id} (crashed, zero turns): ${scrub(result.rawTail.slice(-300))}`,
       );
     }
 
@@ -356,7 +374,8 @@ export class SessionArm {
     let split: string[] = [];
     try {
       const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; split?: unknown };
-      if (typeof parsed.note === "string" && parsed.note.trim() !== "") note = parsed.note.trim();
+      /* SEC-4 (PRDR-169): session-authored free text. */
+      if (typeof parsed.note === "string" && parsed.note.trim() !== "") note = scrub(parsed.note.trim());
       if (Array.isArray(parsed.split)) split = parsed.split.filter((p): p is string => typeof p === "string" && p.trim() !== "").map((p) => p.trim());
     } catch {
       /* the signal's existence is the event; the proposal is best-effort */
@@ -380,7 +399,8 @@ export class SessionArm {
     let missing: string[] = [];
     try {
       const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown };
-      if (typeof parsed.note === "string" && parsed.note !== "") note = parsed.note;
+      /* SEC-4 (PRDR-169): the session wrote this file; its free text is scrubbed before a note or journal event carries it. */
+      if (typeof parsed.note === "string" && parsed.note !== "") note = scrub(parsed.note);
       if (Array.isArray(parsed.missing)) {
         missing = parsed.missing.filter((m): m is string => typeof m === "string" && m.trim() !== "").map((m) => m.trim());
       }

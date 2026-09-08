@@ -11,7 +11,8 @@ import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { removeTree } from "../helpers.js";
-import { addTicket, makeRunRepo } from "../kernel/run-fixture.js";
+import { addTicket, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
+import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 
 /**
  * T-140 — the per-ticket D-21 policy reaches the hook (S-2′, SEC-3).
@@ -30,14 +31,14 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-async function specFromAttempt(): Promise<SessionSpec> {
+async function specFromAttempt(stage: "implement" | "review" = "implement"): Promise<SessionSpec> {
   const repo = await makeRunRepo();
   cleanups.push(() => removeTree(repo.root));
   addTicket(repo.root, { id: "t-1" });
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
   const journal = RunJournal.open(repo.root);
   cleanups.push(() => journal.close());
-  const backend = new MockBackend({ implement: () => okResult() });
+  const backend = new MockBackend({ implement: () => okResult(), review: reviewApprove });
   const core = new RefereeCore(
     { root: repo.root, backend, prompts: loadPromptSet() },
     loaded,
@@ -46,7 +47,8 @@ async function specFromAttempt(): Promise<SessionSpec> {
   );
   installTrailerHook(repo.root);
   expect(core.acquire("t-1").ok).toBe(true);
-  await core.attempt("t-1", "IN_PROGRESS");
+  if (stage === "review") await core.recordStage("t-1", "review");
+  else await core.attempt("t-1", "IN_PROGRESS");
   const spec = backend.calls[0]?.spec;
   if (spec === undefined) throw new Error("no session launched");
   return spec;
@@ -57,6 +59,27 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
     const spec = await specFromAttempt();
     expect(spec.policy?.surface).toEqual(["src/**", "tests/**", ".detent/runs/**"]);
     expect(spec.policy?.workRoot).toBe(spec.cwd);
+  });
+
+  /**
+   * S-1′ (PRDR-170) — asserted on the spec `SessionArm.launch` actually builds,
+   * not on a policy the test composed for itself.
+   *
+   * `allowedTools` was narrowed for read-only roles and the POLICY was not,
+   * while `sdk.ts`'s own comment records that a hook answering `allow` "ended
+   * the evaluation and overrode `allowedTools`" — so the guard handed
+   * review/diagnose/research an unconditional allow to edit the implementation
+   * they exist to judge.
+   */
+  it("a read-only role's surface is its artifact, never the ticket's code", async () => {
+    const spec = await specFromAttempt("review");
+    expect(spec.policy?.surface, "review must not carry the implementation surface").toEqual([".detent/runs/**"]);
+    const policy = spec.policy as GuardPolicy;
+    expect(guardToolUse("Edit", { file_path: path.join(spec.cwd, "src/payments.ts") }, policy).decision).toBe("deny");
+    expect(
+      guardToolUse("Write", { file_path: path.join(spec.cwd, ".detent/runs/t-1/review.json") }, policy).decision,
+      "but it still writes its own verdict",
+    ).toBe("allow");
   });
 
   it("protected carries the project globs PLUS the structural SEC-3 floor", async () => {
