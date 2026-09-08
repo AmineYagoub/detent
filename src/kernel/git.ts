@@ -368,13 +368,31 @@ export function baseReflogWrites(root: string, base: string): number {
  */
 export function ticketCommits(cwd: string, ticketId: string, base: string | null): string[] {
   if (base === null) return [];
-  const raw = tryGit(cwd, "log", "--reverse", "--format=%H%x1f%s", `${base}..HEAD`);
+  /**
+   * PRDR-171: the TRAILER first, the subject prefix as a fallback.
+   *
+   * This selected on `subject.startsWith(\`${ticketId}:\`)` alone — a
+   * convention stated in prompt text and enforced nowhere, asked of a model
+   * three or four times per ticket across the fix ladder. Meanwhile
+   * `installTrailerHook` stamps `Detent-Ticket: <id>` onto every commit made
+   * under a claim, by a git hook that needs no cooperation, and
+   * `parseTicketTrailers` had ZERO production callers. A commit the session
+   * made correctly but forgot to prefix was absent from the diff the reviewer
+   * judges — not truncated, not flagged — and merged.
+   *
+   * `%B` rather than `%s`, so the body the trailer lives in is available;
+   * NUL/SOH separators because a commit body may contain anything.
+   */
+  const raw = tryGit(cwd, "log", "--reverse", "--format=%H%x00%B%x01", `${base}..HEAD`);
   if (raw === null) return [];
   const out: string[] = [];
-  for (const line of raw.split("\n")) {
-    const [sha, subject] = line.split("\x1f");
-    if (sha === undefined || subject === undefined || sha.trim() === "") continue;
-    if (subject.startsWith(`${ticketId}:`)) out.push(sha.trim());
+  for (const record of raw.split("\x01")) {
+    if (record.trim() === "") continue;
+    const [sha, message] = record.trim().split("\x00");
+    if (sha === undefined || sha.trim() === "") continue;
+    const body = message ?? "";
+    const subject = body.split("\n")[0] ?? "";
+    if (parseTicketTrailers(body).includes(ticketId) || subject.startsWith(`${ticketId}:`)) out.push(sha.trim());
   }
   return out;
 }

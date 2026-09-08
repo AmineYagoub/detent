@@ -16,6 +16,7 @@ import { type RunJournal, runsDir } from "./journal.js";
 import { SpendLedger } from "./ledger.js";
 import type { Budgets } from "../schemas/budgets.js";
 import type { LoadedConfig } from "./worstcase.js";
+import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 
 /**
  * The referee's shared ground (T-100): one context object carrying the wiring
@@ -201,7 +202,15 @@ export class RefereeContext {
     if (!this.hookFiles) return;
     publishClaimPolicy(this.root, {
       ticketId,
-      protectedGlobs: this.loaded.config.protected,
+      /**
+       * SEC-3 (PRDR-172): the structural floor, which every other GuardPolicy
+       * construction site in production spreads in and this one did not.
+       * Inert today only by coincidence — the ambient hook's `driver: true`
+       * branch denies every path'd call before `protectedGlobs` is consulted —
+       * so relaxing that branch would silently leave `.git/**` and
+       * `node_modules/**` unprotected for this policy alone.
+       */
+      protectedGlobs: [...this.loaded.config.protected, ...STRUCTURAL_PROTECTED],
       gateCommands: readBindings(this.root).bindings.map((b) => b.resolved),
       expiresAtMs: this.now() + this.budgets.ticket_wall_clock_ms,
     });

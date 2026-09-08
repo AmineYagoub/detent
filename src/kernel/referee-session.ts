@@ -414,9 +414,21 @@ export class SessionArm {
   }
 
   /**
-   * S-6: a role's prompt prefix is byte-identical within a run — the check that
-   * catches a prompt file edited mid-flight. One prompt per role (PRDR-093
-   * removed the variant layer), so the role IS the prompt identity S-6 pins.
+   * S-6: a role's prompt prefix is byte-identical within a run. One prompt per
+   * role (PRDR-093 removed the variant layer), so the role IS the prompt
+   * identity S-6 pins.
+   *
+   * PRDR-172: this used to claim it "catches a prompt file edited mid-flight",
+   * and it does not. `prefixFor`'s three inputs are all `readonly`, assigned
+   * once in `RefereeContext`'s constructor, which is itself constructed once
+   * per run at both production call sites — so for a fixed role the mismatch
+   * branch is unreachable by construction. Editing `AGENTS.md` mid-run was
+   * observed to neither throw nor be noticed; the next session silently used
+   * the stale rules text. S-6 in the PRD is a prompt-CACHE-efficiency
+   * invariant, not a file-edit detector, and this assertion is what makes the
+   * caching claim honest: a tripwire on an assumption, not a watcher. Detecting
+   * a mid-run prompt edit would need the prefix re-derived per session, which
+   * is a different change with its own cache cost.
    */
   private rememberPrefix(role: RoleId, spec: SessionSpec): void {
     const seen = this.prefixSeen.get(role);

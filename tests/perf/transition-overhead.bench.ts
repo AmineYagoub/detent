@@ -44,6 +44,8 @@ describe("N-4 transition overhead", () => {
     expect(rows.length).toBeGreaterThan(40);
 
     const samples: number[] = [];
+    /** PRDR-172: what the LOOP applied, recorded by the loop, not re-derived from its input. */
+    const applied = new Set<string>();
     const split = { validate: 0, apply: 0, append: 0, checkpoint: 0 };
     const ROUNDS = Math.ceil(500 / rows.length) + 1;
 
@@ -85,6 +87,7 @@ describe("N-4 transition overhead", () => {
           split.append += t3 - t2;
           split.checkpoint += t4 - t3;
           samples.push(t4 - started);
+          applied.add(transitionKey(from, event));
         }
       }
     } finally {
@@ -108,8 +111,16 @@ describe("N-4 transition overhead", () => {
     expect(p95).toBeLessThan(100);
     expect(max).toBeLessThan(500);
 
-    /** Sanity: the corpus really covered every row. */
-    const covered = new Set(rows.map((r) => transitionKey(r.from, r.event)));
-    expect(covered.size).toBe(TABLE.size);
+    /**
+     * Sanity: the timed loop really exercised every row.
+     *
+     * PRDR-172: `covered` was built by re-mapping the same `rows` array through
+     * `transitionKey` — a lossless round trip, so `covered.size === TABLE.size`
+     * held by construction. Gutting the entire loop body into a no-op that
+     * never touched `apply`, the journal or `writeTicket` left this assertion
+     * passing. It now counts what the loop itself recorded.
+     */
+    expect(applied.size, "the loop must have applied every row in the table").toBe(TABLE.size);
+    expect(samples.length, "and timed every application").toBe(ROUNDS * rows.length);
   });
 });

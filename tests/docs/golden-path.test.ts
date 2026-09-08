@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { INIT_PHASES, INTERRUPTS, INTERRUPT_PHASE } from "../../src/schemas/init.js";
+import { EXIT_ERROR, EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK } from "../../src/kernel/run.js";
 
 /**
  * T-069 — the porcelain freeze (C-14, N-6).
@@ -46,7 +47,26 @@ describe("T-069 C-14: the porcelain is exactly two commands", () => {
   });
 
   it("the README documents C-11's exit codes as public API", () => {
-    for (const code of ["`0`", "`10`", "`2`", "`1`"]) expect(README).toContain(code);
+    /**
+     * PRDR-172: the code must be PAIRED with its meaning.
+     *
+     * This checked four backtick-wrapped digits were present somewhere in the
+     * file. Scrambling all four rows of the README's exit-code table, so every
+     * code named the wrong outcome, left all 13 tests green — including this
+     * one, titled "the README documents C-11's exit codes as public API".
+     * Each row is now matched against the constant it documents.
+     */
+    const rows: [string, number, RegExp][] = [
+      ["EXIT_OK", EXIT_OK, /ready|ok|success|complete/i],
+      ["EXIT_ERROR", EXIT_ERROR, /error|fail/i],
+      ["EXIT_NOT_READY", EXIT_NOT_READY, /not ready|interrupt|answer/i],
+      ["EXIT_HUMAN_GATED", EXIT_HUMAN_GATED, /human|escalat|gated/i],
+    ];
+    for (const [name, code, meaning] of rows) {
+      const line = README.split("\n").find((l) => new RegExp(`\\\`${code}\\\``).test(l) && /\|/.test(l));
+      expect(line, `${name} (${code}) has no row in the README's exit-code table`).toBeDefined();
+      expect(line ?? "", `the README's row for ${code} does not describe ${name}`).toMatch(meaning);
+    }
     expect(README).toContain("public API");
   });
 });

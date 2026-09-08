@@ -57,8 +57,20 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
       expect(site, `${key} has no enforcement site`).toBeTruthy();
       /* The one honest exception, and the map says so beside it. */
       if (key === "turns_per_stage") continue;
-      const source = readFileSync(new URL(`../../src/${site}.ts`, import.meta.url), "utf8");
-      expect(source, `${site} is named as enforcing ${key} but never mentions it`).toContain(key);
+      /**
+       * PRDR-172: COMMENTS STRIPPED before matching.
+       *
+       * This was a plain substring match over the whole file. Replacing the
+       * real read (`CEILINGS.gate_timeout_ms.default`) with a hardcoded
+       * `900_000` while leaving the adjacent JSDoc — which happens to name
+       * `gate_timeout_ms` — kept every test in this file green. Still a textual
+       * heuristic rather than a semantic one, but prose can no longer vouch for
+       * code that stopped reading the ceiling.
+       */
+      const source = readFileSync(new URL(`../../src/${site}.ts`, import.meta.url), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      expect(source, `${site} is named as enforcing ${key} but never mentions it outside a comment`).toContain(key);
     }
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());
   });

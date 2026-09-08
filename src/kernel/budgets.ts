@@ -47,7 +47,17 @@ export const ENFORCEMENT_SITES = {
   flake_reruns: "kernel/flake",
   gate_timeout_ms: "adapter/run",
   binding_probe_timeout_ms: "adapter/bind",
-  run_spend_usd: "kernel/ledger",
+  /**
+   * PRDR-172: `kernel/referee-context`, not `kernel/ledger`.
+   *
+   * `SpendLedger` performs the check (`spent >= this.ceiling`) but is HANDED a
+   * number and never names the ceiling — the only occurrence of
+   * `run_spend_usd` in that file is prose. `referee-context` is where
+   * `budgets.run_spend_usd` is actually read and passed in, so it is the site
+   * whose drift would break enforcement. The parity test only noticed once it
+   * stopped letting comments vouch for code.
+   */
+  run_spend_usd: "kernel/referee-context",
 } as const satisfies Record<CeilingKey, string>;
 
 export function breachTargetFor(key: CeilingKey): BreachTarget {

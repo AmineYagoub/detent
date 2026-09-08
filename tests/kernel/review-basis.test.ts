@@ -152,3 +152,51 @@ describe("PRDR-113 the basis is scoped by Detent's matcher, not by git's pathspe
     expect(body).toContain("src/cli.ts");
   });
 });
+
+/**
+ * A-5 (PRDR-171) — the enforced mechanism, not the remembered one.
+ *
+ * `ticketCommits` selected by subject prefix, a convention stated in prompt
+ * text and enforced nowhere, while `installTrailerHook` stamps a real
+ * `Detent-Ticket:` trailer on every commit made under a claim and
+ * `parseTicketTrailers` had zero production callers. A commit the session made
+ * correctly but forgot to prefix was absent from the diff the reviewer judges
+ * — and merged.
+ */
+describe("PRDR-171 a ticket's own commit counts even when its subject was not prefixed", () => {
+  it("attributes a commit by its Detent-Ticket trailer", () => {
+    const root = tmpTree({ "a.txt": "one\n" });
+    roots.push(root);
+    gitInit(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "base");
+    const base = git(root, "rev-parse", "HEAD").trim();
+
+    /* The shape the hook produces: no subject prefix, trailer present. */
+    writeTree(root, { "a.txt": "two\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "fix the handler\n\nDetent-Ticket: t1");
+    const trailered = git(root, "rev-parse", "HEAD").trim();
+
+    /* And the old convention still works. */
+    writeTree(root, { "a.txt": "three\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "t1: prefixed the old way");
+    const prefixed = git(root, "rev-parse", "HEAD").trim();
+
+    expect(ticketCommits(root, "t1", base), "both mechanisms count, oldest first").toEqual([trailered, prefixed]);
+  });
+
+  it("does not claim another ticket's trailered commit", () => {
+    const root = tmpTree({ "a.txt": "one\n" });
+    roots.push(root);
+    gitInit(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "base");
+    const base = git(root, "rev-parse", "HEAD").trim();
+    writeTree(root, { "a.txt": "two\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "someone else's work\n\nDetent-Ticket: t2");
+    expect(ticketCommits(root, "t1", base), "PRDR-094's narrowing stands").toEqual([]);
+  });
+});

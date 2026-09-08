@@ -4,6 +4,7 @@ import {
   filterFlake,
   ledgerFor,
   quarantineTicket,
+  type QuarantineDecision,
   type FlakeDecision,
   type FlakeInput,
 } from "../../src/kernel/flake.js";
@@ -171,8 +172,28 @@ describe("T-022 D-14: a pattern never absolves a real regression", () => {
      */
     const root = tree();
     createTicket(root, { id: "t1", type: "feature", title: "t", acceptance_criteria: ["x"] });
+    /**
+     * PRDR-172: the guarantee here is COMPILE-TIME, and now says so.
+     *
+     * This was `expect(() => quarantineTicket(…)).toBeTypeOf("function")`,
+     * which is true of any arrow expression — the call inside it never ran, and
+     * making `quarantineTicket` unconditionally throw left the test green. It
+     * read as a runtime refusal and was not one: a laddered decision handed
+     * past the type system produces a ticket with `undefined` fields rather
+     * than an error, because `quarantineTicket` reads `decision.signature` and
+     * `decision.result` without validating them.
+     *
+     * So the assertion is the `@ts-expect-error` itself — `npm run typecheck`
+     * fails if that error stops occurring, which is exactly the property this
+     * block claims. What follows is the real runtime route, asserted for real.
+     */
     // @ts-expect-error a ladder decision is not evidence of a flake
-    expect(() => quarantineTicket(root, "t1", laddered, { id: "t1-flake-1" })).toBeTypeOf("function");
+    const refusedAtCompileTime: QuarantineDecision = laddered;
+    void refusedAtCompileTime;
+
+    const written = quarantineTicket(root, "t1", quarantined as QuarantineDecision, { id: "t1-flake-1" });
+    expect(written.id, "the quarantine route does produce a linked bug ticket").toBe("t1-flake-1");
+    expect(written.type).toBe("bug");
   });
 });
 
