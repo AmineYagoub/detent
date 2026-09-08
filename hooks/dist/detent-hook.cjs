@@ -1577,6 +1577,14 @@ function pathOf(toolInput) {
   return typeof candidate === "string" && candidate !== "" ? candidate : null;
 }
 var MUTATING_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+function artifactRelative(artifactRoot, resolveReal, absolute) {
+  try {
+    const rel = import_node_path.default.relative(resolveReal(artifactRoot), resolveReal(absolute));
+    return rel.startsWith("..") || import_node_path.default.isAbsolute(rel) ? null : rel;
+  } catch {
+    return null;
+  }
+}
 function realpathNearest(target, maxHops = 40) {
   const absolute = import_node_path.default.resolve(target);
   const trailing = [];
@@ -1611,6 +1619,17 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
   if (target === null) return { decision: "abstain", reason: "no path in tool input \u2014 the allowlist decides" };
   const root = import_node_path.default.resolve(policy.workRoot);
   const absolute = import_node_path.default.resolve(root, target);
+  if (policy.artifactRoot !== void 0) {
+    const artifactRoot = import_node_path.default.resolve(policy.artifactRoot);
+    const lexical = import_node_path.default.relative(artifactRoot, absolute);
+    if (!lexical.startsWith("..") && !import_node_path.default.isAbsolute(lexical)) {
+      const real = artifactRelative(artifactRoot, resolveReal, absolute);
+      if (real === null) {
+        return { decision: "deny", reason: `DENY: ${target} resolves through a symbolic link out of this session's artifact area.` };
+      }
+      return MUTATING_TOOLS.has(toolName) ? { decision: "allow", reason: `${real} is this session's own artifact area (B-2\u2033)` } : { decision: "abstain", reason: `${real} is this session's artifact area; the allowlist decides (S-2\u2033)` };
+    }
+  }
   const typed = import_node_path.default.relative(root, absolute);
   if (typed.startsWith("..") || import_node_path.default.isAbsolute(typed)) {
     return { decision: "deny", reason: `DENY: ${target} is outside the worktree.` };
@@ -1714,12 +1733,26 @@ function decidePreToolUse(payload, nowMs) {
       );
     }
   }
-  if (cfg?.driver === true) {
-    if (pathOf(payload.tool_input) === null) return null;
-    return denyJson(
-      "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens through referee-admitted sessions, and state flows through referee tools alone."
-    );
+  const DRIVER_DENIED_TOOLS = /* @__PURE__ */ new Set([
+    "Bash",
+    "BashOutput",
+    "KillShell",
+    "KillBash",
+    "Task",
+    "Agent",
+    "WebFetch"
+  ]);
+  function driverDecision(tool2, toolInput) {
+    const reason = "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens through referee-admitted sessions, and state flows through referee tools alone.";
+    if (DRIVER_DENIED_TOOLS.has(tool2)) {
+      return denyJson(
+        `${reason} \`${tool2}\` runs commands, which is neither: a shell can write a file, run a gate outside the referee's classification, or start a billable session off the ledger.`
+      );
+    }
+    if (pathOf(toolInput) === null) return null;
+    return denyJson(reason);
   }
+  if (cfg?.driver === true) return driverDecision(tool, payload.tool_input);
   const decision = guardToolUse(tool, payload.tool_input, {
     surface: strings(cfg?.surface),
     protectedGlobs: strings(cfg?.protected),

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
@@ -105,6 +105,45 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
     const review = await specFromAttempt("review");
     expect(review.policy?.surface, "review grants only its artifact").toEqual([".detent/runs/**"]);
     expect(guardToolUse("Write", { file_path: repro }, review.policy as GuardPolicy).decision).toBe("deny");
+  });
+
+  /**
+   * B-2″ (PRDR-180) — the artifact write, in the DEFAULT configuration.
+   *
+   * `artifactOut` is `<root>/.detent/runs/<ticket>/…` while `workRoot` is the
+   * per-ticket worktree, and PRDR-145b made worktrees the default. So the
+   * artifact every read-only role exists to produce resolved to a sibling of
+   * its work root and the guard denied it as an escape. Every test missed it by
+   * running non-worktree, where the two paths coincide — which is why this one
+   * builds the worktree shape explicitly.
+   */
+  it("a session may write its own artifact from inside a worktree, and nothing else outside it", async () => {
+    const spec = await specFromAttempt("review");
+    const worktree = path.join(spec.cwd, ".detent", "worktrees", "t-1");
+    mkdirSync(worktree, { recursive: true });
+    const runs = path.join(spec.cwd, ".detent", "runs", "t-1");
+    mkdirSync(runs, { recursive: true });
+    /**
+     * The PRODUCTION policy, with only `workRoot` moved to the worktree as
+     * `run` does by default. `artifactRoot` is taken from the spec, not
+     * supplied here — the first version of this test passed its own and so
+     * stayed green when production stopped setting it, which is the trap this
+     * whole chain keeps falling into.
+     */
+    expect(spec.policy?.artifactRoot, "the session arm must publish where the artifact goes").toBe(runs);
+    const policy = { ...(spec.policy as GuardPolicy), workRoot: worktree };
+
+    expect(
+      guardToolUse("Write", { file_path: path.join(runs, "review.json") }, policy).decision,
+      "the artifact a review session exists to produce",
+    ).toBe("allow");
+    for (const [label, file] of [
+      ["another ticket's artifacts", path.join(spec.cwd, ".detent", "runs", "t-2", "review.json")],
+      ["the operator's own checkout", path.join(spec.cwd, "src", "payments.ts")],
+      ["the spend ledger", path.join(spec.cwd, ".detent", "ledger.jsonl")],
+    ] as [string, string][]) {
+      expect(guardToolUse("Write", { file_path: file }, policy).decision, label).toBe("deny");
+    }
   });
 
   it("protected carries the project globs PLUS the structural SEC-3 floor", async () => {

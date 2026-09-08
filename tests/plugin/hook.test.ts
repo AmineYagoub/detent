@@ -157,9 +157,19 @@ describe("T-121 D-28 ambient-bypass denies over the bundle", () => {
     expect(reason).toContain("gate tool");
   });
 
-  it("benign Bash and path-less tool calls stay silent", () => {
+  /**
+   * PRDR-180: this asserted the bypass. Under a DRIVER policy `git status` was
+   * silent because the rule looked only at path'd calls — and so were
+   * `printf x > src/pwn.ts` and `claude -p …`. D-27 admits no model-issued
+   * request that writes outside surface or consumes a budget without a
+   * validator in between; a shell does both.
+   */
+  it("a driver policy denies Bash outright, while referee tool calls stay silent", () => {
     const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
-    expect(tool(cwd, "Bash", { command: "git status" })).toEqual({ out: "", code: 0 });
+    for (const command of ["git status", "printf x > src/pwn.ts", "claude -p 'do the thing'"]) {
+      const reason = denyReason(tool(cwd, "Bash", { command }).out);
+      expect(reason, command).toContain("D-27");
+    }
     expect(tool(cwd, "mcp__plugin_detent_referee__next", {})).toEqual({ out: "", code: 0 });
   });
 
@@ -317,4 +327,29 @@ describe("T-113 the shipped wiring", () => {
       );
     }
   });
+});
+
+/**
+ * D-27 (PRDR-180) — a driver policy denies EXECUTION, not only paths.
+ *
+ * The branch denied any call carrying a `file_path`, under a message reading
+ * "the driver sequences, never edits". `Bash` carries no path, so it returned
+ * silence: while a Detent claim was active, driver-mode `Bash` could write a
+ * file with a redirect, run a gate outside the referee's classification, or
+ * spawn a billable session off the ledger.
+ */
+describe("D-27 the driver sequences, and a shell is not sequencing", () => {
+  it("denies every execution tool, not only the path'd calls", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    /* `Task` is already denied by its own rule, with its own message — asserted as a denial, not as D-27's. */
+    for (const name of ["Bash", "BashOutput", "KillShell", "Task", "WebFetch"]) {
+      const reason = denyReason(tool(cwd, name, { command: "printf x > src/pwn.ts" }).out);
+      expect(reason, `${name} must not run under a driver policy`).toMatch(/DENY/);
+    }
+    /* The Bash family is what this rule adds, so those carry D-27's reason. */
+    for (const name of ["Bash", "BashOutput", "KillShell"]) {
+      expect(denyReason(tool(cwd, name, { command: "git status" }).out), name).toContain("D-27");
+    }
+  });
+
 });

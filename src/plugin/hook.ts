@@ -178,14 +178,49 @@ function decidePreToolUse(payload: HookPayload, nowMs: number): string | null {
     }
   }
 
-  /** T-120 (D-27): a driver policy denies every path'd call — sequencing only. */
-  if (cfg?.driver === true) {
-    if (pathOf(payload.tool_input) === null) return null;
+/**
+ * D-27 (PRDR-180): what a driver may still do while a claim is active.
+ *
+ * The driver sequences; every change goes through a referee-admitted session,
+ * and every path'd call is already denied below. What walked past that rule was
+ * EXECUTION, which carries no path: `Bash` could write a file with a redirect,
+ * run a gate outside the referee's classification, or spawn a billable model
+ * session off the ledger — under a policy whose own message reads "the driver
+ * sequences, never edits".
+ *
+ * D-27 is the authority and it is broader than `skills/run/SKILL.md` said: "no
+ * model-issued request applies a transition, consumes a budget, or writes
+ * outside surface without a validator or gate result in between." A redirect
+ * writes; `claude -p` consumes a budget. The skill text named only
+ * gate-matching Bash and has been corrected to match the rule rather than the
+ * rule narrowed to match it — the opposite of the PRDR-170 mistake.
+ */
+const DRIVER_DENIED_TOOLS: ReadonlySet<string> = new Set([
+  "Bash",
+  "BashOutput",
+  "KillShell",
+  "KillBash",
+  "Task",
+  "Agent",
+  "WebFetch",
+]);
+
+/** T-120 (D-27): a driver policy denies every path'd call, and every execution — sequencing only. */
+function driverDecision(tool: string, toolInput: unknown): string | null {
+  const reason =
+    "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens " +
+    "through referee-admitted sessions, and state flows through referee tools alone.";
+  if (DRIVER_DENIED_TOOLS.has(tool)) {
     return denyJson(
-      "DENY: the driver sequences, never edits (D-27). A Detent claim is active; every change happens " +
-        "through referee-admitted sessions, and state flows through referee tools alone.",
+      `${reason} \`${tool}\` runs commands, which is neither: a shell can write a file, run a gate outside ` +
+        "the referee's classification, or start a billable session off the ledger.",
     );
   }
+  if (pathOf(toolInput) === null) return null;
+  return denyJson(reason);
+}
+
+  if (cfg?.driver === true) return driverDecision(tool, payload.tool_input);
 
   const decision = guardToolUse(tool, payload.tool_input, {
     surface: strings(cfg?.surface),

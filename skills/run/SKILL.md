@@ -19,7 +19,10 @@ Arguments passed by the user: $ARGUMENTS
   present the refusal, never work around it, never retry it unchanged.
 - **You never edit, read around, or bypass (D-27/D-28).** While a claim is
   active the containment hook denies you every file write and read, every
-  `Task` spawn, and every Bash command matching a bound verification command.
+  `Task` spawn, and every `Bash` command — not only those matching a bound
+  verification command (PRDR-180). A shell can write a file with a redirect and
+  start a billable session off the ledger, and D-27 admits neither without a
+  validator or gate result in between.
   Do not fight it: sessions do the work through `attempt`; gates run through
   `gate`; state arrives through tool results.
 - **Approval first (C-9).** `run` executes only a plan a human approved via

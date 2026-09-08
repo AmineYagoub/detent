@@ -20,6 +20,22 @@ export interface GuardPolicy {
   readonly protectedGlobs: readonly string[];
   /** The work root; anything resolving outside it is denied. */
   readonly workRoot: string;
+  /**
+   * B-2″ (PRDR-180): the one directory a session may write OUTSIDE its work
+   * root — where its own artifact goes.
+   *
+   * `artifactOut` is always `<root>/.detent/runs/<ticket>/…` while `workRoot`
+   * is the per-ticket worktree, and worktrees are the default. So the artifact
+   * every review, diagnose and research session is required to produce resolved
+   * to a sibling of its work root and was denied as an escape — in the default
+   * configuration. Every test missed it by running non-worktree, where the two
+   * paths coincide.
+   *
+   * Deliberately ONE directory and not "the project root": granting the root
+   * would let a session write the operator's own checkout, which is the harm
+   * B-2″ made worktrees the default to prevent.
+   */
+  readonly artifactRoot?: string;
 }
 
 export interface GuardDecision {
@@ -69,6 +85,21 @@ export function pathOf(toolInput: unknown): string | null {
  * specification cannot implement it (T-140's empty-diff lesson).
  */
 const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * The path relative to this session's artifact directory, or `null` when it is
+ * not inside one. Resolved on both sides for the same reason the work-root
+ * check is (PRDR-180).
+ */
+function artifactRelative(artifactRoot: string, resolveReal: (p: string) => string, absolute: string): string | null {
+  try {
+    const rel = path.relative(resolveReal(artifactRoot), resolveReal(absolute));
+    return rel.startsWith("..") || path.isAbsolute(rel) ? null : rel;
+  } catch {
+    /* An artifact root that cannot be resolved is not an artifact root; fall through to the deny. */
+    return null;
+  }
+}
 
 /**
  * S-2⁗ (PRDR-127): where a path actually LANDS, with symbolic links followed.
@@ -159,6 +190,34 @@ export function guardToolUse(
 
   const root = path.resolve(policy.workRoot);
   const absolute = path.resolve(root, target);
+
+  /**
+   * B-2″ (PRDR-180): the session's own artifact directory, judged FIRST.
+   *
+   * `artifactOut` is under the project root while `workRoot` is the per-ticket
+   * worktree, and worktrees are the default — so the artifact every review,
+   * diagnose and research session must produce resolved to a sibling of its
+   * work root and was denied by the containment check below. In the default
+   * configuration. Every test missed it by running non-worktree, where the two
+   * paths coincide.
+   *
+   * Lexically first and then resolved, matching the containment check: a
+   * symlink into the artifact area is judged on its real destination.
+   */
+  if (policy.artifactRoot !== undefined) {
+    const artifactRoot = path.resolve(policy.artifactRoot);
+    const lexical = path.relative(artifactRoot, absolute);
+    if (!lexical.startsWith("..") && !path.isAbsolute(lexical)) {
+      const real = artifactRelative(artifactRoot, resolveReal, absolute);
+      if (real === null) {
+        return { decision: "deny", reason: `DENY: ${target} resolves through a symbolic link out of this session's artifact area.` };
+      }
+      return MUTATING_TOOLS.has(toolName)
+        ? { decision: "allow", reason: `${real} is this session's own artifact area (B-2″)` }
+        : { decision: "abstain", reason: `${real} is this session's artifact area; the allowlist decides (S-2″)` };
+    }
+  }
+
   /* Lexical `..` is refused before any filesystem work, exactly as before. */
   const typed = path.relative(root, absolute);
   if (typed.startsWith("..") || path.isAbsolute(typed)) {

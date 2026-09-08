@@ -177,6 +177,13 @@ export class SessionArm {
         surface: ARTIFACT_ONLY_ROLES.has(role) ? [".detent/runs/**"] : [...ticket.surface, ".detent/runs/**"],
         protectedGlobs: [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED],
         workRoot: workDir,
+        /**
+         * B-2″ (PRDR-180): where this session's artifact goes, which is under
+         * the ROOT while `workRoot` is the per-ticket worktree. Without it the
+         * guard denied every review, diagnose and research artifact in the
+         * default configuration — the write those roles exist to produce.
+         */
+        artifactRoot: runsDir(ctx.root, id),
       },
     };
 
