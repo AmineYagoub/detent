@@ -8,6 +8,7 @@ import { analysisSchema, planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
+import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { runInit } from "../../src/init/machine.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
 import type { Budgets } from "../../src/schemas/budgets.js";
@@ -300,6 +301,43 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
     expect(call, "a planner session must have run").toBeDefined();
     expect(call!.spec.promptPrefix, "the session must be told the rules it is expected to follow").toContain(marker);
     expect(call!.spec.promptPrefix, "and must not be told there are none").not.toContain("(no rules file)");
+  });
+
+  /**
+   * SEC-3 (PRDR-184) — the init session may write its artifact, judged by the
+   * REAL guard against the REAL policy.
+   *
+   * `analysisPath` is `.detent/state/analysis.json`; PRDR-149 added
+   * `.detent/state/**` to the structural floor, correctly — it holds the
+   * checkpoints and the run lock. Protected globs are consulted before the
+   * surface, so from that commit every init session was denied the one write it
+   * exists to make, and `init` died at ANALYZE. No test caught it because every
+   * init test uses `MockBackend`, which writes artifacts with `fs` and never
+   * runs the guard. This one asks the guard directly.
+   */
+  it("an init session can write its own artifact and nothing else under the floor (PRDR-184)", async () => {
+    const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
+    const backend = new MockBackend({ planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
+    const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
+    await runInit(root, handlers);
+
+    const spec = backend.calls.find((c) => c.role === "planner")?.spec;
+    expect(spec?.policy, "the init arm must publish a policy").toBeDefined();
+    const policy = spec!.policy as GuardPolicy;
+    const identity = (p: string): string => p;
+
+    expect(
+      guardToolUse("Write", { file_path: spec!.artifactOut }, policy, identity).decision,
+      "the artifact is the one write an init session exists to make",
+    ).toBe("allow");
+    for (const [label, file] of [
+      ["another checkpoint", path.join(root, ".detent", "state", "PLAN.json")],
+      ["the run lock", path.join(root, ".detent", "state", "run.lock")],
+      ["the ledger", path.join(root, ".detent", "ledger.jsonl")],
+      ["git's own config", path.join(root, ".git", "config")],
+    ] as [string, string][]) {
+      expect(guardToolUse("Write", { file_path: file }, policy, identity).decision, label).toBe("deny");
+    }
   });
 
   it("the planner session gets the read-only surface plus ONE scoped write — its artifact (S-1′, PRDR-067)", async () => {

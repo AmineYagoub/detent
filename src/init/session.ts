@@ -105,6 +105,25 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
       /** SEC-3′ (PRDR-132): the same structural floor the run loop enforces, `.git/**` included. */
       protectedGlobs: [...STRUCTURAL_PROTECTED],
       workRoot: deps.root,
+      /**
+       * SEC-3 (PRDR-184): the session's own artifact, exempt from the floor
+       * that would otherwise refuse it.
+       *
+       * `analysisPath` is `.detent/state/analysis.json`, and PRDR-149 added
+       * `.detent/state/**` to `STRUCTURAL_PROTECTED` — correctly, it holds the
+       * checkpoints and the run lock. Protected globs are consulted before the
+       * surface, so from that moment every init session was DENIED the one
+       * write it exists to make, and `init` died at ANALYZE with "produced no
+       * analysis artifact". Found by a live run, and by nothing else: every
+       * init test uses `MockBackend`, which writes artifacts with `fs` and
+       * never runs the guard (PRDR-182 says so in as many words).
+       *
+       * The FILE, not its directory — `path.relative(file, file)` is `""` so
+       * the exact path is allowed, while a sibling resolves to `../other.json`
+       * and falls through to the floor. `.detent/state/` keeps every other
+       * checkpoint immutable to the session.
+       */
+      artifactRoot: request.artifactOut,
     },
   };
 }
