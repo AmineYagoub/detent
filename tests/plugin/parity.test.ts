@@ -93,6 +93,22 @@ describe("T-120 the skill's program completes a run over the referee (scripted m
   });
 });
 
+/**
+ * PRDR-174 — the gap this file does NOT close, recorded rather than implied.
+ *
+ * The parity test below drives two tickets that both complete cleanly, so
+ * ARCH-2 is proven only on the all-green path. The model driver's own
+ * BREACH / DRIFT_HALT / resume handling in `tests/plugin/skill-driver.ts` is
+ * exercised by no automated test, cross-driver or otherwise: planting a
+ * divergent BREACH-handler reason string there — the shape of the historical
+ * PRDR-140 divergence, whose fix commit names a driver-specific difference of
+ * exactly this kind — leaves the full suite green.
+ *
+ * Closing it needs the skill driver to execute its ladder rows against a
+ * failing gate, which is a harness build rather than a test, and it is named
+ * here so the next person reading "cross-driver parity" knows what that phrase
+ * currently covers. It does not cover failure paths.
+ */
 describe("T-123 cross-driver parity (ARCH-2)", () => {
   it("twin repos, fixed clock: model-driven and headless journals are byte-identical", { timeout: 120_000 }, async () => {
     const model = await makeRunRepo();

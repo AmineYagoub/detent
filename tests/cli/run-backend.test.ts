@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { main as runMain } from "../../src/cli/run.js";
 import { stateDir } from "../../src/fs/layout.js";
-import { makeRunRepo } from "../kernel/run-fixture.js";
+import { addTicket, implementGreen, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { removeTree } from "../helpers.js";
+import { MockBackend } from "../../src/sessions/mock.js";
 
 /**
  * C-14″ (PRDR-129) — the porcelain runs LIVE.
@@ -38,20 +39,47 @@ function configEvent(root: string): Record<string, unknown> {
 }
 
 describe("C-14″ the porcelain runs live, and the journal says which backend ran", () => {
+  /**
+   * PRDR-174: the seam, not the empty pool.
+   *
+   * This relied on `makeRunRepo()` seeding zero tickets — so the live default
+   * was safe only because nothing was there to run. Adding one ticket to that
+   * shared fixture made the identical call reach `ClaudeCodeBackend.run` three
+   * times, and no `DETENT_NO_LIVE` enforcement exists anywhere in the suite.
+   * The ticket below is deliberate: it proves the default reaches the pool AND
+   * that what it reaches is the injected builder, so this test can never spend
+   * however the fixture evolves.
+   */
   it("`detent run` with no --backend uses the LIVE backend", async () => {
-    /* An empty pool finishes without launching a session, so this needs no credentials. */
     const { root } = await makeRunRepo();
     roots.push(root);
+    addTicket(root, { id: "t-1" });
+    let built = 0;
     const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
-      await runMain([root]);
-      expect(configEvent(root)["backend"]).toBe("claude-code");
+      await runMain([root], {
+        buildBackend: () => {
+          built += 1;
+          return new MockBackend({ implement: implementGreen, review: reviewApprove });
+        },
+      });
+      /**
+       * The C-14″ property, asserted directly: with no flag, `main` reaches the
+       * LIVE builder. Previously this was inferred from the journal's
+       * `"claude-code"` string, which only held because nothing was injected —
+       * and only stayed safe because the fixture had no tickets to run.
+       */
+      expect(built, "with no --backend, main builds the live backend").toBe(1);
+      /* And the journal names whichever backend actually ran — here, the injected one. */
+      expect(configEvent(root)["backend"]).toBe("mock");
       /* A live run says nothing about backends — the banner is for the fixture. */
-      expect(err.mock.calls.join("")).not.toContain("FIXTURE backend");
+      expect(err.mock.calls.join(""), "the banner is keyed on the --backend flag, not on what was built").not.toContain(
+        "FIXTURE backend",
+      );
     } finally {
       err.mockRestore();
     }
-  });
+  }, 30_000);
 
   it("a fixture run announces itself on stderr before anything is spent", async () => {
     const { root } = await makeRunRepo();

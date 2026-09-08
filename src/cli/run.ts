@@ -4,6 +4,7 @@ import { buildLiveBackend } from "../sessions/live.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { makeTtyEscalation } from "./escalate.js";
+import type { SessionBackend } from "../sessions/backend.js";
 
 /**
  * T-041/T-140 — `detent run`, the second porcelain verb (C-9…C-11, D-3).
@@ -16,7 +17,23 @@ import { makeTtyEscalation } from "./escalate.js";
  * `--backend mock` stays the fixture path; `--backend claude` (the default's
  * counterpart for real work) builds the live backend the N-7 self-build uses.
  */
-export async function main(argv: readonly string[]): Promise<number> {
+/**
+ * X-1 (PRDR-174): the live-backend builder is a seam.
+ *
+ * `run`'s live-by-default (C-14″) is correct, and it meant the only thing
+ * keeping `tests/cli/run-backend.test.ts` from launching real billed sessions
+ * was a fixture property: `makeRunRepo()` happens to seed zero tickets. Adding
+ * one ticket to that shared fixture makes the identical `main([root])` call
+ * reach `ClaudeCodeBackend.run` three times, with no `DETENT_NO_LIVE`
+ * enforcement anywhere in the suite to stop it. `doctor` was given this seam by
+ * PRDR-158/162 for exactly the same reason; `run` had none, so the same
+ * structural hardening was impossible without a source change first.
+ */
+export interface RunMainDeps {
+  readonly buildBackend?: (root: string) => SessionBackend;
+}
+
+export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     allowPositionals: true,
@@ -65,7 +82,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write("--max-tickets must be a positive whole number\n");
     return EXIT_ERROR;
   }
-  const backend = values.backend === "mock" ? new MockBackend() : buildLiveBackend(root);
+  const backend = values.backend === "mock" ? new MockBackend() : (mainDeps.buildBackend ?? buildLiveBackend)(root);
   /**
    * C-14″: a fixture run writes real ledger rows and real journal events against
    * real ticket state, so it must never be mistaken for a real one. Said once,
