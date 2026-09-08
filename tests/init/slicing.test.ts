@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { buildPipeline } from "../../src/init/pipeline.js";
+import type { Budgets } from "../../src/schemas/budgets.js";
+import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
@@ -206,6 +208,47 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     await runInit(root, handlers, { replan: true });
     expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
   });
+
+  /**
+   * C-8 (PRDR-186) — raising the SPEND CAP must not discard the plan.
+   *
+   * `sliceKey` hashed the whole `budgets` object, so `run_spend_usd` was in the
+   * key: on a live run five slices deep, raising the cap to let the run finish
+   * invalidated every cached slice and re-paid for them — roughly $70 thrown
+   * away by an operational decision that cannot change what a plan should say.
+   * The key covers `sessionBudget()` now, which is exactly the three values
+   * that reach the prompt. A budget the planner DOES read still invalidates.
+   */
+  it("a changed spend cap reuses every slice; a changed session budget does not", async () => {
+    const root = repo(DOCS);
+    const log: string[] = [];
+    const notes: string[] = [];
+    const backend = new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const build = (budgets: Budgets): PhaseHandler[] =>
+      buildPipeline({ root, backend, prompts: PROMPTS, budgets, note: (t) => notes.push(t) });
+
+    await runInit(root, build(BUDGETS));
+    expect(log).toContain("PLAN:s01");
+
+    /**
+     * A document edit is what forces PLAN to run again — the phase digest holds
+     * no budgets — and it is only then that the slice keys are consulted. That
+     * is the live situation exactly: the run died mid-PLAN, so the phase had no
+     * checkpoint, and every slice key was re-derived against the new cap.
+     */
+    writeFileSync(path.join(root, "prd-billing.md"), "# billing, revised once\n");
+    log.splice(0);
+    notes.splice(0);
+    await runInit(root, build({ ...BUDGETS, run_spend_usd: BUDGETS.run_spend_usd * 2 }));
+    expect(log, "raising the cap must not re-plan a slice that read nothing new").not.toContain("PLAN:s01");
+    expect(notes.join("\n")).toContain("s01 skeleton: reused — nothing it read has changed (C-8)");
+
+    /* But `turns_per_stage` reaches the prompt as `session_budget`, so it must. */
+    writeFileSync(path.join(root, "prd-billing.md"), "# billing, revised twice\n");
+    log.splice(0);
+    await runInit(root, build({ ...BUDGETS, turns_per_stage: BUDGETS.turns_per_stage + 5 }));
+    expect(log, "a budget the planner reads still invalidates the slice").toContain("PLAN:s01");
+  }, 30_000);
 
   /**
    * F-3′ (PRDR-137): the cache advertises itself as a validated trust boundary

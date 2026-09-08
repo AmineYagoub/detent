@@ -5,6 +5,7 @@ import path from "node:path";
 import { planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { contentsDigest, sliceCacheDir } from "./machine.js";
+import { sessionBudget } from "./plan-review.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
@@ -127,7 +128,20 @@ function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly DraftedTicke
         deps.greenfield,
         deps.baseline ?? "production",
         deps.boundSlots,
-        deps.budgets,
+        /**
+         * PRDR-186: what the planner READ, not the whole budgets object.
+         *
+         * `sessionBudget` derives the only three values a plan can depend on —
+         * `turns_per_stage`, `ticket_wall_clock_ms`, `sessions` — and they are
+         * what reaches the prompt as `session_budget`. Keying on the whole
+         * object put `run_spend_usd` in the key, so raising a spend cap
+         * mid-run discarded every slice already planned and re-paid for it.
+         * Observed: a live run five slices in, ~$70 of planning thrown away by
+         * an operational decision that cannot change what a plan should say.
+         * This module's own header calls the key "everything a slice's draft
+         * READ"; the cap is not something it read.
+         */
+        sessionBudget(deps.budgets),
         deps.promptHash ?? "",
       ]),
     )
