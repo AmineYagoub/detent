@@ -12,7 +12,7 @@ import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { runInit } from "../../src/init/machine.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
 import type { Budgets } from "../../src/schemas/budgets.js";
-import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
+import { MockBackend, okResult, outageResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 
@@ -548,7 +548,8 @@ describe("PRDR-185 init waits out a backend outage", () => {
     const waits: number[] = [];
     const flaky: StageFn = (spec) => {
       calls += 1;
-      if (calls === 1) return okResult({ ok: false, rawTail: limit });
+      /* PRDR-188: DERIVED from the SDK shape, not hand-built — the gap PRDR-187 lived in. */
+      if (calls === 1) return outageResult(limit);
       return plannerStage(ANALYSIS_BROWNFIELD, DRAFT)(spec);
     };
     const notes: string[] = [];
@@ -572,7 +573,7 @@ describe("PRDR-185 init waits out a backend outage", () => {
   it("gives up on a failure that is not an outage, without waiting", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
     const waits: number[] = [];
-    const broken: StageFn = () => okResult({ ok: false, rawTail: "the model refused: the PRD contradicts itself" });
+    const broken: StageFn = () => outageResult("the model refused: the PRD contradicts itself");
     const handlers = buildPipeline({
       root,
       backend: new MockBackend({ planner: broken }),
