@@ -29,8 +29,11 @@ exactly the class parity exists to catch and exactly the class it could not see.
 
 ## The claim that was wrong
 
-PRDR-174 recorded that closing this "needs the skill driver to execute its ladder rows against a
-failing gate, which is a harness build rather than a test". That was carried forward from an
+PRDR-174 recorded that closing this needs the skill driver "to run its ladder rows against a
+failing gate, which is a harness build". (PRDR-179 correction: the sentence originally quoted here
+was not PRDR-174's — it read "execute … rather than a test", words that appear in no ticket. A
+ticket whose thesis is that recording an unchecked reason is how a false claim survives should not
+have fabricated the quotation it was correcting.) That was carried forward from an
 earlier commit and never checked against the code. `tests/plugin/skill-driver.ts` already
 implements BREACH, DRIFT_HALT and resume in full — about fifty lines of complete handling. What was
 missing was a caller passing it a failing script, and `modelDrive` hard-coding `GREEN_SCRIPT()` was

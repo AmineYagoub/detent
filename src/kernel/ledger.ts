@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { ledgerRowSchema, type LedgerRow } from "../schemas/records.js";
@@ -47,20 +47,37 @@ export class SpendExhaustedError extends Error {
  * `readRecordedSpend` and `detent report` count it like any other.
  */
 export function recordOutOfBandSpend(root: string, role: string, result: SessionResult, at: string): LedgerRow {
+  const perModel = Object.values(result.perModel ?? {});
+  const sum = (pick: (u: (typeof perModel)[number]) => number): number => perModel.reduce((a, u) => a + pick(u), 0);
   const row = ledgerRowSchema.parse({
     at,
     ticket: "(out-of-band)",
     generation: 0,
     role,
-    cost_estimate_usd: result.costEstimateUsd,
-    input_tokens: result.inputTokens,
-    output_tokens: result.outputTokens,
-    cache_read_input_tokens: result.cacheReadInputTokens,
-    cache_creation_input_tokens: result.cacheCreationInputTokens,
+    /**
+     * PRDR-179: the per-model breakdown where there is one, which
+     * `SpendLedger.record` calls "the token source of record when present".
+     * This read the flat estimate and sorted nothing, so an out-of-band row was
+     * a different shape from every other row in the same file.
+     */
+    cost_estimate_usd: perModel.length > 0 ? sum((u) => u.costUSD) : result.costEstimateUsd,
+    input_tokens: perModel.length > 0 ? sum((u) => u.inputTokens) : result.inputTokens,
+    output_tokens: perModel.length > 0 ? sum((u) => u.outputTokens) : result.outputTokens,
+    cache_read_input_tokens: perModel.length > 0 ? sum((u) => u.cacheReadInputTokens) : result.cacheReadInputTokens,
+    cache_creation_input_tokens: perModel.length > 0 ? sum((u) => u.cacheCreationInputTokens) : result.cacheCreationInputTokens,
     turns: result.turns,
-    models: result.perModel === undefined ? [] : Object.keys(result.perModel),
+    models: result.perModel === undefined ? [] : Object.keys(result.perModel).sort(),
   });
-  mkdirSync(stateDir(root), { recursive: true });
+  /**
+   * PRDR-179: the caller must already have a state directory.
+   *
+   * This created one, so `detent doctor --smoke` in a bare directory left a
+   * `.detent/` behind on a root Detent had never been initialised on. A
+   * diagnostic does not initialise anything.
+   */
+  if (!existsSync(stateDir(root))) {
+    throw new Error(`no .detent/ at ${root} — a session's cost cannot be recorded on a root that was never initialised (X-1)`);
+  }
   appendFileSync(path.join(stateDir(root), "ledger.jsonl"), `${JSON.stringify(row)}\n`);
   return row;
 }

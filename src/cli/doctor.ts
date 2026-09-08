@@ -191,7 +191,20 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
        * the first two. Recorded after the call, so a session that threw is not
        * charged for tokens it never reported.
        */
-      recordOutOfBandSpend(root, "doctor-smoke", result, new Date().toISOString());
+      const row = recordOutOfBandSpend(root, "doctor-smoke", result, new Date().toISOString());
+      /**
+       * X-1 (PRDR-179): say that it counts, because it counts FOREVER.
+       *
+       * `readRecordedSpend` sums the whole file — "cumulative across
+       * generations AND across resumed invocations" — so a smoke row is
+       * subtracted from every future `detent run` on this root, not just the
+       * next one. PRDR-173 recorded the row and told nobody what recording it
+       * meant.
+       */
+      process.stderr.write(
+        `smoke session recorded $${row.cost_estimate_usd.toFixed(4)} to .detent/ledger.jsonl — ` +
+          "it counts against run_spend_usd for every later run on this root (X-1).\n",
+      );
       checks.push({
         name: "smoke-session",
         ok: result.telemetryParsed,

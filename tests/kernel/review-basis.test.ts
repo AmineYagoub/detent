@@ -187,6 +187,32 @@ describe("PRDR-171 a ticket's own commit counts even when its subject was not pr
     expect(ticketCommits(root, "t1", base), "both mechanisms count, oldest first").toEqual([trailered, prefixed]);
   });
 
+  /**
+   * PRDR-179: a body byte must not be able to drop a commit.
+   *
+   * The first version used `%x01` as the record separator under a comment
+   * saying it was chosen "because a commit body may contain anything" — which
+   * is why it was wrong: a body containing a literal SOH split its own record
+   * and the commit vanished from the review basis, silently, which is the exact
+   * harm PRDR-171 exists to remove. Git refuses NUL in a commit message, so NUL
+   * is the one byte a body provably cannot carry.
+   */
+  it("attributes a commit whose body contains the old record separator", () => {
+    const root = tmpTree({ "a.txt": "one\n" });
+    roots.push(root);
+    gitInit(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "base");
+    const base = git(root, "rev-parse", "HEAD").trim();
+
+    writeTree(root, { "a.txt": "two\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "fix the handler\n\nlog line: \u0001 raw\n\nDetent-Ticket: t1");
+    const sha = git(root, "rev-parse", "HEAD").trim();
+
+    expect(ticketCommits(root, "t1", base), "a control byte in the body must not lose the commit").toEqual([sha]);
+  });
+
   it("does not claim another ticket's trailered commit", () => {
     const root = tmpTree({ "a.txt": "one\n" });
     roots.push(root);

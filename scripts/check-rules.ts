@@ -60,6 +60,23 @@ export function sourceFiles(dir: string, out: string[] = []): string[] {
  * that tracks comment state cannot make that mistake, and is linear.
  */
 export function withoutStringLiterals(source: string): string {
+  return mask(source, false);
+}
+
+/**
+ * Blank comments AS WELL, leaving only executable text.
+ *
+ * `tests/oracle/budgets.test.ts` asks "does this file actually READ this
+ * ceiling", and prose must not answer for code — neither a doc comment (the
+ * hole PRDR-172 closed) nor a log message (the hole it opened by closing the
+ * first with a comment-only strip). One scanner, so the gate and that test
+ * cannot disagree about what counts as code.
+ */
+export function codeOnly(source: string): string {
+  return mask(source, true);
+}
+
+function mask(source: string, blankComments: boolean): string {
   const out = source.split("");
   let i = 0;
   const blank = (at: number): void => {
@@ -69,13 +86,17 @@ export function withoutStringLiterals(source: string): string {
     const ch = source[i] as string;
     const next = source[i + 1];
     if (ch === "/" && next === "*") {
+      const start = i;
       i += 2;
       while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i += 1;
       i += 2;
+      if (blankComments) for (let n = start; n < Math.min(i, source.length); n += 1) blank(n);
       continue;
     }
     if (ch === "/" && next === "/") {
+      const start = i;
       while (i < source.length && source[i] !== "\n") i += 1;
+      if (blankComments) for (let n = start; n < i; n += 1) blank(n);
       continue;
     }
     if (ch === '"' || ch === "'" || ch === "`") {

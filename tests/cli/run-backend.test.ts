@@ -72,8 +72,13 @@ describe("C-14″ the porcelain runs live, and the journal says which backend ra
       expect(built, "with no --backend, main builds the live backend").toBe(1);
       /* And the journal names whichever backend actually ran — here, the injected one. */
       expect(configEvent(root)["backend"]).toBe("mock");
-      /* A live run says nothing about backends — the banner is for the fixture. */
-      expect(err.mock.calls.join(""), "the banner is keyed on the --backend flag, not on what was built").not.toContain(
+      /**
+       * PRDR-179: the banner follows what RAN. This asserted the opposite —
+       * that an injected fixture ran silently, because the banner was keyed on
+       * the flag rather than the backend — codifying exactly the divergence
+       * C-14″ exists to forbid.
+       */
+      expect(err.mock.calls.join(""), "an injected fixture is still a fixture and must announce itself").toContain(
         "FIXTURE backend",
       );
     } finally {

@@ -380,17 +380,28 @@ export function ticketCommits(cwd: string, ticketId: string, base: string | null
    * made correctly but forgot to prefix was absent from the diff the reviewer
    * judges — not truncated, not flagged — and merged.
    *
-   * `%B` rather than `%s`, so the body the trailer lives in is available;
-   * NUL/SOH separators because a commit body may contain anything.
+   * `%B` rather than `%s`, so the body the trailer lives in is available.
+   *
+   * PRDR-179: `-z` and a NUL record separator, not `%x01`. The comment here
+   * claimed SOH was safe "because a commit body may contain anything" — which
+   * is exactly why it was not: a body containing a literal SOH split its own
+   * record and the commit was dropped silently, reproducing the harm PRDR-171
+   * exists to remove. Git refuses a NUL in a commit message outright ("a NUL
+   * byte in commit log message not allowed"), so a NUL separator is the one
+   * byte a body provably cannot contain.
+   *
+   * With `-z` git separates RECORDS with a single NUL and the format puts one
+   * between sha and body, so the stream is `sha\0body\0sha\0body\0` — read in
+   * pairs, not split on a double NUL.
    */
-  const raw = tryGit(cwd, "log", "--reverse", "--format=%H%x00%B%x01", `${base}..HEAD`);
+  const raw = tryGit(cwd, "log", "--reverse", "-z", "--format=%H%x00%B", `${base}..HEAD`);
   if (raw === null) return [];
+  const fields = raw.split("\0");
   const out: string[] = [];
-  for (const record of raw.split("\x01")) {
-    if (record.trim() === "") continue;
-    const [sha, message] = record.trim().split("\x00");
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const sha = fields[i];
     if (sha === undefined || sha.trim() === "") continue;
-    const body = message ?? "";
+    const body = fields[i + 1] ?? "";
     const subject = body.split("\n")[0] ?? "";
     if (parseTicketTrailers(body).includes(ticketId) || subject.startsWith(`${ticketId}:`)) out.push(sha.trim());
   }

@@ -44,6 +44,11 @@ Against this project's stated threat model — repository content is untrusted i
 prompt-injected review session can rewrite the implementation it was launched to judge, defeating
 the independence the review role exists to provide.
 
-The identical bug class was found and fixed once, as **PRDR-124**, scoped to `src/init/session.ts`;
-that ticket's own text claims kernel worker sessions "have always" narrowed correctly, which is
-false against the code.
+The identical bug class was found and fixed once, as **PRDR-124**, scoped to `src/init/session.ts`.
+
+**PRDR-179 correction.** This ticket originally said PRDR-124 claims kernel worker sessions "have
+always" narrowed correctly, and that this is false against the code. That mischaracterises it:
+PRDR-124 says the policy moves onto the spec "as worker sessions have always done" — a claim about
+where the policy is CARRIED, which is true. What PRDR-124 did not do was ask whether the surface
+that policy carries is right for every role, which is this ticket's finding, and that is a gap
+rather than a lie.

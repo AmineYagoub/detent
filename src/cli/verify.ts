@@ -94,6 +94,16 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
    */
   const missingRequired = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
   if (missingRequired.length > 0) {
+    /**
+     * PRDR-179: the notices go FIRST, on this path too.
+     *
+     * This returned before the `messages.push(notice)` loop below and never
+     * calls `deps.consent`, so `renderSyncSummary` never runs either — leaving
+     * the vacuous-gate notice with nowhere to appear on one of three exits.
+     * PRDR-167 closed that hole for the normal path and reopened it here by
+     * adding a new early return above the loop.
+     */
+    for (const notice of report.notices) messages.push(notice);
     messages.push(
       `no way to run: ${missingRequired.join(", ")} — a project with no test command cannot be gated (P2). ` +
         "Establish the tooling and re-run `detent verify sync`; syncing now would leave the gate unrecorded.",
@@ -247,6 +257,18 @@ export function renderSyncSummary(summary: SyncSummary): string {
   const lines = ["", "verification bindings to re-baseline (V-3):"];
   for (const check of summary.drift) lines.push(`  [${check.status}] ${check.message}`);
   for (const b of summary.proposed) lines.push(`  ${b.slot}: \`${b.resolved}\` (${b.adapter}:${b.ref})`);
+  /**
+   * PRDR-179: the skips, in the text the operator consents to.
+   *
+   * PRDR-167 put them on `SyncSummary` and documented them as what will be
+   * WRITTEN, and then rendered them nowhere — so the human approving a
+   * re-baseline was never told which gates were about to be recorded as
+   * skipped. Adding a field to the decision object is not the same as adding
+   * it to the decision.
+   */
+  for (const skip of summary.skips) {
+    lines.push(`  ${skip.slot}: no candidate — recorded as skipped, acknowledged by ${skip.acknowledged_by}`);
+  }
   /** PRDR-165: before the decision, not after it. */
   if (summary.notices.length > 0) {
     lines.push("", `Gates that may verify nothing (${summary.notices.length}) — evidence, not a refusal (V-1‴):`);

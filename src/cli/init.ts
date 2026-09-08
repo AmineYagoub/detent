@@ -51,7 +51,16 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   const approvalFlag: ApprovalFlag | undefined = flags[0];
 
-  /** C-1: root-only, with the root path hinted — and no `.detent/` created. */
+  /**
+   * C-1: root-only, with the root path hinted — and no `.detent/` created.
+   *
+   * PRDR-179: that second half is why the lock is taken BELOW this block and
+   * not above it. `acquireRunLock` mkdirs `state/` and `release()` removes only
+   * the lock file, so a refusal here would leave a `.detent/` behind on a
+   * directory Detent had declined to work on. The existing test for this rule
+   * exercises the no-repo path, which returns before the lock either way — a
+   * guarantee kept true by a coincidental fixture until it was asserted.
+   */
   const where = checkRoot(root);
   if (where.kind === "subdirectory") {
     process.stderr.write(`\`detent init\` runs only at the git root — run it from ${where.root}\n`);
@@ -231,7 +240,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write("\ninit complete — plan ready for approval.\n");
     return EXIT_OK;
   } finally {
-    /* Nine return paths below; one release. */
+    /* Seven return paths above; one release. */
     lock.release();
   }
 }

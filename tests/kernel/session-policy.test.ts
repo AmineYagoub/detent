@@ -193,6 +193,45 @@ describe("PRDR-173 a degraded session is recorded where a human will see it", ()
     expect(events, "and the journal carries it as a machine-readable event").toContain("model_fallback");
   });
 
+  /**
+   * SEC-4 (PRDR-179) — the extraction-site scrubs, which the seam does not cover.
+   *
+   * PRDR-169 scrubs at `appendNote`, so reverting any of the four extraction
+   * scrubs left every note test green and all four were effectively untested.
+   * What they uniquely protect is the JOURNAL: `appendTicketEvent` does not go
+   * through `appendNote`, so a runtime-supplied `modelFallback.reason` reaches
+   * `journal.jsonl` scrubbed only because it was scrubbed where it was read.
+   */
+  it("scrubs a secret out of the journal event, not only out of the note", async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({
+      implement: () =>
+        okResult({
+          modelFallback: { requested: "claude-fable-5-1", reason: "runtime refused: token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+        }),
+    });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet() },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "scrub-journal"),
+    );
+    installTrailerHook(repo.root);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+
+    const events = readFileSync(journal.ticketJournalPath("t-1"), "utf8");
+    expect(events, "the journal is a record, and a record must not carry a credential").not.toContain(
+      "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+    expect(events).toContain("REDACTED");
+  });
+
   it("notes an MCP server that was configured and unavailable", async () => {
     const repo = await makeRunRepo();
     cleanups.push(() => removeTree(repo.root));

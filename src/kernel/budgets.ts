@@ -43,7 +43,17 @@ export const ENFORCEMENT_SITES = {
   /** X-1″ (PRDR-106): advisory — read by the planner as `session_budget`, enforced nowhere. */
   turns_per_stage: "init/plan-review",
   failure_research_tool_calls: "kernel/referee-stage",
-  planning_research_tool_calls: "init/plan-research",
+  /**
+   * PRDR-179: `init/pipeline`, not `init/plan-research`.
+   *
+   * `plan-research.ts` is HANDED a `budget` number and only names the ceiling
+   * in a doc comment and a log message — the same posture PRDR-172 declared
+   * disqualifying for `kernel/ledger`. `pipeline.ts` is where
+   * `budgets.planning_research_tool_calls` is read and passed in, so it is the
+   * site whose drift would break enforcement. Found once the parity test
+   * stopped letting a log string vouch for code.
+   */
+  planning_research_tool_calls: "init/pipeline",
   flake_reruns: "kernel/flake",
   gate_timeout_ms: "adapter/run",
   binding_probe_timeout_ms: "adapter/bind",

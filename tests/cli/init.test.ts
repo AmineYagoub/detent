@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { main } from "../../src/cli/init.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
@@ -69,5 +69,43 @@ describe("X-1‴ init refuses a root another process is already planning", () =>
       err.mockRestore();
       if (held.ok) held.release();
     }
+  });
+});
+
+/**
+ * C-1 (PRDR-179) — a refusal leaves nothing behind.
+ *
+ * PRDR-168's lock mkdirs `.detent/state/` and its `release()` removes only the
+ * lock file, so a refusal AFTER the lock would leave a `.detent/` on a
+ * directory Detent declined to work on. The rule's existing test exercises the
+ * no-repo path, which returns before the lock either way — kept true by a
+ * coincidental fixture rather than by an assertion.
+ */
+describe("C-1 a refused init creates no .detent/", () => {
+  it("leaves the directory untouched when it is not a git root", async () => {
+    const root = tmpTree({ "PRD.md": "# product\n" });
+    roots.push(root);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      expect(await main([root])).toBe(2);
+    } finally {
+      err.mockRestore();
+    }
+    expect(existsSync(path.join(root, ".detent")), "a refusal must not initialise anything").toBe(false);
+  });
+
+  it("leaves the directory untouched when it is a subdirectory of a repo", async () => {
+    const root = tmpTree({ "PRD.md": "# product\n" });
+    roots.push(root);
+    gitInit(root);
+    const sub = path.join(root, "packages", "app");
+    mkdirSync(sub, { recursive: true });
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      expect(await main([sub])).toBe(2);
+    } finally {
+      err.mockRestore();
+    }
+    expect(existsSync(path.join(sub, ".detent")), "a refusal must not initialise anything").toBe(false);
   });
 });

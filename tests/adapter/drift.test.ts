@@ -503,3 +503,61 @@ describe("PRDR-173 verify sync's entry point: TTY refusal, --yes, and what reach
     }
   }, 30_000);
 });
+
+/**
+ * PRDR-179 — the two verify-sync exits PRDR-167 left uncovered.
+ *
+ * The audit found the `SETUP_REQUIRED_SLOTS` refusal has no test at all —
+ * `if (false && missingRequired.length > 0)` left the suite green — and that
+ * the same refusal returns before the notices reach `messages`, so a vacuous
+ * gate is reported on two of three exits and silent on the third. It also found
+ * `SyncSummary.skips` documented as decision material and rendered nowhere.
+ */
+describe("PRDR-179 verify sync's refusal path, and what the operator is shown", () => {
+  it("refuses when the test slot has no candidate, rather than syncing it into nothing", async () => {
+    const root = tree({ ...FIXTURE, "package.json": JSON.stringify({ name: "notest", scripts: { test: "vitest run" } }, null, 2) });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    /* The one slot a project cannot be gated without disappears. */
+    writeTree(root, { "package.json": JSON.stringify({ name: "notest", scripts: {} }, null, 2) });
+
+    const result = await verifySync(root, { consent: async () => true, now: NOW });
+    expect(result.exitCode, "P2: a project with no test command cannot be gated").toBe(EXIT_NOT_READY);
+    expect(result.rebaselined, "and nothing is re-baselined").toBe(false);
+    expect(result.messages.join("\n")).toContain("no way to run: test");
+    expect(readBindings(root).bindings.map((b) => b.slot), "the stored bindings are left intact").toContain("test");
+  }, 30_000);
+
+  it("still reports a vacuous gate on the refusal exit", async () => {
+    const root = tree({
+      ...FIXTURE,
+      "package.json": JSON.stringify({ name: "both", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2),
+    });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    /* test vanishes (the refusal) while lint becomes vacuous (the notice). */
+    writeTree(root, { "package.json": JSON.stringify({ name: "both", scripts: { lint: "echo no lint here" } }, null, 2) });
+
+    const result = await verifySync(root, { consent: async () => true, now: NOW });
+    expect(result.exitCode).toBe(EXIT_NOT_READY);
+    expect(result.messages.join("\n"), "the refusal must not swallow the notice").toContain("verifies nothing");
+  }, 30_000);
+
+  it("shows the operator which gates are about to be recorded as skipped", async () => {
+    const root = tree({
+      ...FIXTURE,
+      "package.json": JSON.stringify({ name: "skipshow", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2),
+    });
+    writeBindings(root, { bindings: await bound(root), skips: [] });
+    writeTree(root, { "package.json": JSON.stringify({ name: "skipshow", scripts: { test: "vitest run" } }, null, 2) });
+
+    let shown = "";
+    await verifySync(root, {
+      consent: async (summary) => {
+        shown = renderSyncSummary(summary);
+        return false;
+      },
+      now: NOW,
+    });
+    expect(shown, "a gate about to be recorded as skipped belongs in the text being approved").toContain("lint");
+    expect(shown).toContain("recorded as skipped");
+  }, 30_000);
+});

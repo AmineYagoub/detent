@@ -11,6 +11,7 @@ import {
   slotAvailable,
 } from "../../src/kernel/budgets.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
+import { codeOnly } from "../../scripts/check-rules.js";
 import { ZERO_COUNTERS } from "../../src/kernel/generations.js";
 
 describe("T-012 unit budgets (X-1, D-12)", () => {
@@ -67,9 +68,18 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
        * heuristic rather than a semantic one, but prose can no longer vouch for
        * code that stopped reading the ceiling.
        */
-      const source = readFileSync(new URL(`../../src/${site}.ts`, import.meta.url), "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      /**
+       * PRDR-179: STRING LITERALS too, not only comments.
+       *
+       * Stripping comments swapped "a comment vouches for code" for "a log
+       * message vouches for code": `planning_research_tool_calls` survived only
+       * via a template literal in an error string, while the enforcement beside
+       * it read a handed-in number — the exact posture PRDR-172 declared
+       * disqualifying for `kernel/ledger`. `codeOnly` is the rules gate's own
+       * scanner with comments blanked too, so this test and `rules:check`
+       * cannot disagree about what counts as code.
+       */
+      const source = codeOnly(readFileSync(new URL(`../../src/${site}.ts`, import.meta.url), "utf8"));
       expect(source, `${site} is named as enforcing ${key} but never mentions it outside a comment`).toContain(key);
     }
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());

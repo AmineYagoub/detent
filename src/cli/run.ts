@@ -84,11 +84,22 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
   }
   const backend = values.backend === "mock" ? new MockBackend() : (mainDeps.buildBackend ?? buildLiveBackend)(root);
   /**
+   * C-14″ (PRDR-179): the banner follows the BACKEND, not the flag.
+   *
+   * PRDR-174 added an injectable builder and left the banner keyed on
+   * `values.backend`, so an injected fixture ran silently while the flag said
+   * live — and the test asserting the journal reads "mock" with no banner
+   * printed codified that divergence. C-14″ exists so a fixture run can never
+   * be mistaken for a real one; the name the journal records is the same name
+   * the operator is warned about.
+   */
+  const isFixture = backend.name === "mock";
+  /**
    * C-14″: a fixture run writes real ledger rows and real journal events against
    * real ticket state, so it must never be mistaken for a real one. Said once,
    * before anything is spent.
    */
-  if (values.backend === "mock") {
+  if (isFixture) {
     process.stderr.write(
       "running against the FIXTURE backend (--backend mock): no model session will run, and the ledger and journal " +
         "below are fabricated. Pass --backend claude for a real run.\n",
