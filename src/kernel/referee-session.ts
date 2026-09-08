@@ -360,8 +360,29 @@ export class SessionArm {
     const floor = [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED];
     const key = repoPathKey(target);
     const isProtected = key !== "" && (picomatch.isMatch(key, floor, { dot: true }) || coversProtected(key, floor));
+    /**
+     * SEC-3 (PRDR-183): the note names WHICH rule refused, and survives an
+     * empty request.
+     *
+     * It was `surface DENIED: ${target} (${why})`, so a request arriving with
+     * no `path` rendered as `surface DENIED:  ()` — a denial that does not say
+     * what was denied or why. Observed live: a session hit a real blocker,
+     * asked for a widening twice, and left two notes carrying no path, one of
+     * them no justification either. Three different refusals also read
+     * identically, so an operator could not tell "you named no path" from
+     * "that path is protected" from "you have had your three".
+     */
     if (!isConcreteRepoPath(target) || isProtected || grants >= 3) {
-      appendNote(ctx.root, ticketId, { author: "kernel", text: `surface DENIED: ${target} (${why}) (SEC-3)` });
+      const refusal =
+        target === ""
+          ? "the request named no path"
+          : !isConcreteRepoPath(target)
+            ? `\`${target}\` is not a concrete repository path — one path, no globs`
+            : isProtected
+              ? `\`${target}\` is protected and stays immutable to sessions`
+              : `the grant budget of three is exhausted (already granted ${String(grants)})`;
+      const said = why.trim() === "" ? "" : ` — the session said: ${why.trim()}`;
+      appendNote(ctx.root, ticketId, { author: "kernel", text: `surface DENIED: ${refusal}${said} (SEC-3)` });
       return;
     }
     writeTicket(ctx.root, { ...ticket, surface: [...ticket.surface, target] });

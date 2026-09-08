@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EXIT_HUMAN_GATED, run } from "../../src/kernel/run.js";
@@ -186,7 +187,10 @@ describe("T-046 surface requests through the loop (oracle test_surface_request_g
 
     const t2 = readTicket(root, "t2");
     expect(t2.surface).not.toContain("AGENTS.md");
-    expect(t2.notes.map((n) => n.text).join(" ")).toContain("surface DENIED: AGENTS.md");
+    /* PRDR-183: the denial names the path AND which rule refused it. */
+    const denial = t2.notes.map((n) => n.text).join(" ");
+    expect(denial).toContain("surface DENIED: `AGENTS.md`");
+    expect(denial, "an operator must be able to tell protected from malformed from budget-exhausted").toContain("protected");
     /** a denied expansion is not an escalation */
     expect(outcome.exitCode).toBe(0);
   });
@@ -246,7 +250,7 @@ describe("SEC-3′ a session cannot grant itself a wildcard, `.git`, or the stru
 
     const t1 = readTicket(root, "t1");
     expect(t1.surface).not.toContain(target);
-    expect(t1.notes.map((n) => n.text).join(" ")).toContain(`surface DENIED: ${target}`);
+    expect(t1.notes.map((n) => n.text).join(" ")).toContain(`surface DENIED: \`${target}\``);
   });
 
   /* The lever still works — this must not become "no expansion ever". */
@@ -313,4 +317,43 @@ describe("S-4 partial telemetry is absent telemetry", () => {
     });
     expect(withUsage.telemetryParsed).toBe(true);
   });
+});
+
+/**
+ * SEC-3 (PRDR-183) — a denial that says what was denied.
+ *
+ * Observed in a live run: a session hit a real blocker (its acceptance criterion
+ * needed a file outside its surface), asked for a widening twice, and left two
+ * notes reading `surface DENIED:  ()` — no path, and on the second one no
+ * justification either. The message was `${target} (${why})`, so an empty
+ * request rendered as nothing, and the three distinct refusals — no path,
+ * protected, budget exhausted — were indistinguishable.
+ */
+describe("SEC-3 a refused surface request says which rule refused it", () => {
+  async function denialFor(request: object): Promise<string> {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t1" });
+    const requesting: StageFn = (spec) => {
+      /* Written where the referee reads it — the absolute `surface_request_out`, not cwd. */
+      const variable = JSON.parse(spec.promptVariable) as { surface_request_out: string };
+      mkdirSync(path.dirname(variable.surface_request_out), { recursive: true });
+      writeFileSync(variable.surface_request_out, JSON.stringify(request));
+      return implementGreen(spec);
+    };
+    await run({ root, backend: new MockBackend({ "t1:implement": requesting, review: reviewApprove }), prompts: PROMPTS, runId: "sr-why" });
+    return readTicket(root, "t1").notes.map((n) => n.text).join(" ");
+  }
+
+  it("names the missing path when the request carries none", async () => {
+    const note = await denialFor({ justification: "the test script is broken and lives in package.json" });
+    expect(note, "an empty target used to render as nothing at all").toContain("the request named no path");
+    expect(note, "and what the session asked for survives").toContain("the test script is broken");
+  }, 60_000);
+
+  it("says nothing about a justification the session did not give", async () => {
+    const note = await denialFor({});
+    expect(note).toContain("the request named no path");
+    expect(note, "an absent justification is absent, not an empty pair of brackets").not.toContain("()");
+  }, 60_000);
 });
