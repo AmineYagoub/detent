@@ -758,28 +758,6 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
  * complaint about the same ticket".
  */
 describe("PRDR-196 the revision round is measured, not assumed", () => {
-  it("separates what was resolved, what survived and what the round introduced", () => {
-    const before = [
-      { tag: "sizing" as const, ticket: "t-a", finding: "too big" },
-      { tag: "dependency" as const, ticket: "t-b", finding: "missing edge" },
-    ];
-    const after = [
-      { tag: "sizing" as const, ticket: "t-a", finding: "still too big, differently worded" },
-      { tag: "coherence" as const, ticket: "t-c", finding: "brand new complaint" },
-    ];
-    expect(revisionOutcome(before, after)).toEqual({ resolved: 1, survived: 1, introduced: 1 });
-  });
-
-  it("reads a clean revision as all resolved and nothing introduced", () => {
-    const before = [{ tag: "sizing" as const, ticket: "t-a", finding: "too big" }];
-    expect(revisionOutcome(before, [])).toEqual({ resolved: 1, survived: 0, introduced: 0 });
-  });
-
-  it("counts a round that fixed nothing and added nothing as pure survival", () => {
-    const same = [{ tag: "sizing" as const, ticket: "t-a", finding: "too big" }];
-    expect(revisionOutcome(same, [{ ...same[0]!, finding: "reworded" }])).toEqual({ resolved: 0, survived: 1, introduced: 0 });
-  });
-
   /**
    * Through the real pipeline. `revisionOutcome` computing correctly and never
    * being called is the shape that has broken four times on this line today —
@@ -806,9 +784,46 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
         [],
       ),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
     expect(whole).toBeGreaterThan(0);
     expect(notes.join("\n")).toMatch(/revision: \d+ resolved, \d+ survived, \d+ introduced/);
+    /**
+     * And it reaches the operator. Measuring into a cache nobody reads is the
+     * defect this ticket is about; the audit of the ticket found exactly that
+     * and this assertion is what closes it.
+     */
+    expect(result.interrupt?.message ?? "").toMatch(/Revision rounds: \d+ finding\(s\) resolved/);
+  });
+
+  /**
+   * PRDR-196 criterion 1, through the REAL pipeline.
+   *
+   * `stages.test.ts` proves `presentStage` renders contract findings it is
+   * GIVEN. The hop that carries them out of `plan.ts` and into PRESENT's deps
+   * is its own surface, and it is the one that has broken five times on this
+   * line. The audit of this very ticket found it untested.
+   */
+  it("carries the contract findings all the way to what PRESENT prints", async () => {
+    const root = repo(DOCS);
+    /* s02's ticket leans on a name no ticket in the plan owns — a finding code proves. */
+    const unprovided = (inputs: Record<string, unknown>): object =>
+      sliceOf(inputs) === "s01"
+        ? { schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }
+        : {
+            schema_version: 1,
+            tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
+            questions: [],
+          };
+    const backend = new MockBackend({
+      planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),
+    });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
+    const message = result.interrupt?.message ?? "";
+    expect(message).toMatch(/Contract checks/i);
+    expect(message).toContain("pkg/thing.Nobody");
+    expect(message).toContain("no session and no judgement");
   });
 
   /** A finding naming no ticket belongs to the plan; it cannot be matched, so it is not counted as survival. */

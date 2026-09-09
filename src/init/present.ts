@@ -54,6 +54,15 @@ export interface PresentInput {
    */
   readonly contractFindings?: PlanReview["findings"];
   /**
+   * PRDR-196: what the revision rounds did, summed over the slices.
+   *
+   * The audit of that ticket found the per-slice figure written to every cache
+   * and read by nothing — a measurement stored where nobody looks, which is one
+   * hop from the defect the ticket is about. PRESENT is where an operator
+   * decides whether to approve, so it is where the number belongs.
+   */
+  readonly revisions?: { readonly resolved: number; readonly survived: number; readonly introduced: number };
+  /**
    * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
    * be put where the next run will read it.
    *
@@ -82,7 +91,7 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings"> {
+): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -149,6 +158,12 @@ export function presentInputsFromOutputs(
     questions,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
+    ...(((v): v is { resolved: number; survived: number; introduced: number } =>
+      typeof v === "object" && v !== null && typeof (v as { resolved?: unknown }).resolved === "number")(
+      outputs["PLAN"]?.["revision_summary"],
+    )
+      ? { revisions: outputs["PLAN"]["revision_summary"] as { resolved: number; survived: number; introduced: number } }
+      : {}),
     derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges").filter(isEdge),
     gateNotices: list<unknown>("DETERMINE_VERIFICATION", "gate_notices").filter((n): n is string => typeof n === "string"),
   };
@@ -203,6 +218,14 @@ export function renderPresentation(input: PresentInput): string {
       `Dependencies Detent derived (${edges.length}) — the plan declared a name one ticket owns and another needs, so the edge is the plan's own, not a guess (A-1‴):`,
     );
     for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
+  }
+  const rev = input.revisions;
+  if (rev !== undefined && rev.resolved + rev.survived + rev.introduced > 0) {
+    lines.push(
+      "",
+      `Revision rounds: ${String(rev.resolved)} finding(s) resolved, ${String(rev.survived)} survived the revision, ` +
+        `${String(rev.introduced)} introduced by it (PRDR-196).`,
+    );
   }
   const proved = input.contractFindings ?? [];
   if (proved.length > 0) {

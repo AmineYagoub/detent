@@ -27,6 +27,8 @@ export interface SlicePlan {
   readonly questions: PlanQuestion[];
   /** Findings a slice's second review still held; shown at PRESENT. */
   readonly remaining: { readonly slice: string; readonly findings: PlanReview["findings"] }[];
+  /** PRDR-196: what each revision round did, for the slices that needed one. */
+  readonly revisions: readonly RevisionOutcome[];
 }
 
 /**
@@ -359,6 +361,8 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
   const index: DraftedTicket[] = [];
   const questions: PlanQuestion[] = [];
   const remaining: SlicePlan["remaining"] = [];
+  /* PRDR-196: one per slice that needed a revision round; summed for PRESENT. */
+  const revisions: RevisionOutcome[] = [];
   mkdirSync(sliceCacheDir(deps.root), { recursive: true });
 
   for (const slice of slices) {
@@ -468,9 +472,10 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
      * than before means a slice that failed to persist does not count.
      */
     noteUnitComplete(deps.root);
+    if (revision !== null) revisions.push(revision);
     index.push(...normalised.tickets);
     questions.push(...numbered);
     if (held.length > 0) remaining.push({ slice: slice.id, findings: held });
   }
-  return { tickets: index, questions, remaining };
+  return { tickets: index, questions, remaining, revisions };
 }
