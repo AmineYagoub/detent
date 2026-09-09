@@ -1,7 +1,7 @@
 ---
 id: PRDR-166
 title: "AWAIT_INFO tells the operator to answer in the planning documents without saying what DISCOVER will accept as one"
-state: READY
+state: DONE
 severity: minor
 category: usability
 labels: ["prd-review", "found-by-execution"]

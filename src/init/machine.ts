@@ -455,15 +455,28 @@ export async function runInit(
 
     const outcome = await handler.run(ctx);
     if (outcome.kind === "interrupt") {
+      /**
+       * PRDR-166: a repeated question says whether anything new was read.
+       *
+       * An answer written where DISCOVER does not look is never read, ANALYZE
+       * re-derives, and the identical question returns — indistinguishable from
+       * an answer the planner judged inadequate, at the cost of a full ANALYZE
+       * round per wrong guess. The machine already knows: a reused DISCOVER
+       * means the document set did not change. It simply never said so.
+       */
+      const message =
+        outcome.interrupt === "AWAIT_INFO" && reused.includes("DISCOVER")
+          ? `${outcome.message}\n\nThe document set is unchanged since the last run — no new planning document was read, so if you answered this already, the answer is somewhere DISCOVER does not look.`
+          : outcome.message;
       /* Not checkpointed: the phase did not complete, so a re-run resumes here. */
       return {
         exitCode: 2,
         reachedPhase: phase,
-        interrupt: { interrupt: outcome.interrupt, message: outcome.message, items: outcome.items ?? [] },
+        interrupt: { interrupt: outcome.interrupt, message, items: outcome.items ?? [] },
         replayedFrom,
         executed,
         reused,
-        messages: [...messages, outcome.message],
+        messages: [...messages, message],
         outputs,
       };
     }

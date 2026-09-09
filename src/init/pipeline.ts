@@ -410,6 +410,8 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
         ...presentInputsFromOutputs(ctx.outputs),
+        /* PRDR-166: the globs DISCOVER recorded, not a second copy. */
+        docPatterns: (ctx.outputs["DISCOVER"]?.["patterns_searched"] as string[] | undefined) ?? [],
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
         ...(deps.print === undefined ? {} : { print: deps.print }),

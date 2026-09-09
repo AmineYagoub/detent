@@ -320,3 +320,40 @@ describe("C-9 the approval reader is the schema, not a cast", () => {
     expect(approvalState(root).approved).toBe(true);
   });
 });
+
+/**
+ * PRDR-166 — a re-run that read nothing new says so.
+ *
+ * An operator who answers an AWAIT_INFO question in a file DISCOVER does not
+ * match gets the identical question back with no signal that the answer was
+ * missed, which is indistinguishable from an answer the planner judged
+ * inadequate. The machine knows: it reused DISCOVER, so the document set did
+ * not change. That fact was already computed and simply never said.
+ */
+describe("PRDR-166 a repeated AWAIT_INFO says whether the documents changed", () => {
+  const asking = (phase: (typeof INIT_PHASES)[number], digest: () => string): PhaseHandler => ({
+    phase,
+    digest,
+    run: async () => ({ kind: "interrupt", interrupt: "AWAIT_INFO", message: "1 blocking question(s)", items: ["q"] }),
+  });
+
+  it("tells the operator the document set is unchanged when DISCOVER was reused", async () => {
+    const root = repo({ "PRD.md": "# v1\n" });
+    const log: string[] = [];
+    const handlers = (): PhaseHandler[] => [
+      probe("INIT_FS", () => listingDigest([".detent"]), log),
+      probe("DISCOVER", () => listingDigest(["PRD.md"]), log),
+      asking("ANALYZE", () => contentsDigest(root, ["PRD.md"])),
+    ];
+
+    /* First ask: DISCOVER ran, so nothing is claimed about the documents. */
+    const first = await runInit(root, handlers());
+    expect(first.interrupt?.interrupt).toBe("AWAIT_INFO");
+    expect(first.interrupt?.message ?? "").not.toContain("unchanged");
+
+    /* Second ask with nothing edited: DISCOVER is reused, and the message says so. */
+    const again = await runInit(root, handlers());
+    expect(again.reused).toContain("DISCOVER");
+    expect(again.interrupt?.message ?? "").toContain("unchanged");
+  });
+});

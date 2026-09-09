@@ -42,6 +42,16 @@ export interface PresentInput {
   readonly questions?: readonly PlanQuestion[];
   /** Findings the reviews still held after their revision round. */
   readonly findings?: PlanReview["findings"];
+  /**
+   * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
+   * be put where the next run will read it.
+   *
+   * Carried from `DISCOVER.json`'s recorded `patterns_searched` rather than
+   * imported from `DOC_PATTERNS`: a second copy in the message would drift from
+   * the one that did the searching, and the operator would be told to satisfy
+   * the wrong list.
+   */
+  readonly docPatterns?: readonly string[];
   /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
   readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
   /**
@@ -194,6 +204,26 @@ export function renderPresentation(input: PresentInput): string {
   return lines.join("\n");
 }
 
+/**
+ * PRDR-166: where the answer goes, in terms the next run will honour.
+ *
+ * "Answer them in the planning documents" was the whole instruction, and it is
+ * unfollowable: a `planning-answers.md` at the root matches none of DISCOVER's
+ * globs, so the file is never read, ANALYZE re-derives, and the same question
+ * returns with nothing to distinguish it from an answer judged inadequate.
+ */
+export function answerInstruction(patterns: readonly string[]): string {
+  const base =
+    "Answer them in a planning document and re-run `detent init` — only the slices whose inputs changed are re-planned (C-8).";
+  if (patterns.length === 0) return base;
+  return [
+    base,
+    "",
+    "A planning document is a file matching one of the globs DISCOVER searched — an answer written anywhere else is not read:",
+    ...patterns.map((p) => `  ${p}`),
+  ].join("\n");
+}
+
 export type ApprovalDecision =
   | { readonly kind: "approved"; readonly by: string }
   | { readonly kind: "declined" }
@@ -220,10 +250,14 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     return {
       kind: "interrupt",
       interrupt: "AWAIT_INFO",
-      message:
-        `${presentation}\n\n${blocking.length} blocking question(s) need an answer before this plan can be approved:\n` +
-        `${blocking.map((q, i) => `  ${i + 1}. ${q.question}`).join("\n")}\n\n` +
-        "Answer them in the planning documents and re-run `detent init` — only the slices whose inputs changed are re-planned (C-8).",
+      message: [
+        presentation,
+        "",
+        `${String(blocking.length)} blocking question(s) need an answer before this plan can be approved:`,
+        blocking.map((q, i) => `  ${String(i + 1)}. ${q.question}`).join("\n"),
+        "",
+        answerInstruction(deps.docPatterns ?? []),
+      ].join("\n"),
       items: blocking.map((q) => q.question),
     };
   }
