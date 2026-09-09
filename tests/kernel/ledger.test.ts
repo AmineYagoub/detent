@@ -105,7 +105,7 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
         root,
         journal,
         0.01,
-        { spend_without_progress_floor_usd: 100, spend_without_progress_multiple: 3 },
+        { spend_without_progress_floor_usd: 100, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 },
         (t) => said.push(t),
       );
       ledger.record("t1", 0, "implement", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
@@ -127,7 +127,7 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
     try {
-      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
       for (let i = 0; i < 3; i += 1) {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
       }
@@ -141,7 +141,7 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
     try {
-      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
       for (let i = 0; i < 20; i += 1) {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 8 }), "2026-08-18T10:00:00.000Z");
         ledger.noteProgress();
@@ -163,7 +163,7 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
     try {
-      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
       for (let i = 0; i < 8; i += 1) ledger.noteProgress();
       ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
       expect(() => ledger.assertLaunchAllowed()).not.toThrow();
@@ -176,9 +176,14 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
     try {
-      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 1, spend_without_progress_multiple: 3 });
+      const ledger = new SpendLedger(root, journal, 0, {
+        spend_without_progress_floor_usd: 1,
+        spend_without_progress_multiple: 3,
+        spend_without_progress_sessions: 1,
+      });
       ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 9 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed()).toThrow(/9\.00.*without completing/s);
+      ledger.record("t2", 0, "planner", okResult({ costEstimateUsd: 9 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed()).toThrow(/18\.00.*without completing/s);
     } finally {
       journal.close();
     }

@@ -153,11 +153,15 @@ export function recordOutOfBandSpend(root: string, role: string, result: Session
  * it as — the parity test requires the ceiling to be READ here, not merely
  * mentioned in a comment (PRDR-172's rule).
  */
-export type ProgressBreaker = Pick<Budgets, "spend_without_progress_floor_usd" | "spend_without_progress_multiple">;
+export type ProgressBreaker = Pick<
+  Budgets,
+  "spend_without_progress_floor_usd" | "spend_without_progress_multiple" | "spend_without_progress_sessions"
+>;
 
 const DEFAULT_BREAKER: ProgressBreaker = {
   spend_without_progress_floor_usd: CEILINGS.spend_without_progress_floor_usd.default,
   spend_without_progress_multiple: CEILINGS.spend_without_progress_multiple.default,
+  spend_without_progress_sessions: CEILINGS.spend_without_progress_sessions.default,
 };
 
 export class SpendLedger {
@@ -241,8 +245,17 @@ export class SpendLedger {
    * punishing precisely the checkpoint reuse that makes a restart cheap.
    */
   progressThreshold(): number {
-    const observed = this.lastUnitCost * this.breaker.spend_without_progress_multiple;
-    return Math.max(this.breaker.spend_without_progress_floor_usd, observed);
+    const perUnit = this.lastUnitCost * this.breaker.spend_without_progress_multiple;
+    /**
+     * The scale-free term, and the only one available before a unit completes.
+     * A fixed dollar floor was the first design; this file's own audit found it
+     * wrong for the reason X-1⁵ rejects a fixed total — it read ~3x this
+     * project's slice cost and would read a fraction of that on a project whose
+     * sessions cost ten times as much. The mean session cost is observable
+     * after ONE session, which is far sooner than any unit completes.
+     */
+    const perSession = meanSessionCost(this.root) * this.breaker.spend_without_progress_sessions;
+    return Math.max(this.breaker.spend_without_progress_floor_usd, perUnit, perSession);
   }
 
   spent(): number {
@@ -331,6 +344,37 @@ export function noteUnitComplete(root: string): void {
  * The torn-LAST-line tolerance stays: that is the one shape a crash actually
  * produces, and the justification for it was always sound.
  */
+/**
+ * X-1⁵: what a session has cost on this root so far, on average.
+ *
+ * The scale signal the no-progress threshold derives from. Zero rows means zero,
+ * and the absolute minimum governs until the first session lands.
+ */
+export function meanSessionCost(root: string): number {
+  const file = path.join(stateDir(root), "ledger.jsonl");
+  if (!existsSync(file)) return 0;
+  let total = 0;
+  let rows = 0;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const parsed = ledgerRowSchema.safeParse(JSON.parse(line));
+      if (!parsed.success) continue;
+      total += parsed.data.cost_estimate_usd;
+      rows += 1;
+    } catch {
+      /**
+       * PRDR-151's rule: a torn line is a crash artifact and is skipped. Unlike
+       * `readRecordedSpend` this never throws on a well-formed non-row either —
+       * a threshold that refuses to be computed would halt the run it exists to
+       * keep alive, and that file already refuses such a shape by name.
+       */
+      continue;
+    }
+  }
+  return rows === 0 ? 0 : total / rows;
+}
+
 export function readRecordedSpend(root: string): number {
   const file = path.join(stateDir(root), "ledger.jsonl");
   if (!existsSync(file)) return 0;

@@ -105,8 +105,8 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(nonBreach).toHaveLength(7);
   });
 
-  it("the X-1 table has exactly sixteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
-    expect(ALL_CEILING_KEYS).toHaveLength(16);
+  it("the X-1 table has exactly seventeen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
+    expect(ALL_CEILING_KEYS).toHaveLength(17);
     expect(CEILINGS.gate_timeout_ms.default).toBe(900_000);
     expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
   });
@@ -114,7 +114,12 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
   it("the run-scoped ceilings are the total and the breaker, and EVERY ceiling has a default (X-1′)", () => {
     const runScoped = ALL_CEILING_KEYS.filter((k) => CEILINGS[k].scope === "run");
     /* X-1⁵ (PRDR-191): the total is joined by the two the no-progress breaker reads. */
-    expect(runScoped.sort()).toEqual(["run_spend_usd", "spend_without_progress_floor_usd", "spend_without_progress_multiple"]);
+    expect(runScoped.sort()).toEqual([
+      "run_spend_usd",
+      "spend_without_progress_floor_usd",
+      "spend_without_progress_multiple",
+      "spend_without_progress_sessions",
+    ]);
     /**
      * PRDR-083: the spend cap was the lone defaultless ceiling, which made the
      * first init of every project a required spend decision. It defaults now;

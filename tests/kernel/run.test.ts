@@ -681,6 +681,7 @@ describe("T-041 X-1 enforcement fixtures", () => {
           run_spend_usd: 999,
           spend_without_progress_floor_usd: 999,
           spend_without_progress_multiple: 3,
+          spend_without_progress_sessions: 999,
         },
         protected: [],
         risk: [],

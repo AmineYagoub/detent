@@ -89,7 +89,16 @@ export const CEILINGS = {
    * finished slices for $0 (C-8), so a purely derived threshold would collapse
    * toward zero and halt on the first dollar of real work.
    */
-  spend_without_progress_floor_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 50 },
+  spend_without_progress_floor_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 5 },
+  /**
+   * X-1⁵: how many sessions' worth of OBSERVED spend may pass with nothing
+   * completing. The scale-free term, and the one that carries the threshold
+   * before any unit has completed. A fixed dollar floor was the first attempt
+   * and its own audit found it wrong for the same reason X-1⁵ rejects a fixed
+   * total: it read ~3x this project's slice cost and would have read 0.3x on a
+   * project whose sessions cost ten times as much.
+   */
+  spend_without_progress_sessions: { scope: "run", breachTarget: "BUDGET_BREACH", default: 20 },
   /** X-1⁵: multiplied by the observed cost of the units this run has completed. */
   spend_without_progress_multiple: { scope: "run", breachTarget: "BUDGET_BREACH", default: 3 },
 } as const satisfies Record<string, CeilingSpec>;
@@ -139,6 +148,7 @@ export const budgetsSchema = z
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),
     run_spend_usd: withDefault("run_spend_usd"),
     spend_without_progress_floor_usd: withDefault("spend_without_progress_floor_usd"),
+    spend_without_progress_sessions: withDefault("spend_without_progress_sessions"),
     spend_without_progress_multiple: withDefault("spend_without_progress_multiple"),
   })
   .describe("X-1 ceilings");

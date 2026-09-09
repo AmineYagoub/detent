@@ -61,6 +61,17 @@ export interface RunOptions {
   readonly escalate?: (input: EscalationInput) => Promise<EscalationAction>;
   /** C-13: resume announcements and similar user-facing notices. */
   readonly announce?: (message: string) => void;
+  /**
+   * PRDR-190 (audit finding 2): what the run is doing, for whatever ends it.
+   *
+   * Declared here and supplied by `cli/run.ts`, because the recorder lives in
+   * `src/cli/**` and ARCH-1 forbids the kernel importing upward. Without it the
+   * phase marker existed on `init` alone: a signal during `detent run` recorded
+   * no phase and a lock left by a killed run named none — the same
+   * one-driver-only shape ARCH-2 exists to prevent, and which PRDR-140,
+   * PRDR-181 and PRDR-185 each found separately.
+   */
+  readonly phase?: (text: string) => void;
   /** PRDR-112: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
 }
@@ -252,6 +263,8 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
         ...(opts.worktree !== undefined ? { worktree: opts.worktree } : {}),
         /** PRDR-104: the headless loop has no model session to govern — no hook files. */
         hookFiles: false,
+        /* X-1⁵ (audit finding 1): the advisory total speaks on BOTH drivers. */
+        ...(opts.announce === undefined ? {} : { announce: opts.announce }),
       },
       loaded,
       journal,

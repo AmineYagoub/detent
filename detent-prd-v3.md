@@ -508,10 +508,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   ceiling with neither ever seeing `SpendExhaustedError`. **The replacement bounds the quantity
   the fear actually describes.** Legitimate work COMPLETES things — a slice for `init`, a ticket
   reaching DONE for the loop — and a runaway does not, so the ceiling is dollars accrued since
-  the last completed unit. It catches PRDR-186's shape in minutes rather than hours and cannot
-  fire on a run that is working, however long or expensive. Its threshold is DERIVED rather than
-  chosen: a multiple of the observed cost of the units this run has already completed, which the
-  ledger already records, with a floor before anything has completed. `run_spend_usd` stays in
+  the last completed unit. It cannot fire on a run that is working, however long or expensive.
+  **What it does not catch is worth stating, because the first draft of this clause claimed
+  otherwise:** PRDR-186's runaway RE-PLANNED finished slices, and re-planning writes the slice
+  file, so that failure completes units and this breaker stays silent through it. The shape it
+  catches is a run that finishes nothing — a retry storm, a wedged phase, a ladder that never
+  lands — which is the larger class and the one no other control covers. Redoing completed work
+  needs a different test and does not have one yet. The threshold is DERIVED rather than chosen,
+  and derived from the SESSION rather than the unit: the mean cost of the sessions this root has
+  recorded, times a session count, because a session is observable after the first one lands
+  whereas the first unit may be an hour away. A multiple of the last completed unit's cost takes
+  over once there is one, and a small absolute minimum covers the moment before any session has
+  finished. A fixed dollar floor was the first implementation and this amendment's own audit
+  rejected it for the reason the rest of this clause gives: it read about three times one
+  project's slice cost and would read a fraction of that on a project whose sessions cost ten
+  times as much. `run_spend_usd` stays in
   the table as an advisory figure that is counted and reported — and where an operator sets one
   deliberately, reaching it presents rather than dies, because everything is checkpointed and
   the answer is a human's. The financial exposure of an unbounded total is accepted here

@@ -222,6 +222,8 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
       const file = path.join(stateDir(root), "config.json");
       const config = JSON.parse(readFileSync(file, "utf8")) as { budgets: Record<string, number> };
       config.budgets["spend_without_progress_floor_usd"] = 0.0001;
+      /* And the session-derived term below it, so the floor is what governs here. */
+      config.budgets["spend_without_progress_sessions"] = 0.001;
       writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
     }
 

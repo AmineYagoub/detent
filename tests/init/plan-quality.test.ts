@@ -206,7 +206,7 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
     /* A floor below one mock session's own $0.001 estimate. */
-    const budgets = { ...BUDGETS, spend_without_progress_floor_usd: 0.0001 };
+    const budgets = { ...BUDGETS, spend_without_progress_floor_usd: 0.0001, spend_without_progress_sessions: 0.001 };
 
     await expect(runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets }))).rejects.toThrow(
       /no-progress breaker/,

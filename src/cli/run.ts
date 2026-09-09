@@ -5,6 +5,8 @@ import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { makeTtyEscalation } from "./escalate.js";
 import type { SessionBackend } from "../sessions/backend.js";
+import { noteRunPhase } from "../kernel/run-lock.js";
+import { setInFlight } from "./exit-record.js";
 
 /**
  * T-041/T-140 — `detent run`, the second porcelain verb (C-9…C-11, D-3).
@@ -118,6 +120,11 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
     worker: values.worker,
     worktree: values.worktree === true && values["no-worktree"] !== true,
     announce: (message) => process.stdout.write(`${message}\n`),
+    /* PRDR-190: the recorder lives here; the kernel only declares the seam. */
+    phase: (text) => {
+      setInFlight(text);
+      noteRunPhase(root, text);
+    },
     ...(interactive ? { escalate: makeTtyEscalation(process.env["USER"] ?? "operator") } : {}),
     ...(maxTickets === undefined ? {} : { maxTickets }),
   });

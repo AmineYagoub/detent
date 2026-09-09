@@ -68,6 +68,7 @@ function sessionDeps(deps: PipelineDeps): InitSessionDeps {
     progressBreaker: {
       spend_without_progress_floor_usd: deps.budgets.spend_without_progress_floor_usd,
       spend_without_progress_multiple: deps.budgets.spend_without_progress_multiple,
+      spend_without_progress_sessions: deps.budgets.spend_without_progress_sessions,
     },
     /**
      * PRDR-176: AGENTS.md, which every init session was promised and none

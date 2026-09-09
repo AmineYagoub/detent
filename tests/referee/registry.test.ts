@@ -236,6 +236,8 @@ describe("T-104 R-4: attempt is metered", () => {
     const cfgFile = path.join(stateDir(root), "config.json");
     const cfg = JSON.parse(readFileSync(cfgFile, "utf8")) as { budgets: Record<string, number> };
     cfg.budgets["spend_without_progress_floor_usd"] = 0.0001;
+    /* And the session-derived term below it, so the floor is what governs here. */
+    cfg.budgets["spend_without_progress_sessions"] = 0.001;
     writeFileSync(cfgFile, `${JSON.stringify(cfg, null, 2)}\n`);
     /**
      * The mark says the last thing to COMPLETE did so when nothing had been

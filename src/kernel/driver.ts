@@ -82,6 +82,15 @@ export class Driver {
       }>("claim", { op: "acquire", ticket_id: id });
       if (!acquired.ok) continue;
 
+      /**
+       * PRDR-190 (audit finding 2): the run's phase, for whatever ends it.
+       *
+       * The claim is the moment the run commits to a ticket, so it is what was
+       * in flight if a signal arrives. `init` reported this from its `note`
+       * seam and the loop reported nothing at all.
+       */
+      this.opts.phase?.(`ticket ${id}`);
+
       let refused: DriverRefusal | null = null;
       try {
         await this.processTicket(id, acquired);

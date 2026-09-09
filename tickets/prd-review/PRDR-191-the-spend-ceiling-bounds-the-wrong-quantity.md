@@ -112,6 +112,34 @@ recording because both are shapes this repository keeps producing:
   production read the schema defaults while the project's config said otherwise. Implemented,
   unit-tested and unreachable — PRDR-141's shape exactly, inside the change that cites it.
 
+## Audit of this implementation (2026-09-09)
+
+Four findings, three fixed here.
+
+1. **ARCH-2, fixed.** The advisory-total announcement reached `init` and not the run loop —
+   `referee-context.ts` built the ledger with no `announce`. A control on one driver and not the
+   other is the shape PRDR-140, PRDR-181 and PRDR-185 each found separately, and this change
+   created a fresh instance of it while citing them.
+2. **ARCH-2, fixed.** PRDR-190's phase marker had the same asymmetry: `setInFlight` and
+   `noteRunPhase` were called only from `cli/init.ts`, so a signal during `detent run` recorded
+   no phase. The kernel now declares a `phase` seam that `cli/run.ts` supplies, because the
+   recorder lives in `src/cli/**` and ARCH-1 forbids the kernel importing upward.
+3. **Threshold calibration, fixed.** The $50 floor was chosen by feel and the live run's own
+   numbers refuted it: slices cost $14.59–$16.20, about 3x headroom, and a slice retrying through
+   a session limit could plausibly exceed it — a false positive that halts a healthy run, which
+   is the exact failure this ticket exists to remove. The threshold now derives from the mean
+   cost of sessions this root has recorded, which is observable after the FIRST session.
+4. **C-8 reuse does not advance the mark, recorded not fixed.** The reuse path returns before
+   `noteUnitComplete`, so `lastUnitCost` stays 0 after a restart and only the session-derived and
+   minimum terms govern. Harmless — reuse costs $0, so the numerator does not grow either — and
+   conservative in the safe direction, but it is an accident rather than a decision.
+
+**And a correction to the amendment itself.** X-1⁵ claimed the breaker "catches PRDR-186's shape
+in minutes rather than hours". It does not. PRDR-186's runaway re-planned finished slices, and
+re-planning writes the slice file, so that failure completes units and the breaker stays silent
+through it. What it catches is a run that finishes NOTHING. Redoing completed work is a different
+test and does not have one. The PRD says so now.
+
 ## Process
 
 X-1, X-1′ and X-8 are PRD requirements. This is a design change, so the PRD amends first and code
