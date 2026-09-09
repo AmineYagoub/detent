@@ -198,6 +198,8 @@ export async function main(argv: readonly string[]): Promise<number> {
       prompts: loadPromptSet(),
       budgets: budgetsFor(config),
       modelRouting: config?.model_routing ?? {},
+      /* PRDR-197: routed effort reaches init's sessions too — the loop read it from config directly and this path did not. */
+      effortRouting: config?.effort_routing ?? {},
       planBaseline: config?.plan_baseline ?? "production",
       ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
       ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),

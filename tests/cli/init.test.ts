@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { main } from "../../src/cli/init.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
@@ -107,5 +107,26 @@ describe("C-1 a refused init creates no .detent/", () => {
       err.mockRestore();
     }
     expect(existsSync(path.join(sub, ".detent")), "a refusal must not initialise anything").toBe(false);
+  });
+});
+
+/**
+ * PRDR-197 — the CLI hands the pipeline what config carries.
+ *
+ * `cli/init.ts` passed `modelRouting` and not `effortRouting`, so the knob was
+ * validated at config load and reached no init session: dead on one driver,
+ * working on the other. The audit found it; no test did, because `main` builds
+ * its own live backend and cannot be driven to a session here.
+ *
+ * So this reads the module, on the precedent of `tests/oracle/budgets.test.ts`,
+ * which requires an enforcement site to MENTION its ceiling rather than letting
+ * a doc comment vouch for the code. Weak evidence, and it is the evidence that
+ * would have caught this.
+ */
+describe("PRDR-197 the CLI forwards both routings", () => {
+  it("passes effort_routing as well as model_routing into the pipeline", () => {
+    const source = readFileSync("src/cli/init.ts", "utf8");
+    expect(source).toContain("modelRouting: config?.model_routing");
+    expect(source).toContain("effortRouting: config?.effort_routing");
   });
 });

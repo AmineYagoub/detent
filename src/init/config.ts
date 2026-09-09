@@ -59,6 +59,11 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
     protected: [...DEFAULT_PROTECTED],
     risk: [],
     model_routing: { ...DEFAULT_MODEL_ROUTING },
+    /**
+     * PRDR-197: empty, and PRESENT. The default must change nothing, but a knob
+     * an operator cannot see in the file they edit is one they do not have.
+     */
+    effort_routing: {},
     plan_baseline: "production",
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });

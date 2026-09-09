@@ -124,4 +124,21 @@ describe("PRDR-197 effort_routing is validated on both axes", () => {
   it("refuses a level the SDK does not have, naming it", () => {
     expect(() => loadConfig({ ...base(), effort_routing: { review: "extreme" } })).toThrow(/effort_routing\.review is `extreme`/);
   });
+
+  /**
+   * The audit of this ticket found `cli/init.ts` passing `modelRouting` and not
+   * `effortRouting`, so the knob was read by the schema and reached no init
+   * session — dead on that path while working on the loop, which is ARCH-2
+   * asymmetry in the ticket whose own criteria warn about it. The parity case
+   * asserted the RUN driver and passed.
+   */
+  it("a first init writes the key, so the knob is discoverable", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    ensureConfig(root, 10);
+    const written = JSON.parse(readFileSync(path.join(root, ".detent", "config.json"), "utf8")) as Record<string, unknown>;
+    expect(written).toHaveProperty("effort_routing");
+    /* Empty, because the default must change nothing — but present, so it can be found. */
+    expect(written["effort_routing"]).toEqual({});
+  });
 });

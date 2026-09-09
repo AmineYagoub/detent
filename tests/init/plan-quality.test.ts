@@ -314,3 +314,33 @@ describe("PRDR-085 --replan means a fresh planning session", () => {
     expect(allTickets(root).map((t) => t.id)).toEqual(["t-100"]);
   });
 });
+
+/**
+ * PRDR-197 — ARCH-2 on the init side.
+ *
+ * `driver-parity.test.ts` asserts the loop routes effort, and it passed while
+ * `cli/init.ts` was not passing `effortRouting` at all — so the knob worked on
+ * one driver and was dead on the other, which is the asymmetry that ticket's
+ * own criteria warn about. Found by auditing, not by a test, which is why this
+ * one exists. Asserted on the SPEC a session was launched with.
+ */
+describe("PRDR-197 init routes effort to its own sessions", () => {
+  it("carries the routed effort onto the planner's session spec", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(
+      root,
+      buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, effortRouting: { planner: "xhigh" } }),
+    );
+    const launched = backend.calls.filter((c) => c.role === "planner");
+    expect(launched.length).toBeGreaterThan(0);
+    expect(launched[0]?.spec.effort).toBe("xhigh");
+  });
+
+  it("carries none when the role is not routed, so the default stays invisible", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    expect(backend.calls[0]?.spec.effort).toBeUndefined();
+  });
+});
