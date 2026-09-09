@@ -31,6 +31,7 @@ import { appendNote, claim, readClaim, release, writeTicket } from "./tickets/mu
 import { healStaleClaims } from "./plumbing.js";
 import type { LoadedConfig } from "./worstcase.js";
 import { TERMINAL_STATES } from "../schemas/states.js";
+import { noteUnitComplete } from "./ledger.js";
 
 /**
  * T-100…T-105 — the REFEREE core (R-1…R-4, D-27, ARCH-1/ARCH-2).
@@ -48,7 +49,7 @@ import { TERMINAL_STATES } from "../schemas/states.js";
  */
 
 export { TransitionError } from "./machine.js";
-export { SpendExhaustedError } from "./ledger.js";
+export { NoProgressError, SpendExhaustedError } from "./ledger.js";
 export {
   ATTEMPT_STATES,
   Breach,
@@ -378,6 +379,13 @@ export class RefereeCore {
         throw new Breach(err.message);
       }
     }
+    /**
+     * X-1⁵ (PRDR-191): a ticket reached DONE and its work is merged, so the run
+     * has completed a unit and the no-progress breaker resets. Last in the
+     * method deliberately — a merge conflict throws above, and a ticket whose
+     * work did not land is not progress.
+     */
+    noteUnitComplete(this.root);
   }
 
   /* -------------------------------------------------------------- admit */

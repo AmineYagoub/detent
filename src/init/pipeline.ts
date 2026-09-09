@@ -63,6 +63,12 @@ function sessionDeps(deps: PipelineDeps): InitSessionDeps {
     backend: deps.backend,
     prompts: deps.prompts,
     spendCeiling: deps.budgets.run_spend_usd,
+    ...(deps.note === undefined ? {} : { note: deps.note }),
+    /* X-1⁵ (PRDR-191): the breaker's ceilings travel with the total. */
+    progressBreaker: {
+      spend_without_progress_floor_usd: deps.budgets.spend_without_progress_floor_usd,
+      spend_without_progress_multiple: deps.budgets.spend_without_progress_multiple,
+    },
     /**
      * PRDR-176: AGENTS.md, which every init session was promised and none
      * received. `InitSessionDeps.rulesText` was declared and consumed —

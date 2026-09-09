@@ -135,13 +135,13 @@ export function noteRunPhase(root: string, phase: string): void {
   try {
     const held = readLock(root);
     if (held === null) return;
-    writeFileSync(file, `${JSON.stringify({ pid: held.pid, host: held.host, at: held.at, phase }, null, 2)}\n`);
+    writeFileSync(file, `${JSON.stringify({ ...held, phase }, null, 2)}\n`);
   } catch {
     /* An unwritable marker is not worth failing a run over; see the doc-block. */
   }
 }
 
-/** How a stale lock's holder is described when one is broken or refused. */
+/** How a stale lock's holder is described when one is broken or refused (PRDR-190). */
 export function lockPhaseSuffix(info: RunLockInfo | null): string {
   return info?.phase == null ? "" : `, which was: ${info.phase}`;
 }

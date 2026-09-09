@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
@@ -217,18 +217,35 @@ describe("T-103 the gate tool reuses the v2 gate path", () => {
 });
 
 describe("T-104 R-4: attempt is metered", () => {
-  it("an exhausted spend ledger refuses the launch as a structured BREACH", async () => {
+  it("spend with nothing completed refuses the launch as a structured BREACH (X-1⁵)", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     addTicket(root, { id: "t-1" });
     /**
-     * The ledger IS the record: a prior run spent past the ceiling.
+     * X-1⁵ (PRDR-191): a prior run's TOTAL no longer refuses anything — it fired
+     * on success, and a run resuming against history has completed nothing yet
+     * to be judged on. What refuses is money leaving with nothing finishing, so
+     * the fixture sets the breaker's floor below one session's own estimate and
+     * lets the launch gate see the spend the first session recorded.
      *
      * X-1‴ (PRDR-136): a FULL row, validated by `ledgerRowSchema` on read. This
      * used to write `{ cost_estimate_usd: 1000 }` alone — a shape the product
      * cannot produce, since `journal.appendLedger` parses every row it writes.
      * The fixture was only viable while the reader was an unvalidated cast.
      */
+    const cfgFile = path.join(stateDir(root), "config.json");
+    const cfg = JSON.parse(readFileSync(cfgFile, "utf8")) as { budgets: Record<string, number> };
+    cfg.budgets["spend_without_progress_floor_usd"] = 0.0001;
+    writeFileSync(cfgFile, `${JSON.stringify(cfg, null, 2)}\n`);
+    /**
+     * The mark says the last thing to COMPLETE did so when nothing had been
+     * spent — so the $1000 above is a thousand dollars of un-progressed work,
+     * which is the state the breaker exists to refuse. Without this the row
+     * would be forgiven as history, which is the correct reading of a resumed
+     * run and the wrong one for this case.
+     */
+    mkdirSync(path.join(stateDir(root), "state"), { recursive: true });
+    writeFileSync(path.join(stateDir(root), "state", "progress.json"), `${JSON.stringify({ spent: 0, unitCost: 0 })}\n`);
     appendFileSync(
       path.join(stateDir(root), "ledger.jsonl"),
       `${JSON.stringify(

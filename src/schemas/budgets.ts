@@ -77,7 +77,21 @@ export const CEILINGS = {
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
   gate_timeout_ms: { scope: "gate-execution", breachTarget: "RED_GATE_NO_EXIT", default: 900_000 },
   binding_probe_timeout_ms: { scope: "binding-probe", breachTarget: "REJECTED_CANDIDATE", default: 120_000 },
-  run_spend_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 100 },
+  /**
+   * X-1⁵ (PRDR-191): ADVISORY. Counted and reported; it no longer halts a run.
+   * A total fires on success and fires late on failure, and no constant is both
+   * low enough to leave real work alone and high enough to catch a defect fast.
+   */
+  run_spend_usd: { scope: "run", breachTarget: "NONE", default: 100 },
+  /**
+   * X-1⁵ (PRDR-191): the quantity that actually describes a runaway — money out
+   * with nothing completed. A MINIMUM, not a fallback: a resumed run reuses
+   * finished slices for $0 (C-8), so a purely derived threshold would collapse
+   * toward zero and halt on the first dollar of real work.
+   */
+  spend_without_progress_floor_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 50 },
+  /** X-1⁵: multiplied by the observed cost of the units this run has completed. */
+  spend_without_progress_multiple: { scope: "run", breachTarget: "BUDGET_BREACH", default: 3 },
 } as const satisfies Record<string, CeilingSpec>;
 
 export type CeilingKey = keyof typeof CEILINGS;
@@ -124,6 +138,8 @@ export const budgetsSchema = z
     gate_timeout_ms: withDefault("gate_timeout_ms"),
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),
     run_spend_usd: withDefault("run_spend_usd"),
+    spend_without_progress_floor_usd: withDefault("spend_without_progress_floor_usd"),
+    spend_without_progress_multiple: withDefault("spend_without_progress_multiple"),
   })
   .describe("X-1 ceilings");
 

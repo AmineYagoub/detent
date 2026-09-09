@@ -10,6 +10,7 @@ import { draftAndRead, type PlanDeps } from "./plan.js";
 import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
+import { noteUnitComplete } from "../kernel/ledger.js";
 
 /**
  * C-2‴ (PRDR-117) — PLAN, one slice at a time, to the end of the product.
@@ -385,6 +386,13 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
         2,
       )}\n`,
     );
+    /**
+     * X-1⁵ (PRDR-191): the slice is on disk, so the run has completed a unit of
+     * work and buys its next budget. This is the ONLY thing that resets the
+     * no-progress breaker, and putting it after the checkpoint write rather
+     * than before means a slice that failed to persist does not count.
+     */
+    noteUnitComplete(deps.root);
     index.push(...normalised.tickets);
     questions.push(...numbered);
     if (held.length > 0) remaining.push({ slice: slice.id, findings: held });

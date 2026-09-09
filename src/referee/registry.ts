@@ -5,6 +5,7 @@ import {
   DriftHaltSignal,
   EscrowError,
   SessionRefusal,
+  NoProgressError,
   SpendExhaustedError,
   TransitionError,
   type RefereeCore,
@@ -141,7 +142,7 @@ export async function callTool(core: RefereeCore, name: string, rawInput: unknow
     if (err instanceof DriftHaltSignal) {
       return { error: { code: "DRIFT_HALT", message: err.message } };
     }
-    if (err instanceof Breach || err instanceof SpendExhaustedError) {
+    if (err instanceof Breach || err instanceof SpendExhaustedError || err instanceof NoProgressError) {
       return { error: { code: "BREACH", message: err.message } };
     }
     /** PRDR-112: a backend refusal or outage is a structured route, so a driver can back off and retry. */

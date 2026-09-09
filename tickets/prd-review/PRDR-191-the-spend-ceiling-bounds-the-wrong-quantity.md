@@ -1,13 +1,13 @@
 ---
 id: PRDR-191
 title: "run_spend_usd bounds total spend, which fires on success and fires late on failure — the quantity worth bounding is spend with no progress"
-state: OPEN
+state: DONE
 severity: major
 category: design
 labels: ["prd-review", "found-by-live-run", "budgets", "operator-surface"]
 surface: ["detent-prd-v3.md", "src/kernel/ledger.ts", "src/init/pipeline.ts", "src/init/session.ts", "src/schemas/budgets.ts", "src/schemas/states.ts", "tests/oracle/budgets.test.ts"]
 prd_refs: ["X-1", "X-1′", "X-1‴", "X-8", "D-25", "C-8"]
-acceptance_criteria: ["`run_spend_usd` no longer halts a run. Spend is counted and reported; a total never terminates work.", "A no-progress breaker replaces it: the run halts when a configured amount accrues with NO unit of progress completing — a slice for `init`, a ticket reaching DONE for the loop.", "The breaker's default is derived from the observed cost of one unit of progress, not chosen as a constant.", "Spend is reported as it accrues, against the session estimate `slice.ts` already computes, so an operator sees the trajectory rather than discovering it at a wall.", "If an operator sets a total anyway, breaching it raises AWAIT_SPEND_CONFIRM — checkpointed and resumable — never a fatal error.", "The breaker lands in the SAME change that removes the blocker. A release with neither is a regression, not a step."]
+acceptance_criteria: ["`run_spend_usd` no longer halts a run. Spend is counted and reported; a total never terminates work.", "A no-progress breaker replaces it: the run halts when a configured amount accrues with NO unit of progress completing — a slice for `init`, a ticket reaching DONE for the loop.", "The breaker's default is derived from the observed cost of one unit of progress, not chosen as a constant.", "Spend is reported as it accrues, against the session estimate `slice.ts` already computes, so an operator sees the trajectory rather than discovering it at a wall.", "If an operator sets a total anyway, reaching it is SAID rather than acted on. AMENDED on implementation: an announcement, not AWAIT_SPEND_CONFIRM — see below.", "The breaker lands in the SAME change that removes the blocker. A release with neither is a regression, not a step."]
 non_goals: ["Does not touch the per-ticket ceilings (`blind_fix_attempts`, `informed_fix_attempts`, `research_sessions`, `hypotheses`). Those bound ATTEMPTS, not money, three of them are structural under D-24, and they are the controls that actually work.", "Does not remove the ledger or the accounting. The counting stays; the blocking goes.", "Does not claim the financial exposure is zero. It is accepted deliberately, and the breaker is what makes accepting it reasonable."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-186", "PRDR-190", "PRDR-083", "PRDR-168"]
@@ -83,6 +83,34 @@ total bound. That is a real cost and it is being taken deliberately: the operato
 that finishes its job over one that stops half-built. **The breaker is what makes that choice
 reasonable, so it must land in the same change.** Shipping the removal first and the breaker later
 leaves a release with no control at all, which is worse than what exists today.
+
+## Resolved (2026-09-09)
+
+`run_spend_usd` no longer throws. `spend_without_progress_floor_usd` (50) and
+`spend_without_progress_multiple` (3) join the X-1 table; the threshold is
+`max(floor, multiple x the last completed unit's cost)`, and `noteUnitComplete` resets it from
+the two places work actually completes — a slice checkpointed in `plan-slices.ts`, and
+`finalizeDone` in `referee.ts`, last in the method so a merge conflict does not count as
+progress. Cross-driver parity is asserted over the new control, not the deleted one.
+
+**Criterion 5 amended.** It called for `AWAIT_SPEND_CONFIRM`. That needs a new state in the X
+machine, which is an F-3 schema event, and — more to the point — an interrupt is a block, which
+is the thing this ticket exists to remove. The advisory total is announced once, on the first
+launch after it is passed, and the run continues. Announcing on every launch would be a warning
+an operator learns to skip, which is V-1‴'s own description of a useless one.
+
+**Two defects in this implementation, found by its own tests staying silent.** Both are worth
+recording because both are shapes this repository keeps producing:
+
+- The mark was held on the run lock, then defaulted to the CURRENT total whenever no mark
+  existed. `init` builds a fresh `SpendLedger` per session launch, so every session forgave
+  everything the last one spent and the breaker could never accumulate anything to fire on. It
+  now lives in its own `state/progress.json`, pinned once rather than re-derived — and off the
+  lock, because a control that only works when another subsystem happens to be present is not a
+  control.
+- The breaker's two ceilings were never passed to either `SpendLedger` construction, so
+  production read the schema defaults while the project's config said otherwise. Implemented,
+  unit-tested and unreachable — PRDR-141's shape exactly, inside the change that cites it.
 
 ## Process
 

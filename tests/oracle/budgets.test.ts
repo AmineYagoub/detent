@@ -85,7 +85,7 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());
   });
 
-  it("each ceiling declares its own breach target — six are not BUDGET_BREACH", () => {
+  it("each ceiling declares its own breach target — seven are not BUDGET_BREACH", () => {
     expect(breachTargetFor("failure_research_tool_calls")).toBe("RESEARCH_DRY");
     expect(breachTargetFor("planning_research_tool_calls")).toBe("AWAIT_INFO_BATCH");
     expect(breachTargetFor("flake_reruns")).toBe("LADDER_ENTRY");
@@ -94,19 +94,27 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     /* X-1″ (PRDR-106): the planner's sizing target has nothing to breach. */
     expect(breachTargetFor("turns_per_stage")).toBe("NONE");
     expect(CEILINGS.turns_per_stage.scope).toBe("plan-sizing");
+    /**
+     * X-1⁵ (PRDR-191): the run total is ADVISORY. It fired on success and fired
+     * late on failure, so it counts and reports and halts nothing; the breaker
+     * that does halt bounds spend with no unit completing.
+     */
+    expect(breachTargetFor("run_spend_usd")).toBe("NONE");
+    expect(breachTargetFor("spend_without_progress_floor_usd")).toBe("BUDGET_BREACH");
     const nonBreach = ALL_CEILING_KEYS.filter((k) => breachTargetFor(k) !== "BUDGET_BREACH");
-    expect(nonBreach).toHaveLength(6);
+    expect(nonBreach).toHaveLength(7);
   });
 
-  it("the X-1 table has exactly fourteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
-    expect(ALL_CEILING_KEYS).toHaveLength(14);
+  it("the X-1 table has exactly sixteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
+    expect(ALL_CEILING_KEYS).toHaveLength(16);
     expect(CEILINGS.gate_timeout_ms.default).toBe(900_000);
     expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
   });
 
-  it("run_spend_usd is the only run-scoped ceiling, and EVERY ceiling has a default (X-1′)", () => {
+  it("the run-scoped ceilings are the total and the breaker, and EVERY ceiling has a default (X-1′)", () => {
     const runScoped = ALL_CEILING_KEYS.filter((k) => CEILINGS[k].scope === "run");
-    expect(runScoped).toEqual(["run_spend_usd"]);
+    /* X-1⁵ (PRDR-191): the total is joined by the two the no-progress breaker reads. */
+    expect(runScoped.sort()).toEqual(["run_spend_usd", "spend_without_progress_floor_usd", "spend_without_progress_multiple"]);
     /**
      * PRDR-083: the spend cap was the lone defaultless ceiling, which made the
      * first init of every project a required spend decision. It defaults now;

@@ -491,6 +491,34 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   breakable on the same dead-pid-and-matching-host terms, so a second run REFUSES and names its
   holder. NG4 stands — concurrent runs are not made safe, they are made to decline.
 
+- **X-1⁵ (3.1.1, PRDR-191).** `run_spend_usd` counts and no longer blocks; what halts a run is
+  spend WITHOUT PROGRESS. A total is the wrong quantity and fails in two opposite directions. It
+  fires on success: the gate-312 planning run reached $230 having completed eleven of fifteen
+  slices with nothing wrong, and was on course to halt at s15 for no reason but arithmetic. And
+  it fires late on failure: PRDR-186's key-formula bug re-planned every completed slice and
+  burned $70 before anyone noticed, and had that been a cycle rather than a one-shot, the
+  ceiling would have been the only thing to stop it — after hours. Raising the constant trades
+  one failure for the other, and no value is both low enough to leave real work alone and high
+  enough to catch a defect quickly. The constant is unchooseable in any case, because the phases
+  differ by an order of magnitude: $230 buys 230 tickets WRITTEN DOWN, and building them is an
+  implement session and a review per ticket plus gates plus the fix ladder, so planning is the
+  cheap quarter of a self-build and one number is wrong for at least one phase of the same run.
+  Nor was it ever the backstop X-8 named: D-25 evaluates at session launch, so a run overshoots
+  by a whole session's cost, and before X-1‴ two runs on one root reached $16 against a $10
+  ceiling with neither ever seeing `SpendExhaustedError`. **The replacement bounds the quantity
+  the fear actually describes.** Legitimate work COMPLETES things — a slice for `init`, a ticket
+  reaching DONE for the loop — and a runaway does not, so the ceiling is dollars accrued since
+  the last completed unit. It catches PRDR-186's shape in minutes rather than hours and cannot
+  fire on a run that is working, however long or expensive. Its threshold is DERIVED rather than
+  chosen: a multiple of the observed cost of the units this run has already completed, which the
+  ledger already records, with a floor before anything has completed. `run_spend_usd` stays in
+  the table as an advisory figure that is counted and reported — and where an operator sets one
+  deliberately, reaching it presents rather than dies, because everything is checkpointed and
+  the answer is a human's. The financial exposure of an unbounded total is accepted here
+  deliberately: it is the cost of a tool that finishes its job, and the no-progress breaker is
+  what makes accepting it reasonable, so the two land together. A release carrying the removal
+  without the breaker is a regression, not a step.
+
 - **F-3′ (3.1.1, PRDR-137).** An artifact is read with the schema that wrote it. Four were
   validated on write and cast on read, and each failed in its own way: the slice cache
   advertised itself as a validated trust boundary while checking 3 of 11 fields, so a cache from

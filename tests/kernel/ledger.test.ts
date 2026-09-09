@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RunJournal } from "../../src/kernel/journal.js";
-import { SpendExhaustedError, SpendLedger, readRecordedSpend } from "../../src/kernel/ledger.js";
+import { NoProgressError, SpendLedger, readRecordedSpend } from "../../src/kernel/ledger.js";
 import { EXIT_HUMAN_GATED, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { ledgerRowSchema } from "../../src/schemas/records.js";
@@ -38,29 +38,33 @@ const rows = (root: string) =>
     .map((line) => ledgerRowSchema.parse(JSON.parse(line)));
 
 describe("T-048 D-25: the spend ceiling is a launch gate", () => {
-  it("overshoot is bounded by ONE in-flight session; the next launch is refused → NEEDS_HUMAN, exit 10", async () => {
-    /**
-     * Ceiling below one session's cost: the first launch is allowed (spend 0),
-     * its 0.001 crosses the ceiling, and the second launch is refused.
-     */
+  /**
+   * X-1⁵ (PRDR-191) replaces what this case used to assert. It drove a run at a
+   * ceiling below one session's cost and required the SECOND launch to be
+   * refused → NEEDS_HUMAN. That behaviour is deleted: a total fired on success,
+   * and the run above was a working run stopped by arithmetic. Asserted through
+   * `run` rather than the ledger class, because the production path is where
+   * the old refusal lived and where its absence has to be observable.
+   */
+  it("a total below one session's cost no longer stops a working run (X-1⁵)", async () => {
     const root = await fixture(0.0005);
     addTicket(root, { id: "t1" });
 
     const backend = new MockBackend({ implement: implementRed });
     const outcome = await run({ root, backend, prompts: PROMPTS, runId: "spend" });
 
-    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
-    /** exactly one launch */
-    expect(backend.calls.map((c) => c.role)).toEqual(["implement"]);
+    /** The ladder runs its course; nothing was refused for reaching a total. */
+    expect(backend.calls.length).toBeGreaterThan(1);
+    expect(readRecordedSpend(root)).toBeGreaterThan(0.0005);
     const t1 = readTicket(root, "t1");
-    expect(t1.state).toBe("NEEDS_HUMAN");
-    expect(t1.notes.map((n) => n.text).join(" ")).toContain("run-spend exhaustion");
     /**
-     * The overshoot is recorded honestly: ledger total exceeds the ceiling by
-     * at most the one session that was in flight.
+     * It still ends human-gated — but for the LADDER exhausting on a red gate,
+     * which is the honest outcome for `implementRed`. What must not appear is a
+     * refusal for reaching a total, and that is what the note asserts.
      */
-    expect(rows(root)).toHaveLength(1);
-    expect(readRecordedSpend(root)).toBeCloseTo(0.001, 6);
+    expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
+    expect(t1.notes.map((n) => n.text).join(" ")).not.toContain("run-spend exhaustion");
+    expect(rows(root).length).toBeGreaterThan(1);
   });
 
   it("spend accumulates across resumed invocations — a requeue never resets the money (X-8)", async () => {
@@ -78,9 +82,105 @@ describe("T-048 D-25: the spend ceiling is a launch gate", () => {
     try {
       const ledger2 = new SpendLedger(root, journal2, 0.2);
       expect(ledger2.spent()).toBeCloseTo(0.25, 6);
-      expect(() => ledger2.assertLaunchAllowed()).toThrow(SpendExhaustedError);
     } finally {
       journal2.close();
+    }
+  });
+});
+
+/**
+ * X-1⁵ (PRDR-191) — the ceiling counts; what halts is spend WITHOUT PROGRESS.
+ *
+ * A total fires on success and fires late on failure. Legitimate work completes
+ * things — a slice, a ticket reaching DONE — and a runaway does not, so the
+ * quantity worth bounding is dollars since the last completed unit.
+ */
+describe("X-1⁵ the run ceiling counts and does not block", () => {
+  it("does not halt a run that has passed its advisory total, and says so once", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    const said: string[] = [];
+    try {
+      const ledger = new SpendLedger(
+        root,
+        journal,
+        0.01,
+        { spend_without_progress_floor_usd: 100, spend_without_progress_multiple: 3 },
+        (t) => said.push(t),
+      );
+      ledger.record("t1", 0, "implement", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
+      expect(ledger.spent()).toBeGreaterThan(0.01);
+      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      expect(ledger.overAdvisoryTotal()).toBe(true);
+      /* Counting without reporting is not counting — but a warning on every launch is noise. */
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain("advisory");
+      ledger.assertLaunchAllowed();
+      ledger.assertLaunchAllowed();
+      expect(said).toHaveLength(1);
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("halts when money goes out and nothing completes", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      for (let i = 0; i < 3; i += 1) {
+        ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
+      }
+      expect(() => ledger.assertLaunchAllowed()).toThrow(NoProgressError);
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("never halts a run that keeps completing units, however expensive", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      for (let i = 0; i < 20; i += 1) {
+        ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 8 }), "2026-08-18T10:00:00.000Z");
+        ledger.noteProgress();
+        expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      }
+      expect(ledger.spent()).toBeCloseTo(160, 6);
+    } finally {
+      journal.close();
+    }
+  });
+
+  /**
+   * The trap this design walks into if the threshold is a mean alone. A resumed
+   * run reuses finished slices for $0, so the observed cost per unit collapses
+   * to zero and a purely derived threshold would halt on the first dollar
+   * spent — punishing exactly the checkpoint reuse C-8 exists to provide.
+   */
+  it("does not collapse to zero when completed units cost nothing (C-8 reuse)", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3 });
+      for (let i = 0; i < 8; i += 1) ledger.noteProgress();
+      ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("carries the spend since the last unit in what it throws", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 1, spend_without_progress_multiple: 3 });
+      ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 9 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed()).toThrow(/9\.00.*without completing/s);
+    } finally {
+      journal.close();
     }
   });
 });

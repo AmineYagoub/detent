@@ -679,6 +679,8 @@ describe("T-041 X-1 enforcement fixtures", () => {
           gate_timeout_ms: 900_000,
           binding_probe_timeout_ms: 120_000,
           run_spend_usd: 999,
+          spend_without_progress_floor_usd: 999,
+          spend_without_progress_multiple: 3,
         },
         protected: [],
         risk: [],

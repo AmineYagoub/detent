@@ -182,20 +182,36 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
     expect(String(end?.["tail"])).toContain("turn ceiling");
   });
 
-  it("the run ceiling gates init launches too (D-25)", async () => {
+  /**
+   * X-1⁵ (PRDR-191) replaces what this pair used to assert. A consumed TOTAL
+   * gated every init launch, which is the failure mode the amendment names:
+   * it fired on a run that had done nothing wrong. Both directions are asserted
+   * because a control that stops firing must be shown to have stopped, and the
+   * one that replaced it must be shown to fire.
+   */
+  it("a total already consumed no longer gates init (X-1⁵)", async () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
-    /** A ceiling already consumed: no init session may launch. */
     mkdirSync(stateDir(root), { recursive: true });
     writeFileSync(
       path.join(stateDir(root), "ledger.jsonl"),
       `${JSON.stringify({ at: "2026-08-28T00:00:00.000Z", ticket: "init", generation: 0, role: "planner", cost_estimate_usd: 999, input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, turns: 1 })}\n`,
     );
 
-    await expect(
-      runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS })),
-    ).rejects.toThrow(/run-spend exhaustion/);
-    expect(backend.calls, "nothing may launch past the ceiling").toHaveLength(0);
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    expect(backend.calls.length, "a run resuming against history has completed nothing to be judged on").toBeGreaterThan(0);
+  });
+
+  it("spend with no slice completing does gate init (X-1⁵)", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    /* A floor below one mock session's own $0.001 estimate. */
+    const budgets = { ...BUDGETS, spend_without_progress_floor_usd: 0.0001 };
+
+    await expect(runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets }))).rejects.toThrow(
+      /no-progress breaker/,
+    );
+    expect(backend.calls.length, "the first launch is allowed; the one after it is refused").toBeGreaterThan(0);
   });
 });
 

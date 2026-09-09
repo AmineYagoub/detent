@@ -12,7 +12,7 @@ import {
 import { toolsForRole } from "../sessions/guard.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
-import { SpendLedger } from "../kernel/ledger.js";
+import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
@@ -41,6 +41,15 @@ export interface InitSessionDeps {
   readonly prompts: PromptSet;
   /** PRDR-088: X-1's run ceiling — init spend counts against it like any other. */
   readonly spendCeiling: number;
+  /**
+   * X-1⁵ (PRDR-191): the no-progress breaker's two ceilings.
+   *
+   * Optional so existing callers keep compiling, but `pipeline.ts` supplies it:
+   * without this the breaker read its schema defaults while the project's
+   * config said otherwise — implemented, unit-tested and unreachable, which is
+   * PRDR-141's shape and was caught here by three tests staying silent.
+   */
+  readonly progressBreaker?: ProgressBreaker;
   /** PRDR-114: the config's `model_routing`; the planner and planning research run on their routed models. */
   readonly modelRouting?: Readonly<Record<string, string>>;
   readonly rulesText?: string;
@@ -266,7 +275,10 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
   const journal = RunJournal.open(deps.root);
   let result: SessionResult;
   try {
-    const ledger = new SpendLedger(deps.root, journal, deps.spendCeiling);
+    const ledger =
+      deps.progressBreaker === undefined
+        ? new SpendLedger(deps.root, journal, deps.spendCeiling)
+        : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
     /* D-25: the ceiling is a launch gate, evaluated here and never mid-flight. */
     ledger.assertLaunchAllowed();
     journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });

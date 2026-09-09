@@ -139,7 +139,11 @@ export class RefereeContext {
       null,
       2,
     );
-    this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd);
+    /* X-1⁵ (PRDR-191): the breaker reads its own two ceilings, from the same config. */
+    this.spend = new SpendLedger(opts.root, journal, this.budgets.run_spend_usd, {
+      spend_without_progress_floor_usd: this.budgets.spend_without_progress_floor_usd,
+      spend_without_progress_multiple: this.budgets.spend_without_progress_multiple,
+    });
     this.hookFiles = opts.hookFiles ?? true;
     /* P7: every ref except the run branch is protected ground for this run. */
     this.refs = snapshotRefs(opts.root);

@@ -213,10 +213,15 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
     cleanups.push(() => removeTree(headless.root));
     for (const root of [model.root, headless.root]) {
       addTicket(root, { id: "t-1" });
-      /* A ceiling the first session's own cost estimate already exceeds. */
+      /**
+       * X-1⁵ (PRDR-191): the no-progress breaker, not the total. The total no
+       * longer halts anything, so parity over it would assert nothing; what
+       * both drivers must still refuse identically is money out with nothing
+       * completed. A floor the first session's own cost estimate exceeds.
+       */
       const file = path.join(stateDir(root), "config.json");
       const config = JSON.parse(readFileSync(file, "utf8")) as { budgets: Record<string, number> };
-      config.budgets["run_spend_usd"] = 0.0001;
+      config.budgets["spend_without_progress_floor_usd"] = 0.0001;
       writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
     }
 
@@ -235,7 +240,7 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
     );
 
     /* The ceiling really bit: neither driver may report the ticket finished. */
-    expect(readTicket(model.root, "t-1").state, "a ticket cannot reach DONE past the ceiling").not.toBe("DONE");
+    expect(readTicket(model.root, "t-1").state, "a ticket cannot reach DONE past the no-progress breaker").not.toBe("DONE");
     expect(readTicket(headless.root, "t-1").state).toBe(readTicket(model.root, "t-1").state);
 
     const modelJournal = journalBytes(model.root);
