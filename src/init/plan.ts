@@ -317,6 +317,13 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       ...written,
       questions: [...planned.questions, ...reviewed.questions] as unknown as Record<string, unknown>[],
       review_findings: findings as unknown as Record<string, unknown>[],
+      /**
+       * PRDR-196: the deterministic checker's findings reach the operator.
+       *
+       * They were noted to the log and dropped here, so the only signal the
+       * literature calls reliable was the only one PRESENT never showed.
+       */
+      contract_findings: contracts.findings as unknown as Record<string, unknown>[],
       derived_edges: contracts.derived as unknown as Record<string, unknown>[],
     },
   };

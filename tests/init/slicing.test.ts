@@ -6,6 +6,7 @@ import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
 import { DOC_PATTERNS } from "../../src/init/discover-docs.js";
+import { revisionOutcome } from "../../src/init/plan-slices.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
@@ -740,5 +741,80 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
     expect(said).not.toMatch(/finding\(s\)/);
     expect(said).not.toMatch(/review:/);
     expect(notes.join("\n")).toMatch(/finding\(s\)/);
+  });
+});
+
+/**
+ * PRDR-196 criterion 3 — whether revision fixes what it was given.
+ *
+ * Counts alone cannot answer it. This run's revision rounds ended with MORE
+ * findings than they started on 11 slices of 19, and that is equally consistent
+ * with "the revision introduced defects" and with "a fresh review of rewritten
+ * text found fresh, partly spurious things". The literature says the critic is
+ * the likelier culprit, which makes the distinction the whole question.
+ *
+ * Identity is `(ticket, tag)`. Finding TEXT is rewritten every round so it
+ * cannot key anything, and the pair is what a reader means by "the same
+ * complaint about the same ticket".
+ */
+describe("PRDR-196 the revision round is measured, not assumed", () => {
+  it("separates what was resolved, what survived and what the round introduced", () => {
+    const before = [
+      { tag: "sizing" as const, ticket: "t-a", finding: "too big" },
+      { tag: "dependency" as const, ticket: "t-b", finding: "missing edge" },
+    ];
+    const after = [
+      { tag: "sizing" as const, ticket: "t-a", finding: "still too big, differently worded" },
+      { tag: "coherence" as const, ticket: "t-c", finding: "brand new complaint" },
+    ];
+    expect(revisionOutcome(before, after)).toEqual({ resolved: 1, survived: 1, introduced: 1 });
+  });
+
+  it("reads a clean revision as all resolved and nothing introduced", () => {
+    const before = [{ tag: "sizing" as const, ticket: "t-a", finding: "too big" }];
+    expect(revisionOutcome(before, [])).toEqual({ resolved: 1, survived: 0, introduced: 0 });
+  });
+
+  it("counts a round that fixed nothing and added nothing as pure survival", () => {
+    const same = [{ tag: "sizing" as const, ticket: "t-a", finding: "too big" }];
+    expect(revisionOutcome(same, [{ ...same[0]!, finding: "reworded" }])).toEqual({ resolved: 0, survived: 1, introduced: 0 });
+  });
+
+  /**
+   * Through the real pipeline. `revisionOutcome` computing correctly and never
+   * being called is the shape that has broken four times on this line today —
+   * PRDR-191's breaker ceilings, PRDR-194's progress seam, PRDR-166's globs,
+   * and PRDR-193's own wiring. A measurement nothing runs measures nothing.
+   */
+  it("is recorded by the run, not merely computable", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    let whole = 0;
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          draft: twoSliceDraft,
+          review: (inputs) => {
+            if (inputs["scope"] === "whole") {
+              whole += 1;
+              return APPROVE_PLAN;
+            }
+            /* A slice review that faults something forces the revision round. */
+            return { schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] };
+          },
+        },
+        [],
+      ),
+    });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    expect(whole).toBeGreaterThan(0);
+    expect(notes.join("\n")).toMatch(/revision: \d+ resolved, \d+ survived, \d+ introduced/);
+  });
+
+  /** A finding naming no ticket belongs to the plan; it cannot be matched, so it is not counted as survival. */
+  it("does not pretend an unticketed finding is the same complaint twice", () => {
+    const before = [{ tag: "coherence" as const, finding: "the plan double-books a name" }];
+    const after = [{ tag: "coherence" as const, finding: "a different plan-wide worry" }];
+    expect(revisionOutcome(before, after).survived).toBe(0);
   });
 });

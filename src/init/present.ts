@@ -43,6 +43,17 @@ export interface PresentInput {
   /** Findings the reviews still held after their revision round. */
   readonly findings?: PlanReview["findings"];
   /**
+   * PRDR-196: what `applyContracts` PROVED, kept apart from what the review
+   * judged.
+   *
+   * These were computed on every run and never carried out of `plan.ts` — the
+   * log had them, the plan output did not, so the operator saw 74 findings from
+   * a paid session and none of the 7 a deterministic check had established for
+   * nothing. One kind is reliable and the other is judgement; merging them
+   * would throw away the distinction that makes the first kind worth having.
+   */
+  readonly contractFindings?: PlanReview["findings"];
+  /**
    * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
    * be put where the next run will read it.
    *
@@ -71,7 +82,7 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices"> {
+): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings"> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -137,6 +148,7 @@ export function presentInputsFromOutputs(
     slices,
     questions,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
+    contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
     derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges").filter(isEdge),
     gateNotices: list<unknown>("DETERMINE_VERIFICATION", "gate_notices").filter((n): n is string => typeof n === "string"),
   };
@@ -191,6 +203,14 @@ export function renderPresentation(input: PresentInput): string {
       `Dependencies Detent derived (${edges.length}) — the plan declared a name one ticket owns and another needs, so the edge is the plan's own, not a guess (A-1‴):`,
     );
     for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
+  }
+  const proved = input.contractFindings ?? [];
+  if (proved.length > 0) {
+    lines.push(
+      "",
+      `Contract checks (${String(proved.length)}) — proved by code from the tickets' own \`provides\`/\`consumes\`, no session and no judgement (A-1‴):`,
+    );
+    for (const f of proved) lines.push(`  ${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`);
   }
   const findings = input.findings ?? [];
   if (findings.length > 0) {

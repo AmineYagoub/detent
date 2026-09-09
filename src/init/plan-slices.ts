@@ -63,6 +63,20 @@ const sliceCacheSchema = z.strictObject({
   questions: z.array(planQuestionSchema),
   remaining: z.array(z.looseObject({ tag: z.string(), finding: z.string() })),
   /**
+   * PRDR-196: what the revision round did, or `null` where none was needed.
+   *
+   * Additive with a default, so every cache written before this reads back as
+   * "unmeasured" rather than failing — the `cache_*` and `models` precedent.
+   * Adding it WITHOUT the default re-planned every cached slice, which two
+   * existing cases caught immediately: a strict schema is a trust boundary in
+   * both directions, and a field the writer knows and the reader does not is a
+   * miss, exactly as F-3′ says.
+   */
+  revision: z
+    .looseObject({ resolved: z.number(), survived: z.number(), introduced: z.number() })
+    .nullable()
+    .default(null),
+  /**
    * Ids in EARLIER slices these tickets depend on; if one is gone, the cache is
    * stale. REQUIRED, not defaulted: `sliceKey` hashes what the slice READ, not
    * the code that read it, so a cache written before this field existed still
@@ -147,6 +161,49 @@ export function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly Draft
       ]),
     )
     .digest("hex");
+}
+
+/**
+ * PRDR-196: what one revision round actually did.
+ *
+ * The counts this run produced — more findings after revision than before, on
+ * 11 slices of 19 — cannot distinguish "the revision introduced defects" from
+ * "a fresh review of rewritten text found fresh, partly spurious things". The
+ * literature names feedback generation as the bottleneck, which makes that
+ * distinction the whole question, and no number Detent records today answers
+ * it.
+ *
+ * Identity is `(ticket, tag)`. Finding TEXT is rewritten every round so it can
+ * key nothing, and the pair is what a reader means by "the same complaint about
+ * the same ticket". A finding naming no ticket belongs to the plan rather than
+ * to one of its tickets and cannot be matched, so it is never counted as
+ * survival — an unmatched pair is honestly unknown, not silently resolved.
+ */
+export interface RevisionOutcome {
+  /** Complaints that were made and are no longer made. */
+  readonly resolved: number;
+  /** Complaints the revision was handed and did not remove. */
+  readonly survived: number;
+  /** Complaints that did not exist before the round. */
+  readonly introduced: number;
+}
+
+const findingKey = (f: PlanReview["findings"][number]): string | null =>
+  f.ticket === undefined || f.ticket === "" ? null : `${f.ticket}\u0000${f.tag}`;
+
+export function revisionOutcome(
+  before: PlanReview["findings"],
+  after: PlanReview["findings"],
+): RevisionOutcome {
+  const keysBefore = new Set(before.map(findingKey).filter((k): k is string => k !== null));
+  const keysAfter = new Set(after.map(findingKey).filter((k): k is string => k !== null));
+  let survived = 0;
+  for (const k of keysBefore) if (keysAfter.has(k)) survived += 1;
+  return {
+    resolved: keysBefore.size - survived,
+    survived,
+    introduced: keysAfter.size - survived,
+  };
 }
 
 export const tagSlice = (tickets: readonly Omit<DraftedTicket, "slice">[], slice: string): DraftedTicket[] =>
@@ -334,6 +391,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
 
     let leftover: PlanReview["findings"] = [];
     let reviewed = false;
+    let revision: RevisionOutcome | null = null;
     const review = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
     reviewed = review !== null;
     if (review !== null && review.verdict === "changes" && review.findings.length > 0) {
@@ -346,6 +404,19 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       const second = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
       reviewed = second !== null;
       leftover = second !== null && second.verdict === "changes" ? second.findings : [];
+      /**
+       * PRDR-196: say what the round DID, not how many findings came back.
+       *
+       * A count answers neither of the two questions worth asking — did the
+       * revision fix what it was handed, and did it create work that was not
+       * there. Recorded on the slice as well as said, so the question can be
+       * asked across runs rather than re-derived from a log each time.
+       */
+      revision = revisionOutcome(review.findings, leftover);
+      deps.note?.(
+        `${slice.id} revision: ${String(revision.resolved)} resolved, ${String(revision.survived)} survived, ` +
+          `${String(revision.introduced)} introduced (PRDR-196)`,
+      );
       deps.note?.(
         leftover.length === 0
           ? `${slice.id} review: revision accepted`
@@ -381,6 +452,8 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
           tickets: normalised.tickets,
           questions: numbered,
           remaining: held,
+          /* PRDR-196: null when the slice needed no revision. */
+          revision,
           external_deps: [...new Set(normalised.tickets.flatMap((t) => t.depends_on).filter((d) => !own.has(d)))],
           reviewed,
         },
