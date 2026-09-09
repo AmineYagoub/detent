@@ -55,8 +55,51 @@ which serves both the CLI path and the plugin path. Under the plugin path the re
 server would hold that pid and stay alive for the whole session, so suppressing on
 liveness would silence T-120's nudge entirely and turn a working feature off.
 
-Distinguishing the two paths needs the plugin path exercised, and
-`plugin:detent:referee` failed to connect for the whole of this session
-(`CONNECTION_CLOSED`). Guessing at a fix to a path that cannot be run is how a small
-annoyance becomes a silent regression in loop persistence. The evidence is recorded here
-so the fix can be written against a working plugin session.
+Distinguishing the two paths needs the plugin path exercised, and it has never been
+exercisable. That was originally recorded as `plugin:detent:referee` failing to connect
+(`CONNECTION_CLOSED`), which is what the client reports but not what happens.
+
+## The real blocker (established 2026-09-09)
+
+`CONNECTION_CLOSED` is not a transport fault. The referee server starts, refuses, and
+exits — and the client renders a clean refusal as a dropped connection. Probed directly:
+
+```
+$ tsx src/cli/referee.ts --root /Users/workstation/detent
+no config at /Users/workstation/detent/.detent/config.json — run `detent init` first
+
+$ tsx src/cli/referee.ts --root <an initialized root>
+no approved plan — run `detent init` and approve it first (C-9)
+```
+
+**The Detent repository has never been `detent init`'d against itself.** The server was
+reporting that accurately for as long as anyone has looked at it, into a channel where the
+message was never read — the same shape as PRDR-190, a correct message delivered where
+nobody was listening. Nothing needs repairing in the server or the plugin manifest.
+
+So the precondition chain for fixing this ticket is:
+
+1. an initialized root **with an approved plan** (C-9) — the referee refuses without one;
+2. a `detent run` on it, so the driver loop writes `stage.json` at all;
+3. a plugin session in that root whose Stop hook fires.
+
+None of the three is satisfied today, which is why every attempt to reach the plugin path
+has ended at step 0. `detent-gate-312` will satisfy (1) when its plan reaches PRESENT and
+is approved; that is the first moment this ticket is workable rather than guessable, and
+picking it up before then produces a fix nobody can run.
+
+Note also that the installed plugin is **3.0.1** (`~/.claude/plugins/cache/detent/detent/3.0.1/`)
+against a local 3.1.1 line. A connected referee would serve old code until that is
+reinstalled, so a fix verified against the cached plugin proves nothing about this tree.
+
+## Still present, re-verified 2026-09-09
+
+The defect has not drifted or been fixed incidentally. `refreshRunRefeed`
+([`src/kernel/hook-policy.ts`](../../src/kernel/hook-policy.ts)) writes exactly
+`schema_version`, `stage`, `gate_cmd`, `run_refeed` and `expires_at_ms` — **no `owner`,
+no `pid`** — and neither that writer nor `decideStop` in
+[`src/plugin/hook.ts`](../../src/plugin/hook.ts) mentions either word. `decideStop` still
+blocks on `run_refeed !== "" && !stop_hook_active` alone, and the trigger is still
+`pool.length > 0 || any claimed` at `referee.ts:154`. Acceptance criterion 3 asks for the
+claim's own currency (`owner`, `pid`, liveness — PRDR-079); the stage file carries none of
+it, so there is nothing for a fix to read yet.
