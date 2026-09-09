@@ -631,3 +631,55 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
     }
   });
 });
+
+/**
+ * PRDR-193 — the free check runs before the paid one, and hands it the result.
+ *
+ * `applyContracts` is deterministic and costs nothing; `wholePlanReview` is the
+ * largest paid prompt `init` builds. The free one ran second, so the paid
+ * session rediscovered what code proves. Observed live on gate-312, where the
+ * review found `t-s02-003 consumes a name no ticket provides`, cited the
+ * mechanical checker by ticket id, wrote that such defects "should be corrected
+ * rather than discovered by it" — and then paid again to redraft the slice.
+ */
+describe("PRDR-193 code proves what it can before a session is paid to look", () => {
+  /** s02's ticket leans on a name nothing in the plan owns. */
+  const unprovidedDraft = (inputs: Record<string, unknown>): object =>
+    sliceOf(inputs) === "s01"
+      ? { schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }
+      : {
+          schema_version: 1,
+          tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
+          questions: [],
+        };
+
+  it("reports the mechanical findings BEFORE the review, and tells the review it did", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    const wholeInputs: Record<string, unknown>[] = [];
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          draft: unprovidedDraft,
+          review: (inputs) => {
+            if (inputs["scope"] === "whole") wholeInputs.push(inputs);
+            return APPROVE_PLAN;
+          },
+        },
+        [],
+      ),
+    });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+
+    /* Proved by code, and said so before any whole-plan session ran. */
+    const joined = notes.join("\n");
+    expect(joined).toContain("contract checks before review");
+    expect(joined).toContain("not paid for");
+
+    /* And the paid session is handed the result rather than left to rediscover it. */
+    expect(wholeInputs.length).toBeGreaterThan(0);
+    const first = wholeInputs[0] ?? {};
+    expect(JSON.stringify(first["already_found"] ?? "")).toContain("t-s02-001");
+    expect(String(first["scope_instruction"])).toContain("do not restate");
+  });
+});

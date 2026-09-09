@@ -1,7 +1,7 @@
 ---
 id: PRDR-193
 title: "applyContracts runs after wholePlanReview, so a paid session rediscovers defects a deterministic check proves for nothing — and the review said so itself"
-state: OPEN
+state: DONE
 severity: minor
 category: design
 labels: ["prd-review", "found-by-live-run", "cost", "planning"]

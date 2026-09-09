@@ -27,11 +27,13 @@ export async function wholePlanReview(
   deps: PlanDeps,
   slices: readonly SliceSpec[],
   tickets: readonly DraftedTicket[],
+  /** PRDR-193: what the mechanical contract check already proved, so this session need not. */
+  known: PlanReview["findings"] = [],
 ): Promise<WholeReview> {
   /* One slice is one plan, and its own review already read all of it. */
   if (slices.length <= 1) return { tickets: [...tickets], questions: [], remaining: [] };
 
-  const first = await reviewPlan(deps, tickets, { kind: "whole", slices });
+  const first = await reviewPlan(deps, tickets, { kind: "whole", slices, ...(known.length === 0 ? {} : { known }) });
   if (first === null) {
     /**
      * The coherence review is the whole reason this stage exists, and it is the

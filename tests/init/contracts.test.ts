@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
+import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 
@@ -288,5 +289,35 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
     expect(contractKey({ kind: "symbol", id: "pkg.Name" })).toBe("symbol:pkg.Name");
     /** Two kinds sharing an id are two different names. */
     expect(contractKey({ kind: "config", id: "X" })).not.toBe(contractKey({ kind: "file", id: "X" }));
+  });
+});
+
+/**
+ * PRDR-193 — the free check runs before the paid review, and tells it.
+ *
+ * gate-312's whole-plan review spent a session on `t-s02-003 consumes a name no
+ * ticket provides` — a finding `applyContracts` emits verbatim for nothing — and
+ * said so itself, citing the mechanical checker by ticket id and observing the
+ * defects "should be corrected rather than discovered by it". Then the finding
+ * triggered a redraft: a second paid session for a one-line declaration fix.
+ *
+ * Asserted on `scopeInputs`, which is what a review session is actually handed.
+ */
+describe("PRDR-193 the whole-plan review is told what code already proved", () => {
+  const known = [{ tag: "dependency" as const, ticket: "t-s02-003", finding: "consumes a name nobody provides" }];
+
+  it("carries the mechanical findings into the review's own inputs", () => {
+    const inputs = scopeInputs({ kind: "whole", slices: [], known });
+    expect(JSON.stringify(inputs)).toContain("t-s02-003");
+  });
+
+  it("tells the review not to spend its budget restating them", () => {
+    const inputs = scopeInputs({ kind: "whole", slices: [], known });
+    expect(String(inputs["scope_instruction"])).toMatch(/already|do not restate|no need to report/i);
+  });
+
+  it("says nothing extra when code found nothing", () => {
+    const inputs = scopeInputs({ kind: "whole", slices: [] });
+    expect(Object.keys(inputs)).not.toContain("already_found");
   });
 });

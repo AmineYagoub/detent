@@ -129,9 +129,23 @@ export type ReviewScope =
         readonly surface: readonly string[];
       }[];
     }
-  | { readonly kind: "whole"; readonly slices: readonly SliceSpec[] };
+  | {
+      readonly kind: "whole";
+      readonly slices: readonly SliceSpec[];
+      /**
+       * PRDR-193: what the mechanical union check already proved, handed to the
+       * review so its budget goes on what only judgement reaches.
+       *
+       * gate-312's whole-plan review spent a session finding `t-s02-003
+       * consumes a name no ticket provides` — which `applyContracts` emits
+       * verbatim for nothing — and said so itself, citing the checker by ticket
+       * id and noting the defects "should be corrected rather than discovered
+       * by it". That finding then paid for a redraft.
+       */
+      readonly known?: PlanReview["findings"];
+    };
 
-function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
+export function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
   if (scope === undefined) return {};
   if (scope.kind === "slice") {
     return {
@@ -145,15 +159,27 @@ function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
     };
   }
   const carried = new Set(scope.slices.flatMap((s) => s.baseline_items));
+  const known = scope.known ?? [];
+  const base =
+    "This is the WHOLE plan across every slice, each ticket tagged with its slice. Add `coherence`: tickets that " +
+    "contradict each other, duplicate each other, or disagree about the interface between them — usually in different " +
+    "slices. Judge coverage across EVERY slice's `requirement_ids` and `baseline_items` (a PB-### item traces to " +
+    "`baseline:PB-###`, which is valid provenance). Name the ticket in every finding; the slice is known from it.";
+  /**
+   * PRDR-193: what code already proved, so this session does not pay to prove
+   * it again. Empty when the check found nothing, so a clean plan's instruction
+   * is unchanged.
+   */
+  const alreadyProved =
+    known.length === 0
+      ? ""
+      : ` \`already_found\` lists ${String(known.length)} finding(s) Detent's own contract check has ALREADY proved mechanically and will report regardless — do not restate them. Spend this session on what code cannot decide: whether two tickets' criteria contradict each other, whether a ticket is oversized, whether a slice's coverage is short. If one of them is wrong, say so; otherwise treat it as handled.`;
   return {
     scope: "whole",
     slices: scope.slices,
+    ...(known.length === 0 ? {} : { already_found: known }),
     ...(carried.size === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => carried.has(b.id)) }),
-    scope_instruction:
-      "This is the WHOLE plan across every slice, each ticket tagged with its slice. Add `coherence`: tickets that " +
-      "contradict each other, duplicate each other, or disagree about the interface between them — usually in different " +
-      "slices. Judge coverage across EVERY slice's `requirement_ids` and `baseline_items` (a PB-### item traces to " +
-      "`baseline:PB-###`, which is valid provenance). Name the ticket in every finding; the slice is known from it.",
+    scope_instruction: `${base}${alreadyProved}`,
   };
 }
 

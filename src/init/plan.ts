@@ -232,7 +232,28 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       ? deps.slices
       : [{ id: "s01", title: "the plan", goal: "everything the documents ask for", requirement_ids: [], baseline_items: [], docs: [...deps.docs], depends_on: [], expected_tickets: 20, rationale: "" }];
   const planned = await planSlices(deps, slices);
-  const reviewed = await wholePlanReview(deps, slices, planned.tickets);
+  /**
+   * PRDR-193: the free check runs BEFORE the paid one.
+   *
+   * `applyContracts` is deterministic and costs nothing, and every ticket it
+   * needs exists the moment `planSlices` returns. It used to run only after the
+   * whole-plan review — the largest paid prompt `init` builds — so that session
+   * rediscovered what code could prove. Observed live: gate-312's review spent
+   * a session on `t-s02-003 consumes a name no ticket provides`, cited this
+   * checker by ticket id, wrote that such defects "should be corrected rather
+   * than discovered by it", and then paid again to redraft the slice.
+   *
+   * Only the FINDINGS move. Edge derivation stays below, on the reviewed
+   * tickets, because an edge must land on the text that reaches disk and a
+   * redraft rewrites that text.
+   */
+  const early = applyContracts(planned.tickets, slices.map((s) => s.id));
+  if (early.findings.length > 0) {
+    deps.note?.(
+      `contract checks before review: ${String(early.findings.length)} finding(s) proved by code, not paid for — ${early.findings.map((f) => f.tag).join(", ")}`,
+    );
+  }
+  const reviewed = await wholePlanReview(deps, slices, planned.tickets, early.findings);
   /**
    * A-1‴ (PRDR-120): the declarations are checked by code, after every model
    * has had its say and before a ticket reaches disk. Two tickets owning one
