@@ -31,6 +31,16 @@ export interface RunLockInfo {
   readonly pid: number;
   readonly host: string;
   readonly at: string;
+  /**
+   * PRDR-190: what the holder was last doing.
+   *
+   * SIGKILL cannot be caught, so a signal handler alone would have explained
+   * none of the six deaths that produced that ticket. This field is what makes
+   * an uncatchable death diagnosable after the fact: a lock left behind by a
+   * dead pid says WHICH SLICE it died in, so a later reader can tell
+   * "died while planning s09" from "exited cleanly after s09".
+   */
+  readonly phase: string | null;
 }
 
 export type RunLockResult =
@@ -55,7 +65,13 @@ function readLock(root: string): RunLockInfo | null {
   try {
     const raw = JSON.parse(readFileSync(lockPath(root), "utf8")) as Partial<RunLockInfo>;
     if (typeof raw.pid !== "number" || typeof raw.host !== "string") return null;
-    return { pid: raw.pid, host: raw.host, at: typeof raw.at === "string" ? raw.at : "" };
+    return {
+      pid: raw.pid,
+      host: raw.host,
+      at: typeof raw.at === "string" ? raw.at : "",
+      /* Additive: a lock written before PRDR-190 reads back with no phase rather than failing. */
+      phase: typeof raw.phase === "string" && raw.phase !== "" ? raw.phase : null,
+    };
   } catch {
     /* Unreadable or half-written: held by someone, on the R-3 rule that an
        unreadable claim is a held one. Breaking it would be the guess. */
@@ -89,7 +105,7 @@ export function acquireRunLock(
       const fd = openSync(file, "wx");
       closeSync(fd);
       /* Written after the atomic create: a lock that exists but is empty still reads as held. */
-      writeFileSync(file, `${JSON.stringify({ pid, host, at }, null, 2)}\n`);
+      writeFileSync(file, `${JSON.stringify({ pid, host, at, phase: null }, null, 2)}\n`);
       return true;
     } catch {
       return false;
@@ -106,9 +122,36 @@ export function acquireRunLock(
   return { ok: true, release: () => rmSync(file, { force: true }), brokeStale: held };
 }
 
+/**
+ * PRDR-190: record what the holder is doing, so a lock it leaves behind explains
+ * itself.
+ *
+ * Best-effort by construction. This runs on every progress line of a live run,
+ * and a run must not die because its own liveness marker could not be written —
+ * the marker exists to explain a death, not to cause one.
+ */
+export function noteRunPhase(root: string, phase: string): void {
+  const file = lockPath(root);
+  try {
+    const held = readLock(root);
+    if (held === null) return;
+    writeFileSync(file, `${JSON.stringify({ pid: held.pid, host: held.host, at: held.at, phase }, null, 2)}\n`);
+  } catch {
+    /* An unwritable marker is not worth failing a run over; see the doc-block. */
+  }
+}
+
+/** How a stale lock's holder is described when one is broken or refused. */
+export function lockPhaseSuffix(info: RunLockInfo | null): string {
+  return info?.phase == null ? "" : `, which was: ${info.phase}`;
+}
+
 /** What the operator is told when the root is busy. */
 export function runLockRefusal(held: RunLockInfo | null): string {
-  const who = held === null ? "another process" : `pid ${held.pid} on ${held.host}${held.at === "" ? "" : ` since ${held.at}`}`;
+  const who =
+    held === null
+      ? "another process"
+      : `pid ${held.pid} on ${held.host}${held.at === "" ? "" : ` since ${held.at}`}${lockPhaseSuffix(held)}`;
   return (
     `another run holds this root (${who}) — a second run would enforce its own spend ceiling and the two would ` +
     "jointly spend past it (X-1). Wait for it to finish, or remove .detent/state/run.lock if that process is gone."

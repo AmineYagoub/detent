@@ -14,7 +14,7 @@ import type { SessionBackend } from "../sessions/backend.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
-import { acquireRunLock, runLockRefusal } from "../kernel/run-lock.js";
+import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "../kernel/run-lock.js";
 import { readBindings } from "../adapter/drift.js";
 
 /**
@@ -106,7 +106,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
   if (lock.brokeStale !== null) {
-    process.stderr.write(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)\n`);
+    process.stderr.write(
+      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)\n`,
+    );
   }
 
   const backend: SessionBackend =

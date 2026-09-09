@@ -6,7 +6,7 @@ import { approvalSchema } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
-import { acquireRunLock, runLockRefusal } from "./run-lock.js";
+import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "./run-lock.js";
 import { approvalState } from "../init/machine.js";
 import { NON_TICKET_FILES } from "./tickets/readers.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
@@ -201,7 +201,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   const lock = acquireRunLock(root);
   if (!lock.ok) return notReady(runLockRefusal(lock.heldBy));
   if (lock.brokeStale !== null) {
-    opts.announce?.(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)`);
+    opts.announce?.(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)`);
   }
 
   let journal: RunJournal;

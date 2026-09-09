@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { buildPipeline, pendingPhases } from "../init/pipeline.js";
 import { checkRoot, runInit } from "../init/machine.js";
+import { setInFlight } from "./exit-record.js";
 import { loadConfig } from "../kernel/worstcase.js";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -12,7 +13,7 @@ import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
-import { acquireRunLock, runLockRefusal } from "../kernel/run-lock.js";
+import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 
 /**
@@ -95,13 +96,20 @@ export async function main(argv: readonly string[]): Promise<number> {
    * PRDR-158 was filed for. Everything above is parsing and repo validation,
    * and none of it spends or writes.
    */
+  /**
+   * PRDR-190: the run's phase reaches the entry point's exit recorder through
+   * `setInFlight`, and the disk through `noteRunPhase` — the first covers a
+   * catchable signal, the second a SIGKILL.
+   */
   const lock = acquireRunLock(root);
   if (!lock.ok) {
     process.stderr.write(`${runLockRefusal(lock.heldBy)}\n`);
     return EXIT_NOT_READY;
   }
   if (lock.brokeStale !== null) {
-    process.stdout.write(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host (X-1‴)\n`);
+    process.stdout.write(
+      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)\n`,
+    );
   }
 
   try {
@@ -194,7 +202,19 @@ export async function main(argv: readonly string[]): Promise<number> {
       ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
       ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
       planDocs: config?.plan_docs ?? [],
-      note: (text) => process.stdout.write(`  ${text}\n`),
+      /**
+       * PRDR-190: the progress channel is also the liveness marker.
+       *
+       * `note` is what the operator is last told, so it is by definition what
+       * was in flight. Recording it on the run lock as it passes means a lock
+       * left behind by a dead pid names the slice it died in — the half of the
+       * ticket a signal handler cannot cover, because SIGKILL is not catchable.
+       */
+      note: (text) => {
+        setInFlight(text);
+        noteRunPhase(root, text);
+        process.stdout.write(`  ${text}\n`);
+      },
       print: (text) => process.stdout.write(`${text}\n`),
       /*
        * C-7: a relayed flag answer wins (T-131 — the plugin path, where the

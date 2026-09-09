@@ -1,3 +1,4 @@
+import { currentInFlight, installExitRecorder } from "./exit-record.js";
 import { main as initMain } from "./init.js";
 import { main as refereeMain } from "./referee.js";
 import { main as verifyMain } from "./verify.js";
@@ -64,10 +65,32 @@ export async function main(argv: readonly string[]): Promise<number> {
 /** Executed as the CLI entry point (distinguished from an import). */
 const invoked = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
 if (invoked) {
+  /**
+   * PRDR-190: every exit path says so.
+   *
+   * The `.catch` branch always spoke. The `.then` branch was silent on every
+   * code it was handed, so a normal return and an abnormal one were
+   * indistinguishable in the log — and a signal reached neither, which is how
+   * six deaths across three days left no record at all. A line that always
+   * appears at the end is what makes its absence mean something.
+   */
+  const recordExit = installExitRecorder({
+    write: (text) => process.stderr.write(text),
+    on: (signal, handler) => {
+      process.on(signal as NodeJS.Signals, handler);
+    },
+    exit: (code) => process.exit(code),
+    phase: currentInFlight,
+    label: `detent${process.argv[2] === undefined || process.argv[2].startsWith("-") ? "" : ` ${process.argv[2]}`}`,
+  });
   main(process.argv.slice(2))
-    .then((code) => process.exit(code))
+    .then((code) => {
+      recordExit(code);
+      process.exit(code);
+    })
     .catch((err: unknown) => {
       process.stderr.write(`${(err as Error).message}\n`);
+      recordExit(1);
       process.exit(1);
     });
 }
