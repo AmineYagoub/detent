@@ -1,7 +1,7 @@
 ---
 id: PRDR-175
 title: "Cross-driver parity was proven only on the all-green path, and the claim that closing the gap needed a harness build was false"
-state: OPEN
+state: DONE
 severity: major
 category: coverage
 labels: ["prd-review", "found-by-audit", "coverage", "false-claim"]

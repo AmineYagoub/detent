@@ -1,7 +1,7 @@
 ---
 id: PRDR-164
 title: "presentInputsFromOutputs validates the elements of two of its four return fields; the renderer still throws on the other two"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "found-by-audit"]

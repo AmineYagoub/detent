@@ -1,7 +1,7 @@
 ---
 id: PRDR-160
 title: "The recorded whole-plan scale measurements are wrong, contradict each other, and two of the five stages carry no bound at all"
-state: OPEN
+state: DONE
 severity: minor
 category: defect
 labels: ["prd-review", "found-by-audit", "recorded-fact"]

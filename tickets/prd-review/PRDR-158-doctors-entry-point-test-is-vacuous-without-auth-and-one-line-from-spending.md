@@ -1,7 +1,7 @@
 ---
 id: PRDR-158
 title: "Doctor's entry-point test proves nothing on a machine without live auth, and is one line from billing every developer who runs npm test"
-state: OPEN
+state: DONE
 severity: critical
 category: weak-test
 labels: ["prd-review", "found-by-audit", "vacuous-test", "spend"]

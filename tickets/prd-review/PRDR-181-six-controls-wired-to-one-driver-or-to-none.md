@@ -1,7 +1,7 @@
 ---
 id: PRDR-181
 title: "attempt launched a session on an unclaimed ticket, the plugin referee had no lock, no gate preflight and a casting approval reader, run never checked the pin, and half-formed telemetry parsed as present"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "spend", "security", "arch-2"]

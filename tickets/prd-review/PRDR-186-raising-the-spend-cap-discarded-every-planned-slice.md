@@ -1,7 +1,7 @@
 ---
 id: PRDR-186
 title: "The slice cache key hashed the whole budgets object, so raising a spend cap mid-run discarded every slice already planned"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "found-by-live-run", "cache-invalidation", "spend"]

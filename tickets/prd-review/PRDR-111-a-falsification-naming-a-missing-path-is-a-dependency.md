@@ -1,7 +1,7 @@
 ---
 id: PRDR-111
 title: "A falsification that names code another ticket will build is a dependency the plan missed — today it is a human stop that a person has to remember to clear"
-state: READY
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "user-raised", "found-by-execution"]

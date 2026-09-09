@@ -1,7 +1,7 @@
 ---
 id: PRDR-110
 title: "Dry research routes straight to a human — eight of nine research sessions on the gate, each cleared by a requeue that added nothing"
-state: READY
+state: DONE
 severity: major
 category: decision
 labels: ["prd-review", "user-raised", "found-by-execution"]

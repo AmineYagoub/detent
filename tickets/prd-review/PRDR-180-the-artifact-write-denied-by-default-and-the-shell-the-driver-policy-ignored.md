@@ -1,7 +1,7 @@
 ---
 id: PRDR-180
 title: "In the default worktree mode the guard denied the artifact every read-only role exists to produce, and a driver policy that denies 'every path'd call' ignored the shell"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "containment", "security"]

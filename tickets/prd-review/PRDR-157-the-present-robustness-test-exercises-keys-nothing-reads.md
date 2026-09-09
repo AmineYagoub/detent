@@ -1,7 +1,7 @@
 ---
 id: PRDR-157
 title: "PRESENT's robustness test feeds six foreign shapes to keys the code never reads, and the one shape it passes throws in the renderer"
-state: OPEN
+state: DONE
 severity: major
 category: weak-test
 labels: ["prd-review", "found-by-audit", "vacuous-test"]

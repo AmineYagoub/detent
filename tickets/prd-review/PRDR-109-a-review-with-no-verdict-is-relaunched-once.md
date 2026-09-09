@@ -1,7 +1,7 @@
 ---
 id: PRDR-109
 title: "A reviewer that writes no usable verdict is escalated as a budget breach when a second session would have written it"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "user-raised", "found-by-execution"]

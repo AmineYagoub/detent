@@ -1,7 +1,7 @@
 ---
 id: PRDR-189
 title: "PRDR-185's 1/5/15 ladder exhausted in 21 minutes against a usage limit that reset hours later, while the message said exactly when it would come back"
-state: OPEN
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-live-run", "reliability"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-162
 title: "The doctor test rewritten to remove a fixture from the spend-safety path now depends on that fixture harder, on every machine including CI"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "spend"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-092
 title: "A run silently discards uncommitted .detent/config.json edits — the setting stops applying and nothing says so"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-execution"]

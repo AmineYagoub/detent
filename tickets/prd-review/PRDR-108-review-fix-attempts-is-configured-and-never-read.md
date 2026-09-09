@@ -1,7 +1,7 @@
 ---
 id: PRDR-108
 title: "review_fix_attempts parses any number and the machine never reads it — review findings buy one round, then a human who relays the same findings"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "user-raised", "found-by-execution"]

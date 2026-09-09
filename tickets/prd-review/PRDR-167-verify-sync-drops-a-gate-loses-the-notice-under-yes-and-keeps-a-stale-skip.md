@@ -1,7 +1,7 @@
 ---
 id: PRDR-167
 title: "verify sync silently drops an unbound gate, shows the vacuous-gate notice nowhere under --yes, and carries a stale skip forward for a slot it just bound"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "verification-integrity"]

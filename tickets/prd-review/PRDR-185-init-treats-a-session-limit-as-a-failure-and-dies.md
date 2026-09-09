@@ -1,7 +1,7 @@
 ---
 id: PRDR-185
 title: "A session limit kills `detent init` outright — the init pipeline has no outage handling, while the run loop has had it since PRDR-112"
-state: OPEN
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-live-run", "arch-2", "reliability"]

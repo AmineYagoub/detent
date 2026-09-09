@@ -1,7 +1,7 @@
 ---
 id: PRDR-107
 title: "B-4 on the plan's own risk_label has stopped eleven times across every gate and field test, been approved eleven times, and declined never"
-state: READY
+state: DONE
 severity: major
 category: decision
 labels: ["prd-review", "user-raised", "found-by-execution"]

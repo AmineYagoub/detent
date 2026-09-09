@@ -1,7 +1,7 @@
 ---
 id: PRDR-062
 title: "Give research docs domains a config home — S-3 and X-6 consume a value F-1 nowhere stores"
-state: READY
+state: DONE
 severity: minor
 category: gap
 labels: ["prd-review"]

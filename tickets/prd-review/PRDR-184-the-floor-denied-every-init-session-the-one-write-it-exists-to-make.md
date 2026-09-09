@@ -1,7 +1,7 @@
 ---
 id: PRDR-184
 title: "Adding .detent/state/** to the structural floor denied every init session its own artifact, and init has been dead at ANALYZE ever since"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-live-run", "containment", "regression"]

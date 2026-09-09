@@ -1,7 +1,7 @@
 ---
 id: PRDR-163
 title: "The required redactor is defeated by an optional option one frame up, there is a second bindAll caller that does not pass it, and verify sync discards every notice"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "found-by-audit", "unreachable-feature"]

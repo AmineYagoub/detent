@@ -1,7 +1,7 @@
 ---
 id: PRDR-173
 title: "doctor's smoke session leaves no ledger row, and three load-bearing behaviours had no test that fails when they are deleted"
-state: OPEN
+state: DONE
 severity: major
 category: coverage
 labels: ["prd-review", "found-by-audit", "coverage", "spend"]

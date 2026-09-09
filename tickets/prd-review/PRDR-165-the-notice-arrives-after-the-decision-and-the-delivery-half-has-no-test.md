@@ -1,7 +1,7 @@
 ---
 id: PRDR-165
 title: "verify sync reports the vacuous gate after the operator has consented and after the baseline is written, and no test fails when the delivery hop is deleted"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "delivery-gap"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-106
 title: "Delete the turns ceiling: no session is terminated on turns, the referee never halts on one, and the key survives only as the planner's sizing target"
-state: READY
+state: DONE
 severity: major
 category: decision
 labels: ["prd-review", "user-raised", "found-by-execution"]

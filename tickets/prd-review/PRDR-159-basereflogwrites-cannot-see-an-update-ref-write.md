@@ -1,7 +1,7 @@
 ---
 id: PRDR-159
 title: "baseReflogWrites drops every reflog entry written without a message, so the guard's own restore — and a tamper via update-ref — count as zero"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "found-by-audit", "metric-integrity"]

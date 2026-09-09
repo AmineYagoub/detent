@@ -1,7 +1,7 @@
 ---
 id: PRDR-113
 title: "The review basis scopes by git pathspec, git cannot read a brace glob, and the reviewer rejected the one commit that satisfied the ticket because it was never shown it"
-state: READY
+state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-execution"]

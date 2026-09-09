@@ -1,7 +1,7 @@
 ---
 id: PRDR-168
 title: "detent init takes no run lock, so two concurrent invocations each enforce the full ceiling and jointly spend past it"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "spend"]

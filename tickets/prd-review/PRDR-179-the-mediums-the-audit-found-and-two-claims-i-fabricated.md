@@ -1,7 +1,7 @@
 ---
 id: PRDR-179
 title: "Nine medium findings from the audit of 0752fef..4f25d31, including a commit-body byte that silently dropped a commit and two claims I fabricated in my own tickets"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "found-by-audit", "false-claim"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-172
 title: "Four tests that passed for the wrong reason, a driver policy missing the structural floor, and an S-6 doc comment describing a detector the architecture cannot support"
-state: OPEN
+state: DONE
 severity: major
 category: weak-test
 labels: ["prd-review", "found-by-audit", "vacuous-test"]

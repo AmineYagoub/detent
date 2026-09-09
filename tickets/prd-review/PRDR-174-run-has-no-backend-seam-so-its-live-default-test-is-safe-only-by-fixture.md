@@ -1,7 +1,7 @@
 ---
 id: PRDR-174
 title: "detent run has no injectable backend, so the test asserting its live-by-default is kept safe only by a fixture that happens to seed no tickets"
-state: OPEN
+state: DONE
 severity: major
 category: weak-test
 labels: ["prd-review", "found-by-audit", "spend", "vacuous-test"]

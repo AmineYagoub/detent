@@ -1,7 +1,7 @@
 ---
 id: PRDR-176
 title: "Seven AGENTS.md rules are enforced by nothing, and the file's own claim that it reaches every session is false for init"
-state: OPEN
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-audit", "rules"]

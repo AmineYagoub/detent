@@ -1,7 +1,7 @@
 ---
 id: PRDR-169
 title: "scrub() never reaches session-authored text, which lands verbatim in .detent/plan/<id>.json — a committed file"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "security"]

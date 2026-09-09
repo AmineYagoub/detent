@@ -1,7 +1,7 @@
 ---
 id: PRDR-170
 title: "The containment policy is built identically for every role, so a review, diagnose or research session can write any file in the ticket's surface"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "security", "containment"]

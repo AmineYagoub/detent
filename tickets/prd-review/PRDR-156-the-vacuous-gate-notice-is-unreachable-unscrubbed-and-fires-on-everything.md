@@ -1,7 +1,7 @@
 ---
 id: PRDR-156
 title: "The vacuous-gate notice reaches no operator, carries unscrubbed command output, and its threshold sits above its own positive example"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "unreachable-feature"]

@@ -1,7 +1,7 @@
 ---
 id: PRDR-171
 title: "A ticket's commits are selected by an unenforced subject-prefix convention while the hook-enforced Detent-Ticket trailer has zero readers, so an unprefixed commit is invisible to the reviewer and merges anyway"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "verification-integrity"]

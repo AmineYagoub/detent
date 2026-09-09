@@ -1,7 +1,7 @@
 ---
 id: PRDR-178
 title: "PRDR-170 denied the repro-test write prompts/diagnose.md grants, its surface request was left for the next implement session, and PRDR-172's floor reached one site of three"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "security", "containment"]

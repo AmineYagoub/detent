@@ -1,7 +1,7 @@
 ---
 id: PRDR-188
 title: "MockBackend ignored the containment policy it was handed, so every session-driving test in the suite was blind to the guard — and failure fixtures were hand-built rather than derived from the producer"
-state: OPEN
+state: DONE
 severity: critical
 category: weak-test
 labels: ["prd-review", "systemic", "vacuous-test"]

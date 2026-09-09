@@ -1,7 +1,7 @@
 ---
 id: PRDR-187
 title: "The absent-telemetry branch discarded the failure reason, so a session limit with no usage surfaced as a bare 'session failed' and PRDR-185's retry could not see it"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-verification", "regression"]

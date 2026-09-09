@@ -1,7 +1,7 @@
 ---
 id: PRDR-192
 title: "Every artifact in this repository has a gate except the tickets, and the record of WHY the code is the way it is has drifted in five directions"
-state: OPEN
+state: DONE
 severity: minor
 category: consistency
 labels: ["prd-review", "found-by-audit", "observability", "process"]

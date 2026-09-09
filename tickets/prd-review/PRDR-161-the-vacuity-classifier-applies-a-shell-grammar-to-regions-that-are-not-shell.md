@@ -1,7 +1,7 @@
 ---
 id: PRDR-161
 title: "The vacuity classifier applies a shell grammar to config_region shapes that are not commands, and falsely accuses every gate of an ordinary Python project"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "false-accusation"]

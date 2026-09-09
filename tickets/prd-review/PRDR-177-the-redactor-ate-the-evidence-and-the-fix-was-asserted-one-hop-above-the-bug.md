@@ -1,7 +1,7 @@
 ---
 id: PRDR-177
 title: "scrub at the appendNote seam corrupted compiler errors, operator guidance and hashed paths; and PRDR-167's regression tests passed with its own defect restored"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "security", "vacuous-test"]

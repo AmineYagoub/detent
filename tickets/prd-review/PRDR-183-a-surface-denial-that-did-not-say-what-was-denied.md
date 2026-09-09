@@ -1,7 +1,7 @@
 ---
 id: PRDR-183
 title: "A refused surface request rendered as `surface DENIED:  ()` — no path, no reason, and three different refusals reading identically"
-state: OPEN
+state: DONE
 severity: minor
 category: defect
 labels: ["prd-review", "found-by-live-run", "observability"]
