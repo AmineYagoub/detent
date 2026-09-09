@@ -107,6 +107,8 @@ function inFlightTickets(root: string): string[] {
 }
 
 export interface InitOptions {
+  /** PRDR-194: called as each phase begins, so a killed run can name the phase. */
+  readonly progress?: (text: string) => void;
   /** C-8: regenerate an approved plan rather than printing status. */
   readonly replan?: boolean;
   readonly now?: () => number;
@@ -428,6 +430,7 @@ export async function runInit(
     const handler = handlers.find((h) => h.phase === phase);
     if (handler === undefined) continue;
 
+    opts.progress?.(phase);
     const ctx: InitContext = { root, outputs, now };
     const hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
     carried = hash;

@@ -1,7 +1,7 @@
 ---
 id: PRDR-194
 title: "PRDR-190's phase marker is fed by the `note` seam, which carries warnings and verdicts as well as progress — so a spend announcement was recorded as what the run was doing"
-state: OPEN
+state: DONE
 severity: minor
 category: bug
 labels: ["prd-review", "found-by-live-run", "observability"]

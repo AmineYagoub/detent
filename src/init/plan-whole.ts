@@ -33,6 +33,7 @@ export async function wholePlanReview(
   /* One slice is one plan, and its own review already read all of it. */
   if (slices.length <= 1) return { tickets: [...tickets], questions: [], remaining: [] };
 
+  deps.progress?.("whole-plan coherence review");
   const first = await reviewPlan(deps, tickets, { kind: "whole", slices, ...(known.length === 0 ? {} : { known }) });
   if (first === null) {
     /**
@@ -84,6 +85,7 @@ export async function wholePlanReview(
   for (const slice of slices) {
     const findings = bySlice.get(slice.id);
     if (findings === undefined) continue;
+    deps.progress?.(`redrafting ${slice.id} ${slice.title}`);
     deps.note?.(`redrafting ${slice.id} ${slice.title} for ${findings.length} whole-plan finding(s)`);
     const at = sliceOrder(slices, slice.id);
     const earlier = updated.filter((t) => sliceOrder(slices, t.slice) < at);

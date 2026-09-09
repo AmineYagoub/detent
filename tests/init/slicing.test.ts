@@ -683,3 +683,48 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
     expect(String(first["scope_instruction"])).toContain("do not restate");
   });
 });
+
+/**
+ * PRDR-194 — progress and commentary are different channels.
+ *
+ * The marker PRDR-190 added was fed from `note`, on the reasoning that what the
+ * operator was last told is what was in flight. It is not: `note` also carries
+ * review verdicts, reuse status and warnings. A live SIGTERM on gate-312 duly
+ * recorded X-1⁵'s advisory spend announcement as the run's activity, when it was
+ * re-running the whole-plan review.
+ */
+describe("PRDR-194 the phase marker is fed by progress, not by every note", () => {
+  it("reports where work begins, and never a verdict or a warning", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    const progress: string[] = [];
+    const backend = new MockBackend({
+      planner: scriptedPlanner(
+        {
+          draft: twoSliceDraft,
+          review: (inputs) =>
+            inputs["scope"] === "whole"
+              ? { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] }
+              : APPROVE_PLAN,
+        },
+        [],
+      ),
+    });
+    await runInit(
+      root,
+      buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t), progress: (t) => progress.push(t) }),
+      { progress: (t) => progress.push(t) },
+    );
+
+    /* Where work begins: the phases, the slices, the review, the redraft. */
+    const said = progress.join("\n");
+    expect(said).toContain("PLAN");
+    expect(said).toMatch(/planning s01/);
+    expect(said).toContain("whole-plan coherence review");
+
+    /* And never the commentary `note` carries. */
+    expect(said).not.toMatch(/finding\(s\)/);
+    expect(said).not.toMatch(/review:/);
+    expect(notes.join("\n")).toMatch(/finding\(s\)/);
+  });
+});

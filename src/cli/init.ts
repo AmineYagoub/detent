@@ -202,18 +202,20 @@ export async function main(argv: readonly string[]): Promise<number> {
       ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
       ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
       planDocs: config?.plan_docs ?? [],
+      note: (text) => process.stdout.write(`  ${text}\n`),
       /**
-       * PRDR-190: the progress channel is also the liveness marker.
+       * PRDR-194: the marker is fed from PROGRESS, not from `note`.
        *
-       * `note` is what the operator is last told, so it is by definition what
-       * was in flight. Recording it on the run lock as it passes means a lock
-       * left behind by a dead pid names the slice it died in — the half of the
-       * ticket a signal handler cannot cover, because SIGKILL is not catchable.
+       * PRDR-190 wired it to `note` on the reasoning that "what the operator is
+       * last told is by definition what was in flight". It is not: `note` also
+       * carries verdicts, reuse status and warnings, and a live SIGTERM
+       * recorded X-1⁵'s spend announcement as the run's activity. `setInFlight`
+       * covers a catchable signal; `noteRunPhase` puts it on the lock, which is
+       * what survives a SIGKILL.
        */
-      note: (text) => {
+      progress: (text) => {
         setInFlight(text);
         noteRunPhase(root, text);
-        process.stdout.write(`  ${text}\n`);
       },
       print: (text) => process.stdout.write(`${text}\n`),
       /*
@@ -230,7 +232,14 @@ export async function main(argv: readonly string[]): Promise<number> {
 
     let result;
     try {
-      result = await runInit(root, handlers, { replan: values.replan });
+      result = await runInit(root, handlers, {
+        replan: values.replan,
+        /* PRDR-194: phase boundaries, so a run killed between slices still names where it was. */
+        progress: (text) => {
+          setInFlight(text);
+          noteRunPhase(root, text);
+        },
+      });
     } catch (err) {
       /*
        * A phase that could not complete is an error (C-11's `1`), not an

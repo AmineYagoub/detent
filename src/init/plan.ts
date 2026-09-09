@@ -85,6 +85,14 @@ export interface PlanDeps {
   /** PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN a verdict. */
   readonly launch: (inputs: Record<string, unknown>, artifactOut?: string) => Promise<void>;
   readonly note?: (text: string) => void;
+  /**
+   * PRDR-194: where work actually BEGINS, distinct from `note`.
+   *
+   * `note` carries verdicts, reuse status, drift explanations and warnings as
+   * well as progress, so a marker fed from it reports whichever came last — a
+   * spend announcement was recorded as what a run was doing. One seam, one job.
+   */
+  readonly progress?: (text: string) => void;
   /** C-2‴ (PRDR-117): the increments SLICE cut; PLAN plans each in turn. Empty = one unnamed slice over `docs`. */
   readonly slices?: readonly SliceSpec[];
   /** C-2‴: the production baseline the plan must deliver, or "none" — written into the config. */

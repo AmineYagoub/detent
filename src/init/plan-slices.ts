@@ -311,6 +311,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     /** A cached slice that reaches into an earlier one is only valid while those tickets still exist. */
     const reachable = cached === null || cached.external_deps.every((d) => planned.has(d));
     if (cached !== null && cached.key === key && reachable) {
+      deps.progress?.(`reusing ${slice.id}`);
       deps.note?.(`${slice.id} ${slice.title}: reused — nothing it read has changed (C-8)`);
       index.push(...cached.tickets);
       questions.push(...cached.questions);
@@ -324,6 +325,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       deps.note?.(`${slice.id} ${slice.title}: re-planning — a ticket it depends on is no longer in the plan (C-8‴)`);
     }
 
+    deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
     let drafted = await draftAndRead(deps, { slice, planIndex: index });
     let normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);

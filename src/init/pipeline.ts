@@ -47,6 +47,14 @@ export interface PipelineDeps {
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
   readonly note?: (text: string) => void;
+  /**
+   * PRDR-194: where work actually BEGINS, distinct from `note`.
+   *
+   * `note` carries verdicts, reuse status, drift explanations and warnings as
+   * well as progress, so a marker fed from it reports whichever came last — a
+   * spend announcement was recorded as what a run was doing. One seam, one job.
+   */
+  readonly progress?: (text: string) => void;
   /** PRDR-185: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
   /** PRDR-189: the clock a stated reset is measured against. */
@@ -325,6 +333,8 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         baseline: deps.planBaseline ?? "production",
         promptHash: deps.prompts.hashes.planner,
         ...(deps.note === undefined ? {} : { note: deps.note }),
+        /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
+        ...(deps.progress === undefined ? {} : { progress: deps.progress }),
         launch: async (inputs: Record<string, unknown>, artifactOut?: string) => {
           await launchInitSession(
             sessionDeps(deps),
