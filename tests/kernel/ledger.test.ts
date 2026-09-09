@@ -118,6 +118,24 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
       ledger.assertLaunchAllowed();
       ledger.assertLaunchAllowed();
       expect(said).toHaveLength(1);
+
+      /**
+       * PRDR-195: and once for the RUN, not once per session.
+       *
+       * `init` builds a fresh `SpendLedger` for every session launch, so a flag
+       * held in the instance resets each time — the live log fired three times
+       * in thirteen minutes. Asserting against one instance was the wrong scope
+       * and is why the original case passed; production never has one.
+       */
+      const second = new SpendLedger(
+        root,
+        journal,
+        0.01,
+        { spend_without_progress_floor_usd: 100, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 },
+        (t) => said.push(t),
+      );
+      second.assertLaunchAllowed();
+      expect(said).toHaveLength(1);
     } finally {
       journal.close();
     }

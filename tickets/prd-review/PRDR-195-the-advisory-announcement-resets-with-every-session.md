@@ -1,7 +1,7 @@
 ---
 id: PRDR-195
 title: "X-1⁵'s advisory total announces once per SESSION, not once per run — the flag meant to bound it is instance state on an object `init` rebuilds for every launch"
-state: OPEN
+state: DONE
 severity: minor
 category: bug
 labels: ["prd-review", "found-by-live-run", "observability"]

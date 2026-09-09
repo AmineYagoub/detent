@@ -30,7 +30,11 @@ import type { RunJournal } from "./journal.js";
  * finished slices) and never on a run that is working, however long or costly.
  */
 /**
- * X-1⁵: where the breaker's mark lives.
+ * X-1⁵: the RUN-SCOPED ledger state — the breaker's mark, and whether the
+ * advisory total has been announced.
+ *
+ * Keeps its filename: renaming it would be a migration for every root, and the
+ * mark is still the reason it exists.
  *
  * Its own file under `state/`, and NOT the run lock, which was the first
  * attempt. `init` builds a fresh `SpendLedger` for every session launch, so the
@@ -46,6 +50,15 @@ function progressPath(root: string): string {
 interface ProgressMark {
   readonly spent: number | null;
   readonly unitCost: number | null;
+  /**
+   * PRDR-195: said once for the RUN, not once per session.
+   *
+   * This was an instance field, and `init` builds a `SpendLedger` for every
+   * session launch — so it reset each time and the live log announced three
+   * times in thirteen minutes. The same defect PRDR-191's audit found for
+   * `spent`, one line above, left in place when that one was fixed.
+   */
+  readonly advisoryAnnounced: boolean;
 }
 
 export function readProgressMark(root: string): ProgressMark {
@@ -54,10 +67,11 @@ export function readProgressMark(root: string): ProgressMark {
     return {
       spent: typeof raw.spent === "number" ? raw.spent : null,
       unitCost: typeof raw.unitCost === "number" ? raw.unitCost : null,
+      advisoryAnnounced: raw.advisoryAnnounced === true,
     };
   } catch {
     /* Absent or unreadable: nothing has completed that we can prove, so the floor governs. */
-    return { spent: null, unitCost: null };
+    return { spent: null, unitCost: null, advisoryAnnounced: false };
   }
 }
 
@@ -170,7 +184,6 @@ export class SpendLedger {
   private progressMark: number;
   /** What the last completed unit cost — the observation the threshold derives from. */
   private lastUnitCost: number;
-  private announcedTotal = false;
 
   constructor(
     private readonly root: string,
@@ -195,7 +208,7 @@ export class SpendLedger {
      * anything to fire on. Found by the breaker staying silent in three tests
      * that should have tripped it.
      */
-    if (mark.spent === null) writeProgressMark(root, { spent: this.accumulated, unitCost: 0 });
+    if (mark.spent === null) writeProgressMark(root, { spent: this.accumulated, unitCost: 0, advisoryAnnounced: false });
     this.progressMark = mark.spent ?? this.accumulated;
     this.lastUnitCost = mark.unitCost ?? 0;
   }
@@ -211,7 +224,8 @@ export class SpendLedger {
     this.lastUnitCost = Math.max(0, spent - this.progressMark);
     this.progressMark = spent;
     this.accumulated = spent;
-    writeProgressMark(this.root, { spent, unitCost: this.lastUnitCost });
+    /* PRDR-195: carry the announcement flag; progress is not a reason to warn twice. */
+    writeProgressMark(this.root, { spent, unitCost: this.lastUnitCost, advisoryAnnounced: readProgressMark(this.root).advisoryAnnounced });
   }
 
   /** X-1⁵: `run_spend_usd` is advisory now — counted and reported, never fatal. */
@@ -227,8 +241,10 @@ export class SpendLedger {
    * warning that fires constantly.
    */
   private announceAdvisoryTotal(): void {
-    if (this.announcedTotal || !this.overAdvisoryTotal()) return;
-    this.announcedTotal = true;
+    if (!this.overAdvisoryTotal()) return;
+    const mark = readProgressMark(this.root);
+    if (mark.advisoryAnnounced) return;
+    writeProgressMark(this.root, { spent: mark.spent, unitCost: mark.unitCost, advisoryAnnounced: true });
     this.announce?.(
       `spend has passed the advisory run_spend_usd of $${this.ceiling.toFixed(2)} ` +
         `(now $${this.accumulated.toFixed(2)}). X-1⁵: this is a figure, not a gate — the run continues, ` +
@@ -327,7 +343,11 @@ export class SpendLedger {
 export function noteUnitComplete(root: string): void {
   const spent = readRecordedSpend(root);
   const mark = readProgressMark(root);
-  writeProgressMark(root, { spent, unitCost: Math.max(0, spent - (mark.spent ?? spent)) });
+  writeProgressMark(root, {
+    spent,
+    unitCost: Math.max(0, spent - (mark.spent ?? spent)),
+    advisoryAnnounced: mark.advisoryAnnounced,
+  });
 }
 
 /**
