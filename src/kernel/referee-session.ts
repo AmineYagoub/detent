@@ -148,6 +148,8 @@ export class SessionArm {
       ...ctx.symbolServer(),
       permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
+      /* PRDR-197: ARCH-2 — the loop routes effort exactly as init does, or neither driver has it. */
+      ...(ctx.loaded.config.effort_routing[role] === undefined ? {} : { effort: ctx.loaded.config.effort_routing[role] }),
       /**
        * S-2′/D-21: the per-ticket hook policy. Surface = the ticket's declared
        * surface plus ONLY the runs area, where artifact/falsified/surface-

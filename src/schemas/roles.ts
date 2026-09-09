@@ -26,6 +26,18 @@ export const ROLE_IDS = [
 export type RoleId = (typeof ROLE_IDS)[number];
 
 /**
+ * PRDR-197: the SDK's closed set, mirrored so a typo is refused at config load
+ * rather than accepted and silently ignored.
+ *
+ * `xhigh` and `max` are not served by every model. The SDK downgrades silently
+ * for a model that cannot serve one, which is why a configured effort is
+ * recorded per session rather than assumed to have been honoured.
+ */
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
+
+/**
  * PRDR-114: the routing `init` writes. Judgement roles — the plan, the
  * verdicts, the hypothesis, the informed attempt — get the stronger models;
  * the volume roles get Sonnet. Typed over ROLE_IDS so a ninth role is a

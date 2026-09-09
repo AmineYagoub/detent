@@ -411,3 +411,40 @@ describe("S-4 a result with no telemetry still carries why it failed", () => {
     expect(parsed.rawTail).toBe("");
   });
 });
+
+/**
+ * PRDR-197 — effort is configurable per role.
+ *
+ * `model_routing` routes each role to a model but not to an effort, and the
+ * judgement roles are already on the strongest model — so effort is the only
+ * lever left on exactly the roles PRDR-196 identifies as the bottleneck, and it
+ * did not exist. `settingSources: []` means it cannot come from outside either.
+ *
+ * A knob and a default that changes nothing: with no effort configured, the
+ * options a session is built with must be what they were before.
+ */
+describe("PRDR-197 a session carries the effort its role is routed to", () => {
+  const spec = (over: Record<string, unknown> = {}) =>
+    ({
+      cwd: "/repo",
+      ticketId: "t-1",
+      role: "planner",
+      model: "",
+      prompt: "p",
+      allowedTools: ["Read"],
+      artifactOut: "/repo/out.json",
+      permissionMode: "",
+      ...over,
+    }) as never;
+
+  it("passes the configured effort into the options a session is actually built with", () => {
+    const options = buildOptions(spec({ effort: "xhigh" }), CONFIG);
+    expect((options as { effort?: string }).effort).toBe("xhigh");
+  });
+
+  /** The default must be invisible: a spec with no effort produces today's options. */
+  it("omits the key entirely when no effort is routed", () => {
+    const options = buildOptions(spec(), CONFIG);
+    expect("effort" in options).toBe(false);
+  });
+});

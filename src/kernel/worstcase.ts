@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ROLE_IDS } from "../schemas/roles.js";
+import { EFFORT_LEVELS, ROLE_IDS } from "../schemas/roles.js";
 import { budgetsSchema, type Budgets } from "../schemas/budgets.js";
 import { SCHEMA_VERSION, glob, nonEmptyString } from "../schemas/common.js";
 import type { State } from "../schemas/states.js";
@@ -191,6 +191,31 @@ const configSchema = z.strictObject({
           code: "custom",
           message: `model_routing has no role \`${key}\` — expected one of ${ROLE_IDS.join(", ")}`,
         });
+      }
+    }),
+  /**
+   * PRDR-197: effort per role, beside `model_routing`.
+   *
+   * Validated on BOTH axes because PRDR-142 was the lesson: `model_routing`
+   * accepted any key, so a typo routed that role to the runtime default forever
+   * with nothing printed. An unknown role and an unknown level are each refused
+   * by name. Empty by default, so a config that says nothing gets exactly the
+   * sessions it got before.
+   */
+  effort_routing: z
+    .record(z.string(), z.string())
+    .default({})
+    .superRefine((routing, ctx) => {
+      for (const [key, value] of Object.entries(routing)) {
+        if (!ROLE_IDS.includes(key as (typeof ROLE_IDS)[number])) {
+          ctx.addIssue({ code: "custom", message: `effort_routing has no role \`${key}\` — expected one of ${ROLE_IDS.join(", ")}` });
+        }
+        if (!EFFORT_LEVELS.includes(value as (typeof EFFORT_LEVELS)[number])) {
+          ctx.addIssue({
+            code: "custom",
+            message: `effort_routing.${key} is \`${value}\` — expected one of ${EFFORT_LEVELS.join(", ")}`,
+          });
+        }
       }
     }),
   pinned: z.strictObject({

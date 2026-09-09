@@ -52,6 +52,8 @@ export interface InitSessionDeps {
   readonly progressBreaker?: ProgressBreaker;
   /** PRDR-114: the config's `model_routing`; the planner and planning research run on their routed models. */
   readonly modelRouting?: Readonly<Record<string, string>>;
+  /** PRDR-197: the config's `effort_routing`, resolved per role like the model above. */
+  readonly effortRouting?: Readonly<Record<string, string>>;
   readonly rulesText?: string;
   /** PRDR-185: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
@@ -103,6 +105,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     ],
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
+    ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
      * rule above is TRUE rather than merely stated.

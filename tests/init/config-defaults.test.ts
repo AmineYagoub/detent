@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ensureConfig } from "../../src/init/config.js";
 import { DEFAULT_MODEL_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
 import { removeTree, tmpTree } from "../helpers.js";
+import { loadConfig } from "../../src/kernel/worstcase.js";
 
 /** PRDR-114 — `init` has an opinion about models, and every role is covered. */
 const roots: string[] = [];
@@ -89,5 +90,38 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
     expect(String(seen["instruction"])).toContain("Size a slice to 9–13 tickets");
     /** And it says WHY the ceiling matters, because that is what a planner needs to respect it. */
     expect(String(seen["instruction"])).toContain("largest thing this pipeline must produce without failing");
+  });
+});
+
+/**
+ * PRDR-197 — effort per role, refused by name when it is wrong.
+ *
+ * `model_routing` accepted any key, so a typo routed that role to the runtime
+ * default forever with nothing printed (PRDR-142). This field is validated on
+ * BOTH axes because it has two ways to be wrong, and a config that says nothing
+ * must produce exactly the sessions it produced before the key existed.
+ */
+describe("PRDR-197 effort_routing is validated on both axes", () => {
+  const base = (): Record<string, unknown> => {
+    const root = tmpTree({});
+    roots.push(root);
+    ensureConfig(root, 10);
+    return JSON.parse(readFileSync(path.join(root, ".detent", "config.json"), "utf8")) as Record<string, unknown>;
+  };
+
+  it("defaults to empty, so an unconfigured project is unchanged", () => {
+    expect(loadConfig(base()).config.effort_routing).toEqual({});
+  });
+
+  it("accepts a real role at a real level", () => {
+    expect(loadConfig({ ...base(), effort_routing: { review: "xhigh" } }).config.effort_routing).toEqual({ review: "xhigh" });
+  });
+
+  it("refuses a role that does not exist, naming it", () => {
+    expect(() => loadConfig({ ...base(), effort_routing: { reviewr: "xhigh" } })).toThrow(/effort_routing has no role `reviewr`/);
+  });
+
+  it("refuses a level the SDK does not have, naming it", () => {
+    expect(() => loadConfig({ ...base(), effort_routing: { review: "extreme" } })).toThrow(/effort_routing\.review is `extreme`/);
   });
 });

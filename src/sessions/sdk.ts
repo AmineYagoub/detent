@@ -122,6 +122,14 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
     /** X-1″ (PRDR-106): no ceiling unless a caller sets one — only the doctor probe does. */
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
     ...(spec.model === "" ? {} : { model: spec.model }),
+    /**
+     * PRDR-197: effort where a role is routed to one.
+     *
+     * Omitted entirely otherwise, so a project that configures nothing gets the
+     * options it got before the key existed — the SDK's own defaults, `high`
+     * with adaptive thinking.
+     */
+    ...(spec.effort === undefined || spec.effort === "" ? {} : { effort: spec.effort as NonNullable<Options["effort"]> }),
     hooks: {
       /** S-2′: the per-ticket policy wins; construction policy is the fallback. */
       ...buildPreToolUseHook(spec.policy ?? config.policy),

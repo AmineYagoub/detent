@@ -32,6 +32,12 @@ export interface SessionSpec {
   /** Model routing per role; empty means the backend's default. */
   readonly model: string;
   /**
+   * PRDR-197: the effort this role is routed to, or absent for the runtime's
+   * own default. Absent means the options are what they were before the knob
+   * existed — that invisibility is the point of the default.
+   */
+  readonly effort?: string;
+  /**
    * X-1″ (PRDR-106): no ceiling by default. The referee and init never set
    * one; the doctor probe bounds itself to a single turn, and that is the
    * only caller that does.

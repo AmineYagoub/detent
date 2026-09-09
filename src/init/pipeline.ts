@@ -19,8 +19,8 @@ import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
-import { type InitSessionDeps, launchInitSession } from "./session.js";
-import { readRules } from "../kernel/rules.js";
+import { launchInitSession } from "./session.js";
+import { sessionDeps } from "./session-deps.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -38,8 +38,9 @@ export interface PipelineDeps {
   /** PRDR-086: narrows C-2 discovery to this increment's documents. Empty = all. */
   readonly planDocs?: readonly string[];
   readonly docsDomains?: readonly string[];
-  /** PRDR-114: routed models for the init roles (planner, research). */
+  /** PRDR-114 / PRDR-197: what each init role is routed to — its model, and its effort. */
   readonly modelRouting?: Readonly<Record<string, string>>;
+  readonly effortRouting?: Readonly<Record<string, string>>;
   /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out. */
   readonly planBaseline?: "production" | "none";
   /** S-3′ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
@@ -65,41 +66,6 @@ export interface PipelineDeps {
 }
 
 /** The deps every init session launch shares — one place, so a new field cannot miss a call site. */
-function sessionDeps(deps: PipelineDeps): InitSessionDeps {
-  return {
-    root: deps.root,
-    backend: deps.backend,
-    prompts: deps.prompts,
-    spendCeiling: deps.budgets.run_spend_usd,
-    ...(deps.note === undefined ? {} : { note: deps.note }),
-    /* X-1⁵ (PRDR-191): the breaker's ceilings travel with the total. */
-    progressBreaker: {
-      spend_without_progress_floor_usd: deps.budgets.spend_without_progress_floor_usd,
-      spend_without_progress_multiple: deps.budgets.spend_without_progress_multiple,
-      spend_without_progress_sessions: deps.budgets.spend_without_progress_sessions,
-    },
-    /**
-     * PRDR-176: AGENTS.md, which every init session was promised and none
-     * received. `InitSessionDeps.rulesText` was declared and consumed —
-     * `stablePrefix(prompt, deps.rulesText ?? "(no rules file)", preamble)` —
-     * and this, the only production caller, never supplied it. So ANALYZE,
-     * SLICE, PLAN and the plan reviews planned this repository without being
-     * told its engineering rules, while the rules file's own header says it is
-     * fed to every session Detent launches.
-     */
-    rulesText: readRules(deps.root),
-    /**
-     * PRDR-185: the outage seam. Without `note` the wait is silent, and a
-     * command that appears hung for fifteen minutes is worse than one that
-     * fails — the operator is told what is being waited for and for how long.
-     */
-    ...(deps.note === undefined ? {} : { note: deps.note }),
-    ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
-    ...(deps.now === undefined ? {} : { now: deps.now }),
-    ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
-    ...(deps.modelRouting === undefined ? {} : { modelRouting: deps.modelRouting }),
-  };
-}
 
 export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
   return [
