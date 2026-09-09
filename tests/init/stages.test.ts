@@ -8,6 +8,7 @@ import { analysisSchema, planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
+import { msUntilReset } from "../../src/init/session.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { runInit } from "../../src/init/machine.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
@@ -540,7 +541,11 @@ describe("T-063 planning research (C-3a, D-11)", () => {
  * `detent init` died. The sleep is injected so this costs no wall clock.
  */
 describe("PRDR-185 init waits out a backend outage", () => {
-  const limit = "Claude Code returned an error result: You've hit your session limit · resets 5:20pm";
+  /**
+   * PRDR-189: an outage that states NO reset time — the ladder is for exactly
+   * those. A message naming a reset takes the other path and is covered below.
+   */
+  const limit = "Claude Code returned an error result: upstream overloaded, try again";
 
   it("retries after a session limit and completes on the next attempt", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
@@ -585,5 +590,87 @@ describe("PRDR-185 init waits out a backend outage", () => {
     });
     await expect(runInit(root, handlers)).rejects.toThrow(/contradicts itself/);
     expect(waits, "a real failure must not be retried as though it were transport").toEqual([]);
+  }, 30_000);
+});
+
+/**
+ * PRDR-189 — a usage limit names its own reset time, and the wait honours it.
+ *
+ * PRDR-185's 1/5/15 ladder is right for a transient outage and wrong for a
+ * usage window. Observed live on the gate run: three retries exhausted in 21
+ * minutes against a limit that reset hours later, and `init` died having done
+ * everything correctly at every step.
+ *
+ * The messages below are verbatim from that run's log.
+ */
+describe("PRDR-189 the wait honours the reset the limit states", () => {
+  const LIVE = "Claude Code returned an error result: You've hit your session limit · resets 10:30pm (Africa/Algiers)";
+
+  /** 21:00 in Algiers (UTC+1) — 90 minutes before a 22:30 reset there. */
+  const at = (iso: string): Date => new Date(iso);
+
+  it("reads the live message and waits until the stated time, not the ladder", () => {
+    const ms = msUntilReset(LIVE, at("2026-09-08T20:00:00Z"));
+    expect(ms, "21:00 Algiers → 22:30 Algiers is 90 minutes").not.toBeNull();
+    expect(Math.round((ms as number) / 60_000), "plus the one-minute margin").toBe(91);
+  });
+
+  /**
+   * The zone is not decoration. Africa/Algiers is UTC+1 all year and the
+   * machine that hit this was on CEST (UTC+2), so reading "10:30pm" as LOCAL
+   * time waits an hour early and the retry fails again — a wait that looks like
+   * it honoured the reset and did not.
+   */
+  /**
+   * The zone is not decoration, and this must hold wherever the suite runs —
+   * the machine that found the defect happens to BE on Africa/Algiers, which is
+   * exactly the coincidence that would make a naive implementation look right.
+   * Two explicitly different zones, five hours apart, independent of the runner.
+   */
+  it("honours the named zone rather than the runner's own clock", () => {
+    const when = at("2026-09-08T20:00:00Z");
+    const algiers = msUntilReset("resets 10:30pm (Africa/Algiers)", when) as number;
+    const newYork = msUntilReset("resets 10:30pm (America/New_York)", when) as number;
+    expect(algiers, "21:00 in Algiers → 22:30 there").not.toBeNull();
+    expect(newYork, "16:00 in New York → 22:30 there").not.toBeNull();
+    expect(Math.round((newYork - algiers) / 60_000), "the two zones are five hours apart").toBe(5 * 60);
+  });
+
+  it("rolls to tomorrow when the stated time has already passed there", () => {
+    const ms = msUntilReset(LIVE, at("2026-09-08T22:00:00Z")) as number;
+    expect(ms, "23:00 Algiers is past 22:30, so the next one is tomorrow").toBeGreaterThan(23 * 60 * 60_000);
+  });
+
+  it("says nothing about a message that states no reset", () => {
+    expect(msUntilReset("Claude Code returned an error result: overloaded")).toBeNull();
+    expect(msUntilReset("resets soon")).toBeNull();
+  });
+
+  it("waits for the reset instead of the ladder, and says which it is doing", async () => {
+    const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
+    let calls = 0;
+    const waits: number[] = [];
+    const notes: string[] = [];
+    const flaky: StageFn = (spec) => {
+      calls += 1;
+      if (calls === 1) return outageResult(LIVE);
+      return plannerStage(ANALYSIS_BROWNFIELD, DRAFT)(spec);
+    };
+    const handlers = buildPipeline({
+      root,
+      backend: new MockBackend({ planner: flaky }),
+      prompts: PROMPTS,
+      budgets: BUDGETS,
+      note: (t) => notes.push(t),
+      /* 21:00 in Algiers, 90 minutes before the stated 22:30 reset. */
+      now: () => at("2026-09-08T20:00:00Z"),
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    });
+    await runInit(root, handlers);
+
+    expect(Math.round((waits[0] ?? 0) / 60_000), "the stated reset, not the ladder's one minute").toBe(91);
+    expect(notes.join(" "), "and the operator is told which kind of wait this is").toContain("for the stated reset");
   }, 30_000);
 });

@@ -46,6 +46,12 @@ export interface InitSessionDeps {
   readonly rulesText?: string;
   /** PRDR-185: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * PRDR-189: the clock the reset is measured against. AGENTS.md requires an
+   * injectable seam wherever a decision reads the time, and "how long until the
+   * limit resets" is a decision.
+   */
+  readonly now?: () => Date;
   /** PRDR-185: what an operator is told while init waits out a backend outage. */
   readonly note?: (text: string) => void;
   /** X-6/S-3 docs domains for research-capable init sessions. */
@@ -162,6 +168,60 @@ export function isOutage(text: string): boolean {
   return OUTAGE_MARKERS.some((re) => re.test(text));
 }
 
+/**
+ * PRDR-189: a usage limit names its own reset time — wait until THAT.
+ *
+ * PRDR-185's ladder is 1, 5, 15 minutes, which is right for a transient
+ * outage and wrong for a usage window: observed live, the three retries
+ * exhausted in 21 minutes against a limit that reset hours later, and the run
+ * died having done everything correctly. The message carries the answer —
+ * "resets 10:30pm (Africa/Algiers)" — and PRDR-185's own acceptance criteria
+ * said the operator should be told "until when" while the code never read it.
+ *
+ * The ZONE is not decoration. Africa/Algiers is UTC+1 year-round and this
+ * machine was on CEST (UTC+2) when the limit hit, so reading "10:30pm" as local
+ * time would wait an hour early and fail again — a retry that looks like it
+ * honoured the reset and did not. The current time is taken IN the named zone
+ * and the delta computed there, which needs no date arithmetic.
+ */
+export function msUntilReset(message: string, now: Date = new Date()): number | null {
+  const m = /resets\s+(\d{1,2}):(\d{2})\s*(am|pm)?(?:\s*\(([A-Za-z]+\/[A-Za-z_]+)\))?/i.exec(message);
+  if (m === null) return null;
+  const minute = Number(m[2]);
+  const meridiem = m[3]?.toLowerCase();
+  let hour = Number(m[1]);
+  if (meridiem === "pm" && hour !== 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  if (hour > 23 || minute > 59) return null;
+
+  let hereNow: string;
+  try {
+    hereNow = new Intl.DateTimeFormat("en-GB", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      ...(m[4] === undefined ? {} : { timeZone: m[4] }),
+    }).format(now);
+  } catch {
+    /* An unknown zone is not a parse failure; fall back to this machine's clock. */
+    hereNow = new Intl.DateTimeFormat("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" }).format(now);
+  }
+  const [nowHour, nowMinute] = hereNow.split(":").map(Number) as [number, number];
+  let deltaMinutes = hour * 60 + minute - (nowHour * 60 + nowMinute);
+  /* Already past in that zone means the next occurrence is tomorrow. */
+  if (deltaMinutes <= 0) deltaMinutes += 24 * 60;
+  /* A minute past the stated time, so a clock a few seconds behind does not retry early. */
+  return deltaMinutes * 60_000 + 60_000;
+}
+
+/**
+ * The longest this will wait for a named reset before handing the decision
+ * back. A usage window resets within hours; a wait longer than this is more
+ * likely a misparse or a clock problem than a real reset, and an operator would
+ * rather be told than discover a command that slept until tomorrow.
+ */
+export const MAX_RESET_WAIT_MS = 6 * 60 * 60_000;
+
 export async function launchInitSession(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   for (let attempt = 0; ; attempt += 1) {
@@ -169,11 +229,31 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
       return await launchOnce(deps, request);
     } catch (err) {
       const message = (err as Error).message;
-      const wait = OUTAGE_BACKOFF_MS[attempt];
-      if (!isOutage(message) || wait === undefined) throw err;
+      const ladder = OUTAGE_BACKOFF_MS[attempt];
+      if (!isOutage(message) || ladder === undefined) throw err;
+      /**
+       * PRDR-189: the stated reset wins over the ladder.
+       *
+       * A usage limit is not a transient outage — 1/5/15 minutes exhausted
+       * against one that reset hours later, and the run died having behaved
+       * correctly at every step. When the message says when it comes back, that
+       * is the wait; the ladder remains for outages that say nothing.
+       */
+      const untilReset = msUntilReset(message, deps.now?.());
+      if (untilReset !== null && untilReset > MAX_RESET_WAIT_MS) {
+        throw new Error(
+          `${message} — it resets in ${String(Math.round(untilReset / 60_000))} min, longer than this will wait ` +
+            `(${String(MAX_RESET_WAIT_MS / 60_000)} min). Re-run when the window has reset; every finished slice is checkpointed.`,
+        );
+      }
+      const wait = untilReset ?? ladder;
+      const mins = String(Math.round(wait / 60_000));
       deps.note?.(
-        `backend outage during ${request.role} — waiting ${String(Math.round(wait / 60_000))} min before retrying ` +
-          `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`,
+        untilReset === null
+          ? `backend outage during ${request.role} — waiting ${mins} min before retrying ` +
+              `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`
+          : `backend limit during ${request.role} — waiting ${mins} min for the stated reset ` +
+              `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`,
       );
       await sleep(wait);
     }

@@ -49,6 +49,8 @@ export interface PipelineDeps {
   readonly note?: (text: string) => void;
   /** PRDR-185: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /** PRDR-189: the clock a stated reset is measured against. */
+  readonly now?: () => Date;
   /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
   readonly print?: (text: string) => void;
@@ -78,6 +80,7 @@ function sessionDeps(deps: PipelineDeps): InitSessionDeps {
      */
     ...(deps.note === undefined ? {} : { note: deps.note }),
     ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
+    ...(deps.now === undefined ? {} : { now: deps.now }),
     ...(deps.docsDomains === undefined ? {} : { docsDomains: deps.docsDomains }),
     ...(deps.modelRouting === undefined ? {} : { modelRouting: deps.modelRouting }),
   };
