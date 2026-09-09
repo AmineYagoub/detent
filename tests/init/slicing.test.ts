@@ -5,6 +5,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
+import { DOC_PATTERNS } from "../../src/init/discover-docs.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
@@ -182,6 +183,19 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(allTickets(root)).toHaveLength(4);
     expect(result.interrupt?.message).toContain("[BLOCKING] q1: Which payment provider?");
     expect(result.interrupt?.message).toContain("1 blocking question(s) need an answer");
+
+    /**
+     * PRDR-166, through the REAL pipeline rather than a hand-passed argument.
+     *
+     * `presentStage` renders the globs it is given, and `stages.test.ts` proves
+     * that much — but the hop that carries DISCOVER's recorded
+     * `patterns_searched` into PRESENT's deps is its own failure surface, and it
+     * is the one that broke three times on this line (PRDR-191's breaker
+     * ceilings, PRDR-194's first cut, PRDR-141's four dead features). A message
+     * naming no glob is exactly as unfollowable as the one this ticket replaced.
+     */
+    for (const glob of DOC_PATTERNS) expect(result.interrupt?.message).toContain(glob);
+    expect(result.interrupt?.message).toContain("an answer written anywhere else is not read");
   });
 
   it("C-8 inside PLAN: an unchanged slice is reused from its cache when another slice's documents move; --replan re-plans every slice", async () => {
