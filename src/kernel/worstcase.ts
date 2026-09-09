@@ -231,10 +231,10 @@ const configSchema = z.strictObject({
       command: z
         .string()
         .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "symbols.command is an executable name resolved on PATH, not a path — no `/`, `\\` or `..`")
-        .default("serena-agent"),
+        .default("serena"),
       pinned: nonEmptyString.default("0.1.4"),
     })
-    .default({ command: "serena-agent", pinned: "0.1.4" }),
+    .default({ command: "serena", pinned: "0.1.4" }),
   /**
    * S-1: sessions are constructed with no external setting sources. Recorded in
    * config so `doctor` can report it and a backend upgrade cannot silently

@@ -64,21 +64,42 @@ describe("S-3′ symbol intelligence cannot become a containment hole", () => {
     expect(() => assertNoEditingTools(["safe_delete"])).toThrow(/SEC-3/);
   });
 
-  it("disables the server's own memory with upstream's real mechanism, because a remembering session breaks replay", () => {
+  /**
+   * PRDR-198: this case was called "disables the server's own memory with
+   * upstream's real mechanism" and asserted `--mode no-memories`. Serena has no
+   * such mode, so the server could never start — and the test passed anyway,
+   * because every value here lives in ANOTHER PROGRAM and asserting our own
+   * copy of it proves only that we wrote it down.
+   *
+   * Its predecessor made the same mistake with `--enable-memory false`, and the
+   * comment recording that lesson sat directly above the next instance of it.
+   * The title now claims only what the assertion can carry.
+   */
+  it("passes the context, mode and project Serena accepts — values read from the tool, not chosen", () => {
     const server = symbolServerConfig(CONFIG, "/repo") as { serena: { args: string[] } };
     const args = server.serena.args;
-    /**
-     * These are upstream's flags, checked against Serena's configuration docs.
-     * A previous version asserted `--enable-memory false`, which is not a flag
-     * Serena has — the test passed, the memory would have stayed on, and the
-     * property this suite exists to guarantee was never guaranteed.
-     */
     expect(args.slice(0, 2)).toEqual(["start-mcp-server", "--context"]);
-    expect(args).toContain("--mode");
-    expect(args[args.indexOf("--mode") + 1]).toBe("no-memories");
-    /** `claude-code` drops the tools that would duplicate the session's built-ins. */
-    expect(args[args.indexOf("--context") + 1]).toBe("claude-code");
+    /**
+     * `serena context list` -> agent, chatgpt, codex, context.template,
+     * desktop-app, ide-assistant. `ide-assistant` excludes `create_text_file`,
+     * `read_file`, `execute_shell_command`, `prepare_for_new_conversation` and
+     * `replace_regex` — the duplication a session driven by the Agent SDK must
+     * avoid. Verified live: the server reaches "lifetime setup complete".
+     */
+    expect(args[args.indexOf("--context") + 1]).toBe("ide-assistant");
+    /** `serena mode list` -> editing, interactive, no-onboarding, onboarding, one-shot, planning. */
+    expect(args[args.indexOf("--mode") + 1]).toBe("no-onboarding");
     expect(args[args.indexOf("--project") + 1]).toBe("/repo");
+    /**
+     * And NOT a memory claim. Two live runs, with and without the mode, produce
+     * an identical tool surface carrying `write_memory`, `read_memory`,
+     * `list_memories`, `delete_memory`, `onboarding` and
+     * `check_onboarding_performed`. `start-mcp-server` has no memory flag, so
+     * no argument this function can pass suppresses it. Asserting the absence
+     * of such a claim is the only honest thing this test can say about memory.
+     */
+    expect(args).not.toContain("no-memories");
+    expect(args.some((a) => a.includes("memory"))).toBe(false);
   });
 
   it("reaches the session as an MCP server whose tools are exactly the read set", () => {

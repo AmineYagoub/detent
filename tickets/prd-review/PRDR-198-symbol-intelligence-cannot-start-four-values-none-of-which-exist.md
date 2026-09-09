@@ -1,7 +1,7 @@
 ---
 id: PRDR-198
 title: "Symbol intelligence cannot start: the default command is a package name, the probe uses a flag the tool lacks, and the context and mode are values Serena does not have"
-state: OPEN
+state: DONE
 severity: major
 category: bug
 labels: ["prd-review", "found-by-live-run", "dead-control", "unverified-claim"]
@@ -78,7 +78,17 @@ place the question "is this a value Serena has" can actually be asked.
 ## Resolution
 
 `command: "serena"`, probe on `--help` (exit 0), `--context ide-assistant`,
-`--mode no-onboarding` — the last chosen because it excludes `onboarding` and
-`check_onboarding_performed`, so no memories are written on a fresh root, which is the nearest
-achievable form of the original intent. The comment records what was run to establish each,
-and stops claiming a memory guarantee no flag provides.
+`--mode no-onboarding`. Verified live: the server reaches "MCP server lifetime setup complete",
+and the context excludes the five duplicating tools (`create_text_file`, `read_file`,
+`execute_shell_command`, `prepare_for_new_conversation`, `replace_regex`) exactly as intended.
+
+**Memory is still not suppressed, and the first draft of this fix wrongly said it was.** Two
+runs were compared with and without `--mode no-onboarding`: the MCP tool surface is IDENTICAL,
+carrying `write_memory`, `read_memory`, `list_memories`, `delete_memory`, `onboarding` and
+`check_onboarding_performed` either way. Serena logs the exclusion and exposes the tools
+regardless. So the memory guarantee this file has claimed in two successive versions does not
+exist, and cannot be obtained from a flag. If C-8 replay genuinely depends on it, that is a
+separate mechanism Detent must own — recorded here rather than asserted away for a third time.
+
+One practical note from the same run: `ValueError: No source files found` — a PRD-only root has
+nothing to index, so symbol intelligence is inert until the first code lands.

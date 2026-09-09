@@ -102,8 +102,16 @@ export function probeSymbols(
   }
 }
 
+/**
+ * PRDR-198: `--help`, not `--version`.
+ *
+ * `serena --version` exits 2 — the CLI has no such option — so this reported a
+ * correctly installed tool as missing and handed the operator an instruction to
+ * install what they had just installed. `--help` exits 0 and answers the only
+ * question the probe asks: is it there and does it run.
+ */
 function defaultProbe(command: string): void {
-  execFileSync(command, ["--version"], { stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
+  execFileSync(command, ["--help"], { stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
 }
 
 /**
@@ -117,12 +125,42 @@ function defaultProbe(command: string): void {
  * proved nothing.
  *
  * `--mode no-memories` is the real mechanism: it disables the memory tools and
- * everything built on them. That is not politeness — a server that remembers
- * across sessions breaks C-8's replay and S-6's byte-identical prefixes.
- * `--context claude-code` is the right environment for a session the Agent SDK
- * drives, because it drops the tools that would duplicate the built-in ones.
+ * everything built on them.
+ *
+ * PRDR-198: every value below was read out of the installed tool, and the
+ * commands that read it are named so the next person can re-run them rather
+ * than trust this sentence. The previous version claimed the same verification
+ * and had four values the tool does not have.
+ *
+ * `serena context list` -> agent, chatgpt, codex, context.template,
+ * desktop-app, ide-assistant. `--context claude-code` was not among them and
+ * the binary refused it outright: "Context claude-code not found".
+ * `ide-assistant` is the right one on its own description — "Non-symbolic
+ * editing tools and general shell tool are excluded... file operations, basic
+ * edits and reads, and shell commands are handled by your own, internal tools"
+ * — which is exactly the duplication a session driven by the Agent SDK must
+ * avoid. It was previously recorded here AS the mistake; it was the answer.
+ *
+ * `serena mode list` -> editing, interactive, no-onboarding, onboarding,
+ * one-shot, planning. `no-memories` was not among them; `no-onboarding` is the
+ * nearest valid value and its intent is right.
+ *
+ * MEMORY IS NOT SUPPRESSED, and this is measured rather than assumed. Two runs
+ * were compared, with and against without `--mode no-onboarding`, and the tool
+ * surface is IDENTICAL: `write_memory`, `read_memory`, `list_memories`,
+ * `delete_memory`, `onboarding` and `check_onboarding_performed` are exposed
+ * either way. Serena logs `SerenaAgentMode[name='no-onboarding'] excluded 2
+ * tools` and the MCP surface still carries them. `start-mcp-server` has no
+ * memory flag at all — `--project --project-file --context --mode --transport
+ * --host --port --enable-web-dashboard --enable-gui-log-window --log-level
+ * --trace-lsp-communication --tool-timeout`.
+ *
+ * So the sentence this file used to carry — that C-8 replay and S-6 prefixes
+ * are protected because the server does not remember — is false, and was false
+ * before PRDR-198 and after the first draft of its fix. If that guarantee is
+ * required it needs a mechanism Detent controls, not a flag.
  */
-export const SYMBOL_SERVER_ARGS: readonly string[] = ["start-mcp-server", "--context", "claude-code", "--mode", "no-memories"];
+export const SYMBOL_SERVER_ARGS: readonly string[] = ["start-mcp-server", "--context", "ide-assistant", "--mode", "no-onboarding"];
 
 export function symbolServerConfig(config: SymbolsConfig, root: string): Record<string, unknown> {
   return {
