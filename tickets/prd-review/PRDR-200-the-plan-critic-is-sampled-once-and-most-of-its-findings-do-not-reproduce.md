@@ -157,3 +157,44 @@ reading that comment. A strict schema is a trust boundary in both directions.
 new ceiling is an F-3 schema event and C-4″ declined one for this same loop; PLAN now prints the
 k and the threshold that produced the findings, which is what PRDR-197's lesson actually asks
 for — a knob the operator can see.
+
+## Sweep B — the threshold does not validate, and the null does
+
+The ≥2-of-3 threshold was chosen on ONE sweep, where it kept 6 of 16 findings. Choosing and
+validating a threshold on the same data is circular, so a second independent sweep was run over
+the same unchanged tickets: nine more sessions, **$7.81**.
+
+**The null replicates.** Sweep A returned c₀ 0.583 / γ₀ 0.333; sweep B returns **0.545 / 0.273**
+over its own 18 pairs. The finding this ticket exists for is solid across two independent
+measurements, and `churn` is worth recording on every slice.
+
+**The filter does not.** Asking the only question that matters — given two independent sets of
+three reads over the SAME tickets, does a rule select the same findings? — across the whole
+corpus:
+
+| rule | A kept | B kept | in both | Jaccard |
+|---|---:|---:|---:|---:|
+| any 1 read (what production did) | 16 | 13 | 9 | 0.45 |
+| **≥2 of 3 (shipped)** | 6 | 8 | 5 | **0.56** |
+| all 3 of 3 (unanimity) | 2 | 1 | 1 | 0.50 |
+
+Majority is the best of the three and it moves reproducibility **0.45 → 0.56**. Unanimity is not
+better and starves the reviser to one or two findings; `t-s03-004/dependency` was unanimous in
+sweep A and not in sweep B, which kills the tempting idea that a unanimous finding is a reliable
+one. Roughly **half of what the filter promotes is still sweep-specific**. The union is 9–11
+findings, so the error bars are wide, but the direction is not in doubt: at k=3 no threshold
+produces a stable finding set.
+
+**What this changes.** The shipped rule is the best measured option and it demonstrably stops
+the reviser being handed findings no second read saw. It is a mitigation with a measured
+ceiling, not a fix, and nothing in this ticket should be read as claiming the critic now
+produces a reliable finding set. The honest cost-benefit is **+2 sessions per slice — 53 to 103
+at twenty-five slices — to move finding reproducibility from 0.45 to 0.56**, plus the null,
+which is free and permanent. Whether that trade is worth keeping is a live question and belongs
+to the operator, not to this ticket.
+
+**Where it points.** Aggregation is the remedy the literature offers for an unreliable judge,
+and here it buys eleven points. That is evidence for the thing PRDR-193 already built rather
+than against it: a deterministic checker's findings reproduce at Jaccard 1.0 by construction,
+for zero sessions. The durable answer is to keep moving decidable properties out of the critic's
+jurisdiction, not to buy more draws from it.
