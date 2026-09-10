@@ -182,7 +182,11 @@ files down before a single test ran. `LaunchBatch` and its factory are `launch-b
 leaf both sides import; `session.ts` imports only the type. A cycle that presents as
 `Cannot convert undefined or null to object` from zod is worth knowing the shape of.
 
-**One repair found in passing.** `tests/init/plan-critic-sampling.test.ts` had three NUL bytes
-where spaces were meant — the separator in `RECUR` and `keyOf` — which made git treat the file
-as binary and hid its diffs since PRDR-200. They are spaces now, which also makes `keyOf` the same
-key `findingKey` produces.
+**One repair found in passing, then its cause.** `tests/init/plan-critic-sampling.test.ts` had
+three NUL bytes where spaces were meant — the separator in `RECUR` and `keyOf` — which made git
+treat the file as binary and hid its diffs since PRDR-200. Scanning every tracked file for the
+same byte found the fourth: `findingKey` itself, in `plan-review.ts`, joined ticket and tag with
+`\x00`, so the production source was binary to git too and every diff of it since PRDR-200 —
+this ticket's included — showed as `Bin`. All four are spaces now. Runtime behaviour is unchanged
+(the key is only ever compared with itself, across reads, and never displayed or persisted), and
+`keyOf` in the test now produces the same key `findingKey` does.
