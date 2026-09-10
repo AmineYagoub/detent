@@ -864,6 +864,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   turns are byte-identical again. The whole-plan review is still drawn once; slice planning and
   the redrafts are still sequential; there is no knob.
 
+- **S-6′ (3.1.1, PRDR-205).** The sessions of one batch are handed **byte-identical first
+  turns**, and the file each writes is still its own. S-6's stable prefix was never the whole
+  cache key: the SDK is handed one user message, prefix then variable, and the variable ended
+  with the artifact path — so when PRDR-203 gave each draw its own file, the three first turns
+  differed in their last few dozen bytes and the block missed for every draw but the first,
+  about 25k tokens a draw (45k and 47k created behind one path each; 21k and 17k behind one
+  shared path). The draws are now TOLD one path, and the containment hook carries a write to it
+  out at the draw's own file — rewritten before the guard judges it, so containment is decided
+  on the file that will actually be written; reads are untouched (S-2‴) and any other path is
+  judged as before. Measured on never-cached slices: one at a time, the second and third draws
+  fell from 45k/47k to **30.6k/29.6k** against a cold first draw's 54k; launched together, with
+  C-4⁗‴'s wait on the first answer, the two warm draws created **10.6k and 24.1k** against the
+  cold one's 46.4k — the stagger's test deferred from C-4⁗‴, passed. What a session is told and
+  where its file goes are two facts now, and the prompt carries only the one the cache should.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import type { LaunchBatch } from "./launch-batch.js";
+import type { LaunchBatch, LaunchOptions } from "./launch-batch.js";
 import { sizingEvidence } from "./sizing-evidence.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import path from "node:path";
@@ -91,8 +91,8 @@ export interface ReviewDeps {
   readonly launch: (
     inputs: Record<string, unknown>,
     artifactOut?: string,
-    /** D-28′ (PRDR-203): the batch this launch is gated with, if any. */
-    batch?: LaunchBatch,
+    /** D-28′ / PRDR-205: the batch this launch is gated with, and the path it is told. */
+    options?: LaunchOptions,
   ) => Promise<void>;
   readonly note?: (text: string) => void;
   /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
@@ -239,6 +239,14 @@ async function reviewOnce(
 }> {
   const file = planReviewPath(deps.root, draw?.index);
   rmSync(file, { force: true });
+  /**
+   * PRDR-205: a draw is TOLD the one shared path, so every draw's first turn
+   * is the same bytes and the prompt cache serves all but the first; its file
+   * is its own, and the hook carries the write there. The told path is cleared
+   * too, so a stale review from an earlier run cannot be read back as this one.
+   */
+  const told = draw === undefined ? undefined : planReviewPath(deps.root);
+  if (told !== undefined) rmSync(told, { force: true });
   try {
     await deps.launch(
       {
@@ -262,8 +270,11 @@ async function reviewOnce(
             }),
       },
       file,
-      /* The batch gates a draw's FIRST attempt; a relaunch is gated on its own. */
-      previous === null ? draw?.batch : undefined,
+      {
+        /* The batch gates a draw's FIRST attempt; a relaunch is gated on its own. */
+        ...(previous === null && draw?.batch !== undefined ? { batch: draw.batch } : {}),
+        ...(told === undefined ? {} : { told }),
+      },
     );
   } catch (err) {
     /* PRDR-084: the review advises and never fails init — a session that died is an unusable attempt, not an exit. */

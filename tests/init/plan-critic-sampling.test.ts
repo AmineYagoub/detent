@@ -9,7 +9,7 @@ import { FIRST_RESPONSE_WAIT_MS, sampleReviewPlan } from "../../src/init/plan-sa
 import { launchInitSession, type InitSessionDeps } from "../../src/init/session.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
-import type { SessionBackend } from "../../src/sessions/backend.js";
+import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
@@ -156,8 +156,14 @@ describe("D-28′ a batch of review draws is gated once", () => {
       root,
       docs: [],
       budgets: BUDGETS,
-      launch: async (inputs, artifactOut, batch) => {
-        await launchInitSession(init, { role: "planner", inputs, artifactOut: artifactOut ?? planReviewPath(root), ...(batch === undefined ? {} : { batch }) });
+      launch: async (inputs, artifactOut, options) => {
+        await launchInitSession(init, {
+          role: "planner",
+          inputs,
+          artifactOut: artifactOut ?? planReviewPath(root),
+          ...(options?.batch === undefined ? {} : { batch: options.batch }),
+          ...(options?.told === undefined ? {} : { artifactTold: options.told }),
+        });
       },
     };
     try {
@@ -235,8 +241,14 @@ function drivenDeps(root: string, backend: SessionBackend, journal: RunJournal, 
     budgets: BUDGETS,
     sleep,
     note: (t) => notes.push(t),
-    launch: async (inputs, artifactOut, batch) => {
-      await launchInitSession(init, { role: "planner", inputs, artifactOut: artifactOut ?? planReviewPath(root), ...(batch === undefined ? {} : { batch }) });
+    launch: async (inputs, artifactOut, options) => {
+      await launchInitSession(init, {
+        role: "planner",
+        inputs,
+        artifactOut: artifactOut ?? planReviewPath(root),
+        ...(options?.batch === undefined ? {} : { batch: options.batch }),
+        ...(options?.told === undefined ? {} : { artifactTold: options.told }),
+      });
     },
   };
 }
@@ -302,6 +314,60 @@ describe("C-4⁗‴ the draws launch together", () => {
       expect(notes.some((n) => n.includes("did not answer in time")), "and says which way it went").toBe(true);
       for (const n of [1, 2, 3]) r.release(n);
       await pending;
+    } finally {
+      journal.close();
+    }
+  });
+});
+
+/**
+ * PRDR-205 — the draws share one first turn again.
+ *
+ * PRDR-203 gave each draw its own artifact and put its path at the tail of the
+ * one user message the SDK is handed, so the three first turns differed in
+ * their last few dozen bytes and the prompt cache missed the whole block for
+ * the second and third — measured at about 25k tokens a draw (PRDR-204). The
+ * draws are now TOLD one path; each still has its own file.
+ */
+describe("PRDR-205 the k draws hand the backend one first turn", () => {
+  it("byte-identical prefix and variable for every draw, each with its own file, all told the one path", async () => {
+    const root = repo();
+    const journal = RunJournal.open(root);
+    const specs: SessionSpec[] = [];
+    const backend: SessionBackend = {
+      name: "recording",
+      checkVersion: async () => {},
+      run: async (spec) => {
+        specs.push(spec);
+        writeFileSync(spec.artifactOut, `${JSON.stringify(APPROVE_PLAN)}\n`);
+        return okResult();
+      },
+    };
+    const init: InitSessionDeps = { root, backend, prompts: PROMPTS, spendCeiling: 0, journal };
+    const deps: ReviewDeps = {
+      root,
+      docs: [],
+      budgets: BUDGETS,
+      launch: async (inputs, artifactOut, options) => {
+        await launchInitSession(init, {
+          role: "planner",
+          inputs,
+          artifactOut: artifactOut ?? planReviewPath(root),
+          ...(options?.batch === undefined ? {} : { batch: options.batch }),
+          ...(options?.told === undefined ? {} : { artifactTold: options.told }),
+        });
+      },
+    };
+    try {
+      await sampleReviewPlan(deps, TICKETS);
+      expect(specs).toHaveLength(3);
+      expect(new Set(specs.map((s) => s.promptPrefix)).size, "one prefix (S-6)").toBe(1);
+      /* Before PRDR-205 this is three: `artifact_out` differed at the tail, and the cache key with it. */
+      expect(new Set(specs.map((s) => s.promptVariable)).size, "one first turn — the cache key").toBe(1);
+      expect(specs.map((s) => path.relative(root, s.artifactOut)), "and still a file each").toEqual(
+        [1, 2, 3].map((n) => path.join(".detent", "state", "draws", String(n), "plan-review.json")),
+      );
+      expect(new Set(specs.map((s) => s.artifactTold)), "every draw told the one shared path").toEqual(new Set([planReviewPath(root)]));
     } finally {
       journal.close();
     }

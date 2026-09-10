@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { Options, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
-import { guardToolUse, stopGate, type GuardPolicy } from "./guard.js";
+import { guardToolUse, stopGate, type GuardPolicy, carryArtifact, type ArtifactAlias } from "./guard.js";
 import { buildSessionEnv } from "./env.js";
 
 /**
@@ -31,18 +31,17 @@ export interface SdkBackendConfig {
  * absent from the options this module builds: a callback there would be
  * skipped for exactly the writing tools S-3 grants (the shadowing failure).
  */
-export function buildPreToolUseHook(policy: GuardPolicy): NonNullable<Options["hooks"]> {
+export function buildPreToolUseHook(policy: GuardPolicy, alias?: ArtifactAlias): NonNullable<Options["hooks"]> {
   return {
     PreToolUse: [
       {
         hooks: [
           async (input) => {
             const payload = input as { tool_name?: unknown; tool_input?: unknown };
-            const decision = guardToolUse(
-              typeof payload.tool_name === "string" ? payload.tool_name : "",
-              payload.tool_input,
-              policy,
-            );
+            const toolName = typeof payload.tool_name === "string" ? payload.tool_name : "";
+            /* PRDR-205: a write to the path the session was told is carried out at the file it has. */
+            const carried = alias === undefined ? null : carryArtifact(toolName, payload.tool_input, alias, policy.workRoot);
+            const decision = guardToolUse(toolName, carried ?? payload.tool_input, policy);
             /**
              * S-2‴ (PRDR-122): an abstention omits `permissionDecision`
              * entirely, so the SDK carries on to its deny/ask/allow rules. A
@@ -54,6 +53,7 @@ export function buildPreToolUseHook(policy: GuardPolicy): NonNullable<Options["h
                 hookEventName: "PreToolUse" as const,
                 ...(decision.decision === "abstain" ? {} : { permissionDecision: decision.decision }),
                 permissionDecisionReason: decision.reason,
+                ...(carried !== null && decision.decision === "allow" ? { updatedInput: carried } : {}),
               },
             };
           },
@@ -132,7 +132,10 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
     ...(spec.effort === undefined || spec.effort === "" ? {} : { effort: spec.effort as NonNullable<Options["effort"]> }),
     hooks: {
       /** S-2′: the per-ticket policy wins; construction policy is the fallback. */
-      ...buildPreToolUseHook(spec.policy ?? config.policy),
+      ...buildPreToolUseHook(
+        spec.policy ?? config.policy,
+        spec.artifactTold === undefined ? undefined : { told: spec.artifactTold, actual: spec.artifactOut },
+      ),
       ...buildStopHook(config, spec.role),
     },
   };

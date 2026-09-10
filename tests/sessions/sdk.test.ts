@@ -1,9 +1,12 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EXIT_HUMAN_GATED, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
+import { STRUCTURAL_PROTECTED } from "../../src/schemas/common.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
+import type { GuardPolicy } from "../../src/sessions/guard.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { buildOptions, buildPreToolUseHook, parseResultMessage, type SdkBackendConfig } from "../../src/sessions/sdk.js";
@@ -85,6 +88,44 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
     )) as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } };
     expect(output.hookSpecificOutput?.permissionDecision).toBe("deny");
     expect(output.hookSpecificOutput?.permissionDecisionReason).toContain("protected");
+  });
+
+  /**
+   * PRDR-205 — the k draws of one review are TOLD one artifact path, so their
+   * first turns are byte-identical and the prompt cache serves all but the
+   * first (S-6); each draw's file is its own. A write to the told path is
+   * carried out at the file the draw has, and judged there.
+   */
+  it("a write to the artifact the session was TOLD is carried out at the artifact it HAS, and allowed (PRDR-205)", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-alias-"));
+    roots.push(root);
+    const told = path.join(root, ".detent", "state", "plan-review.json");
+    const actual = path.join(root, ".detent", "state", "draws", "2", "plan-review.json");
+    /* An init session's policy (S-1″): the one file it may write, and the structural floor. */
+    const policy: GuardPolicy = { surface: [path.relative(root, actual)], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root, artifactRoot: actual };
+    const [matcher] = buildPreToolUseHook(policy, { told, actual }).PreToolUse ?? [];
+    const callback = matcher?.hooks[0];
+    expect(callback).toBeDefined();
+    type Output = { hookSpecificOutput?: { permissionDecision?: string; updatedInput?: Record<string, unknown> } };
+    const call = async (tool: string, tool_input: Record<string, unknown>): Promise<Output> =>
+      (await callback!({ hook_event_name: "PreToolUse", tool_name: tool, tool_input, tool_use_id: "x" } as never, undefined, {
+        signal: new AbortController().signal,
+      })) as Output;
+
+    const write = await call("Write", { file_path: told, content: "{}" });
+    expect(write.hookSpecificOutput?.permissionDecision, "the draw's own file is its artifact (B-2″)").toBe("allow");
+    expect(write.hookSpecificOutput?.updatedInput?.["file_path"], "carried out where the file goes").toBe(actual);
+    expect(write.hookSpecificOutput?.updatedInput?.["content"], "and nothing else about the call moves").toBe("{}");
+
+    /* The alias is exactly one path; anything else is judged as before. */
+    const elsewhere = await call("Write", { file_path: path.join(root, ".detent", "state", "other.json"), content: "" });
+    expect(elsewhere.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(elsewhere.hookSpecificOutput?.updatedInput).toBeUndefined();
+
+    /* Reads are not this guard's business (S-2‴), alias or not. */
+    const read = await call("Read", { file_path: told });
+    expect(read.hookSpecificOutput?.permissionDecision).toBeUndefined();
+    expect(read.hookSpecificOutput?.updatedInput).toBeUndefined();
   });
 });
 

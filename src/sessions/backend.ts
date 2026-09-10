@@ -52,6 +52,13 @@ export interface SessionSpec {
    */
   readonly onFirstResponse?: () => void;
   /**
+   * PRDR-205: the artifact path the PROMPT names, when it is not `artifactOut`.
+   * The sessions of one batch are told one path so their first turns are
+   * byte-identical — the prompt cache's key (S-6) — and the containment hook
+   * carries a write to it out at `artifactOut`, which stays the file.
+   */
+  readonly artifactTold?: string;
+  /**
    * S-2′/D-21: the PER-TICKET containment policy for this session's hook —
    * the ticket's declared surface plus the artifact area, resolved against
    * this session's work root. Absent (init sessions, fixtures), the backend

@@ -39,3 +39,16 @@ export function newLaunchBatch(): LaunchBatch {
   });
   return { passed: false, firstResponse, noteResponse };
 }
+
+/** What a launch may carry besides its inputs and its artifact. */
+export interface LaunchOptions {
+  /** D-28′ (PRDR-203): the batch this launch is gated with. */
+  readonly batch?: LaunchBatch;
+  /**
+   * PRDR-205: the artifact path the session is TOLD, when it is not where its
+   * file goes. The k draws of one review are told one path so their first
+   * turns are byte-identical — the prompt cache's key (S-6) — and a write to
+   * it is carried out at the draw's own file by the containment hook.
+   */
+  readonly told?: string;
+}

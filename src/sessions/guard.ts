@@ -87,6 +87,30 @@ export function pathOf(toolInput: unknown): string | null {
 const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
 /**
+ * PRDR-205: the artifact a session is TOLD against the one it HAS.
+ *
+ * The k draws of one review are told one path, so their first turns are
+ * byte-identical and the prompt cache (S-6) serves every draw but the first;
+ * each draw's file is its own. A mutating call naming the told path is carried
+ * out at the actual one — rewritten BEFORE the guard judges it, so containment
+ * is decided on the file that will actually be written. Reads are untouched
+ * (S-2‴), and any other path is judged exactly as before.
+ */
+export interface ArtifactAlias {
+  readonly told: string;
+  readonly actual: string;
+}
+
+export function carryArtifact(toolName: string, toolInput: unknown, alias: ArtifactAlias, workRoot: string): Record<string, unknown> | null {
+  if (!MUTATING_TOOLS.has(toolName)) return null;
+  const target = pathOf(toolInput);
+  if (target === null || path.resolve(workRoot, target) !== path.resolve(workRoot, alias.told)) return null;
+  const record = toolInput as Record<string, unknown>;
+  const key = ["file_path", "path", "notebook_path"].find((k) => typeof record[k] === "string") ?? "file_path";
+  return { ...record, [key]: alias.actual };
+}
+
+/**
  * The path relative to this session's artifact directory, or `null` when it is
  * not inside one. Resolved on both sides for the same reason the work-root
  * check is (PRDR-180).

@@ -103,8 +103,14 @@ describe("PRDR-203 two init sessions in flight on one root", () => {
       root,
       docs: [],
       budgets: BUDGETS,
-      launch: async (inputs, artifactOut, batch) => {
-        await launchInitSession(init, { role: "planner", inputs, artifactOut: artifactOut ?? planReviewPath(root), ...(batch === undefined ? {} : { batch }) });
+      launch: async (inputs, artifactOut, options) => {
+        await launchInitSession(init, {
+          role: "planner",
+          inputs,
+          artifactOut: artifactOut ?? planReviewPath(root),
+          ...(options?.batch === undefined ? {} : { batch: options.batch }),
+          ...(options?.told === undefined ? {} : { artifactTold: options.told }),
+        });
       },
     };
     try {

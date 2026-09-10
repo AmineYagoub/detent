@@ -97,6 +97,8 @@ export interface InitSessionRequest {
    * first launch evaluates the gate; the rest pass on that evaluation.
    */
   readonly batch?: LaunchBatch;
+  /** PRDR-205: the artifact path the prompt names, when it is not `artifactOut`. See `SessionSpec.artifactTold`. */
+  readonly artifactTold?: string;
 }
 
 /**
@@ -124,7 +126,8 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     /* No ticket exists during init; the id names the pipeline for the journal. */
     ticketId: INIT_TICKET,
     promptPrefix: stablePrefix(deps.prompts.prompts[request.role], deps.rulesText ?? "(no rules file)", preamble),
-    promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactOut }, null, 2),
+    /* PRDR-205: the told path, so the sessions of one batch share one first turn. */
+    promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactTold ?? request.artifactOut }, null, 2),
     cwd: deps.root,
     artifactOut: request.artifactOut,
     /**
@@ -143,6 +146,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
     /* C-4⁗‴ (PRDR-204): a batched launch reports its first answer to the batch waiting on it. */
     ...(request.batch === undefined ? {} : { onFirstResponse: request.batch.noteResponse }),
+    ...(request.artifactTold === undefined ? {} : { artifactTold: request.artifactTold }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
      * rule above is TRUE rather than merely stated.

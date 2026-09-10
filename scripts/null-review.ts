@@ -7,7 +7,7 @@ import { ClaudeCodeBackend } from "../src/sessions/sdk.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
 import { STRUCTURAL_PROTECTED } from "../src/schemas/common.js";
 import { launchInitSession, withInitJournal } from "../src/init/session.js";
-import type { LaunchBatch } from "../src/init/launch-batch.js";
+import type { LaunchOptions } from "../src/init/launch-batch.js";
 import { sessionDeps } from "../src/init/session-deps.js";
 import { reviewPlan } from "../src/init/plan-review.js";
 import { sampleReviewPlan } from "../src/init/plan-sample.js";
@@ -145,12 +145,13 @@ async function sweep(root: string, runs: number, want: readonly string[] | null,
       root,
       docs: corpus.docs,
       budgets,
-      launch: async (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch): Promise<void> => {
+      launch: async (inputs: Record<string, unknown>, artifactOut?: string, options?: LaunchOptions): Promise<void> => {
         await launchInitSession(sessionDeps(pipelineDeps, journal), {
           role: "planner",
           inputs,
           artifactOut: artifactOut ?? planDraftPath(root),
-          ...(batch === undefined ? {} : { batch }),
+          ...(options?.batch === undefined ? {} : { batch: options.batch }),
+          ...(options?.told === undefined ? {} : { artifactTold: options.told }),
         });
       },
       note: (text: string) => process.stdout.write(`      ${text}\n`),
@@ -187,11 +188,16 @@ async function sweep(root: string, runs: number, want: readonly string[] | null,
         process.stdout.write(`  run ${String(i + 1)}: ${review.verdict}, ${String(fs.length)} finding(s)\n         ${[...keyed(fs)].join("  ") || "(none)"}\n`);
       }
     }
-    /* PRDR-204's measurement: what each session cost and cached, and the wall-clock for all of them. */
+    /**
+     * PRDR-204's measurement: what each session cost and cached, and the
+     * wall-clock for all of them. A ledger row is written when a session
+     * RETURNS, so with draws in flight together the rows are in completion
+     * order, not launch order — the cold draw is the one that created the most.
+     */
     const rows = readLedger(root).slice(rowsBefore);
     for (const [i, r] of rows.entries())
       process.stdout.write(
-        `  session ${String(i + 1)}: $${fmt(r.cost_estimate_usd, 2)}  cache_creation=${String(r.cache_creation_input_tokens)}  ` +
+        `  finished ${String(i + 1)}: $${fmt(r.cost_estimate_usd, 2)}  cache_creation=${String(r.cache_creation_input_tokens)}  ` +
           `cache_read=${String(r.cache_read_input_tokens)}  input=${String(r.input_tokens)}\n`,
       );
     process.stdout.write(`  wall-clock for ${String(rows.length)} session(s): ${fmt((Date.now() - t0) / 60_000, 1)} min\n`);

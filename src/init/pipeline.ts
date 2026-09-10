@@ -20,7 +20,7 @@ import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
-import type { LaunchBatch } from "./launch-batch.js";
+import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 
 /**
@@ -304,11 +304,14 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),
         ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
-        launch: async (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch) => {
-          await launchInitSession(
-            sessionDeps(deps, journal),
-            { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root), ...(batch === undefined ? {} : { batch }) },
-          );
+        launch: async (inputs: Record<string, unknown>, artifactOut?: string, options?: LaunchOptions) => {
+          await launchInitSession(sessionDeps(deps, journal), {
+            role: "planner",
+            inputs,
+            artifactOut: artifactOut ?? planDraftPath(deps.root),
+            ...(options?.batch === undefined ? {} : { batch: options.batch }),
+            ...(options?.told === undefined ? {} : { artifactTold: options.told }),
+          });
         },
       });
     }),
