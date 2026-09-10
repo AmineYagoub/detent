@@ -147,11 +147,24 @@ sessions to 103**, and a slice needing no revision now costs four where it cost 
 estimate in the discussion that produced this ticket assumed the re-review would go; it did not,
 for the reason recorded in criterion 5.
 
-**One near-miss worth recording.** `churn` was written into the slice cache before it was added
-to `sliceCacheSchema`, which is `z.strictObject` — every existing slice would have failed to
-parse, missed, and re-planned at full price. That is precisely the failure PRDR-196's own
-comment on the `revision` field describes one line above, and it was reintroduced anyway while
-reading that comment. A strict schema is a trust boundary in both directions.
+**One near-miss, and a correction to how near it was.** `churn` was written into the slice cache
+before it was added to `sliceCacheSchema`, which is `z.strictObject` — so a cache this build
+wrote, this build could not read: every slice would have missed and re-planned at full price on
+the very next run. That is precisely the failure PRDR-196's comment on the `revision` field
+describes one line above, reintroduced while that comment was on screen.
+
+It would NOT have shipped, and the first version of this note wrongly implied it might. The
+existing C-8 reuse test (`slicing.test.ts`) fails without the schema field — verified by removing
+it and watching that test go red. The suite already covered this. What the episode actually shows
+is the value of the covering test, not of catching it by eye.
+
+Two tests now pin both directions of the boundary explicitly, because the invariant deserves to
+be stated rather than implied: a cache this build WRITES this build must read, and a cache from a
+build before the field existed must still hit. The first was written once in a form that passed
+while asserting nothing — a second run with no document moved replays every phase from its
+checkpoint, so PLAN never executes and `not.toContain("PLAN:s01")` is vacuously true. It now
+moves the other slice's document so PLAN actually runs, and was confirmed to fail with the schema
+field removed.
 
 **Criterion 1's "declared value" is a named constant plus an announcement, not an X-1 key.** A
 new ceiling is an F-3 schema event and C-4″ declined one for this same loop; PLAN now prints the
