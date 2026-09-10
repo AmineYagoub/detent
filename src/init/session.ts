@@ -141,6 +141,8 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
     ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
+    /* C-4⁗‴ (PRDR-204): a batched launch reports its first answer to the batch waiting on it. */
+    ...(request.batch === undefined ? {} : { onFirstResponse: request.batch.noteResponse }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
      * rule above is TRUE rather than merely stated.

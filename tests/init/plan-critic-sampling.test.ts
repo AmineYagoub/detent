@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
-import { planReviewPath, sampleReviewPlan, type ReviewDeps } from "../../src/init/plan-review.js";
+import { planReviewPath, type ReviewDeps } from "../../src/init/plan-review.js";
+import { FIRST_RESPONSE_WAIT_MS, sampleReviewPlan } from "../../src/init/plan-sample.js";
 import { launchInitSession, type InitSessionDeps } from "../../src/init/session.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
@@ -166,6 +167,141 @@ describe("D-28′ a batch of review draws is gated once", () => {
         launchInitSession(init, { role: "planner", inputs: {}, artifactOut: path.join(stateDir(root), "state", "after.json") }),
         "the launch AFTER the batch is refused: the bound is the batch, not the run",
       ).rejects.toThrow(/no-progress breaker/);
+    } finally {
+      journal.close();
+    }
+  });
+});
+
+/**
+ * C-4⁗‴ (PRDR-204) — the draws launch together, and the second waits for the
+ * first to answer.
+ *
+ * A reviewer the test drives by hand: every session reports its first model
+ * response only when told, holds until released, and answers with a finding
+ * that names which launch it was. `sleep` is injected so the bounded wait can
+ * be made to never fire (the ordering tests) or to fire at once (the fallback).
+ */
+function drivenReviewer(): {
+  readonly backend: SessionBackend;
+  readonly launches: () => number;
+  readonly respond: (n: number) => void;
+  readonly release: (n: number) => void;
+} {
+  const sessions: { respond: () => void; release: () => void }[] = [];
+  const backend: SessionBackend = {
+    name: "driven",
+    checkVersion: async () => {},
+    run: async (spec) => {
+      const n = sessions.length + 1;
+      let respond!: () => void;
+      let release!: () => void;
+      const responded = new Promise<void>((r) => {
+        respond = r;
+      });
+      const released = new Promise<void>((r) => {
+        release = r;
+      });
+      sessions.push({ respond, release });
+      void responded.then(() => spec.onFirstResponse?.());
+      await released;
+      writeFileSync(
+        spec.artifactOut,
+        `${JSON.stringify({ schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", finding: `draw ${String(n)}`, ticket: `t-${String(n)}` }] })}\n`,
+      );
+      return okResult();
+    },
+  };
+  const at = (n: number): { respond: () => void; release: () => void } => {
+    const s = sessions[n - 1];
+    if (s === undefined) throw new Error(`no session ${String(n)} has been launched (${String(sessions.length)} so far)`);
+    return s;
+  };
+  return { backend, launches: () => sessions.length, respond: (n) => at(n).respond(), release: (n) => at(n).release() };
+}
+
+/** Let every queued microtask and the stagger's own race settle. */
+const settle = async (): Promise<void> => {
+  for (let i = 0; i < 4; i += 1) await new Promise<void>((r) => setTimeout(r, 0));
+};
+
+const NEVER = (): Promise<void> => new Promise<void>(() => {});
+
+function drivenDeps(root: string, backend: SessionBackend, journal: RunJournal, sleep: (ms: number) => Promise<void>, notes: string[] = []): ReviewDeps {
+  const init: InitSessionDeps = { root, backend, prompts: PROMPTS, spendCeiling: 0, journal };
+  return {
+    root,
+    docs: [],
+    budgets: BUDGETS,
+    sleep,
+    note: (t) => notes.push(t),
+    launch: async (inputs, artifactOut, batch) => {
+      await launchInitSession(init, { role: "planner", inputs, artifactOut: artifactOut ?? planReviewPath(root), ...(batch === undefined ? {} : { batch }) });
+    },
+  };
+}
+
+describe("C-4⁗‴ the draws launch together", () => {
+  it("launches the second and third draws once the first has answered, not before and not after it returns", async () => {
+    const root = repo();
+    const journal = RunJournal.open(root);
+    const r = drivenReviewer();
+    const notes: string[] = [];
+    try {
+      const pending = sampleReviewPlan(drivenDeps(root, r.backend, journal, NEVER, notes), TICKETS);
+      await settle();
+      expect(r.launches(), "one draw in flight until it answers — the stagger (S-6)").toBe(1);
+      r.respond(1);
+      await settle();
+      /* Before PRDR-204 this stays at one: the loop awaited the whole first draw. */
+      expect(r.launches(), "the rest launch on the first response").toBe(3);
+      expect(notes.some((n) => /the first answered after \d+ s — launching 2 more/.test(n)), "and says so").toBe(true);
+      for (const n of [1, 2, 3]) r.release(n);
+      const review = await pending;
+      expect(review?.reads).toHaveLength(3);
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("collects the reads in launch order whatever order the draws complete in (PRDR-203's fifth criterion)", async () => {
+    const root = repo();
+    const journal = RunJournal.open(root);
+    const r = drivenReviewer();
+    try {
+      const pending = sampleReviewPlan(drivenDeps(root, r.backend, journal, NEVER), TICKETS);
+      await settle();
+      r.respond(1);
+      await settle();
+      expect(r.launches()).toBe(3);
+      for (const n of [3, 2, 1]) {
+        r.release(n);
+        await settle();
+      }
+      const review = await pending;
+      expect(review?.reads.map((read) => read[0]?.ticket), "the third draw finished first and is still read third").toEqual(["t-1", "t-2", "t-3"]);
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("launches the rest after the bounded wait when the first never answers", async () => {
+    const root = repo();
+    const journal = RunJournal.open(root);
+    const r = drivenReviewer();
+    let waited: number | null = null;
+    try {
+      const atOnce = async (ms: number): Promise<void> => {
+        waited = ms;
+      };
+      const notes: string[] = [];
+      const pending = sampleReviewPlan(drivenDeps(root, r.backend, journal, atOnce, notes), TICKETS);
+      await settle();
+      expect(r.launches(), "the wait ran out, the rest launched").toBe(3);
+      expect(waited, "and it was the named wait, not an ad-hoc one").toBe(FIRST_RESPONSE_WAIT_MS);
+      expect(notes.some((n) => n.includes("did not answer in time")), "and says which way it went").toBe(true);
+      for (const n of [1, 2, 3]) r.release(n);
+      await pending;
     } finally {
       journal.close();
     }

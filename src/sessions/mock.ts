@@ -85,6 +85,8 @@ export class MockBackend implements SessionBackend {
       const fn = this.script[`${key}:${n}`] ?? this.script[key];
       if (fn !== undefined) {
         this.perKey.set(key, n + 1);
+        /* C-4⁗‴ (PRDR-204): the fixture answers the moment it runs. */
+        spec.onFirstResponse?.();
         const result = await fn(spec);
         this.enforcePolicy(spec);
         return result;

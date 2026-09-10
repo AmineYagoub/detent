@@ -44,6 +44,14 @@ export interface SessionSpec {
    */
   readonly maxTurns?: number;
   /**
+   * C-4⁗‴ (PRDR-204): called once, when the session has answered its first
+   * turn — from then on the prompt that turn was given is cached. A batch of
+   * sessions sharing one first turn launches the rest on this signal, so the
+   * first writes the cache and the others read it (S-6). Absent for a session
+   * nobody is waiting on.
+   */
+  readonly onFirstResponse?: () => void;
+  /**
    * S-2′/D-21: the PER-TICKET containment policy for this session's hook —
    * the ticket's declared surface plus the artifact area, resolved against
    * this session's work root. Absent (init sessions, fixtures), the backend

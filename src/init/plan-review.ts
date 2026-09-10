@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { newLaunchBatch, type LaunchBatch } from "./launch-batch.js";
+import type { LaunchBatch } from "./launch-batch.js";
 import { sizingEvidence } from "./sizing-evidence.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import path from "node:path";
@@ -83,70 +83,6 @@ export const PLAN_REVIEW_SAMPLES = 3;
 export const findingKey = (f: PlanReview["findings"][number]): string | null =>
   f.ticket === undefined || f.ticket === "" ? null : `${f.ticket} ${f.tag}`;
 
-export interface SampledReview {
-  readonly verdict: "approve" | "changes";
-  /** At or above the threshold — the only findings a revision is paid to chase. */
-  readonly findings: PlanReview["findings"];
-  /** Below it. Real judgement, unreproduced: D-24's advice, carried to PRESENT. */
-  readonly seenOnce: PlanReview["findings"];
-  /** Every usable read, so the caller can measure what the reads agreed on. */
-  readonly reads: readonly PlanReview["findings"][];
-  readonly threshold: number;
-}
-
-/**
- * C-4⁗″: draw the review `k` times and keep what at least ⌈k/2⌉ reads saw.
- *
- * Degenerate by design at one usable read — ⌈1/2⌉ is 1, so a slice whose other
- * reads all died falls back to exactly PRDR-084's behaviour rather than
- * planning unreviewed.
- *
- * D-28′ (PRDR-203): the draws are one batch, gated once. Each writes its own
- * artifact. The loop is still sequential — making it concurrent is C-4⁗″'s own
- * amendment; this is what has to hold before it can be.
- */
-export async function sampleReviewPlan(
-  deps: ReviewDeps,
-  tickets: readonly PlanDraftTicket[],
-  scope?: ReviewScope,
-  k: number = PLAN_REVIEW_SAMPLES,
-): Promise<SampledReview | null> {
-  const reads: PlanReview["findings"][] = [];
-  const batch = newLaunchBatch();
-  for (let i = 0; i < k; i += 1) {
-    const review = await reviewPlan(deps, tickets, scope, { index: i + 1, batch });
-    if (review !== null) reads.push(review.verdict === "changes" ? review.findings : []);
-  }
-  if (reads.length === 0) return null;
-  const threshold = Math.ceil(reads.length / 2);
-  const seen = new Map<string, number>();
-  for (const read of reads)
-    for (const key of new Set(read.map(findingKey)))
-      if (key !== null) seen.set(key, (seen.get(key) ?? 0) + 1);
-
-  const findings: PlanReview["findings"][number][] = [];
-  const seenOnce: PlanReview["findings"][number][] = [];
-  const taken = new Set<string>();
-  for (const read of reads) {
-    for (const f of read) {
-      const key = findingKey(f);
-      /**
-       * A finding naming no ticket has no identity across reads, so recurrence
-       * cannot be established for it in either direction. It is never promoted
-       * into the revision and always travels as advice.
-       */
-      if (key === null) {
-        seenOnce.push(f);
-        continue;
-      }
-      if (taken.has(key)) continue;
-      taken.add(key);
-      ((seen.get(key) ?? 0) >= threshold ? findings : seenOnce).push(f);
-    }
-  }
-  return { verdict: findings.length > 0 ? "changes" : "approve", findings, seenOnce, reads, threshold };
-}
-
 /** The slice of `PlanDeps` a review needs — kept narrow so the seam is obvious. */
 export interface ReviewDeps {
   readonly root: string;
@@ -159,6 +95,8 @@ export interface ReviewDeps {
     batch?: LaunchBatch,
   ) => Promise<void>;
   readonly note?: (text: string) => void;
+  /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 /**

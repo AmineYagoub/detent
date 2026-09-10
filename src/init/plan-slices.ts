@@ -7,7 +7,8 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { contentsDigest, sliceCacheDir } from "./machine.js";
 import { sessionBudget } from "./plan-review.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
-import { PLAN_REVISIONS, reviewPlan, sampleReviewPlan } from "./plan-review.js";
+import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
+import { sampleReviewPlan } from "./plan-sample.js";
 import { revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
@@ -378,7 +379,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     if (review !== null) {
       churn = sampleChurn(review.reads);
       deps.note?.(
-        `${slice.id} review: sampled ${String(review.reads.length)}, keeping what ${String(review.threshold)} of ` +
+        `${slice.id} review: sampled ${String(review.reads.length)} launched together, keeping what ${String(review.threshold)} of ` +
           `${String(review.reads.length)} saw — ${String(review.findings.length)} recurring, ` +
           `${String(review.seenOnce.length)} seen once (C-4⁗″)`,
       );

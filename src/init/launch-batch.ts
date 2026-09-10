@@ -21,8 +21,21 @@
  */
 export interface LaunchBatch {
   passed: boolean;
+  /**
+   * C-4⁗‴ (PRDR-204): resolves when the first session of the batch has
+   * answered its first turn. The draws share one first turn, so whoever
+   * launches the batch waits on this before launching the rest: the first
+   * writes the cache, the others read it (S-6).
+   */
+  readonly firstResponse: Promise<void>;
+  /** What a batched launch hands its backend as `onFirstResponse`. */
+  readonly noteResponse: () => void;
 }
 
 export function newLaunchBatch(): LaunchBatch {
-  return { passed: false };
+  let noteResponse!: () => void;
+  const firstResponse = new Promise<void>((resolve) => {
+    noteResponse = resolve;
+  });
+  return { passed: false, firstResponse, noteResponse };
 }

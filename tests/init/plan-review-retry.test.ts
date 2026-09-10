@@ -66,10 +66,17 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
     const good = { schema_version: 1, verdict: "changes", findings: [FINDING] };
     const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
-    /** sample 1 (bad → relaunch, good) → samples 2 and 3 → revision → review (approve) */
+    /**
+     * sample 1 (bad) → samples 2 and 3 launch on its first answer (C-4⁗‴) →
+     * sample 1's relaunch (good) → revision → review (approve). The relaunch is
+     * found by what it carries, not by its position: since PRDR-204 the other
+     * draws are in flight before the first has been judged unusable.
+     */
     expect(reviews(backend)).toBe(5);
     expect(drafts(backend)).toBe(2);
-    const relaunch = reviewInputs[1]?.["previous_attempt"] as { issue: string } | undefined;
+    const carried = reviewInputs.filter((i) => i["previous_attempt"] !== undefined);
+    expect(carried, "exactly one launch carries the previous attempt").toHaveLength(1);
+    const relaunch = carried[0]?.["previous_attempt"] as { issue: string } | undefined;
     expect(relaunch?.issue).toContain("tag");
     expect(notes.some((n) => n.startsWith("plan review artifact unusable ("))).toBe(true);
   });

@@ -90,6 +90,8 @@ export interface PlanDeps {
    * a verdict. D-28′ (PRDR-203): a launch may belong to a batch gated once.
    */
   readonly launch: (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch) => Promise<void>;
+  /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
+  readonly sleep?: (ms: number) => Promise<void>;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.

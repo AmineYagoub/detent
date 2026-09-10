@@ -10,11 +10,12 @@ import { launchInitSession, withInitJournal } from "../src/init/session.js";
 import type { LaunchBatch } from "../src/init/launch-batch.js";
 import { sessionDeps } from "../src/init/session-deps.js";
 import { reviewPlan } from "../src/init/plan-review.js";
+import { sampleReviewPlan } from "../src/init/plan-sample.js";
 import { sampleChurn } from "../src/init/plan-signal.js";
 import { planDraftPath } from "../src/init/plan.js";
 import { stateDir } from "../src/fs/layout.js";
 import type { PlanReview } from "../src/schemas/init.js";
-import { ledgerSpend, readPlannedRoot, runDirectly, sliceTickets } from "./plan-corpus.js";
+import { ledgerSpend, readLedger, readPlannedRoot, runDirectly, sliceTickets } from "./plan-corpus.js";
 
 /**
  * null-review — what the revision round's numbers look like when the revision
@@ -40,7 +41,15 @@ import { ledgerSpend, readPlannedRoot, runDirectly, sliceTickets } from "./plan-
  * the same `launchInitSession` seam PLAN uses. A harness that reimplements
  * either measures the harness.
  *
- *   npx tsx scripts/null-review.ts --root <copy> [--runs 3] [--slices s01,s02]
+ *   npx tsx scripts/null-review.ts --root <copy> [--runs 3] [--slices s01,s02] [--together]
+ *
+ * `--together` draws through the PRODUCTION sampler instead of one review at
+ * a time — the draws launch together, the second once the first has answered
+ * (C-4⁗‴) — and is PRDR-204's measurement: every session's cost and cache
+ * columns are printed from the ledger, with the wall-clock for the set.
+ * `--draws` gives the one-at-a-time reads their own artifact each, as the
+ * sampler does since PRDR-203, so the two forms differ in WHEN they launch and
+ * in nothing else.
  *
  * Point it at a COPY: each review deletes and rewrites
  * `.detent/state/plan-review.json` in the root it is given.
@@ -99,7 +108,7 @@ function budgetsFor(root: string): Budgets {
   };
 }
 
-async function sweep(root: string, runs: number, want: readonly string[] | null): Promise<void> {
+async function sweep(root: string, runs: number, want: readonly string[] | null, together: boolean, draws: boolean): Promise<void> {
   const corpus = readPlannedRoot(root);
   const specs = new Map(corpus.specs.map((s) => [s.id, s]));
   const config = existsSync(path.join(stateDir(root), "config.json"))
@@ -121,7 +130,10 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
   };
   const before = ledgerSpend(root);
   const ids = corpus.planned.filter((id) => want === null || want.includes(id));
-  process.stdout.write(`null-review — ${String(runs)} review(s) per slice over UNCHANGED tickets\nroot: ${root}\nslices: ${ids.join(" ")}\n\n`);
+  process.stdout.write(
+    `null-review — ${String(runs)} review(s) per slice over UNCHANGED tickets, ${together ? "launched TOGETHER (C-4⁗‴)" : `one at a time${draws ? ", one artifact each" : ""}`}\n` +
+      `root: ${root}\nslices: ${ids.join(" ")}\n\n`,
+  );
 
   let tBefore = 0;
   let tAtRisk = 0;
@@ -153,17 +165,36 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
       .map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface }));
 
     process.stdout.write(`${id}  ${String(own.length)} ticket(s)\n`);
+    const t0 = Date.now();
+    const rowsBefore = readLedger(root).length;
     const reads: Findings[] = [];
-    for (let i = 0; i < runs; i += 1) {
-      const review = await reviewPlan(reviewDeps, own, { kind: "slice", slice: spec, planIndex });
-      if (review === null) {
-        process.stdout.write(`  run ${String(i + 1)}: NO VERDICT — excluded\n`);
-        continue;
+    if (together) {
+      /* C-4⁗‴: the production sampler — the draws launch together, the second once the first has answered. */
+      const sampled = await sampleReviewPlan(reviewDeps, own, { kind: "slice", slice: spec, planIndex }, runs);
+      for (const fs of sampled?.reads ?? []) {
+        reads.push(fs);
+        process.stdout.write(`  read ${String(reads.length)}: ${String(fs.length)} finding(s)\n         ${[...keyed(fs)].join("  ") || "(none)"}\n`);
       }
-      const fs = review.verdict === "changes" ? review.findings : [];
-      reads.push(fs);
-      process.stdout.write(`  run ${String(i + 1)}: ${review.verdict}, ${String(fs.length)} finding(s)\n         ${[...keyed(fs)].join("  ") || "(none)"}\n`);
+    } else {
+      for (let i = 0; i < runs; i += 1) {
+        const review = await reviewPlan(reviewDeps, own, { kind: "slice", slice: spec, planIndex }, draws ? { index: i + 1 } : undefined);
+        if (review === null) {
+          process.stdout.write(`  run ${String(i + 1)}: NO VERDICT — excluded\n`);
+          continue;
+        }
+        const fs = review.verdict === "changes" ? review.findings : [];
+        reads.push(fs);
+        process.stdout.write(`  run ${String(i + 1)}: ${review.verdict}, ${String(fs.length)} finding(s)\n         ${[...keyed(fs)].join("  ") || "(none)"}\n`);
+      }
     }
+    /* PRDR-204's measurement: what each session cost and cached, and the wall-clock for all of them. */
+    const rows = readLedger(root).slice(rowsBefore);
+    for (const [i, r] of rows.entries())
+      process.stdout.write(
+        `  session ${String(i + 1)}: $${fmt(r.cost_estimate_usd, 2)}  cache_creation=${String(r.cache_creation_input_tokens)}  ` +
+          `cache_read=${String(r.cache_read_input_tokens)}  input=${String(r.input_tokens)}\n`,
+      );
+    process.stdout.write(`  wall-clock for ${String(rows.length)} session(s): ${fmt((Date.now() - t0) / 60_000, 1)} min\n`);
     if (reads.length < 2) {
       process.stdout.write("  fewer than two usable reads — no pair\n\n");
       continue;
@@ -193,10 +224,16 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
 
 if (runDirectly(import.meta.url)) {
   const { values } = parseArgs({
-    options: { root: { type: "string" }, runs: { type: "string", default: "3" }, slices: { type: "string" } },
+    options: {
+      root: { type: "string" },
+      runs: { type: "string", default: "3" },
+      slices: { type: "string" },
+      together: { type: "boolean", default: false },
+      draws: { type: "boolean", default: false },
+    },
   });
   if (values.root === undefined) {
-    process.stderr.write("usage: null-review --root <copy> [--runs 3] [--slices s01,s02]\n");
+    process.stderr.write("usage: null-review --root <copy> [--runs 3] [--slices s01,s02] [--together | --draws]\n");
     process.exit(1);
   }
   const runs = Number.parseInt(values.runs ?? "3", 10);
@@ -208,5 +245,7 @@ if (runDirectly(import.meta.url)) {
     path.resolve(values.root),
     runs,
     values.slices === undefined ? null : values.slices.split(",").map((s) => s.trim()),
+    values.together === true,
+    values.draws === true,
   );
 }

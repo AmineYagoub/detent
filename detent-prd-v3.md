@@ -846,6 +846,24 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   run in sequence; making them concurrent is C-4⁗″'s own amendment, and this is what had to
   hold before it could be.
 
+- **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
+  independent by construction — that independence is what the threshold rests on — and they ran
+  one after another: three sessions' wall-clock for three sessions' money. Now the first draw
+  launches, and the rest launch when it has answered its first turn, or returned, or after a
+  bounded wait, whichever comes first — one batch gated once (D-28′). A C-4⁗ relaunch inside a
+  draw is gated on its own and may overlap the others, so at most `2k − 1` sessions are in
+  flight. Reads come back in launch order whatever order the draws finish in, so the `churn`
+  C-8 caches and what the reviser is handed are the same across runs. Measured on smoke-1's
+  s04, three draws over unchanged tickets: **9.0 minutes in sequence, 2.9 launched together**,
+  $2.41 against $2.56. The wait exists because the draws share one first turn (S-6), and the
+  measurement found that turn is NOT shared as it stands: PRDR-203 gave each draw its own
+  `artifact_out`, which sits inside the cached block, so the second and third draws write the
+  block the first already wrote — about 25k tokens a draw, in sequence or together alike (21k
+  and 17k created behind one shared path; 45k and 47k behind one path each). That is PRDR-203's
+  cost, carried by PRDR-205, and the stagger's own value can be measured only once the first
+  turns are byte-identical again. The whole-plan review is still drawn once; slice planning and
+  the redrafts are still sequential; there is no knob.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

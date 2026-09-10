@@ -303,6 +303,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),
+        ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
         launch: async (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch) => {
           await launchInitSession(
             sessionDeps(deps, journal),

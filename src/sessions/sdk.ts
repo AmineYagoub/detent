@@ -340,7 +340,11 @@ export class ClaudeCodeBackend implements SessionBackend {
             if (bad.length > 0) mcpFailures = bad;
           }
         }
-        if ((message as { type?: string }).type === "assistant") observedTurns += 1;
+        if ((message as { type?: string }).type === "assistant") {
+          observedTurns += 1;
+          /* C-4⁗‴ (PRDR-204): the first turn is answered, so its prompt is cached now. */
+          if (observedTurns === 1) spec.onFirstResponse?.();
+        }
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);
         }
