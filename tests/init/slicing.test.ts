@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { buildPipeline } from "../../src/init/pipeline.js";
@@ -6,7 +7,7 @@ import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
 import { DOC_PATTERNS } from "../../src/init/discover-docs.js";
-import { revisionOutcome } from "../../src/init/plan-slices.js";
+import { revisionOutcome } from "../../src/init/plan-signal.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
@@ -96,6 +97,16 @@ const twoSliceDraft = (inputs: Record<string, unknown>): object =>
 
 const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
+/**
+ * C-4⁗″ (PRDR-200): a slice's review is DRAWN `PLAN_REVIEW_SAMPLES` times.
+ *
+ * These sequences are about ORDER and REUSE — which slices re-plan when a
+ * document moves — not about how many times the reviewer is asked. Expanding
+ * the expectation keeps the assertion exact rather than collapsing repeats,
+ * which would hide the sampling stopping.
+ */
+const R = (slice: string): string[] => Array.from({ length: PLAN_REVIEW_SAMPLES }, () => `REVIEW:slice:${slice}`);
+
 describe("C-2‴ the product is planned slice by slice, to the end, without stopping", () => {
   it("plans each slice with the earlier index in view, reviews the whole, revises the slice it faults, and writes slice order into the blockers", async () => {
     const root = repo(DOCS);
@@ -123,7 +134,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     /** Every slice in turn, each reviewed as its own plan; then the whole; then only the faulted slice again; then the whole again. */
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole", "PLAN:s02", "REVIEW:whole"]);
+    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole", "PLAN:s02", "REVIEW:whole"]);
     /** The later slice drafts with the earlier slice's tickets in view, and the slice review with the same index. */
     const s02Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s02")!;
     expect(s02Draft["plan_index"]).toEqual([
@@ -207,7 +218,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
+    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
     expect(existsSync(path.join(sliceCacheDir(root), "s01.json"))).toBe(true);
 
     /** Only the billing document changes: s01 read nothing that moved. */
@@ -215,13 +226,13 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     log.splice(0);
     notes.splice(0);
     await runInit(root, handlers);
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
+    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
     expect(notes.join("\n")).toContain("s01 skeleton: reused — nothing it read has changed (C-8)");
 
     /** C-8′: a replan is a fresh planning session — the cache is wiped, every slice drafted again. */
     log.splice(0);
     await runInit(root, handlers, { replan: true });
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", "REVIEW:slice:s01", "PLAN:s02", "REVIEW:slice:s02", "REVIEW:whole"]);
+    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
   });
 
   /**

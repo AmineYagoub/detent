@@ -7,7 +7,8 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { contentsDigest, sliceCacheDir } from "./machine.js";
 import { sessionBudget } from "./plan-review.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
-import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
+import { PLAN_REVISIONS, reviewPlan, sampleReviewPlan } from "./plan-review.js";
+import { revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
@@ -29,6 +30,8 @@ export interface SlicePlan {
   readonly remaining: { readonly slice: string; readonly findings: PlanReview["findings"] }[];
   /** PRDR-196: what each revision round did, for the slices that needed one. */
   readonly revisions: readonly RevisionOutcome[];
+  /** C-4⁗″ (PRDR-200): the same arithmetic over reads of an unchanged draft — the null for the line above. */
+  readonly churns: readonly RevisionOutcome[];
 }
 
 /**
@@ -75,6 +78,18 @@ const sliceCacheSchema = z.strictObject({
    * miss, exactly as F-3′ says.
    */
   revision: z
+    .looseObject({ resolved: z.number(), survived: z.number(), introduced: z.number() })
+    .nullable()
+    .default(null),
+  /**
+   * C-4⁗″ (PRDR-200): the same arithmetic over reads of an UNCHANGED draft.
+   *
+   * Additive with a default for the reason the field above records in full: a
+   * strict schema is a trust boundary in both directions, and a key the writer
+   * knows and the reader does not is a MISS — which here would have re-planned
+   * every cached slice at full price to add a measurement.
+   */
+  churn: z
     .looseObject({ resolved: z.number(), survived: z.number(), introduced: z.number() })
     .nullable()
     .default(null),
@@ -163,49 +178,6 @@ export function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly Draft
       ]),
     )
     .digest("hex");
-}
-
-/**
- * PRDR-196: what one revision round actually did.
- *
- * The counts this run produced — more findings after revision than before, on
- * 11 slices of 19 — cannot distinguish "the revision introduced defects" from
- * "a fresh review of rewritten text found fresh, partly spurious things". The
- * literature names feedback generation as the bottleneck, which makes that
- * distinction the whole question, and no number Detent records today answers
- * it.
- *
- * Identity is `(ticket, tag)`. Finding TEXT is rewritten every round so it can
- * key nothing, and the pair is what a reader means by "the same complaint about
- * the same ticket". A finding naming no ticket belongs to the plan rather than
- * to one of its tickets and cannot be matched, so it is never counted as
- * survival — an unmatched pair is honestly unknown, not silently resolved.
- */
-export interface RevisionOutcome {
-  /** Complaints that were made and are no longer made. */
-  readonly resolved: number;
-  /** Complaints the revision was handed and did not remove. */
-  readonly survived: number;
-  /** Complaints that did not exist before the round. */
-  readonly introduced: number;
-}
-
-const findingKey = (f: PlanReview["findings"][number]): string | null =>
-  f.ticket === undefined || f.ticket === "" ? null : `${f.ticket}\u0000${f.tag}`;
-
-export function revisionOutcome(
-  before: PlanReview["findings"],
-  after: PlanReview["findings"],
-): RevisionOutcome {
-  const keysBefore = new Set(before.map(findingKey).filter((k): k is string => k !== null));
-  const keysAfter = new Set(after.map(findingKey).filter((k): k is string => k !== null));
-  let survived = 0;
-  for (const k of keysBefore) if (keysAfter.has(k)) survived += 1;
-  return {
-    resolved: keysBefore.size - survived,
-    survived,
-    introduced: keysAfter.size - survived,
-  };
 }
 
 export const tagSlice = (tickets: readonly Omit<DraftedTicket, "slice">[], slice: string): DraftedTicket[] =>
@@ -363,6 +335,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
   const remaining: SlicePlan["remaining"] = [];
   /* PRDR-196: one per slice that needed a revision round; summed for PRESENT. */
   const revisions: RevisionOutcome[] = [];
+  const churns: RevisionOutcome[] = [];
   mkdirSync(sliceCacheDir(deps.root), { recursive: true });
 
   for (const slice of slices) {
@@ -396,10 +369,24 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     let leftover: PlanReview["findings"] = [];
     let reviewed = false;
     let revision: RevisionOutcome | null = null;
-    const review = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
+    let churn: RevisionOutcome | null = null;
+    const review = await sampleReviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
     reviewed = review !== null;
+    if (review !== null) {
+      churn = sampleChurn(review.reads);
+      deps.note?.(
+        `${slice.id} review: sampled ${String(review.reads.length)}, keeping what ${String(review.threshold)} of ` +
+          `${String(review.reads.length)} saw — ${String(review.findings.length)} recurring, ` +
+          `${String(review.seenOnce.length)} seen once (C-4⁗″)`,
+      );
+      deps.note?.(
+        `${slice.id} sample churn, nothing revised between the reads: ${String(churn.resolved)} resolved, ` +
+          `${String(churn.survived)} survived, ${String(churn.introduced)} introduced — the null the number ` +
+          `below is read against (PRDR-200)`,
+      );
+    }
     if (review !== null && review.verdict === "changes" && review.findings.length > 0) {
-      deps.note?.(`${slice.id} review: ${review.findings.length} finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
+      deps.note?.(`${slice.id} review: ${review.findings.length} recurring finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
       for (let round = 0; round < PLAN_REVISIONS; round += 1) {
         drafted = await draftAndRead(deps, { slice, planIndex: index, findings: review.findings });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
@@ -429,12 +416,13 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     } else if (review !== null) {
       deps.note?.(
         review.verdict === "approve"
-          ? `${slice.id} review: approve`
+          ? `${slice.id} review: approve — no finding recurred across the samples`
           : `${slice.id} review: changes, but the verdict named no finding — nothing to revise, treated as it stands`,
       );
     }
 
-    const held = [...normalised.findings, ...leftover];
+    /* C-4⁗″: what the filter held back is judgement, not noise to discard — D-24 sends it to the human. */
+    const held = [...normalised.findings, ...leftover, ...(review?.seenOnce ?? [])];
     if (!reviewed) {
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);
@@ -458,6 +446,8 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
           remaining: held,
           /* PRDR-196: null when the slice needed no revision. */
           revision,
+          /* C-4⁗″ (PRDR-200): what the same arithmetic returns over reads of an UNCHANGED draft. */
+          churn,
           external_deps: [...new Set(normalised.tickets.flatMap((t) => t.depends_on).filter((d) => !own.has(d)))],
           reviewed,
         },
@@ -473,9 +463,10 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
      */
     noteUnitComplete(deps.root);
     if (revision !== null) revisions.push(revision);
+    if (churn !== null) churns.push(churn);
     index.push(...normalised.tickets);
     questions.push(...numbered);
     if (held.length > 0) remaining.push({ slice: slice.id, findings: held });
   }
-  return { tickets: index, questions, remaining, revisions };
+  return { tickets: index, questions, remaining, revisions, churns };
 }

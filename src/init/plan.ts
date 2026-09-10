@@ -332,6 +332,19 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
         (a, r) => ({ resolved: a.resolved + r.resolved, survived: a.survived + r.survived, introduced: a.introduced + r.introduced }),
         { resolved: 0, survived: 0, introduced: 0 },
       ) as unknown as Record<string, unknown>,
+      /**
+       * C-4⁗″ (PRDR-200): the null, summed the same way and shown beside it.
+       *
+       * The revision figure above was read for a week as though it isolated
+       * the revision. It does not: run over reads of an UNCHANGED draft the
+       * same arithmetic still returns resolutions and introductions, because
+       * the reviewer does not reproduce itself. Neither number means anything
+       * without the other, so neither is presented without the other.
+       */
+      churn_summary: planned.churns.reduce(
+        (a, r) => ({ resolved: a.resolved + r.resolved, survived: a.survived + r.survived, introduced: a.introduced + r.introduced }),
+        { resolved: 0, survived: 0, introduced: 0 },
+      ) as unknown as Record<string, unknown>,
       derived_edges: contracts.derived as unknown as Record<string, unknown>[],
     },
   };

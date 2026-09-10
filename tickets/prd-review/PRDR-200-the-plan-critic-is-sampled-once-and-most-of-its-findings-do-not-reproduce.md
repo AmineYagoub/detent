@@ -1,13 +1,13 @@
 ---
 id: PRDR-200
 title: "The plan critic is sampled once, most of its findings do not reproduce, and both consumers — the reviser and PRDR-196's own instrument — treat that one sample as fact"
-state: OPEN
+state: DONE
 severity: major
 category: design
 labels: ["prd-review", "found-by-measurement", "planning", "cost", "measurement"]
 surface: ["src/init/plan-review.ts", "src/init/plan-slices.ts", "tests/init/plan-critic-sampling.test.ts", "detent-prd-v3.md"]
 prd_refs: ["PRDR-084", "PRDR-193", "PRDR-196", "PRDR-199", "D-24", "C-2‴"]
-acceptance_criteria: ["The per-slice review is sampled k times and only findings that recur in at least ⌈k/2⌉ samples are handed to the reviser. On the measurement below (k=3, ≥2) that keeps 6 of 16 findings and discards 10. The threshold is a declared value, not a constant nobody can see — PRDR-197's lesson about `effort_routing`.", "The falsification lands first: a test that shows the CURRENT path handing the reviser a single-sample finding set, observed to FAIL before any fix (V-6).", "Asserted on the path as `plan-slices.ts` CALLS IT — `reviewPlan` through to the `draftAndRead` that receives `findings` — not on an aggregation helper called from nowhere. PRDR-141's shape (implemented, tested, documented, unreachable) is what this criterion refuses, and PRDR-191, PRDR-194 and PRDR-199 are the three most recent times this line paid for it.", "`revisionOutcome` stops being reported as though it isolated the revision. Either it is reported alongside a null measured the same way, or the slice's `revision` field is documented as containing critic churn. It is not wrong; it is read as something it is not.", "The re-review's session is re-decided. It exists to produce an after-count — the endpoint PRDR-196 already replaced, and the one this ticket shows carries no information about the revision. It either earns its cost against a stated question or it goes."]
+acceptance_criteria: ["The per-slice review is sampled k times and only findings that recur in at least ⌈k/2⌉ samples are handed to the reviser. On the measurement below (k=3, ≥2) that keeps 6 of 16 findings and discards 10. The threshold is a declared value, not a constant nobody can see — PRDR-197's lesson about `effort_routing`.", "The falsification lands first: a test that shows the CURRENT path handing the reviser a single-sample finding set, observed to FAIL before any fix (V-6).", "Asserted on the path as `plan-slices.ts` CALLS IT — `reviewPlan` through to the `draftAndRead` that receives `findings` — not on an aggregation helper called from nowhere. PRDR-141's shape (implemented, tested, documented, unreachable) is what this criterion refuses, and PRDR-191, PRDR-194 and PRDR-199 are the three most recent times this line paid for it.", "`revisionOutcome` stops being reported as though it isolated the revision. Either it is reported alongside a null measured the same way, or the slice's `revision` field is documented as containing critic churn. It is not wrong; it is read as something it is not.", "The re-review's session is re-decided. AMENDED on implementation: KEPT, and it now earns its cost, because sampling supplies for free the thing it was missing. Its stated question is `what did the revision do`, and that question became answerable the moment every slice also records what the same arithmetic returns with nothing revised. Dropping it would have removed the only measurement of the revision at the same moment the null made it readable."]
 non_goals: ["Does NOT retire the revision round. That was the conclusion this measurement was built to test, and the data does not support it — it shows the measurement cannot decide it, which is a different finding. A ticket that removes revision on the strength of THIS evidence has misread it.", "Does not touch D-24. The review advises and never blocks; that was right and stays. Sampling changes what reaches the reviser, not the reviewer's authority.", "Does not add revision ROUNDS. PRDR-196's non-goal stands: more passes of intrinsic critique is the thing the evidence says does not work, and this ticket is about the quality of one pass's input, not the count of passes.", "Does not implement best-of-k PLANNING. `sliceKey` (plan-slices.ts:136) hashes what a slice READ and deliberately ignores the index, so two independent drafts of one slice collide on the same cache entry. Sampling the DRAFT is therefore a change to what C-8 content-addressing means and belongs in its own ticket.", "Does not claim the deterministic checker (PRDR-193) has this problem. It cannot: its findings reproduce by construction. That contrast is the argument, not an aside."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-084", "PRDR-193", "PRDR-196", "PRDR-199"]
@@ -128,3 +128,32 @@ repository — it calls the production `reviewPlan` and the production `revision
 the same `launchInitSession` seam the PLAN phase uses, so it measures the shipped path and not a
 copy of it. Whether a control of this kind belongs in the tree, gated, is a real question and
 deliberately left open here; the fix for this ticket does not wait on it.
+
+## What implementation changed
+
+**C-4⁗″** in the PRD. `sampleReviewPlan` in [`plan-review.ts`](../../src/init/plan-review.ts)
+draws the review `PLAN_REVIEW_SAMPLES` times and keeps what ⌈k/2⌉ reads saw; `plan-slices.ts`
+hands only those to the reviser and sends the rest to PRESENT as advice, which is where D-24
+always meant an unreproduced judgement to go.
+
+**The null is free and is now recorded per slice.** The samples were bought for the filter;
+their pairwise disagreement is exactly what `revisionOutcome` returns when nothing was revised.
+`churn` sits beside `revision` on every slice checkpoint and beside it again at PRESENT, which
+is criterion 4 satisfied by construction rather than by discipline.
+
+**The cost is larger than the ticket estimated.** Not +1 session per slice: **+2**, on every
+slice, revision or not. `slicing-scale` prices it — twenty-five slices take init from **53
+sessions to 103**, and a slice needing no revision now costs four where it cost two. The
+estimate in the discussion that produced this ticket assumed the re-review would go; it did not,
+for the reason recorded in criterion 5.
+
+**One near-miss worth recording.** `churn` was written into the slice cache before it was added
+to `sliceCacheSchema`, which is `z.strictObject` — every existing slice would have failed to
+parse, missed, and re-planned at full price. That is precisely the failure PRDR-196's own
+comment on the `revision` field describes one line above, and it was reintroduced anyway while
+reading that comment. A strict schema is a trust boundary in both directions.
+
+**Criterion 1's "declared value" is a named constant plus an announcement, not an X-1 key.** A
+new ceiling is an F-3 schema event and C-4″ declined one for this same loop; PLAN now prints the
+k and the threshold that produced the findings, which is what PRDR-197's lesson actually asks
+for — a knob the operator can see.

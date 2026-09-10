@@ -769,6 +769,29 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   them, better than a third of runs would abort hours in. A failure now names the slice it
   died on and says that the finished slices are cached.
 
+- **C-4⁗″ (3.1.1, PRDR-200).** REVIEW_PLAN is **sampled**, not drawn once. C-4″ said a
+  `changes` verdict buys exactly one revision carrying the findings; it did not say where those
+  findings come from, and they came from a single session whose findings do not reproduce.
+  Measured by running the production review three times over byte-identical tickets with no
+  redraft between the passes: **ten of sixteen distinct findings appeared in exactly one read**,
+  four of eighteen ordered pairs shared nothing at all, and one ticket drew three different tags
+  in three reads. The revision was being paid an index-carrying session to chase findings that
+  were not reliably there. A slice's review now runs `k` times — 3, a named constant beside
+  PRDR-084's revision count, and **announced at PLAN with the threshold that produced the
+  findings**, because a knob an operator cannot see is one they do not have (PRDR-197). A new
+  X-1 key is an F-3 schema event and is declined here exactly as C-4″ declined one. Only
+  findings recurring in at least ⌈k/2⌉ reads are handed to the reviser; the rest travel to
+  PRESENT as the review's own advice, which is where D-24 always meant a judgement call to go. The samples are not extra cost for the measurement:
+  their pairwise disagreement IS the null, so every slice now records what the same arithmetic
+  returns when nothing was revised. This does not add revision ROUNDS — PRDR-196's non-goal
+  stands, more passes of intrinsic critique is the shape the evidence rejects — and it does not
+  touch D-24: the review still advises and never blocks. It also retires the reading that
+  `revisionOutcome` measured the revision. Against a null in which nothing was redrafted the
+  same arithmetic returns c 0.583 and γ 0.333 versus production's 0.714 and 0.533, and the
+  two-rate break-even test fails an operation that provably did nothing. The recorded numbers
+  were never wrong; what they isolate is smaller than it was read to be, and from here each one
+  is reported beside its own null.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

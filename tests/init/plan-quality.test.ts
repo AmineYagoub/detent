@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { stateDir } from "../../src/fs/layout.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
@@ -108,7 +109,8 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const reviews = inputsOf(backend, "plan-review.json");
-    expect(reviews, "no REVIEW_PLAN session launched").toHaveLength(1);
+    /* C-4⁗″: the review is DRAWN k times; this test's subject is that a fresh session gets the plan. */
+    expect(reviews, "no REVIEW_PLAN session launched").toHaveLength(PLAN_REVIEW_SAMPLES);
     expect(reviews[0]?.["stage"]).toBe("REVIEW_PLAN");
     expect(reviews[0]?.["plan"]).toBeDefined();
     expect(reviews[0]?.["session_budget"]).toBeDefined();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { buildPipeline } from "../../src/init/pipeline.js";
@@ -177,9 +178,19 @@ describe("C-2‴ at product scale", () => {
      */
     const count = (stage: string): number => seen.filter((s) => s.stage === stage).length;
     expect(count("PLAN")).toBe(N_SLICES);
-    expect(count("REVIEW:slice")).toBe(N_SLICES);
+    /* C-4⁗″: k draws per slice — the cost this ticket buys, made visible at scale. */
+    expect(count("REVIEW:slice")).toBe(N_SLICES * PLAN_REVIEW_SAMPLES);
     expect(count("REVIEW:whole")).toBe(1);
-    expect(seen).toHaveLength(2 + N_SLICES * 2 + 1);
+    /**
+     * C-4⁗″ (PRDR-200): the price, in one number.
+     *
+     * ANALYZE + SLICE + (PLAN + k reviews) per slice + the whole-plan review.
+     * At twenty-five slices sampling takes init from 53 sessions to 103 — a
+     * slice that needs no revision now costs four sessions where it cost two.
+     * That is the cost of not handing the reviser findings no second read saw,
+     * and it belongs in the test that exists to price product scale.
+     */
+    expect(seen).toHaveLength(2 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES) + 1);
 
     /**
      * The whole-plan review carries every ticket, so its input grows with the

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presentStage } from "../../src/init/present.js";
-import { revisionOutcome } from "../../src/init/plan-slices.js";
+import { revisionOutcome } from "../../src/init/plan-signal.js";
 
 /**
  * PRDR-196 — the plan's quality signal: what code PROVED, and what the revision

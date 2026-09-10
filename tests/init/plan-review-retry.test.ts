@@ -51,20 +51,23 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   });
 
   it("ksar's case: `revise` with findings buys the revision it always meant to", async () => {
-    const { stage, reviewInputs } = scriptedPlanner([{ schema_version: 1, verdict: "revise", findings: [FINDING] }, APPROVE_PLAN]);
+    /* C-4⁗″: one read saying `revise` no longer buys a revision — the finding has to recur. */
+    const revise = { schema_version: 1, verdict: "revise", findings: [FINDING] };
+    const { stage, reviewInputs } = scriptedPlanner([revise, revise, revise, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
     expect(drafts(backend)).toBe(2);
-    expect(reviews(backend)).toBe(2);
+    expect(reviews(backend)).toBe(4);
     expect(reviewInputs[0]?.["previous_attempt"]).toBeUndefined();
     expect(notes.some((n) => n.includes("`revise` read as `changes`"))).toBe(true);
   });
 
   it("an unusable artifact is relaunched once, carrying the validator's words; the second one counts", async () => {
     const bad = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
-    const { stage, reviewInputs } = scriptedPlanner([bad, { schema_version: 1, verdict: "changes", findings: [FINDING] }, APPROVE_PLAN]);
+    const good = { schema_version: 1, verdict: "changes", findings: [FINDING] };
+    const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
-    /** review (bad) → review (relaunch, good: changes) → revision → review (approve) */
-    expect(reviews(backend)).toBe(3);
+    /** sample 1 (bad → relaunch, good) → samples 2 and 3 → revision → review (approve) */
+    expect(reviews(backend)).toBe(5);
     expect(drafts(backend)).toBe(2);
     const relaunch = reviewInputs[1]?.["previous_attempt"] as { issue: string } | undefined;
     expect(relaunch?.issue).toContain("tag");
@@ -72,9 +75,10 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   });
 
   it("absent twice: the draft stands unreviewed, and the note says why", async () => {
-    const { stage } = scriptedPlanner([null, null]);
+    /* C-4⁗″: unreviewed means every DRAW failed — k samples, each getting PRDR-116's one relaunch. */
+    const { stage } = scriptedPlanner([null, null, null, null, null, null]);
     const { backend, notes } = await init(stage);
-    expect(reviews(backend)).toBe(2);
+    expect(reviews(backend)).toBe(6);
     expect(drafts(backend)).toBe(1);
     expect(notes.some((n) => n.includes("no artifact written"))).toBe(true);
     expect(notes.some((n) => n.includes("the draft stands unreviewed"))).toBe(true);

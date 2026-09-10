@@ -62,6 +62,8 @@ export interface PresentInput {
    * decides whether to approve, so it is where the number belongs.
    */
   readonly revisions?: { readonly resolved: number; readonly survived: number; readonly introduced: number };
+  /** C-4⁗″ (PRDR-200): the same count with nothing revised — never shown apart from the line above. */
+  readonly churn?: { readonly resolved: number; readonly survived: number; readonly introduced: number };
   /**
    * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
    * be put where the next run will read it.
@@ -164,6 +166,12 @@ export function presentInputsFromOutputs(
     )
       ? { revisions: outputs["PLAN"]["revision_summary"] as { resolved: number; survived: number; introduced: number } }
       : {}),
+    ...(((v): v is { resolved: number; survived: number; introduced: number } =>
+      typeof v === "object" && v !== null && typeof (v as { resolved?: unknown }).resolved === "number")(
+      outputs["PLAN"]?.["churn_summary"],
+    )
+      ? { churn: outputs["PLAN"]["churn_summary"] as { resolved: number; survived: number; introduced: number } }
+      : {}),
     derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges").filter(isEdge),
     gateNotices: list<unknown>("DETERMINE_VERIFICATION", "gate_notices").filter((n): n is string => typeof n === "string"),
   };
@@ -226,6 +234,22 @@ export function renderPresentation(input: PresentInput): string {
       `Revision rounds: ${String(rev.resolved)} finding(s) resolved, ${String(rev.survived)} survived the revision, ` +
         `${String(rev.introduced)} introduced by it (PRDR-196).`,
     );
+    /**
+     * C-4⁗″ (PRDR-200): never the revision figure alone.
+     *
+     * The same arithmetic over repeated reads of an UNCHANGED draft still
+     * returns resolutions and introductions, because the reviewer does not
+     * reproduce itself. Read without that line beside it, the figure above
+     * says the revision did something it may not have done.
+     */
+    const churn = input.churn;
+    if (churn !== undefined) {
+      lines.push(
+        `  ...and with NOTHING revised, the same count over repeated reads of the same draft: ` +
+          `${String(churn.resolved)} resolved, ${String(churn.survived)} survived, ${String(churn.introduced)} introduced. ` +
+          `The difference between the two lines is what the revision did; the second line is not error to subtract (C-4⁗″).`,
+      );
+    }
   }
   const proved = input.contractFindings ?? [];
   if (proved.length > 0) {
