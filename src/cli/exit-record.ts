@@ -86,7 +86,7 @@ export function exitRecord(reason: ExitReason, phase: string | null, at: Date, l
         ? "finished"
         : `exited with code ${String(reason.code)}`;
   const during = phase === null || phase.trim() === "" ? "" : ` while: ${phase}`;
-  const advice = reason.kind === "signal" ? " — every finished slice is checkpointed; re-run to resume" : "";
+  const advice = reason.kind === "signal" ? " — every finished slice and redraft is checkpointed; re-run to resume" : "";
   return `${label}: ${what} at ${at.toISOString()}${during}${advice}\n`;
 }
 

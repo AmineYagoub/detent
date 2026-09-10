@@ -779,6 +779,23 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   same way. What the slice actually reached into is recorded as its external dependencies and
   checked precisely on reuse. The cache is validated on read like every other artifact.
 
+- **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
+  the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
+  redrafts each slice the coherence review named, accumulating into memory and writing nothing
+  until it returns. A death at redraft `k` of `n` discards all `k` — and discards the review that
+  produced the findings too, because that review is recomputed from a slice cache the redrafts
+  never reached, so no restart can get further than the one before it except by surviving the
+  whole set in a single life. Observed on `detent-gate-311`: twelve planner sessions totalling
+  **$59.96** ran after the last file in `state/plan/` was written and left no durable artifact,
+  and the run reached **$296.69 across 81 sessions and 11 supervisor attempts** without ever
+  producing a `plan.json`. Each completed redraft is now checkpointed **before the next begins**,
+  keyed on what the whole-plan review READ, and the review's findings and their slice assignment
+  travel with them — a resumed run CONTINUES the set rather than re-paying for the session that
+  named it. The rule generalises past this loop: a phase that spends per ITEM checkpoints per
+  item. And the exit record stops promising otherwise — PRDR-190's "every finished slice is
+  checkpointed" was true of slices and false of redrafts, which cost the operator the ability to
+  notice.
+
 - **C-4⁗′ (3.1.1, PRDR-118).** Every strict planning artifact gets the one relaunch PRDR-116
   gave the review — the validator's own words in the inputs, and only then a failure. The
   lesson had been applied one level too low: the review's artifact is the simplest planning

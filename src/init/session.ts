@@ -255,7 +255,7 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
       if (untilReset !== null && untilReset > MAX_RESET_WAIT_MS) {
         throw new Error(
           `${message} — it resets in ${String(Math.round(untilReset / 60_000))} min, longer than this will wait ` +
-            `(${String(MAX_RESET_WAIT_MS / 60_000)} min). Re-run when the window has reset; every finished slice is checkpointed.`,
+            `(${String(MAX_RESET_WAIT_MS / 60_000)} min). Re-run when the window has reset; every finished slice and redraft is checkpointed.`,
         );
       }
       const wait = untilReset ?? ladder;

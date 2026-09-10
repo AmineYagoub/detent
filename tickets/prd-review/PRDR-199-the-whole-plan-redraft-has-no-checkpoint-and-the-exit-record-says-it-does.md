@@ -1,7 +1,7 @@
 ---
 id: PRDR-199
 title: "The whole-plan redraft loop has no C-8 checkpoint, and PRDR-190's exit record tells the operator it does"
-state: OPEN
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-live", "c-8", "cost", "resume"]
@@ -86,3 +86,33 @@ asks whether a phase that spends has somewhere to write; `C-8`'s AC is stated pe
 redraft is not a phase, it is a loop inside one. Whether that is a second ticket is left open
 here deliberately — the fix for this one is concrete and should not wait on the general
 question.
+
+## What implementation changed
+
+**C-8⁗** in the PRD: a checkpoint covers the expensive LOOP inside a phase, not only the phase.
+`wholePlanReview` now writes `.detent/state/whole-plan.json` holding the first review's findings,
+the unclaimed plan-wide ones, and every completed redraft — the findings land *before* the first
+session that acts on them, and each redraft lands before the next begins. A resume reuses the
+review and continues the set. The file sits beside `plan-review.json` rather than inside
+`state/plan/`, whose every entry is a slice cache and whose readers walk the directory.
+
+**The bug that mattered was in the key, not the loop.** Keyed with a plain `JSON.stringify` of the
+tickets, every resume MISSED: the same ticket parsed by `planDraftSchema` on the way in and by
+`sliceCacheSchema` on the way out carries identical content in a different key ORDER. The cache
+was written correctly and never read, silently, in the direction that costs money — the exact
+shape of the defect this ticket is about. `stableJson` sorts keys before hashing.
+
+**Falsified against a real interrupt**, not a proxy: a drafting session that throws during redraft
+2 of 2, then a resume. Before: the resumed run re-ran the whole-plan review and redrafted s01 from
+scratch. After: one whole review (the second) and one redraft (the one that died). Verified again
+by disabling reuse and watching the test go red.
+
+**Two mistakes in my own test, both worth recording**, because each made it pass while measuring
+nothing. Labelling a redraft by a first-draft COUNT breaks on resume, when the slice caches hit
+and no first drafts run. Labelling it by `wholeReviews >= 1` breaks once the review itself is
+reused and the counter never increments. The discriminator that survives both is the one thing
+that is actually true of a redraft here: it carries findings.
+
+**Criterion 5 is satisfied by making the message true rather than by weakening it.** The exit
+record and the outage notice now say `every finished slice and redraft is checkpointed`, which
+they are.
