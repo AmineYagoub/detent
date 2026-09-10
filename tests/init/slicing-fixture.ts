@@ -36,6 +36,8 @@ export const ticket = (id: string, deps: string[] = []) => ({
   depends_on: deps,
   provides: [],
   consumes: [],
+  requirement_ids: [],
+  baseline_ids: [],
   risk_label: false,
 });
 

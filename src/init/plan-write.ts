@@ -281,6 +281,9 @@ function newTicket(deps: WriteDeps, draft: DraftedTicket, blockers: readonly str
     /** A-1‴: the interface travels with the ticket — the sessions read it. */
     provides: draft.provides,
     consumes: draft.consumes,
+    /** A-1⁵: what it delivers travels too — the coverage check and the session read the same lists. */
+    requirement_ids: draft.requirement_ids,
+    baseline_ids: draft.baseline_ids,
     risk_label: draft.risk_label,
   });
 }

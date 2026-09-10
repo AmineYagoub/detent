@@ -1,7 +1,7 @@
 ---
 id: PRDR-201
 title: "PLAN is commanded to cover every requirement and baseline item, nothing can check that it did, and the only thing watching is the critic PRDR-200 measured at 0.45"
-state: OPEN
+state: DONE
 severity: major
 category: gap
 labels: ["prd-review", "found-by-measurement", "planning", "traceability", "coverage"]
@@ -88,3 +88,31 @@ The narrower question of whether a ticket should cite the baseline item in a str
 rather than in prose is left open here deliberately. `provides`/`consumes` already show the shape
 that works — a typed list beats a convention inside free text, and the evidence above is what a
 convention inside free text costs.
+
+## What implementation changed
+
+**A-1⁵** in the PRD. A ticket now carries `requirement_ids` and `baseline_ids` as typed lists;
+`applyContracts` takes the slice specs and decides coverage by set membership; both `plan.ts`
+call sites pass them. The fields travel onto the WRITTEN ticket as A-1‴'s interface does, so an
+implement session knows which requirement it serves — that was not in the acceptance criteria and
+was forced by a compile-time guard, correctly: `DRAFT_MAPPING_IS_TOTAL` fails the moment a drafted
+field is left unmapped, because a field silently dropped between draft and disk was a real bug
+(PRDR-101). They are also `APPROVED_FIELDS`, since what a ticket delivers is content a human
+approves and no run-time writer touches it.
+
+**One thing found on the way, and fixed.** PRDR-196 put the checker's findings under their own
+heading at PRESENT precisely because "one kind is reliable and the other is judgement and merging
+them discards the distinction". They were nonetheless ALSO concatenated into `review_findings`, so
+every proof was printed twice — once as a proof, and once as a judgement call "held after
+revision", which is the one thing a proof is not. `contracts.findings` no longer joins that list.
+
+**Two weak assertions this surfaced.** A test extracting question ids with `^ {2}(\S+): ` counted
+any two-space-indented `word:` line, so a `coverage:` finding read as a fifth question; it is now
+scoped to the questions block. And two of the new cases failed first on my own fixtures rather
+than on the code — `t()` defaults to slice `s01`, so a ticket named `t-s02-001` was still in s01,
+and a ticket declaring nothing lands in the UNDECLARED branch rather than the per-item one.
+
+**The undeclared branch is the ticket's own lesson, encoded.** A slice whose tickets declare
+nothing is reported as declaring no coverage, never as having dropped its assigned ids. Reading a
+C-8 cache reused from before the fields existed as a plan that lost four requirements is exactly
+the false accusation that produced this ticket.

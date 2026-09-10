@@ -281,6 +281,17 @@ export const planDraftSchema = z.strictObject({
         /** A-1‴: the names this ticket owns, and the ones it leans on. */
         provides: z.array(contractProvideSchema).default([]),
         consumes: z.array(contractConsumeSchema).default([]),
+        /**
+         * A-1⁵ (PRDR-201): what this ticket DELIVERS, as data.
+         *
+         * C-2⁗ commanded the coverage and the answer lived in prose, so it
+         * could not be checked: one plan cited baseline ids bare where another
+         * bracketed them, and a non-goal naming an item as excluded read as
+         * coverage of it. Defaulted, because a plan drafted before the fields
+         * existed is undeclared rather than invalid.
+         */
+        requirement_ids: z.array(nonEmptyString).default([]),
+        baseline_ids: z.array(nonEmptyString).default([]),
         risk_label: z.boolean().default(false),
       }),
     )

@@ -34,6 +34,8 @@ const ticket = (id: string, deps: string[] = [], title = `t ${id}`) => ({
   depends_on: deps,
   provides: [],
   consumes: [],
+  requirement_ids: [],
+  baseline_ids: [],
   risk_label: false,
 });
 

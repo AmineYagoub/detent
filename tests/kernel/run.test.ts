@@ -331,6 +331,8 @@ describe("C-9′ a run executes only the plan a human approved", () => {
         depends_on: [],
         provides: [],
         consumes: [],
+        requirement_ids: [],
+        baseline_ids: [],
         risk_label: false,
         slice: "s01",
       },

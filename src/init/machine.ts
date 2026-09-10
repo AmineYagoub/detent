@@ -226,6 +226,15 @@ const APPROVED_FIELDS: readonly (keyof Ticket)[] = [
   "non_goals",
   "surface",
   /**
+   * A-1⁵ (PRDR-201): what a ticket DELIVERS is approved content, not run state.
+   *
+   * A human approving a plan is approving which requirement each ticket
+   * carries; rewriting that afterwards changes what was agreed, and no
+   * run-time writer touches either field.
+   */
+  "requirement_ids",
+  "baseline_ids",
+  /**
    * PRDR-153: `blockers` stays — plan-time only, verified: no run-time writer.
    * `waits_on` and `links` were added by PRDR-152 and are REMOVED again: both
    * are written DURING a run — `dependency.ts` sets `waits_on` on an X-4′

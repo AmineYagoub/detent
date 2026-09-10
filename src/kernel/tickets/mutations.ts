@@ -123,6 +123,9 @@ export interface NewTicket {
   /** A-1‴ (PRDR-120): the interface this ticket owns, and the ones it leans on. */
   readonly provides?: readonly ContractProvide[];
   readonly consumes?: readonly ContractConsume[];
+  /** A-1⁵ (PRDR-201): the requirement ids and baseline items this ticket delivers. */
+  readonly requirement_ids?: readonly string[];
+  readonly baseline_ids?: readonly string[];
   readonly priority?: number;
   readonly risk_label?: boolean;
 }
@@ -156,6 +159,9 @@ export function newTicket(input: NewTicket, at = new Date().toISOString()): Tick
     blockers: [...(input.blockers ?? [])],
     provides: [...(input.provides ?? [])],
     consumes: [...(input.consumes ?? [])],
+    /** A-1⁵: what it delivers, recorded at creation like the interface above. */
+    requirement_ids: [...(input.requirement_ids ?? [])],
+    baseline_ids: [...(input.baseline_ids ?? [])],
     /** X-4′: discovered at run time, never at creation. */
     waits_on: [],
     links: [],

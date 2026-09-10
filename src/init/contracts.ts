@@ -1,4 +1,4 @@
-import { contractKey, type ContractConsume, type PlanReview } from "../schemas/init.js";
+import { contractKey, type ContractConsume, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import type { DraftedTicket } from "./plan-write.js";
 
 /**
@@ -91,6 +91,15 @@ export function applyContracts(
   sliceOrder: readonly string[] = [],
   /** Names already provided by DONE work this plan no longer redrafts. */
   external: readonly string[] = [],
+  /**
+   * A-1⁵ (PRDR-201): what SLICE ASSIGNED, so coverage can be decided.
+   *
+   * Absent means "not checkable" and is silent, which is not fail-open the way
+   * an absent `sliceOrder` would be: there is nothing in the tickets to derive
+   * an assignment from, so a caller without the specs genuinely cannot ask this
+   * question. Both production call sites in `plan.ts` pass it.
+   */
+  assigned: readonly SliceSpec[] = [],
 ): ContractResult {
   const findings: PlanReview["findings"] = [];
   const derived: { consumer: string; provider: string; contract: string }[] = [];
@@ -178,6 +187,51 @@ export function applyContracts(
   }
 
   const tickets = input.map((t) => ({ ...t, depends_on: [...(edges.get(t.id) ?? new Set(t.depends_on))] }));
+  /**
+   * A-1⁵ (PRDR-201): coverage, decided.
+   *
+   * Last, because it reads the tickets as they will be written and asks a
+   * question nothing above it touches: did what SLICE assigned actually land.
+   * Set membership over two declared lists — no session, no judgement, and no
+   * reading of prose, which is the whole point. A strict read of the prose
+   * convention accused a complete fifteen-slice plan of dropping CI, the
+   * runbook, traceability and the golden path; a loose one counted a non-goal
+   * naming an item as EXCLUDED as coverage of it.
+   */
+  for (const slice of assigned) {
+    const own = tickets.filter((t) => t.slice === slice.id);
+    /* Not planned yet — C-2‴ plans slice by slice, and an unplanned slice is not a gap. */
+    if (own.length === 0) continue;
+    const wants = [
+      ...slice.baseline_items.map((id) => ({ id, kind: "baseline item" })),
+      ...slice.requirement_ids.map((id) => ({ id, kind: "requirement" })),
+    ];
+    if (wants.length === 0) continue;
+    /**
+     * C-8: a slice cached before these fields existed declares nothing, and
+     * reading that as a plan that DROPPED its requirements turns a reused
+     * checkpoint into a false accusation — the exact error that produced this
+     * ticket. Undeclared is reported as undeclared.
+     */
+    if (own.every((t) => t.requirement_ids.length === 0 && t.baseline_ids.length === 0)) {
+      findings.push({
+        tag: "coverage",
+        finding:
+          `${slice.id} declares no coverage: ${String(wants.length)} assigned item(s) and no ticket names one. ` +
+          `Planned before A-1⁵ and reused from cache (C-8), or drafted without the fields — re-plan the slice to decide it.`,
+      });
+      continue;
+    }
+    const sourced = new Set(own.flatMap((t) => [...t.requirement_ids, ...t.baseline_ids]));
+    for (const want of wants) {
+      if (sourced.has(want.id)) continue;
+      findings.push({
+        tag: "coverage",
+        finding: `${slice.id} was assigned ${want.kind} ${want.id} and no ticket in it declares delivering ${want.id} (A-1⁵).`,
+      });
+    }
+  }
+
   return { tickets, findings, derived };
 }
 

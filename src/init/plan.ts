@@ -55,6 +55,8 @@ type MappedDraftKeys =
   | "depends_on"
   | "provides"
   | "consumes"
+  | "requirement_ids"
+  | "baseline_ids"
   | "risk_label";
 type UnmappedDraftKeys = Exclude<keyof PlanDraftTicket, MappedDraftKeys>;
 /** Fails to compile the moment a drafted field is left unhandled. */
@@ -123,6 +125,9 @@ export function planDraftSkeleton(): Record<string, unknown> {
         provides: [{ kind: "symbol", id: "<pkg/path.ExportedName>", note: "<what it means — a consumer session is handed this verbatim>" }],
         /** A-1‴: names another ticket owns. Detent derives the dependency edge from these. */
         consumes: [{ kind: "config", id: "<KEY another ticket introduces — omit the list if none>" }],
+        /** A-1⁵: which of the slice's OWN `requirement_ids` and `baseline_items` this ticket delivers. */
+        requirement_ids: ["<requirement id from this slice's requirement_ids — omit if none>"],
+        baseline_ids: ["<PB-### from this slice's baseline_items — omit if none>"],
         risk_label: false,
       },
     ],
@@ -217,7 +222,7 @@ export async function draftPlan(
     }${
       slice === undefined
         ? ""
-        : ` Draft ONLY slice \`${slice.id}\` (${slice.title}): every requirement id in its \`requirement_ids\` and every baseline item in its \`baseline_items\` reaches a ticket, and nothing outside it does. A \`production_baseline\` item becomes tickets whose criteria are its \`verifiable_by\`, sourced \`baseline:PB-###\` (C-2⁗). Ticket ids are \`t-${slice.id}-NNN\`. A ticket that needs code an earlier slice built names that ticket in \`depends_on\` by its id from \`plan_index\`.`
+        : ` Draft ONLY slice \`${slice.id}\` (${slice.title}): every requirement id in its \`requirement_ids\` and every baseline item in its \`baseline_items\` reaches a ticket, and nothing outside it does. A \`production_baseline\` item becomes tickets whose criteria are its \`verifiable_by\` (C-2⁗). Record what each ticket DELIVERS in its \`requirement_ids\` and \`baseline_ids\` fields — those two lists are what coverage is checked against, not the prose, so an id mentioned only in a description or a non-goal does not count (A-1⁵). Ticket ids are \`t-${slice.id}-NNN\`. A ticket that needs code an earlier slice built names that ticket in \`depends_on\` by its id from \`plan_index\`.`
     } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. A question the documents cannot answer goes in \`questions\` with the assumption the draft proceeds on. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\`, \`tickets\` and \`questions\` only; the validator is strict and refuses unknown keys (P2).${
       scope.findings === undefined ? "" : " A previous draft drew the `review_findings` in your inputs — address every one of them in this draft."
     }${
@@ -255,7 +260,8 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    * tickets, because an edge must land on the text that reaches disk and a
    * redraft rewrites that text.
    */
-  const early = applyContracts(planned.tickets, slices.map((s) => s.id));
+  /* A-1⁵: the specs too, so coverage is decided here rather than read by the review. */
+  const early = applyContracts(planned.tickets, slices.map((s) => s.id), [], slices);
   if (early.findings.length > 0) {
     deps.note?.(
       `contract checks before review: ${String(early.findings.length)} finding(s) proved by code, not paid for — ${early.findings.map((f) => f.tag).join(", ")}`,
@@ -274,11 +280,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const settledNames = allTickets(deps.root)
     .filter((t) => t.state === "DONE" && !inPlan.has(t.id))
     .flatMap((t) => t.provides.map((p) => contractKey(p)));
-  const contracts = applyContracts(
-    reviewed.tickets,
-    slices.map((s) => s.id),
-    settledNames,
-  );
+  const contracts = applyContracts(reviewed.tickets, slices.map((s) => s.id), settledNames, slices);
   const drafted = contracts.tickets;
   for (const d of contracts.derived) {
     deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);
@@ -310,7 +312,18 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       f.ticket !== undefined && live.has(f.ticket) ? f : { ...f, finding: `[${r.slice}] ${f.finding}` },
     ),
   );
-  const findings = [...held, ...reviewed.remaining, ...contracts.findings, ...written.findings];
+  /**
+   * A-1⁵ (PRDR-201): `contracts.findings` is NOT in this list.
+   *
+   * PRDR-196 put the checker's findings in front of the operator under their
+   * own heading precisely because one kind is proved and the other is
+   * judgement, and said that merging them discards the distinction that makes
+   * the first worth having. They were nonetheless also concatenated here, so
+   * every proof was printed twice — once as a proof and once as a judgement
+   * call "held after revision", which is the one thing it is not. Shown once,
+   * under the heading that says what it is.
+   */
+  const findings = [...held, ...reviewed.remaining, ...written.findings];
   return {
     kind: "complete",
     outputs: {

@@ -45,6 +45,8 @@ const ticket = (id: string, deps: string[] = []) => ({
   depends_on: deps,
   provides: [],
   consumes: [],
+  requirement_ids: [],
+  baseline_ids: [],
   risk_label: false,
 });
 
@@ -413,7 +415,15 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const message = result.interrupt?.message ?? "";
-    const ids = [...message.matchAll(/^ {2}(\S+): /gm)].map((m) => m[1] as string);
+    /**
+     * Scoped to the questions BLOCK. `^ {2}(\S+): ` matches any two-space
+     * indented `word:` line, and A-1⁵'s contract findings are rendered in that
+     * shape too — so the unscoped version counted a `coverage:` proof as a
+     * fifth question and this test's subject, id uniqueness, was never what
+     * moved it.
+     */
+    const block = message.split("Open questions (")[1]?.split("\n\n")[0] ?? "";
+    const ids = [...block.matchAll(/^ {2}(?:\[BLOCKING\] )?(\S+): /gm)].map((m) => m[1] as string);
     expect(ids.length, "four questions from three stages, all shown").toBe(4);
     expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(ids.length);
     /** Both of the slice's drafts contributed, and neither was lost to the other's id. */

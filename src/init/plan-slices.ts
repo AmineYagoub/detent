@@ -63,6 +63,9 @@ const sliceCacheSchema = z.strictObject({
       surface: z.array(z.string()).default([]),
       provides: z.array(z.unknown()).default([]),
       consumes: z.array(z.unknown()).default([]),
+      /* A-1⁵: additive, so a slice cached before the fields existed still HITS. */
+      requirement_ids: z.array(z.string()).default([]),
+      baseline_ids: z.array(z.string()).default([]),
     }),
   ),
   questions: z.array(planQuestionSchema),

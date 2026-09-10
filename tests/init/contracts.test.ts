@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
 import { scopeInputs } from "../../src/init/plan-review.js";
-import { CONTRACT_KINDS, contractKey, planDraftSchema } from "../../src/schemas/init.js";
+import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 
 /**
@@ -38,6 +38,8 @@ const t = (id: string, over: Partial<DraftedTicket> = {}): DraftedTicket => ({
   depends_on: [],
   provides: [],
   consumes: [],
+  requirement_ids: [],
+  baseline_ids: [],
   risk_label: false,
   slice: "s01",
   ...over,
@@ -319,5 +321,97 @@ describe("PRDR-193 the whole-plan review is told what code already proved", () =
   it("says nothing extra when code found nothing", () => {
     const inputs = scopeInputs({ kind: "whole", slices: [] });
     expect(Object.keys(inputs)).not.toContain("already_found");
+  });
+});
+
+/**
+ * A-1⁵ (PRDR-201) — coverage, decided rather than read.
+ *
+ * C-2⁗ has commanded since PRDR-117 that every id in a slice's
+ * `requirement_ids` and every item in its `baseline_items` reaches a ticket.
+ * Nothing checked it, and nothing could: the assignment lived on the slice and
+ * the answer lived in prose. These cases are the answer becoming data.
+ */
+describe("A-1⁵ coverage is a set operation over what the ticket declares", () => {
+  const slice = (over: Partial<SliceSpec> = {}): SliceSpec =>
+    ({
+      id: "s01",
+      title: "skeleton",
+      goal: "g",
+      requirement_ids: [],
+      baseline_items: [],
+      docs: [],
+      depends_on: [],
+      expected_tickets: 2,
+      rationale: "",
+      ...over,
+    }) as SliceSpec;
+
+  it("a baseline item no ticket sources is a finding, with no session launched", () => {
+    const out = applyContracts(
+      [t("t-s01-001", { baseline_ids: ["PB-004"] })],
+      ["s01"],
+      [],
+      [slice({ baseline_items: ["PB-004", "PB-008"] })],
+    );
+    expect(out.findings.map((f) => f.finding).join("\n")).toContain("PB-008");
+    expect(out.findings.map((f) => f.finding).join("\n")).not.toContain("PB-004");
+    expect(out.findings.every((f) => f.tag === "coverage")).toBe(true);
+  });
+
+  it("a requirement id no ticket serves is a finding", () => {
+    const out = applyContracts(
+      [t("t-s01-001", { requirement_ids: ["R-1"] })],
+      ["s01"],
+      [],
+      [slice({ requirement_ids: ["R-1", "R-7"] })],
+    );
+    expect(out.findings.map((f) => f.finding).join("\n")).toContain("R-7");
+    expect(out.findings.map((f) => f.finding).join("\n")).not.toContain("R-1");
+  });
+
+  it("everything assigned and everything declared is silent", () => {
+    const out = applyContracts(
+      [t("t-s01-001", { requirement_ids: ["R-1"], baseline_ids: ["PB-004"] })],
+      ["s01"],
+      [],
+      [slice({ requirement_ids: ["R-1"], baseline_items: ["PB-004"] })],
+    );
+    expect(out.findings).toEqual([]);
+  });
+
+  /**
+   * The C-8 case, and the reason this is not simply "uncovered". A slice cached
+   * before the fields existed declares nothing, and reading that as a plan that
+   * DROPPED four requirements is how a reused checkpoint becomes a false
+   * accusation — which is exactly the error that produced PRDR-201.
+   */
+  it("a slice planned before the fields existed is UNDECLARED, not uncovered", () => {
+    const out = applyContracts(
+      [t("t-s01-001"), t("t-s01-002")],
+      ["s01"],
+      [],
+      [slice({ requirement_ids: ["R-1", "R-7"], baseline_items: ["PB-004"] })],
+    );
+    expect(out.findings).toHaveLength(1);
+    expect(out.findings[0]?.finding).toMatch(/declares no coverage|undeclared/i);
+    expect(out.findings[0]?.finding, "it must not name the ids as dropped").not.toContain("R-7");
+  });
+
+  it("a slice with no tickets yet is not judged at all", () => {
+    /* `t()` defaults to slice s01, so the ticket has to SAY it belongs elsewhere. */
+    const out = applyContracts([t("t-s02-001", { slice: "s02" })], ["s01", "s02"], [], [slice({ baseline_items: ["PB-004"] })]);
+    expect(out.findings).toEqual([]);
+  });
+
+  it("prose is not coverage: an id named only in a non-goal does not source it", () => {
+    const out = applyContracts(
+      /* It declares PB-004, so the slice is NOT undeclared — PB-009 exists only in prose. */
+      [t("t-s01-001", { baseline_ids: ["PB-004"], non_goals: ["Localisation and JSON diagnostics (PB-009, slice s06)."] })],
+      ["s01"],
+      [],
+      [slice({ baseline_items: ["PB-004", "PB-009"] })],
+    );
+    expect(out.findings.map((f) => f.finding).join("\n")).toContain("PB-009");
   });
 });

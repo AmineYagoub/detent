@@ -309,6 +309,25 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   ksar-cloud, where eight findings survived a revision round and five were one defect wearing
   different costumes — two tickets disagreeing about a name neither of them owned.
 
+- **A-1⁵ (3.1.1, PRDR-201).** A ticket declares the **requirement ids and production-baseline
+  items it delivers**, in typed fields, so coverage is a set operation rather than a reading.
+  C-2⁗ has commanded that coverage since PRDR-117 — every id in a slice's `requirement_ids` and
+  every item in its `baseline_items` reaches a ticket — and nothing has ever checked it:
+  `requirement_ids` occurs in the source only in the prompt that commands it, the skeleton that
+  shapes it and the schema that types it. Baseline sourcing was asked for as PROSE,
+  `baseline:PB-###` inside an acceptance criterion, and prose is not checkable — one finished
+  plan cited the ids bare where another bracketed them, so a strict check accused a complete
+  fifteen-slice plan of dropping CI, the runbook, traceability and the golden path, while a
+  loose one reads a non-goal naming an item as EXCLUDED as coverage of it. A-1‴ already
+  established the shape that works for the other half of this problem; this is that shape,
+  applied here. The findings are PROOFS and join the contract set (PRDR-193), reaching PRESENT
+  under the proved heading rather than merged with the review's, because one kind is decided and
+  the other is judgement. A slice planned before the fields existed is reported as **undeclared**
+  rather than as uncovered: a cache reused under C-8 cannot be read as a plan that dropped
+  something. This matters now because the only thing watching coverage today is the review's own
+  `coverage` tag, which PRDR-200 measured at Jaccard 0.45 across two independent sweeps and 0.56
+  after majority filtering; a set operation decides the same question exactly, for no session.
+
 - **S-3′ (3.1.1, PRDR-121).** Symbol intelligence is an OPTIONAL adapter, discovered and never
   installed. `symbols: { enabled, command, pinned }` in config; absent or disabled, every stage
   runs unchanged. Enabled with a command Detent cannot run raises `AWAIT_SETUP_CONSENT` naming
