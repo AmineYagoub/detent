@@ -19,7 +19,8 @@ import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
-import { launchInitSession } from "./session.js";
+import { launchInitSession, withInitJournal } from "./session.js";
+import type { LaunchBatch } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 
 /**
@@ -161,7 +162,8 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
        * the phase reasons must invalidate it, exactly as an edited doc does. */
       return `${contentsDigest(deps.root, docs)}|${valueDigest([ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [], deps.prompts.hashes.planner])}`;
     },
-    run: async (ctx) => {
+    /* PRDR-203: one journal for the phase, handed to every launch it makes. */
+    run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
       const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
       const stackMarkers = (ctx.outputs["DISCOVER"]?.["stack_markers"] as string[] | undefined) ?? [];
       return await analyzeStage({
@@ -171,7 +173,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
           await launchInitSession(
-            sessionDeps(deps),
+            sessionDeps(deps, journal),
             { role: "planner", inputs, artifactOut: analysisPath(deps.root) },
           );
         },
@@ -181,7 +183,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
           researchOne: async (question, remaining) => {
             const artifactOut = path.join(stateDir(deps.root), "state", "planning-brief.json");
             const result = await launchInitSession(
-              sessionDeps(deps),
+              sessionDeps(deps, journal),
               {
                 role: "research",
                 inputs: { question, tool_call_budget: remaining, hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web" },
@@ -200,7 +202,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
           },
         },
       });
-    },
+    }),
   };
 }
 
@@ -249,7 +251,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
       ])}`;
     },
     run: async (ctx) =>
-      await sliceStage({
+      await withInitJournal(deps.root, async (journal) => await sliceStage({
         root: deps.root,
         docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
         analysis: analysisFromOutputs(ctx.outputs),
@@ -258,9 +260,9 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
         sliceSize: deps.sliceSize ?? { min: 12, max: 18 },
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
-          await launchInitSession(sessionDeps(deps), { role: "planner", inputs, artifactOut: slicesPath(deps.root) });
+          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut: slicesPath(deps.root) });
         },
-      }),
+      })),
   };
 }
 
@@ -286,7 +288,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
       ])}`,
     /** C-8‴: the tickets and the plan artifact are PLAN's output; if they are gone, plan again. */
     outputIntact: () => planOutputIntact(deps.root),
-    run: async (ctx) => {
+    run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
       const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
       return await planStage({
         root: deps.root,
@@ -301,14 +303,14 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),
-        launch: async (inputs: Record<string, unknown>, artifactOut?: string) => {
+        launch: async (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch) => {
           await launchInitSession(
-            sessionDeps(deps),
-            { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root) },
+            sessionDeps(deps, journal),
+            { role: "planner", inputs, artifactOut: artifactOut ?? planDraftPath(deps.root), ...(batch === undefined ? {} : { batch }) },
           );
         },
       });
-    },
+    }),
   };
 }
 

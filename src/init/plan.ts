@@ -14,6 +14,7 @@ import type { Binding } from "../schemas/records.js";
 import { allTickets, readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { previousAttemptInput, withOneRelaunch } from "./retry.js";
+import type { LaunchBatch } from "./launch-batch.js";
 
 /**
  * T-066 — PLAN generation and the bootstrap lifecycle (C-4, A-2).
@@ -84,8 +85,11 @@ export interface PlanDeps {
   readonly boundSlots: readonly string[];
   /** PRDR-081: the budget a ticket must fit — the planner sizes against it. */
   readonly budgets: Budgets;
-  /** PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN a verdict. */
-  readonly launch: (inputs: Record<string, unknown>, artifactOut?: string) => Promise<void>;
+  /**
+   * PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN
+   * a verdict. D-28′ (PRDR-203): a launch may belong to a batch gated once.
+   */
+  readonly launch: (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch) => Promise<void>;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.

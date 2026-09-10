@@ -1,4 +1,5 @@
 import { readRules } from "../kernel/rules.js";
+import type { RunJournal } from "../kernel/journal.js";
 import type { InitSessionDeps } from "./session.js";
 import type { PipelineDeps } from "./pipeline.js";
 
@@ -14,11 +15,13 @@ import type { PipelineDeps } from "./pipeline.js";
  * PRDR-194, PRDR-197), which is what a distinct responsibility looks like when
  * it is still living inside another module.
  */
-export function sessionDeps(deps: PipelineDeps): InitSessionDeps {
+export function sessionDeps(deps: PipelineDeps, journal: RunJournal): InitSessionDeps {
   return {
     root: deps.root,
     backend: deps.backend,
     prompts: deps.prompts,
+    /* PRDR-203: the phase's journal, one for every launch the phase makes. */
+    journal,
     spendCeiling: deps.budgets.run_spend_usd,
     ...(deps.note === undefined ? {} : { note: deps.note }),
     /* X-1⁵ (PRDR-191): the breaker's ceilings travel with the total. */

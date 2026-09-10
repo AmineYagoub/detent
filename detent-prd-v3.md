@@ -828,6 +828,24 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   were never wrong; what they isolate is smaller than it was read to be, and from here each one
   is reported beside its own null.
 
+- **D-28′ (3.1.1, PRDR-203).** The overshoot bound is one in-flight **batch**, not one in-flight
+  session. D-25 evaluates the gate at launch and never mid-flight, and D-28 states the
+  consequence as "bounded at one in-flight session". C-4⁗″'s three review draws are independent
+  by construction — the one place in the pipeline where concurrency buys wall-clock without
+  touching plan quality — and launches that pass the gate together all pass it at the same
+  figure. So a batch is gated ONCE, by the first of its launches the gate lets through, and the
+  bound is `PLAN_REVIEW_SAMPLES` sessions: whether the draws run together or one after another,
+  because a bound that depended on scheduling would not be one. A refused batch launches none
+  of its sessions; a relaunch (C-4⁗) is gated on its own. The figure: two extra in-flight
+  sessions are $4–10 on smoke-1's ledger (mean $2.08, peak $5.18 over 45 rows), against a
+  no-progress threshold whose unit term there was about $40. Two things had to hold first, and
+  neither was the ledger, which appends a row per session and re-reads the file at the gate
+  (X-1‴): `init` now holds one journal per PHASE and hands it to every launch, as the run loop
+  has held one per run — F-1's single writer is the process, which the lock decides, not the
+  launch — and each draw writes its own artifact under its own S-1″ surface. The draws still
+  run in sequence; making them concurrent is C-4⁗″'s own amendment, and this is what had to
+  hold before it could be.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

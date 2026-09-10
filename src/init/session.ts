@@ -14,6 +14,7 @@ import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
+import type { LaunchBatch } from "./launch-batch.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
 const INIT_TICKET = "init";
@@ -67,6 +68,21 @@ export interface InitSessionDeps {
   readonly note?: (text: string) => void;
   /** X-6/S-3 docs domains for research-capable init sessions. */
   readonly docsDomains?: readonly string[];
+  /**
+   * PRDR-203: the run journal, opened ONCE by whoever owns the phase and handed
+   * to every launch in it.
+   *
+   * `launchOnce` used to open its own per launch and close it on the way out.
+   * That is the same thing for as long as launches never overlap, and a refusal
+   * the moment two do: `RunJournal.open` keeps an in-process set of roots —
+   * F-1's single writer — so the second launch in flight threw
+   * `JournalContendedError` before any session started. A root's one writer is
+   * the PROCESS, which the lock decides; the run loop has opened one journal per
+   * run since `kernel/run.ts` existed, and init now matches it (ARCH-2). Required,
+   * not defaulted: a launch that could open its own would be the old behaviour
+   * with a new name.
+   */
+  readonly journal: RunJournal;
 }
 
 export interface InitSessionRequest {
@@ -76,6 +92,25 @@ export interface InitSessionRequest {
   readonly artifactOut: string;
   /** C-3a: research capability for planning questions. */
   readonly withWeb?: boolean;
+  /**
+   * D-28′ (PRDR-203): the batch this launch belongs to, if any. The batch's
+   * first launch evaluates the gate; the rest pass on that evaluation.
+   */
+  readonly batch?: LaunchBatch;
+}
+
+/**
+ * PRDR-203: one journal for a phase — opened before its first launch, closed
+ * after its last, handed to every launch between. The shape `kernel/run.ts`
+ * has always had for a run.
+ */
+export async function withInitJournal<T>(root: string, body: (journal: RunJournal) => Promise<T>): Promise<T> {
+  const journal = RunJournal.open(root);
+  try {
+    return await body(journal);
+  } finally {
+    journal.close();
+  }
 }
 
 function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
@@ -275,31 +310,34 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
 async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   mkdirSync(path.dirname(request.artifactOut), { recursive: true });
 
-  const journal = RunJournal.open(deps.root);
-  let result: SessionResult;
-  try {
-    const ledger =
-      deps.progressBreaker === undefined
-        ? new SpendLedger(deps.root, journal, deps.spendCeiling)
-        : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
-    /* D-25: the ceiling is a launch gate, evaluated here and never mid-flight. */
+  /* PRDR-203: the phase's journal, never this launch's own — see `InitSessionDeps.journal`. */
+  const journal = deps.journal;
+  const ledger =
+    deps.progressBreaker === undefined
+      ? new SpendLedger(deps.root, journal, deps.spendCeiling)
+      : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
+  /*
+   * D-25: the ceiling is a launch gate, evaluated here and never mid-flight.
+   * D-28′ (PRDR-203): a batch is gated once, by the first of its launches the
+   * gate lets through; `passed` is set only after the gate did not throw.
+   */
+  if (request.batch === undefined || !request.batch.passed) {
     ledger.assertLaunchAllowed();
-    journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
-    result = await deps.backend.run(initSessionSpec(deps, request));
-    ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString());
-    journal.appendTicketEvent(INIT_TICKET, {
-      stage: request.role,
-      event: "end",
-      at: new Date().toISOString(),
-      ok: result.ok,
-      turns: result.turns,
-      cost: result.costEstimateUsd,
-      ...(result.crashed === true ? { partial: "crash" } : {}),
-      ...(result.rawTail === "" ? {} : { tail: result.rawTail.slice(-500) }),
-    });
-  } finally {
-    journal.close();
+    if (request.batch !== undefined) request.batch.passed = true;
   }
+  journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
+  const result = await deps.backend.run(initSessionSpec(deps, request));
+  ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString());
+  journal.appendTicketEvent(INIT_TICKET, {
+    stage: request.role,
+    event: "end",
+    at: new Date().toISOString(),
+    ok: result.ok,
+    turns: result.turns,
+    cost: result.costEstimateUsd,
+    ...(result.crashed === true ? { partial: "crash" } : {}),
+    ...(result.rawTail === "" ? {} : { tail: result.rawTail.slice(-500) }),
+  });
 
   if (!result.ok) {
     /*

@@ -6,7 +6,8 @@ import { CEILINGS, type Budgets } from "../src/schemas/budgets.js";
 import { ClaudeCodeBackend } from "../src/sessions/sdk.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
 import { STRUCTURAL_PROTECTED } from "../src/schemas/common.js";
-import { launchInitSession } from "../src/init/session.js";
+import { launchInitSession, withInitJournal } from "../src/init/session.js";
+import type { LaunchBatch } from "../src/init/launch-batch.js";
 import { sessionDeps } from "../src/init/session-deps.js";
 import { reviewPlan } from "../src/init/plan-review.js";
 import { sampleChurn } from "../src/init/plan-signal.js";
@@ -118,20 +119,6 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
     effortRouting: config?.effort_routing ?? {},
     note: (text: string) => process.stdout.write(`      ${text}\n`),
   };
-  const reviewDeps = {
-    root,
-    docs: corpus.docs,
-    budgets,
-    launch: async (inputs: Record<string, unknown>, artifactOut?: string): Promise<void> => {
-      await launchInitSession(sessionDeps(pipelineDeps), {
-        role: "planner",
-        inputs,
-        artifactOut: artifactOut ?? planDraftPath(root),
-      });
-    },
-    note: (text: string) => process.stdout.write(`      ${text}\n`),
-  };
-
   const before = ledgerSpend(root);
   const ids = corpus.planned.filter((id) => want === null || want.includes(id));
   process.stdout.write(`null-review — ${String(runs)} review(s) per slice over UNCHANGED tickets\nroot: ${root}\nslices: ${ids.join(" ")}\n\n`);
@@ -139,6 +126,23 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
   let tBefore = 0;
   let tAtRisk = 0;
   const total = { resolved: 0, survived: 0, introduced: 0 };
+
+  /* PRDR-203: one journal for the sweep, as a phase holds one for every launch it makes. */
+  await withInitJournal(root, async (journal) => {
+    const reviewDeps = {
+      root,
+      docs: corpus.docs,
+      budgets,
+      launch: async (inputs: Record<string, unknown>, artifactOut?: string, batch?: LaunchBatch): Promise<void> => {
+        await launchInitSession(sessionDeps(pipelineDeps, journal), {
+          role: "planner",
+          inputs,
+          artifactOut: artifactOut ?? planDraftPath(root),
+          ...(batch === undefined ? {} : { batch }),
+        });
+      },
+      note: (text: string) => process.stdout.write(`      ${text}\n`),
+    };
 
   for (const id of ids) {
     const spec = specs.get(id);
@@ -175,6 +179,7 @@ async function sweep(root: string, runs: number, want: readonly string[] | null)
     }
     process.stdout.write(`  churn over ${String(reads.length * (reads.length - 1))} ordered pair(s), NOTHING revised: ${String(churn.resolved)} resolved, ${String(churn.survived)} survived, ${String(churn.introduced)} introduced\n\n`);
   }
+  });
 
   const rates = nullRates(total, tBefore, tAtRisk);
   const after = ledgerSpend(root);
