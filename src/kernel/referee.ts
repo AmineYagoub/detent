@@ -178,8 +178,11 @@ export class RefereeCore {
      * own and move aside untracked residue belonging to someone else. The
      * READY branch below returns immediately, so without this a fresh claim
      * simply inherits whatever a terminated session left in the tree — and
-     * fails its gate on paths D-21 forbids it from touching.
+     * fails its gate on paths D-21 forbids it from touching. PRDR-214: the
+     * index first — what an earlier generation staged and never committed is
+     * unstaged so the same parking judges it (gate-313's staged probe file).
      */
+
     const settled = settleWorktree(workDir, ticket.surface);
     if (settled !== null) this.ctx.journal.appendTicketEvent(id, { event: "worktree", at: this.ctx.iso(), ...settled });
     if (ticket.state === "READY") {

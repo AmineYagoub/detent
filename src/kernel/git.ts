@@ -428,9 +428,16 @@ export function commitPatch(cwd: string, sha: string, spec: readonly string[]): 
  * itself mutates between commits, and clobbering ticket JSON would destroy
  * the very record resume depends on. Untracked files are left in place: the
  * gate judges the tree as-is.
+ *
+ * PRDR-214: only what HEAD HAS is reset — modified, deleted, type-changed.
+ * `git diff HEAD` also lists a staged addition, and `checkout HEAD --` cannot
+ * restore a path HEAD does not have: the call threw, and a resume of a
+ * generation that had staged a new file threw with it. Staged additions are
+ * the claim-time settle's (`unstageAdditions`), which runs before this.
  */
 export function resetDirtyTracked(cwd: string): string[] {
-  const raw = tryGit(cwd, "diff", "--name-only", "HEAD");
+  const raw = tryGit(cwd, "diff", "--name-only", "--diff-filter=MDT", "HEAD");
+
   if (raw === null || raw.trim() === "") return [];
   const dirty = raw
     .split("\n")

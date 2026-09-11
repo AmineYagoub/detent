@@ -1004,6 +1004,26 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `git clean`, no `git reset` or `git restore`: the branch stays append-only under a session;
   the referee owns it.
 
+- **B-5″ (3.1.1, PRDR-214).** The claim settles the **index** before it settles the tree, and
+  parking works where the product runs. PRDR-100's settle reads `git ls-files --others`; a path
+  a previous generation STAGED and never committed is not "others", so it stayed in the index
+  across a requeue — on the change surface of every review, with no verb any session had to
+  unstage it. gate-313's bootstrap: generation 0 staged `tmp_check/probe.txt` while probing its
+  tools and falsified; generation 1 found it staged at session start, kept it out of its commits
+  with `git commit --only`, the reviewer flagged it three times, and the third review-fix
+  committed it by accident (PRDR-213). Now, at claim and before parking, every path staged as an
+  addition and absent from HEAD is unstaged — `git rm --cached`, the file stays on disk — so it
+  becomes the untracked file it is and takes the path parking built: foreign ones move aside,
+  owned ones stay for B-5's resume; the `worktree` journal event names what was unstaged. B-5's
+  resume reset lists only what HEAD has (`--diff-filter=MDT`): `git diff HEAD` also lists a
+  staged addition, and `checkout HEAD --` cannot restore a path HEAD does not have — the reset
+  threw, and a resume of such a generation threw with it. And the park root is the worktree's
+  OWN git directory (`rev-parse --absolute-git-dir`): under B-2″'s default, `.git` in a linked
+  worktree is a file, the park root could not be created, every rename fell into the catch, and
+  parking was a silent no-op exactly where the product runs. Per worktree, not the common
+  directory — a foreign file in ticket A's tree was written by A's sessions, and B claims in B's
+  own tree; a cross-worktree restore has no owner.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

@@ -25,9 +25,26 @@ import { git } from "./git.js";
  */
 const PARK_DIR = "detent-parked";
 
+/**
+ * PRDR-214: the park lives under the WORKTREE'S OWN git directory.
+ *
+ * `path.join(cwd, ".git", …)` assumed `.git` is a directory. In a linked
+ * worktree — B-2″'s default — it is a file pointing at
+ * `<main>/.git/worktrees/<id>`, so the park root could not be created, every
+ * rename threw into the catch below, and parking was a silent no-op exactly
+ * where the product runs. Resolved through git; the lexical `.git` stays the
+ * fallback for a directory git cannot answer for. Per worktree, not the common
+ * dir: a foreign file in ticket A's tree was written there by A's sessions, and
+ * B's claim happens in B's own tree — a cross-worktree restore has no owner.
+ */
 function parkRoot(cwd: string): string {
-  return path.join(cwd, ".git", PARK_DIR);
+  try {
+    return path.join(git(cwd, "rev-parse", "--absolute-git-dir").trim(), PARK_DIR);
+  } catch {
+    return path.join(cwd, ".git", PARK_DIR);
+  }
 }
+
 
 function untracked(cwd: string): string[] {
   try {
@@ -87,15 +104,49 @@ export function restoreParked(cwd: string, surface: readonly string[]): string[]
 
 
 /**
+ * PRDR-214: what a previous generation STAGED and never committed.
+ *
+ * `ls-files --others` sees untracked files, and a path in the index is not
+ * "others" — so a staged addition inherited from a falsified generation sat
+ * outside the parking above, on the change surface of every review, with no
+ * verb any session had to unstage it (gate-313: three review-fix rounds on
+ * `tmp_check/probe.txt`, the third committing it by accident with a
+ * pathspec-less `git commit`). Unstaged here, BEFORE parking, it becomes the
+ * untracked file it is and takes the path parking already built: foreign ones
+ * move aside, owned ones stay for B-5's resume. `--cached` leaves the file on
+ * disk — parking, never removal. `.detent/` is the kernel's own, as above.
+ */
+export function unstageAdditions(cwd: string): string[] {
+  let added: string[];
+  try {
+    added = git(cwd, "diff", "--cached", "--name-only", "--diff-filter=A")
+      .split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith(".detent/"));
+  } catch {
+    return [];
+  }
+  if (added.length === 0) return [];
+  try {
+    git(cwd, "rm", "--cached", "-q", "--", ...added);
+  } catch {
+    /* An index that cannot be settled is the status quo: the gate judges it as before. */
+    return [];
+  }
+  return added;
+}
+
+/**
  * PRDR-100's claim-time settle: give the ticket back what it owns, move aside
- * what it does not. Null when the tree needed neither, so the caller journals
- * only real movement.
+ * what it does not — and first (PRDR-214) forget what an earlier generation
+ * staged, so it is judged as the untracked file it is. Null when the tree
+ * needed none of it, so the caller journals only real movement.
  */
 export function settleWorktree(
   cwd: string,
   surface: readonly string[],
-): { readonly restored: readonly string[]; readonly parked: readonly string[] } | null {
+): { readonly restored: readonly string[]; readonly parked: readonly string[]; readonly unstaged: readonly string[] } | null {
+  const unstaged = unstageAdditions(cwd);
   const restored = restoreParked(cwd, surface);
   const parked = parkForeignUntracked(cwd, surface);
-  return restored.length === 0 && parked.length === 0 ? null : { restored, parked };
+  return restored.length === 0 && parked.length === 0 && unstaged.length === 0 ? null : { restored, parked, unstaged };
 }
+
