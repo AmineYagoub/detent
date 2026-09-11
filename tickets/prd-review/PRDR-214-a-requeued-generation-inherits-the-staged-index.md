@@ -84,3 +84,16 @@ five unit cases and the E2E green (the E2E asserts the run branch's tree has the
 the probe, and the journal's `worktree` event carries `"unstaged":["tmp_check/probe.txt"]` and
 `"parked":["tmp_check/probe.txt"]`), and the full suite green.
 
+
+## Audit
+
+Cold re-read of the two git readings. Both ran with rename detection on — git's default — so a
+staged RENAME (`git mv`, or a delete-and-add git pairs up) read as one `R`: not an `A` for the
+settle to unstage, not a `D` for the resume reset to restore. The new path stayed staged and the
+old path stayed missing, the very shape the ticket exists to end. Both diffs now pass
+`--no-renames`, so the pair is read raw: the settle unstages the new path, the reset restores the
+old one. Observed first on a fixture that stages a rename: `unstageAdditions` returned `[]`; then
+the change; then green. Also checked and left alone: `finalizeDone`'s `git add -A` commits an
+owned file the settle kept, which is what the index would have carried before — B-5's partial
+work, by definition; and a park under a linked worktree's git directory is removed with the
+worktree at merge, which is right, since nothing outside that worktree can own it.

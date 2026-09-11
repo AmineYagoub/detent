@@ -180,3 +180,22 @@ describe("PRDR-214 what a previous generation staged is settled with the tree", 
     expect(existsSync(path.join(wt, "tmp_check/probe.txt"))).toBe(true);
   });
 });
+
+/** Audit of PRDR-214: a staged RENAME is an addition and a deletion, not a third thing. */
+describe("audit of PRDR-214: a staged rename settles as the addition and the deletion it is", () => {
+  it("the new path is unstaged, the old path is restored, and nothing throws", () => {
+    const root = tmpTree({ "README.md": "seed\n" });
+    roots.push(root);
+    gitInit(root);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "seed");
+    mkdirSync(path.join(root, "docs"), { recursive: true });
+    git(root, "mv", "README.md", "docs/readme.md");
+    /* Rename detection would report one `R` here; read raw, it is an `A` and a `D`. */
+    expect(unstageAdditions(root)).toEqual(["docs/readme.md"]);
+    expect(resetDirtyTracked(root)).toEqual(["README.md"]);
+    expect(existsSync(path.join(root, "README.md"))).toBe(true);
+    expect(existsSync(path.join(root, "docs/readme.md"))).toBe(true);
+    expect(git(root, "diff", "--cached", "--name-only").trim()).toBe("");
+  });
+});

@@ -434,9 +434,15 @@ export function commitPatch(cwd: string, sha: string, spec: readonly string[]): 
  * restore a path HEAD does not have: the call threw, and a resume of a
  * generation that had staged a new file threw with it. Staged additions are
  * the claim-time settle's (`unstageAdditions`), which runs before this.
+ *
+ * Audit of PRDR-214: `--no-renames`. Rename detection is on by default, so a
+ * staged rename read as one `R` — neither an addition for the settle nor a
+ * deletion for this reset — and the old path stayed missing. Read raw, it is
+ * an `A` the settle unstages and a `D` this restores.
+
  */
 export function resetDirtyTracked(cwd: string): string[] {
-  const raw = tryGit(cwd, "diff", "--name-only", "--diff-filter=MDT", "HEAD");
+  const raw = tryGit(cwd, "diff", "--name-only", "--no-renames", "--diff-filter=MDT", "HEAD");
 
   if (raw === null || raw.trim() === "") return [];
   const dirty = raw

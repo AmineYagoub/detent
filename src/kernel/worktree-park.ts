@@ -119,7 +119,7 @@ export function restoreParked(cwd: string, surface: readonly string[]): string[]
 export function unstageAdditions(cwd: string): string[] {
   let added: string[];
   try {
-    added = git(cwd, "diff", "--cached", "--name-only", "--diff-filter=A")
+    added = git(cwd, "diff", "--cached", "--name-only", "--no-renames", "--diff-filter=A")
       .split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith(".detent/"));
   } catch {
     return [];
