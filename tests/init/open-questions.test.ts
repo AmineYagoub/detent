@@ -93,3 +93,15 @@ describe("C-3″ the drafting stages are handed what was already asked", () => {
     for (const i of seen) expect("open_questions" in i, String(i["__artifact"])).toBe(false);
   });
 });
+
+/** Audit of PRDR-207: a merge must not lose the `blocking` flag the absorbed question carried. */
+describe("audit of PRDR-207", () => {
+  it("a kept question inherits `blocking` from the twin it absorbed — AWAIT_INFO still fires", () => {
+    const built = presentInputsFromOutputs({
+      ANALYZE: { open_questions: [q("q-analyze-1", Q1)] },
+      PLAN: { questions: [{ ...q("s14-q2", S14Q2), blocking: true }] },
+    });
+    expect(built.questions?.map((x) => x.id)).toEqual(["q-analyze-1"]);
+    expect(built.questions?.[0]?.blocking, "the absorbed question was blocking; the merged one is").toBe(true);
+  });
+});

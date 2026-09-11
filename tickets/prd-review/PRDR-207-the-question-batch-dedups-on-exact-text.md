@@ -81,3 +81,21 @@ across the new file and the slicing and plan-quality suites.
 **`plan.ts` at its ceiling, again.** Two three-line spreads became one-liners and the
 open-questions pieces became helper calls; the file is at 300 counted lines. The next ticket
 that touches it should move `planDraftPath`/`planPath` to `plan-write.ts` before adding a line.
+
+## Audit
+
+Read cold after the close, with one thing found and fixed.
+
+- **A merge dropped `blocking`.** The kept question was ANALYZE's; if the twin it absorbed was
+  the blocking one, the merged entry read `blocking: false` and PRESENT's AWAIT_INFO — which
+  lists blocking questions — would have let the plan through to approval. Observed as
+  `expected false to be true` (V-6); the kept question is now blocking if any question it
+  absorbed was. Pinned.
+- **The whole-plan redrafts are handed ANALYZE's questions only.** They redraft a slice whose
+  own questions are already in the batch, and the backstop merges what a redraft re-asks in new
+  words. Accepted, and recorded.
+- **Chains.** A~B and B~C with A≁C keeps A and C and absorbs B into A; C is compared to the kept
+  A only. Two entries for what a human might call one question is the harmless direction.
+- **The threshold is a number.** 0.5 was set by the receipts — gate-313's pair at well above,
+  its other founder questions at well below — and is named. The next pair that lands near it is
+  the ticket that moves it.

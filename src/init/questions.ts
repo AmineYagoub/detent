@@ -35,13 +35,21 @@ export function similarQuestions(a: string, b: string): boolean {
 /** A batched question, with the ids of the questions it absorbed. */
 export type PresentQuestion = PlanQuestion & { readonly also?: readonly string[] };
 
-/** Keep the first of each near-duplicate pair; the later one's id rides on it. Order is preserved. */
+/**
+ * Keep the first of each near-duplicate pair; the later one's id rides on it.
+ * Order is preserved. Audit of PRDR-207: a kept question is blocking if ANY
+ * question it absorbed was — a merge that dropped the flag would silence the
+ * AWAIT_INFO the absorbed question would have raised.
+ */
 export function mergeSimilar(questions: readonly PlanQuestion[]): PresentQuestion[] {
   const kept: { q: PlanQuestion; also: string[] }[] = [];
   for (const q of questions) {
     const twin = kept.find((k) => similarQuestions(k.q.question, q.question));
     if (twin === undefined) kept.push({ q, also: [] });
-    else twin.also.push(q.id);
+    else {
+      twin.also.push(q.id);
+      if (q.blocking) twin.q = { ...twin.q, blocking: true };
+    }
   }
   return kept.map(({ q, also }) => (also.length === 0 ? q : { ...q, also }));
 }
