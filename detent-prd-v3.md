@@ -972,6 +972,19 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   The number is a constant beside PRDR-119's noise rules, not a knob; `--approve` re-presents
   the same summary, since the wall is in the file.
 
+- **C-3″ (3.1.1, PRDR-207).** A question is asked **once**. C-3′ batches every stage's
+  questions at PRESENT and dedups them on exact text; nothing told a later stage what an
+  earlier one had asked. gate-313 asked the founder which npm identity publishes Detent at
+  ANALYZE and again, in s14's own words, at PLAN — two paid assumptions, two answers. Now the
+  stages that draft are handed `open_questions` — what ANALYZE and the slices before them already
+  asked, each with its assumption — and told not to ask any of them again in any words, recording
+  a differing assumption where the stage decides instead; the list joins a stage's inputs only
+  when non-empty, so a root with no questions gets byte-for-byte the prompt it always got (S-6)
+  and reuses every cache (C-8). PRESENT keeps the backstop: two questions whose vocabularies
+  overlap past a stated threshold render as one entry naming both ids, so one answer covers
+  both — pinned on gate-313's pair, which merges, and on its two other founder questions, both
+  beginning "Which …", which do not.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

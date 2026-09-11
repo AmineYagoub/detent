@@ -1,4 +1,5 @@
 import { heldAs } from "./present-advice.js";
+import { openQuestionsInput, openQuestionsInstruction } from "./questions.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -183,6 +184,8 @@ export interface DraftScope {
   readonly findings?: PlanReview["findings"];
   /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
   readonly keepIds?: readonly string[];
+  /** C-3″ (PRDR-207): what earlier stages already asked, each with its assumption — not to be asked again. */
+  readonly openQuestions?: readonly PlanQuestion[];
 }
 
 /** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with findings when a review asks (PRDR-084). */
@@ -212,14 +215,12 @@ export async function draftPlan(
     ...(sizingEvidence(deps.root) === null ? {} : { sizing_evidence: sizingEvidence(deps.root) }),
     ...(slice === undefined ? {} : { slice }),
     /** C-2⁗: the baseline items this slice carries, with what each is verified by — tickets are drafted from them. */
-    ...(slice === undefined || deps.baseline === "none" || slice.baseline_items.length === 0
-      ? {}
-      : { production_baseline: PRODUCTION_BASELINE.filter((b) => slice.baseline_items.includes(b.id)) }),
-    ...(scope.planIndex === undefined || scope.planIndex.length === 0
-      ? {}
-      : { plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })) }),
+    ...(slice === undefined || deps.baseline === "none" || slice.baseline_items.length === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => slice.baseline_items.includes(b.id)) }),
+    ...(scope.planIndex === undefined || scope.planIndex.length === 0 ? {} : { plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })) }),
     ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
     ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
+    /* C-3″ (PRDR-207): only when non-empty, so a root with no questions gets the bytes it always got (S-6). */
+    ...openQuestionsInput(scope.openQuestions),
     ...previousAttemptInput(previous, "plan draft"),
     expected_output: planDraftSkeleton(),
     instruction: `${
@@ -232,7 +233,7 @@ export async function draftPlan(
         : ` Draft ONLY slice \`${slice.id}\` (${slice.title}): every requirement id in its \`requirement_ids\` and every baseline item in its \`baseline_items\` reaches a ticket, and nothing outside it does. A \`production_baseline\` item becomes tickets whose criteria are its \`verifiable_by\` (C-2⁗). Record what each ticket DELIVERS in its \`requirement_ids\` and \`baseline_ids\` fields — those two lists are what coverage is checked against, not the prose, so an id mentioned only in a description or a non-goal does not count (A-1⁵). Ticket ids are \`t-${slice.id}-NNN\`. A ticket that needs code an earlier slice built names that ticket in \`depends_on\` by its id from \`plan_index\`.`
     } Size every ticket to ONE implement session inside \`session_budget\`, and order the plan as vertical slices (walking skeleton first), never as infrastructure layers completed ahead of the first end-to-end path. A question the documents cannot answer goes in \`questions\` with the assumption the draft proceeds on. Write EXACTLY the \`expected_output\` shape to artifact_out — a top-level object with \`schema_version\`, \`tickets\` and \`questions\` only; the validator is strict and refuses unknown keys (P2).${
       scope.findings === undefined ? "" : " A previous draft drew the `review_findings` in your inputs — address every one of them in this draft."
-    }${
+    }${openQuestionsInstruction(scope.openQuestions, "earlier stages")}${
       scope.keepIds === undefined || scope.keepIds.length === 0 ? "" : " Keep every ticket id in `keep_ids` exactly — later slices depend on them."
     }`,
   });

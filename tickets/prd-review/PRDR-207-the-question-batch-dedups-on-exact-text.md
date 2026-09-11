@@ -1,11 +1,11 @@
 ---
 id: PRDR-207
 title: "The question batch dedups on exact text, so a founder question asked at ANALYZE and asked again at PLAN reaches the human twice, each with its own paid assumption — gate-313's q-analyze-1 and s14-q2"
-state: OPEN
+state: DONE
 severity: minor
 category: defect
 labels: ["prd-review", "questions", "present", "init", "C-3′"]
-surface: ["src/init/present.ts", "src/init/plan.ts", "src/init/plan-slices.ts", "prompts/planner.md", "tests/init/present.test.ts", "tests/init/plan-quality.test.ts"]
+surface: ["src/init/questions.ts", "src/init/present.ts", "src/init/plan.ts", "src/init/plan-slices.ts", "src/init/plan-whole.ts", "src/init/slice.ts", "tests/init/open-questions.test.ts", "detent-prd-v3.md"]
 prd_refs: ["C-3′", "C-3a", "C-8", "S-6", "V-6", "N-6", "PRDR-117", "PRDR-119", "PRDR-166"]
 acceptance_criteria: ["PLAN and SLICE are handed the questions already raised — `open_questions`: id, text and the assumption — and told that a question already in it is not asked again; a session that needs a different assumption records the difference in the ticket's `description` instead of re-asking. gate-313's `s14-q2` is the fixture: a scripted planner that would re-ask it, given the batch, does not (V-6: observed re-asking first).", "PRESENT merges near-duplicates as a backstop: two questions whose normalised token sets overlap at or above a stated threshold render as ONE, carrying both ids and both stages, so the human answers once. gate-313's two texts merge; two genuinely different questions sharing vocabulary do not — both fixtures pinned.", "An unchanged root still reuses every slice cache (C-8): the batch handed to PLAN is part of the slice's inputs only when it is non-empty, and a resumed root with no questions produces byte-identical prompts to today's — asserted on the fixture that already pins reuse."]
 non_goals: ["Does not answer questions or change what a question IS (C-3′): the founder-owned facts still go to the human, once.", "Does not dedup across RUNS — a question answered in a planning document is C-8's business and PRDR-166's instruction.", "Does not touch the id-collision rule PRDR-119 added; that stays."]
@@ -53,3 +53,31 @@ Two remedies, in the order they pay:
 The first changes the planner's inputs, so C-8 has to be respected: the batch joins a slice's
 inputs only when non-empty, and a root with no questions produces today's bytes exactly — the
 S-6 prefix is untouched either way.
+
+## What implementation changed
+
+**`src/init/questions.ts`.** `similarQuestions` — Jaccard over lowercase alphanumeric tokens of
+four or more characters, threshold `QUESTION_SIMILARITY = 0.5`; `mergeSimilar` — keep the first
+of a near-duplicate pair, carry the later id in `also`; `openQuestionsInput` and
+`openQuestionsInstruction` — what a drafting stage is handed and told, empty when there is
+nothing to hand. The threshold was calibrated on the receipts, not chosen: gate-313's pair
+merges, its two other founder questions — both "Which …" — do not.
+
+**Don't ask twice.** PLAN's drafts (first, revision, and the whole-plan redrafts) and SLICE
+receive `open_questions` and the instruction, through the INPUTS, not the prompt prefix — so no
+prompt hash moved and no root's PLAN checkpoints were invalidated. The slice cache key never
+read the inputs, and the list joins them only when non-empty; the byte-identical case is pinned
+by a run that raises nothing and finds `open_questions` in no stage's inputs.
+
+**Merge what slipped through.** `presentInputsFromOutputs` runs `mergeSimilar` after the
+exact-text pass; the rendering prints *also asked as s14-q2 — the same question in another
+stage's words; one answer covers both* under the kept entry.
+
+**V-6, in order.** Observed on the tree as it was: four questions where three were meant
+(`expected [ 'q-analyze-1', 'q-analyze-2', …(2) ] to deeply equal … (1)`), and SLICE handed
+nothing (`expected [] to deeply equal [ 'q-analyze-1' ]`). Then the change; then 41 of 41
+across the new file and the slicing and plan-quality suites.
+
+**`plan.ts` at its ceiling, again.** Two three-line spreads became one-liners and the
+open-questions pieces became helper calls; the file is at 300 counted lines. The next ticket
+that touches it should move `planDraftPath`/`planPath` to `plan-write.ts` before adding a line.

@@ -365,7 +365,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
 
     deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
-    let drafted = await draftAndRead(deps, { slice, planIndex: index });
+    let drafted = await draftAndRead(deps, { slice, planIndex: index, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
     let normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
     /** A question the first draft raised is not answered by redrafting it — both drafts' questions are the human's. */
     const asked: PlanQuestion[] = [...drafted.questions];
@@ -392,7 +392,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     if (review !== null && review.verdict === "changes" && review.findings.length > 0) {
       deps.note?.(`${slice.id} review: ${review.findings.length} recurring finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
       for (let round = 0; round < PLAN_REVISIONS; round += 1) {
-        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: review.findings });
+        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: review.findings, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
         for (const q of drafted.questions) if (!asked.some((a) => a.question.trim().toLowerCase() === q.question.trim().toLowerCase())) asked.push(q);
       }

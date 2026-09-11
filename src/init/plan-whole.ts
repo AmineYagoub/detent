@@ -218,7 +218,7 @@ export async function wholePlanReview(
     const currentIds = new Set(updated.filter((t) => t.slice === slice.id).map((t) => t.id));
     /** Ids later slices reach for: the redraft keeps them, or it is discarded. */
     const keepIds = [...new Set(later.flatMap((t) => t.depends_on).filter((d) => currentIds.has(d)))];
-    const drafted = await draftAndRead(deps, { slice, planIndex: [...earlier, ...later], findings: [...findings, ...planWideUnclaimed], keepIds });
+    const drafted = await draftAndRead(deps, { slice, planIndex: [...earlier, ...later], findings: [...findings, ...planWideUnclaimed], keepIds, openQuestions: deps.analysis?.questions ?? [] });
     const fresh = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), earlier, deps.note, [...earlier, ...later]).tickets;
     const missing = keepIds.filter((id) => !fresh.some((t) => t.id === id));
     if (missing.length > 0) {

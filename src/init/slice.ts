@@ -1,3 +1,4 @@
+import { openQuestionsInput, openQuestionsInstruction } from "./questions.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
@@ -90,6 +91,8 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
     production_baseline: deps.baseline === "none" ? [] : PRODUCTION_BASELINE,
     slice_size: deps.sliceSize,
     expected_output: slicesSkeleton(),
+    /* C-3″ (PRDR-207): what ANALYZE already asked — only when non-empty, so the bytes are unchanged otherwise (S-6). */
+    ...openQuestionsInput(deps.analysis?.questions),
     ...previousAttemptInput(previous, "slices artifact"),
     instruction:
       "Cut the WHOLE document set into ordered slices — increments of the product, each a thin end-to-end path that works " +
@@ -102,7 +105,7 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
       "pipeline must produce without failing. A large product is many slices, and that is the point. " +
       "Do NOT draft tickets here. A question the documents cannot answer goes in `questions` with the assumption the " +
       "slicing proceeds on — mark it blocking only if no assumption can carry it. Write EXACTLY the `expected_output` " +
-      "shape to artifact_out; the validator is strict (P2).",
+      `shape to artifact_out; the validator is strict (P2).${openQuestionsInstruction(deps.analysis?.questions, "ANALYZE")}`,
   });
   const file = slicesPath(deps.root);
   if (!existsSync(file)) return { value: null, issue: "no artifact written" };
