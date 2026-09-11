@@ -119,10 +119,11 @@ describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () 
     planner: ["A-2", "acceptance criteria", "artifact_out", "P2"],
     diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified"],
     /* PRDR-212: the surface is stated, a refusal is named as containment, and a signal can be taken back. */
-    implement: ["falsified", "surface", "never suppress", "commit with the ticket id", "git add", "refus", "retracted"],
-    blind_fix: ["ONE attempt", "failure", "never suppress", "no second blind fix"],
-    informed_fix: ["research brief", "LAST", "what_would_falsify", "escalates to a human"],
-    review_fix: ["own budget", "never route to research", "scope findings", "commit with the ticket id"],
+    /* PRDR-213: the third verb is stated to every write role. */
+    implement: ["falsified", "surface", "never suppress", "commit with the ticket id", "git add", "git rm", "refus", "retracted"],
+    blind_fix: ["ONE attempt", "failure", "never suppress", "no second blind fix", "git rm"],
+    informed_fix: ["research brief", "LAST", "what_would_falsify", "escalates to a human", "git rm"],
+    review_fix: ["own budget", "never route to research", "scope findings", "commit with the ticket id", "git rm"],
     research: ["hierarchy", "local_search", "cache_key", "advice", "never authority", "upstream_bug"],
     review: ["ONLY the diff", "scope", "style preferences are not findings", "approve"],
   };

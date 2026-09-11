@@ -90,6 +90,26 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
     expect(output.hookSpecificOutput?.permissionDecisionReason).toContain("protected");
   });
 
+  it("S-3⁵ (PRDR-213): the hook judges a `git rm` per pathspec, and an allowed one carries no rewrite", async () => {
+    const hooks = buildPreToolUseHook(CONFIG.policy);
+    const callback = hooks.PreToolUse?.[0]?.hooks[0];
+    expect(callback).toBeDefined();
+    const judge = async (command: string) =>
+      (await callback!(
+        { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, tool_use_id: "x" } as never,
+        undefined,
+        { signal: new AbortController().signal },
+      )) as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string; updatedInput?: unknown } };
+    const denied = await judge("git rm -f /wt/AGENTS.md");
+    expect(denied.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(denied.hookSpecificOutput?.permissionDecisionReason).toContain("protected");
+    const allowed = await judge("git rm -f src/a.ts");
+    expect(allowed.hookSpecificOutput?.permissionDecision).toBe("allow");
+    expect(allowed.hookSpecificOutput?.updatedInput).toBeUndefined();
+    /* A `git add` is still the allowlist's call — the hook says nothing either way. */
+    expect((await judge("git add src/a.ts")).hookSpecificOutput?.permissionDecision).toBeUndefined();
+  });
+
   /**
    * PRDR-205 — the k draws of one review are TOLD one artifact path, so their
    * first turns are byte-identical and the prompt cache serves all but the

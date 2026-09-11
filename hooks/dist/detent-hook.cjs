@@ -1559,6 +1559,41 @@ var HOOK_STAGE_FILE = "stage.json";
 var import_node_path = __toESM(require("node:path"), 1);
 var import_node_fs = require("node:fs");
 var import_picomatch = __toESM(require_picomatch2(), 1);
+
+// src/sessions/git-rm.ts
+var KNOWN_OPTIONS = /* @__PURE__ */ new Set(["-f", "--force", "-q", "--quiet", "--cached"]);
+var PLAIN_TOKEN = /^[A-Za-z0-9._/@+,=-]+$/;
+var GIT_RM_COMMAND = /(^|[;&|(`\n]\s*)git\s+rm(\s|$)/;
+function commandOf(toolInput) {
+  if (typeof toolInput !== "object" || toolInput === null) return "";
+  const command = toolInput["command"];
+  return typeof command === "string" ? command : "";
+}
+function readGitRm(command) {
+  if (!GIT_RM_COMMAND.test(command)) return null;
+  const tokens = command.trim().split(/[ \t]+/);
+  if (tokens[0] !== "git" || tokens[1] !== "rm") {
+    return { ok: false, detail: "`git rm` must be the whole command, not one part of a compound one" };
+  }
+  const paths = [];
+  let optionsDone = false;
+  for (const token of tokens.slice(2)) {
+    if (!PLAIN_TOKEN.test(token)) return { ok: false, detail: `\`${token}\` is not a plain path or a known option` };
+    if (!optionsDone && token === "--") {
+      optionsDone = true;
+      continue;
+    }
+    if (!optionsDone && token.startsWith("-")) {
+      if (!KNOWN_OPTIONS.has(token)) return { ok: false, detail: `option \`${token}\` is not read` };
+      continue;
+    }
+    paths.push(token);
+  }
+  if (paths.length === 0) return { ok: false, detail: "no pathspec" };
+  return { ok: true, paths };
+}
+
+// src/sessions/guard.ts
 function matchAny(rel, patterns) {
   const clean = rel.replace(/^\.\//, "");
   for (const raw of patterns) {
@@ -1615,6 +1650,10 @@ function realpathNearest(target, maxHops = 40) {
   }
 }
 function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest) {
+  if (toolName === "Bash") {
+    const reading = readGitRm(commandOf(toolInput));
+    if (reading !== null) return judgeGitRm(reading, policy, resolveReal);
+  }
   const target = pathOf(toolInput);
   if (target === null) return { decision: "abstain", reason: "no path in tool input \u2014 the allowlist decides" };
   const root = import_node_path.default.resolve(policy.workRoot);
@@ -1664,6 +1703,19 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
   }
   return { decision: "allow", reason: `${rel} is inside the declared surface` };
 }
+function judgeGitRm(reading, policy, resolveReal) {
+  if (!reading.ok) {
+    return {
+      decision: "deny",
+      reason: `DENY: a \`git rm\` the guard cannot read is refused \u2014 ${reading.detail}. One simple command, plain paths one per token; the options read are -f, -q, --cached and -- (no -r, no globs, no shell syntax) (S-3\u2075).`
+    };
+  }
+  for (const target of reading.paths) {
+    const verdict = guardToolUse("Write", { file_path: target }, policy, resolveReal);
+    if (verdict.decision !== "allow") return { decision: "deny", reason: verdict.reason };
+  }
+  return { decision: "allow", reason: `git rm ${reading.paths.join(" ")}: every path is inside the declared surface (S-3\u2075)` };
+}
 
 // src/plugin/hook.ts
 function payloadCwd(payload) {
@@ -1694,7 +1746,7 @@ function readPolicyFile(file) {
     return null;
   }
 }
-function commandOf(toolInput) {
+function commandOf2(toolInput) {
   if (typeof toolInput !== "object" || toolInput === null) return "";
   const command = toolInput["command"];
   return typeof command === "string" ? command : "";
@@ -1725,7 +1777,7 @@ function decidePreToolUse(payload, nowMs) {
     );
   }
   if (tool === "Bash") {
-    const command = commandOf(payload.tool_input);
+    const command = commandOf2(payload.tool_input);
     const hit = strings(cfg?.deny_bash_containing).find((entry) => entry !== "" && command.includes(entry));
     if (hit !== void 0) {
       return denyJson(

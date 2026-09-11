@@ -101,6 +101,13 @@ describe("T-113 PreToolUse over the bundle (T-046 oracle ports)", () => {
     expect(pre(cwd, null)).toEqual({ out: "", code: 0 });
   });
 
+  it("S-3⁵ (PRDR-213): `git rm` is judged per pathspec over the bundle — the plugin driver shares the verdict", () => {
+    const cwd = work({ ".detent/active_surface.json": SURFACE });
+    expect(tool(cwd, "Bash", { command: "git rm -f src/calc.py" })).toEqual({ out: "", code: 0 });
+    expect(denyReason(tool(cwd, "Bash", { command: "git rm -f README.md" }).out)).toContain("surface");
+    expect(denyReason(tool(cwd, "Bash", { command: "git rm -r src" }).out)).toContain("cannot read");
+  });
+
   it("ABSENT surface file is silence — the ambient hook has no opinion outside a Detent attempt", () => {
     const cwd = work();
     expect(pre(cwd, { file_path: "/etc/hosts" })).toEqual({ out: "", code: 0 });

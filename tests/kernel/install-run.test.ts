@@ -59,7 +59,8 @@ describe("V-1⁗ the referee installs the manifest's dependencies before the gat
   });
 
   it("the session's own Bash still cannot run a package manager (S-3, S-2‴)", () => {
-    expect(toolsForRole("implement")).toEqual(["Read", "Grep", "Glob", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"]);
+    /* S-3⁵ (PRDR-213): three verbs, still no package manager. */
+    expect(toolsForRole("implement")).toEqual(["Read", "Grep", "Glob", "Edit", "Write", "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"]);
     const decision = guardToolUse("Bash", { command: "npm install" }, { surface: ["**"], protectedGlobs: [], workRoot: "/wt" });
     expect(decision.decision, "abstains — the allowlist decides, and npm is not on it").toBe("abstain");
   });

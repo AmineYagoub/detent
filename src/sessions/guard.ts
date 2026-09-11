@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readlinkSync, realpathSync } from "node:fs";
 import picomatch from "picomatch";
+import { commandOf, readGitRm, type GitRmReading } from "./git-rm.js";
 
 /**
  * T-046 — the containment guard (S-2/D-21, SEC-3), as pure decision functions.
@@ -204,6 +205,11 @@ export function guardToolUse(
   policy: GuardPolicy,
   resolveReal: (p: string) => string = realpathNearest,
 ): GuardDecision {
+  /* S-3⁵ (PRDR-213): the one Bash verb that names paths is judged on them. */
+  if (toolName === "Bash") {
+    const reading = readGitRm(commandOf(toolInput));
+    if (reading !== null) return judgeGitRm(reading, policy, resolveReal);
+  }
   const target = pathOf(toolInput);
   /**
    * A tool call naming no path is not this guard's business — it governs WHERE
@@ -289,6 +295,28 @@ export function guardToolUse(
   return { decision: "allow", reason: `${rel} is inside the declared surface` };
 }
 
+
+/**
+ * S-3⁵ (PRDR-213): a `git rm` is judged where a Write to each of its paths
+ * would be — the same boundary, protection and surface, one path at a time —
+ * and one refused path refuses the call. What cannot be read is refused too:
+ * this guard abstains on a call that names no path (S-2‴), and this one does.
+ */
+function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p: string) => string): GuardDecision {
+  if (!reading.ok) {
+    return {
+      decision: "deny",
+      reason:
+        `DENY: a \`git rm\` the guard cannot read is refused — ${reading.detail}. One simple command, plain paths ` +
+        "one per token; the options read are -f, -q, --cached and -- (no -r, no globs, no shell syntax) (S-3⁵).",
+    };
+  }
+  for (const target of reading.paths) {
+    const verdict = guardToolUse("Write", { file_path: target }, policy, resolveReal);
+    if (verdict.decision !== "allow") return { decision: "deny", reason: verdict.reason };
+  }
+  return { decision: "allow", reason: `git rm ${reading.paths.join(" ")}: every path is inside the declared surface (S-3⁵)` };
+}
 /*
  * ---------------------------------------------------------------------------
  * Stop gate (oracle `stop_gate.py`) — an accelerant, never the authority (P2).
@@ -357,5 +385,6 @@ export function researchTools(docsDomains: readonly string[]): string[] {
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
   if (role === "research") return researchTools(docsDomains);
   if (READ_ONLY_STAGES.has(role)) return [...READ_ONLY_TOOLS];
-  return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git commit:*)"];
+  /* S-3⁵ (PRDR-213): three verbs — the guard judges `git rm` per pathspec (judgeGitRm). */
+  return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"];
 }

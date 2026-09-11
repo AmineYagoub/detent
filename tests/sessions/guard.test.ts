@@ -242,3 +242,71 @@ describe("S-1″ (PRDR-124): an init session's surface is its artifact, so its o
     expect(guardToolUse("Read", { file_path: "/etc/hosts" }, initPolicy).decision).toBe("deny");
   });
 });
+
+/**
+ * S-3⁵ (PRDR-213) — `git rm` is the third verb, judged per pathspec like a write.
+ *
+ * Nothing a write session had removed a file: Write and Edit create and change,
+ * and its Bash was `git add` and `git commit`. gate-313's bootstrap spent all
+ * three review-fix attempts on a staged probe file no session could delete, and
+ * the third committed it by accident. The verb is granted here and judged
+ * exactly where a Write to the same path is judged — one plain path per token,
+ * and a command the guard cannot read is DENIED, never left to the allowlist.
+ */
+describe("S-3⁵ (PRDR-213): `git rm` is the third verb, judged per pathspec like a write", () => {
+  const bash = (command: string) => guardToolUse("Bash", { command }, POLICY);
+
+  it("the write roles have three verbs; the read-only roles still have none", () => {
+    for (const role of ["implement", "blind_fix", "informed_fix", "review_fix"]) {
+      expect(toolsForRole(role), role).toContain("Bash(git rm:*)");
+    }
+    for (const role of ["review", "diagnose", "research", "planner"]) {
+      expect(toolsForRole(role), role).not.toContain("Bash(git rm:*)");
+    }
+  });
+
+  it("a plain path inside the surface is allowed; -f, -q, --cached and -- are read", () => {
+    expect(bash("git rm -f src/calc.py").decision).toBe("allow");
+    expect(bash("git rm --cached -q -- src/calc.py src/other.py").decision).toBe("allow");
+    expect(bash("git rm -f /wt/src/calc.py").decision).toBe("allow");
+  });
+
+  it("outside the surface, on a protected path, or outside the worktree: the Write's own verdict", () => {
+    const readme = bash("git rm -f README.md");
+    expect(readme.decision).toBe("deny");
+    expect(readme.reason).toContain("outside this ticket's declared surface");
+    expect(bash("git rm -f AGENTS.md").reason).toContain("protected");
+    expect(bash("git rm -f ../secrets.txt").reason).toContain("outside the worktree");
+    /* One denied path denies the call: a foreign path cannot ride behind an owned one. */
+    expect(bash("git rm -f src/calc.py README.md").decision).toBe("deny");
+  });
+
+  it("what the guard cannot read is DENIED, never abstained: -r, globs, magic, no pathspec, shell syntax", () => {
+    const unreadable = [
+      "git rm -r src",
+      "git rm -f 'src/*.py'",
+      "git rm -f src/*.py",
+      "git rm -f :/src/calc.py",
+      "git rm -f",
+      "git rm",
+      "git rm -f src/calc.py && rm -rf /",
+      "git rm -f src/calc.py; ls",
+      "git rm -f src/calc.py\nrm x",
+      "git rm --dry-run src/calc.py",
+      "git rm -f $(echo src/calc.py)",
+      "git rm -f src/calc.py > /dev/null",
+    ];
+    for (const command of unreadable) {
+      const decision = bash(command);
+      expect(decision.decision, command).toBe("deny");
+      expect(decision.reason, command).toContain("cannot read");
+    }
+  });
+
+  it("every other bash call still abstains — the allowlist decides (S-2‴)", () => {
+    expect(bash("git add src/calc.py").decision).toBe("abstain");
+    expect(bash("git commit -m x").decision).toBe("abstain");
+    expect(bash("rm -rf src").decision).toBe("abstain");
+    expect(bash("git rmx src/calc.py").decision).toBe("abstain");
+  });
+});

@@ -985,6 +985,25 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   both — pinned on gate-313's pair, which merges, and on its two other founder questions, both
   beginning "Which …", which do not.
 
+- **S-3⁵ (3.1.1, PRDR-213).** A write session has **three** git verbs: `git add`, `git rm`
+  and `git commit`. Nothing a session had removed a file — Write and Edit create and change,
+  and PRDR-212 had already admitted it in passing — so a `scope` finding that named a file was
+  one no fix session could act on, while the review-fix prompt says a scope finding "means
+  removing work". gate-313's bootstrap spent all three review-fix attempts on a staged probe
+  file (PRDR-214): 53 shell calls in the last session alone, every deletion refused, and a
+  pathspec-less `git commit` run to test the verb committed the probe by accident. It went to a
+  human with $7.56 of the run's $12.85 spent on a deletion nobody had. Now `git rm` is judged by
+  the containment hook the way a Write is — per pathspec, resolved, inside the worktree, not
+  protected (SEC-3), inside the surface, one refused path refusing the call — and a `git rm`
+  the guard cannot read with confidence (no pathspec, `-r`, a glob, pathspec magic, an option
+  it does not know, a quoted or compound command) is DENIED, never abstained: S-2‴ abstains on
+  a call that names no path, and this one names paths. The options read are `-f`, `-q`,
+  `--cached` and `--`. A file the session itself left untracked goes the same way — `git add`
+  it, `git rm -f` it — and the four write-role prompts say so. The reading is one module under
+  both drivers, since the plugin hook is the same decision in a third skin. No `rm`, no
+  `git clean`, no `git reset` or `git restore`: the branch stays append-only under a session;
+  the referee owns it.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
