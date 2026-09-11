@@ -59,3 +59,15 @@ pinned tool's `start-mcp-server --help`. Also observed live, once, with the flag
 0.1.4 started, reached its MCP server and language-server setup in 116 log lines with zero
 mentions of a dashboard, and opened nothing.
 
+
+## Audit
+
+Cold re-read against every place Serena runs. `symbolServerConfig` is the ONE launch, shared
+by both drivers through the referee context; `probeSymbols` runs `--help` and starts no
+server (PRDR-198), so the doctor and `init --symbols` open nothing. No document tells an
+operator to disable the dashboard by hand, so none needed correcting. What the re-read did
+turn up: the tabs the operator saw came from the live gate-313 run itself — its config has
+symbols ON, which this session's notes had recorded as off — and that run was launched from a
+runner clone predating this fix. The operator-side mitigation for sessions already in flight
+is Serena's own `web_dashboard_open_on_launch: false` in `~/.serena/serena_config.yml`, read at
+each server start; the fix reaches the run at its next restart. No code change.
