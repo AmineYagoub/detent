@@ -55,8 +55,9 @@ export function substituteBase(command: string, baseRef: string): string {
  *
  * The operator may lift it for a project that genuinely builds on install, by
  * exporting `DETENT_ALLOW_LIFECYCLE_SCRIPTS=1` for the run. A session cannot:
- * it does not compose the referee's environment. Per-project, per-script
- * approval is PRDR-233.
+ * it does not compose the referee's environment. That switch is all-or-nothing
+ * by design here; approving a project's scripts one body at a time is filed as
+ * its own ticket rather than built into a one-line environment fix.
  */
 export function suppressionEnv(approved: boolean): Readonly<Record<string, string>> {
   return { npm_config_ignore_scripts: approved ? "false" : "true" };
