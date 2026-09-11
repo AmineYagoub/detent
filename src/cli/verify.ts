@@ -205,12 +205,37 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
  * records the accepted hashes on the ticket, and requeues it. The root's
  * baseline follows at the merge, where the run branch actually changes.
  */
-/** The branch the root is checked out on — the run branch a ticket's worktree was cut from (B-2″). */
-function runBranchOf(root: string): string {
+/**
+ * The run branch a ticket's worktree was cut from.
+ *
+ * Audit of PRDR-230: this guessed, and the guess had a success path that
+ * silently collapsed the whole check. `git rev-parse --abbrev-ref HEAD` does
+ * not throw on a detached root — it prints the literal `HEAD` and exits 0, so
+ * the catch was dead code — and `git merge-base HEAD HEAD` inside the worktree
+ * then returns the ticket's OWN tip, making the tree its own baseline. The
+ * accept verb reported "nothing to accept" and exit 0 while leaving the ticket
+ * blocked. Now a name that is not a real branch is refused rather than used,
+ * and the run branch is recovered from the one `detent/run-*` head when the
+ * root is not sitting on it.
+ */
+function runBranchOf(root: string): string | null {
+  const named = tryGitLine(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (named !== null && named !== "HEAD" && tryGitLine(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${named}`]) !== null) {
+    return named;
+  }
+  const runs = (tryGitLine(root, ["for-each-ref", "--format=%(refname:short)", "refs/heads/detent/run-*"]) ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return runs.length === 1 ? (runs[0] as string) : null;
+}
+
+function tryGitLine(root: string, args: readonly string[]): string | null {
   try {
-    return git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    const out = git(root, ...args).trim();
+    return out === "" ? null : out;
   } catch {
-    return "HEAD";
+    return null;
   }
 }
 
@@ -225,7 +250,15 @@ export async function acceptTicketDrift(root: string, id: string, deps: VerifySy
     return { exitCode: EXIT_NOT_READY, summary: summaryOf([], [], []), rebaselined: false, messages };
   }
   const discovery = discover(tree);
-  const drift = checkAll(bindingsForTree(root, id, tree, runBranchOf(root)), discovery).checks;
+  const runBranch = runBranchOf(root);
+  if (runBranch === null) {
+    messages.push(
+      `${id}: cannot tell which run branch this worktree was cut from — the root is not checked out on a branch, ` +
+        "and there is not exactly one `detent/run-*` head to fall back to. Check the root out on its run branch and retry.",
+    );
+    return { exitCode: EXIT_NOT_READY, summary: summaryOf([], [], []), rebaselined: false, messages };
+  }
+  const drift = checkAll(bindingsForTree(root, id, tree, runBranch), discovery).checks;
   const halting = drift.filter((d) => d.status === "drifted" || d.status === "vanished");
   if (halting.length === 0) {
     messages.push(`${id}: its tree matches the baseline it started from — nothing to accept`);

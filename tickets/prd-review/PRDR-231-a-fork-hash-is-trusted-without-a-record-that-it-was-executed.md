@@ -2,8 +2,8 @@
 id: PRDR-231
 title: "A fork commit's gate configuration is trusted as a baseline without any record that it was ever executed and approved"
 state: OPEN
-severity: minor
-category: hardening
+severity: critical
+category: defect
 labels: ["prd-review", "V-3", "SEC-5", "drift", "hardening", "design-panel"]
 surface: ["src/kernel/drift-base.ts", "src/cli/verify.ts", "src/adapter/bind.ts", "src/fs/layout.ts", "tests/kernel/drift-worktree.test.ts", "detent-prd-v3.md"]
 prd_refs: ["V-3", "V-3⁗", "SEC-5", "V-1", "N-6", "PRDR-230"]
@@ -16,8 +16,16 @@ depends_on: ["PRDR-230"]
 
 # PRDR-231 — a baseline trusted by induction
 
-**Severity:** minor · **Category:** hardening · **Found by:** the four-design panel that settled
+**Severity:** critical · **Category:** defect · **Found by:** the four-design panel that settled
 PRDR-230, as the one verdict that survives its recommendation
+
+## Severity, re-graded
+
+Filed as minor hardening on the strength of the induction below. The PRDR-230 audit graded the
+same gap CRITICAL, on a reading worth recording: under B-2″'s default worktrees the gate arm is
+the only production drift assertion, and V-3⁗ judges a tree against its fork — so for every slot
+the fork defines, `.detent/bindings.json` has no enforcement role at all. The induction is what
+carries SEC-5 there, and an induction is not a control. Re-graded, and next.
 
 ## Problem
 

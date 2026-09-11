@@ -76,12 +76,33 @@ export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeo
   let dir: string | null = null;
   try {
     dir = mkdtempSync(path.join(tmpdir(), "detent-fork-"));
-    for (const name of git(workDir, "ls-tree", "--name-only", sha).split("\n").map((l) => l.trim())) {
-      if (name === "" || !MARKERS.includes(name)) continue;
+    for (const line of git(workDir, "ls-tree", sha).split("\n")) {
+      const [meta, name] = line.split("\t");
+      const mode = meta === undefined ? "" : (meta.trim().split(" ")[0] ?? "");
+      /**
+       * Audit of PRDR-230: only a regular blob is materialised. `ls-tree
+       * --name-only` discarded the mode, and neither `git show` nor
+       * `cat-file` THROWS on a tree or a symlink at that path — the first
+       * prints a directory listing and the second the link target, and the
+       * catch below wrote either out as a bogus marker file for the engines
+       * to parse. Asked of git instead of inferred from a throw.
+       */
+      if (name === undefined || (mode !== "100644" && mode !== "100755") || !MARKERS.includes(name)) continue;
       try {
-        writeFileSync(path.join(dir, name), git(workDir, "show", `${sha}:${name}`));
+        /**
+         * Audit of PRDR-230: `--filters`, not `git show`. Every other input to
+         * this comparison is a CHECKED-OUT tree, where git has applied the
+         * repository's end-of-line and smudge conversions; `git show` streams
+         * the raw blob. For an adapter whose config region is verbatim file
+         * text — make, just, pyproject — a repository carrying
+         * `.gitattributes` `eol=crlf` or `core.autocrlf` therefore hashed the
+         * two sides differently and every ticket halted on a pristine tree.
+         * `cat-file --filters` runs the same conversion the checkout did, and
+         * is byte-identical to `git show` where no filter applies.
+         */
+        writeFileSync(path.join(dir, name), git(workDir, "cat-file", "--filters", `${sha}:${name}`));
       } catch {
-        /* A marker that is a tree, or unreadable at this commit: absent, so it yields no candidate. */
+        /* Unreadable at this commit: absent, so it yields no candidate and the root's binding decides. */
       }
     }
     return discover(dir);
@@ -92,8 +113,13 @@ export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeo
   }
 }
 
+/** Audit of PRDR-230: PRDR-226 wrote the record here; read it once so an upgrade cannot silently discard an acceptance in flight. */
+function legacyAcceptPath(root: string, id: string): string {
+  return path.join(stateDir(root), "runs", id, "drift_accept.json");
+}
+
 export function readAcceptedDrift(root: string, id: string): AcceptRecord | null {
-  const file = driftAcceptPath(root, id);
+  const file = existsSync(driftAcceptPath(root, id)) ? driftAcceptPath(root, id) : legacyAcceptPath(root, id);
   try {
     const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<AcceptRecord>;
     const hashes: Record<string, string> = {};
@@ -117,9 +143,23 @@ export function bindingsForTree(root: string, id: string, workDir: string, runBr
   const accepted = readAcceptedDrift(root, id)?.hashes ?? {};
   const sha = forkCommit(workDir, runBranch);
   const fork = sha === null ? null : discoverAtCommit(workDir, sha);
+  const here = discover(workDir);
   return file.bindings.map((b) => {
-    const hash = accepted[b.slot] ?? (fork === null ? undefined : currentFor(b, fork)?.config_hash);
-    return hash === undefined ? b : { ...b, config_hash: hash };
+    /**
+     * Audit of PRDR-230: an acceptance ADDS an admissible baseline, it does not
+     * replace the fork's. Substituting the accepted hash alone blocked a ticket
+     * a second time for REVERTING its own accepted change — restoring exactly
+     * the configuration its fork carries — and only a merge could clear it.
+     * Whichever admissible baseline the tree actually matches is the one the
+     * comparison uses; when it matches neither, the operator's own accepted
+     * hash is what the halt message names.
+     */
+    const admissible = [accepted[b.slot], fork === null ? undefined : currentFor(b, fork)?.config_hash].filter(
+      (hash): hash is string => typeof hash === "string",
+    );
+    if (admissible.length === 0) return b;
+    const current = currentFor(b, here)?.config_hash;
+    return { ...b, config_hash: admissible.find((hash) => hash === current) ?? (admissible[0] as string) };
   });
 }
 
@@ -143,16 +183,25 @@ export function rebaselineAccepted(root: string, id: string, at: string): string
   const checks = checkAll(file.bindings, discover(root)).checks;
   const changed: string[] = [];
   const bindings = file.bindings.map((b) => {
+    /**
+     * Audit of PRDR-230: only the slots the operator ACCEPTED, and only at the
+     * configuration whose gates were executed. This consulted the record for
+     * its existence alone and then re-baselined every slot whose root hash had
+     * moved — so an acceptance of `lint` silently re-approved a `test` the
+     * operator never ran, stamped with their name (SEC-5).
+     */
+    const want = accepted.hashes[b.slot];
     const current = checks.find((c) => c.slot === b.slot)?.current_hash;
-    if (typeof current !== "string" || current === b.config_hash) return b;
+    if (want === undefined || current !== want || current === b.config_hash) return b;
     changed.push(b.slot);
     return { ...b, config_hash: current, executed_at: at, approved_by: accepted.by };
   });
   if (changed.length > 0) writeBindings(root, { bindings, skips: [...file.skips] });
   rmSync(driftAcceptPath(root, id), { force: true });
+  rmSync(legacyAcceptPath(root, id), { force: true });
   return changed;
 }
 
 export function hasAcceptedDrift(root: string, id: string): boolean {
-  return existsSync(driftAcceptPath(root, id));
+  return existsSync(driftAcceptPath(root, id)) || existsSync(legacyAcceptPath(root, id));
 }

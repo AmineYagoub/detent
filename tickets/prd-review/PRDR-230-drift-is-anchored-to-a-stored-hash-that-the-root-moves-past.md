@@ -85,3 +85,79 @@ still charged, blocked and named the `--ticket` verb in the same test; the accep
 recorded and consumed at the protected path; a root re-baseline does not move a tree's
 baseline; an unresolvable run branch yields no fork; and the guard denies the acceptance path.
 
+
+## Audit
+
+Five dimensions over the committed diff, each finding put to an adversarial verifier that had to
+reproduce the mechanism in the code. Seventeen reported, eight survived. Six are repaired here;
+the rest are recorded with the reason they are not.
+
+**Repaired.**
+
+*The two sides were not the same bytes.* `discoverAtCommit` read `git show <sha>:<name>`, which
+streams the raw blob, while every other input to the comparison is a CHECKED-OUT tree, where git
+has applied the repository's end-of-line and smudge conversions. For an adapter whose config
+region is verbatim file text — make, just, pyproject — a repository carrying `.gitattributes`
+`eol=crlf` or `core.autocrlf` hashed the two sides differently, so every ticket halted on a
+pristine tree and needed its own human acceptance, forever. Measured by the verifier:
+`git show` and `git cat-file --filters` are byte-identical where no filter applies, and differ
+by the conversion where one does. Now `cat-file --filters`, which is the pipeline that produced
+the tree being judged. Detent's own repository is node-scripts and was never exposed, which is
+why the shipped fixture could not catch it.
+
+*A marker that is not a blob was materialised as one.* Neither `git show` nor `cat-file` throws
+on a tree or a symlink at that path — the first prints a directory listing, the second the link
+target — so the catch never fired and the bogus content was written out for the engines to
+parse. The comment claiming otherwise was wrong. Now the mode is read from `ls-tree` and only
+`100644`/`100755` are materialised.
+
+*The accept verb guessed the run branch, and the guess had a silent success path.*
+`git rev-parse --abbrev-ref HEAD` does not throw on a detached root: it prints the literal
+`HEAD` and exits 0, so the documented catch was dead code, and `git merge-base HEAD HEAD` inside
+the worktree then made the ticket's own tip its baseline. The verb reported "nothing to accept"
+and exit 0 while leaving the ticket blocked — an operator told everything is fine, and a wrapper
+that reruns after a successful sync loops. Now a name that is not a real branch is refused, the
+single `detent/run-*` head is the fallback, and no run branch at all is `EXIT_NOT_READY` naming
+what to do.
+
+*An acceptance re-approved gates the operator never ran.* `rebaselineAccepted` consulted the
+record for its existence alone and then re-baselined every slot whose root hash had moved,
+stamping each with the accepting operator's name. An acceptance of `lint` silently re-approved a
+changed `test`. Now only the slots actually accepted, and only when the post-merge hash equals
+the hash whose gates were executed.
+
+*An acceptance replaced the fork instead of joining it.* A ticket that reverted its own accepted
+change — restoring exactly the configuration its fork carries — was blocked a second time, and
+only a merge could clear it. The fork's hash and any accepted hash are now both admissible; the
+comparison uses whichever the tree matches.
+
+*The moved acceptance record had no migration.* `readAcceptedDrift` now reads the PRDR-226 path
+when the new one is absent, and `rebaselineAccepted` removes both, so an upgrade mid-flight
+cannot silently discard an acceptance an operator made.
+
+**Recorded, not changed.**
+
+*The fork is trusted without a record that it was executed* (the one finding graded critical).
+The suggested repair — trust the fork only when it equals the root's hash — reintroduces this
+ticket's own bug exactly, because a worktree cut before an accepted change has a fork that
+differs from the root by construction. The real answer is the approvals ledger, already filed as
+PRDR-231; the audit's grading is the reason to promote it from hardening to the next thing built,
+and the ticket is re-graded to match. Until then the induction stated in V-3⁗ is what holds:
+config reaches the run branch only through a ticket whose own change was blocked and accepted.
+
+*Only `config_hash` is anchored to the fork, not `resolved`.* The suggested repair is unsafe as
+stated: `bindingsForTree`'s output is also what `runScopedGates` EXECUTES, so substituting the
+fork's command would change what runs, not just what is compared. The command channel is
+separately exposed by the package-manager flip in PRDR-232, which is where it belongs.
+
+*A fork equal to the ticket's own tip.* Reachable only after a ticket's branch is merged while
+its worktree survives, which requires merging a blocked ticket by hand; and the naive guard
+would return null for a stale worktree that simply has no commits yet, reintroducing the false
+block for exactly the tickets this fix unblocks. Left as it is, with the reasoning on the record
+rather than a change that trades one defect for another.
+
+**Verified live, twice.** Before and after the repairs, `bindingsForTree` over the four standing
+worktrees of the halted gate root reports no halting drift, each judged against the old lint
+region from its own fork commit rather than the root's advanced hash. A stale halt note naming
+the per-ticket verb keeps the drift sweep from requeueing a ticket the new rule finds clean, so
+t-s01-003 was requeued by hand with the reason recorded.

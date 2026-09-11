@@ -107,7 +107,9 @@ import { writeBindings } from "../../src/adapter/drift.js";
 describe("PRDR-230 the tree's baseline is its fork commit, not whatever the root now holds", () => {
   const testHashOf = (root: string): string | undefined => readBindings(root).bindings.find((b) => b.slot === "test")?.config_hash;
 
-  it("a root re-baseline does not move the tree's baseline; an acceptance for this ticket does", async () => {
+  const hashIn = (dir: string): string | undefined => discover(dir).candidates.find((c) => c.slot === "test")?.config_hash;
+
+  it("a root re-baseline does not move it; an acceptance ADDS a baseline; reverting to the fork is not a second block", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     ensureRunBranch(root, "seam");
@@ -115,22 +117,39 @@ describe("PRDR-230 the tree's baseline is its fork commit, not whatever the root
     const original = testHashOf(root);
     expect(original).toBeDefined();
 
-    const sha = forkCommit(tree, "seam-missing-branch");
-    expect(sha, "an unresolvable run branch yields no fork").toBeNull();
-    const fork = forkCommit(tree, git(root, "rev-parse", "--abbrev-ref", "HEAD").trim());
+    expect(forkCommit(tree, "seam-missing-branch"), "an unresolvable run branch yields no fork").toBeNull();
+    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    const fork = forkCommit(tree, runBranch);
     expect(fork, "the fork commit is derivable from the worktree alone").not.toBeNull();
     expect(discoverAtCommit(tree, fork as string)?.candidates.some((c) => c.slot === "test")).toBe(true);
 
     /* The root moves on — another ticket's change, accepted and merged. */
     const file = readBindings(root);
     writeBindings(root, { bindings: file.bindings.map((b) => (b.slot === "test" ? { ...b, config_hash: "b".repeat(64) } : b)), skips: [...file.skips] });
-    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
-    expect(bindingsForTree(root, "t9", tree, runBranch).find((b) => b.slot === "test")?.config_hash,
-      "the tree is still judged by what it was cut from").toBe(original);
+    const baseline = (): string | undefined => bindingsForTree(root, "t9", tree, runBranch).find((b) => b.slot === "test")?.config_hash;
+    expect(baseline(), "the tree is still judged by what it was cut from").toBe(original);
 
-    /* An operator's acceptance for THIS ticket overlays the fork — nothing else does. */
-    acceptDrift(root, "t9", "operator", "2026-09-11T00:00:00.000Z", { test: "c".repeat(64) });
-    expect(bindingsForTree(root, "t9", tree, runBranch).find((b) => b.slot === "test")?.config_hash).toBe("c".repeat(64));
+    /* An unresolvable fork falls back to the ROOT's binding — the documented safe answer, never the tree's own. */
+    expect(bindingsForTree(root, "t9", tree, "no-such-branch").find((b) => b.slot === "test")?.config_hash,
+      "no fork means the root decides, not the tree").toBe("b".repeat(64));
+
+    /* The ticket changes the recipe itself: its own change, so it drifts. */
+    const makefile = readFileSync(path.join(tree, "Makefile"), "utf8");
+    writeTree(tree, { Makefile: makefile.replace("sh scripts/test.sh", "sh scripts/test.sh # changed by t9") });
+    const changedHash = hashIn(tree) as string;
+    expect(changedHash).not.toBe(original);
+    expect(checkAll(bindingsForTree(root, "t9", tree, runBranch), discover(tree)).halting.map((h) => h.slot)).toEqual(["test"]);
+
+    /* The operator accepts THAT configuration, having executed its gates: clean. */
+    acceptDrift(root, "t9", "operator", "2026-09-11T00:00:00.000Z", { test: changedHash });
+    expect(baseline()).toBe(changedHash);
+    expect(checkAll(bindingsForTree(root, "t9", tree, runBranch), discover(tree)).halting).toEqual([]);
+
+    /* And reverting to exactly what the fork carries is NOT a second block. */
+    writeTree(tree, { Makefile: makefile });
+    expect(hashIn(tree)).toBe(original);
+    expect(checkAll(bindingsForTree(root, "t9", tree, runBranch), discover(tree)).halting,
+      "restoring the fork's own configuration cannot be drift").toEqual([]);
 
     /* Non-worktree mode reads the root's bindings untouched, exactly as before. */
     expect(bindingsForTree(root, "t9", root, runBranch).find((b) => b.slot === "test")?.config_hash).toBe("b".repeat(64));
@@ -146,7 +165,9 @@ describe("PRDR-230 a worktree cut before an accepted change is judged against it
     /* t2's worktree is cut NOW, from the run branch as it stands before t1's change lands. */
     ensureRunBranch(root, "stale");
     const stale = ensureWorktree(root, "t2");
-    const forkRecipe = readFileSync(path.join(stale, "Makefile"), "utf8");
+    /* The premise: t2's tree is cut with the pre-change recipe and nothing in this test writes to it. */
+    expect(readFileSync(path.join(stale, "Makefile"), "utf8")).toContain("sh scripts/test.sh");
+    const forkHash = testHash(root);
 
     /* t1 changes a bound gate's recipe: caught, blocked, and the halt names the per-ticket verb. */
     const halted = await run({ root, backend: new MockBackend({ implement: changeTheGate, review: reviewApprove }), prompts: PROMPTS, runId: "stale", worktree: true, maxTickets: 1 });
@@ -161,11 +182,27 @@ describe("PRDR-230 a worktree cut before an accepted change is judged against it
     expect(readTicket(root, "t1").state).toBe("DONE");
     expect(git(root, "show", "HEAD:Makefile")).toContain("extended by t1");
 
-    /* t2's tree is now older than the run branch, through no act of its own. */
-    expect(readFileSync(path.join(stale, "Makefile"), "utf8"), "t2 never touched the recipe").toBe(forkRecipe);
+    /*
+     * The premise, asserted rather than assumed (audit of PRDR-230): the root's
+     * baseline really did move past t2's fork, and judged by the root's
+     * bindings — which is what every version before this one did — t2 WOULD be
+     * blocked. Without this the test stays green under a mutation that stops
+     * `rebaselineAccepted` moving the root at all.
+     */
+    expect(testHash(root), "the root re-baselined at the merge").not.toBe(forkHash);
+    expect(checkAll(readBindings(root).bindings, discover(stale)).halting.map((h) => h.slot),
+      "judged by the root's bindings, the untouched tree would be blocked").toEqual(["test"]);
     const resumed = await run({ root, backend: new MockBackend({ implement: implementGreen, review: reviewApprove }), prompts: PROMPTS, runId: "stale", worktree: true, maxTickets: 1 });
     /* Before PRDR-230: BLOCKED and exit 2 — judged against a root that had moved past it. */
     expect(resumed.exitCode, resumed.summary.reason ?? "").toBe(EXIT_OK);
     expect(readTicket(root, "t2").state).toBe("DONE");
+    /*
+     * The recipe that survives the merge is t1's, not the older one t2's tree
+     * carried — which is what constrains the session, and is readable after the
+     * run where the worktree is not: `mergeWorktree` removes it at DONE. The
+     * pre-run read of `stale/Makefile` above is the fixture's own premise and
+     * is stated as one rather than asserted.
+     */
+    expect(git(root, "show", "HEAD:Makefile"), "the stale tree did not drag its older recipe back onto the run branch").toContain("extended by t1");
   }, 180_000);
 });
