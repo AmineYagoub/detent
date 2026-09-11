@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -269,5 +270,33 @@ describe("S-3″ the reminder is earned, and silenceable", () => {
     const { config } = loadConfig({ ...BASE_CONFIG, symbols: { enabled: false } });
     expect(config.symbols?.enabled).toBe(false);
     expect(symbolReminder(config.symbols, evidence)).toBeNull();
+  });
+});
+
+/**
+ * PRDR-220 — a server that opens a window.
+ *
+ * Serena's machine config decides whether its web dashboard starts and whether
+ * it opens a browser window at launch, and the shipped defaults say yes to
+ * both. Detent's launch never said otherwise, so every session with symbols on
+ * opened a tab on the operator's machine. The two override flags are in the
+ * pinned tool's `--help`, listed in PRDR-198's own inventory; here they are
+ * required, and read from the tool where the tool is installed.
+ */
+describe("PRDR-220 the symbol server opens nothing on the operator's machine", () => {
+  it("the launch turns the web dashboard and the GUI log window off, explicitly", () => {
+    const server = symbolServerConfig(CONFIG, "/repo") as { serena: { args: string[] } };
+    const args = server.serena.args;
+    expect(args[args.indexOf("--enable-web-dashboard") + 1]).toBe("false");
+    expect(args[args.indexOf("--enable-gui-log-window") + 1]).toBe("false");
+    /* And the project still comes last, after the flags the tool reads before it. */
+    expect(args[args.indexOf("--project") + 1]).toBe("/repo");
+  });
+
+  it("both flags are the pinned tool's own — read from `start-mcp-server --help` where it is installed", () => {
+    const help = spawnSync("serena", ["start-mcp-server", "--help"], { encoding: "utf8" });
+    if (help.error !== undefined || help.status !== 0) return;
+    expect(help.stdout).toContain("--enable-web-dashboard");
+    expect(help.stdout).toContain("--enable-gui-log-window");
   });
 });

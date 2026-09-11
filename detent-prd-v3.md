@@ -1100,6 +1100,16 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   threshold from the unit cost it carries; memory never runs ahead of the file, and a file
   that cannot be read leaves the memory value in force.
 
+- **S-3⁶ (3.1.1, PRDR-220).** The symbol server opens nothing on the operator's machine. Serena's
+  machine config ships with its web dashboard on and set to open a browser window at launch,
+  and Detent's launch never said otherwise — so every session that had a symbol server, one per
+  write-role launch when symbols are on, left a tab in the operator's browser. Now the launch
+  passes `--enable-web-dashboard false --enable-gui-log-window false`, two flags PRDR-198's own
+  inventory of `start-mcp-server` already listed, read from the pinned tool's `--help` by the
+  test where the tool is installed. D-4 holds: Detent edits nothing under `~/.serena`; it
+  declines, per launch, a window it never wanted. Symbol intelligence — its tools, its read-only
+  surface, its pin — is unchanged.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

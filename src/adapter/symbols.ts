@@ -159,8 +159,28 @@ function defaultProbe(command: string): void {
  * are protected because the server does not remember — is false, and was false
  * before PRDR-198 and after the first draft of its fix. If that guarantee is
  * required it needs a mechanism Detent controls, not a flag.
+ *
+ * PRDR-220: the dashboard and the GUI log window are turned OFF per launch.
+ * Serena's machine config (`~/.serena/serena_config.yml`) ships with
+ * `web_dashboard: true` and `web_dashboard_open_on_launch: true`, so a server
+ * launched without saying otherwise opened a browser tab on the operator's
+ * machine for every session that had one. Both override flags are in the
+ * inventory above and in the pinned tool's `--help`; the test reads them from
+ * the tool where it is installed. D-4 holds: nothing under `~/.serena` is
+ * edited — the launch declines a window it never wanted.
  */
-export const SYMBOL_SERVER_ARGS: readonly string[] = ["start-mcp-server", "--context", "ide-assistant", "--mode", "no-onboarding"];
+export const SYMBOL_SERVER_ARGS: readonly string[] = [
+  "start-mcp-server",
+  "--context",
+  "ide-assistant",
+  "--mode",
+  "no-onboarding",
+  "--enable-web-dashboard",
+  "false",
+  "--enable-gui-log-window",
+  "false",
+];
+
 
 export function symbolServerConfig(config: SymbolsConfig, root: string): Record<string, unknown> {
   return {
