@@ -1286,6 +1286,30 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   — measured as `pnpm run test` before the install and `npm run test` after. A row that is not
   the project's installs nothing and the outcome names the manager it saw.
 
+- **V-3⁵ (3.1.1, PRDR-231).** A configuration is a baseline only if it was EXECUTED and approved.
+  V-3⁗ judges a ticket's tree against the config at its fork commit and adopted whatever that
+  commit carried. Because worktrees are the default and the gate arm is the only production drift
+  assertion, that left `.detent/bindings.json` with no enforcement role for any slot a fork
+  defines: the safety argument was an induction — config reaches the run branch only through a
+  ticket whose own change was blocked and accepted — and an induction is not a control. A
+  configuration arriving by any other path was adopted silently by every worktree cut after it,
+  and PRDR-232 was one such path. Now every approved binding is recorded in an append-only
+  `state/approvals.jsonl`, written at the ONE funnel every mint route passes through
+  (`writeBindings`), so init's binding, both `verify sync` paths, C-4's bootstrap promotion and
+  the merge-time re-baseline all record without an optional dependency any of them could forget;
+  an operator's per-ticket acceptance records where its gates actually ran. A hash that is not
+  recorded is not admissible as a baseline: it drops out, the root's approved binding decides,
+  and the outcome is an ordinary `drifted` check flowing through the halt message and the
+  `--ticket` verb that already exist — no new status, no new halt path, and the remedy an
+  operator is told to run is one that already works. **The migration is bounded and stated:** a
+  root that predates the ledger is seeded once with what it has BEEN EXECUTING — its own approved
+  bindings and the configuration every standing worktree was cut with, both read from places a
+  session cannot forge (the bindings file, and run-branch commits reached by merge-base). The
+  seed admits nothing new; it records the status quo so an upgrade mid-run halts nothing, and
+  every root created after this is strict from its first binding. Verified on the halted gate
+  root: seeded 16 rows, no standing worktree halts, and both lint hashes are recorded — the
+  root's current one and the older one its standing worktrees were cut with.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

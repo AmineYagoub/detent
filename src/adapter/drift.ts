@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { recordApprovals } from "./approvals.js";
 import { parseArtifact } from "../schemas/common.js";
 import { bindingsFileSchema, type Binding, type BindingsFile } from "../schemas/records.js";
 import { stateDir, writeArtifact } from "../fs/layout.js";
@@ -39,6 +40,13 @@ export function readBindings(root: string): BindingsFile {
 
 export function writeBindings(root: string, file: Omit<BindingsFile, "schema_version">): void {
   writeArtifact(root, BINDINGS_FILE, file);
+  /**
+   * V-3⁵ (PRDR-231): the ONE funnel. Every route that mints an approved binding
+   * — init's `bindAll`, both `verify sync` paths, C-4's bootstrap promotion, and
+   * the merge-time re-baseline — writes through here, so recording the approval
+   * here needs no optional dependency at any of them and none can forget.
+   */
+  recordApprovals(root, file.bindings, new Date().toISOString());
 }
 
 type DriftStatus = "clean" | "drifted" | "exempt" | "vanished";

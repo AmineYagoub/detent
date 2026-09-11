@@ -121,6 +121,7 @@ interface E2EResult {
   readonly detentFiles: readonly string[];
   readonly gitignore: string;
   readonly bindingsJson: string;
+  readonly approvals: string;
 }
 
 const results = new Map<string, E2EResult>();
@@ -252,6 +253,7 @@ async function runE2E(plan: FixturePlan): Promise<E2EResult> {
     detentFiles: walkFiles(stateDir(root)),
     gitignore: readFileSync(path.join(stateDir(root), ".gitignore"), "utf8"),
     bindingsJson: readFileSync(path.join(stateDir(root), "bindings.json"), "utf8"),
+    approvals: readFileSync(path.join(stateDir(root), "state", "approvals.jsonl"), "utf8"),
   };
   results.set(plan.fixture, result);
   return result;
@@ -285,8 +287,31 @@ describe("T-030 bindings-only diffs between fixtures", () => {
   it("the .detent/ trees are structurally identical — same files, same .gitignore bytes", () => {
     const done = pairs();
     for (const r of done) {
-      expect(r.detentFiles).toEqual([".gitignore", "bindings.json"]);
+      /* V-3⁵ (PRDR-231): binding also records what it approved, in the local state the .gitignore already covers. */
+      expect(r.detentFiles).toEqual([".gitignore", "bindings.json", "state/approvals.jsonl"]);
       expect(r.gitignore).toBe(done[0]!.gitignore);
+    }
+  });
+
+  it("every ecosystem records its approvals, one row per bound slot, and none of it is committed (V-3⁵)", () => {
+    for (const r of pairs()) {
+      const rows = r.approvals.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+      const bound = (JSON.parse(r.bindingsJson) as { bindings: { slot: string; config_hash: string }[] }).bindings;
+      /*
+       * Append-only, and superseded rows are kept on purpose: a flow that binds,
+       * writes, re-binds and writes again records both configurations, and the
+       * earlier one is exactly what lets a worktree cut before the change still
+       * be judged (V-3⁵). What must hold is that every CURRENT binding is
+       * recorded — an approval the ledger does not know is one V-3⁵ will refuse.
+       */
+      expect(rows.length).toBeGreaterThanOrEqual(bound.length);
+      for (const binding of bound) {
+        expect(
+          rows.some((row) => row["slot"] === binding.slot && row["config_hash"] === binding.config_hash),
+          `${binding.slot} was approved without being recorded`,
+        ).toBe(true);
+      }
+      expect(r.gitignore, "the ledger lives under the local state the .gitignore already covers").toContain("state");
     }
   });
 

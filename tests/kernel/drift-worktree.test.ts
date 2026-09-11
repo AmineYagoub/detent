@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { discover } from "../../src/adapter/discover/index.js";
@@ -96,6 +96,7 @@ describe("PRDR-226 drift is judged against the base a tree started from, and acc
   }, 120_000);
 });
 
+import { approvalsPath, hasApprovals } from "../../src/adapter/approvals.js";
 import { acceptDrift, bindingsForTree, discoverAtCommit, driftAcceptPath, forkCommit } from "../../src/kernel/drift-base.js";
 import { writeBindings } from "../../src/adapter/drift.js";
 
@@ -205,4 +206,76 @@ describe("PRDR-230 a worktree cut before an accepted change is judged against it
      */
     expect(git(root, "show", "HEAD:Makefile"), "the stale tree did not drag its older recipe back onto the run branch").toContain("extended by t1");
   }, 180_000);
+});
+
+/**
+ * V-3⁵ (PRDR-231) — a fork hash is a baseline only if it was executed and
+ * approved. V-3⁗ adopted whatever the fork commit carried, so a configuration
+ * that reached the run branch by any path other than an accepted ticket was
+ * adopted silently by every worktree cut after it — and since the gate arm is
+ * the only production drift assertion under worktrees, bindings.json had no
+ * enforcement role at all for those slots.
+ */
+describe("PRDR-231 an unapproved configuration is not a baseline", () => {
+  it("a fork carrying a config nobody approved falls back to the root's binding, and drifts", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    ensureRunBranch(root, "unapproved");
+    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    expect(hasApprovals(root), "init's own binding populated the ledger").toBe(true);
+
+    /* A gate's config reaches the run branch WITHOUT any approval — the path the induction cannot see. */
+    const makefile = readFileSync(path.join(root, "Makefile"), "utf8");
+    writeTree(root, { Makefile: makefile.replace("sh scripts/test.sh", "sh scripts/test.sh # slipped in") });
+    git(root, "add", "Makefile");
+    git(root, "commit", "-q", "-m", "a config change that passed through no gate");
+
+    /* A worktree cut now forks at that commit. */
+    const tree = ensureWorktree(root, "t-after");
+    const forkHash = discover(tree).candidates.find((c) => c.slot === "test")?.config_hash;
+    expect(forkHash).toBeDefined();
+
+    const bindings = bindingsForTree(root, "t-after", tree, runBranch);
+    /* Before PRDR-231: the fork's hash was substituted, the tree matched it, and the check was clean. */
+    expect(bindings.find((b) => b.slot === "test")?.config_hash,
+      "an unapproved fork hash is not admissible, so the root's binding decides").not.toBe(forkHash);
+    expect(checkAll(bindings, discover(tree)).halting.map((h) => h.slot)).toEqual(["test"]);
+  }, 60_000);
+
+  it("the seed records what a pre-ledger root has been running, so nothing in flight halts", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    ensureRunBranch(root, "seeded");
+    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    const tree = ensureWorktree(root, "t-standing");
+
+    /* The shape of a root that predates the ledger: standing worktrees, no approvals file. */
+    rmSync(approvalsPath(root), { force: true });
+    const makefile = readFileSync(path.join(root, "Makefile"), "utf8");
+    writeTree(root, { Makefile: makefile.replace("sh scripts/test.sh", "sh scripts/test.sh # moved on") });
+    git(root, "add", "Makefile");
+    git(root, "commit", "-q", "-m", "the run branch moves past the standing worktree");
+    expect(hasApprovals(root)).toBe(false);
+
+    const bindings = bindingsForTree(root, "t-standing", tree, runBranch);
+    expect(hasApprovals(root), "the seed is written once, on first use").toBe(true);
+    /* The standing tree is judged by what it was cut with, and does not halt. */
+    expect(checkAll(bindings, discover(tree)).halting).toEqual([]);
+  }, 60_000);
+
+  it("an operator's acceptance is admissible before the merge, because that is where its gates ran", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    ensureRunBranch(root, "accepted");
+    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    const tree = ensureWorktree(root, "t-acc");
+    const makefile = readFileSync(path.join(tree, "Makefile"), "utf8");
+    writeTree(tree, { Makefile: makefile.replace("sh scripts/test.sh", "sh scripts/test.sh # the ticket's own change") });
+    const changed = discover(tree).candidates.find((c) => c.slot === "test")?.config_hash as string;
+    expect(checkAll(bindingsForTree(root, "t-acc", tree, runBranch), discover(tree)).halting.map((h) => h.slot)).toEqual(["test"]);
+
+    acceptDrift(root, "t-acc", "operator", "2026-09-11T00:00:00.000Z", { test: changed });
+    expect(checkAll(bindingsForTree(root, "t-acc", tree, runBranch), discover(tree)).halting,
+      "the acceptance is recorded where the gates ran, so it is a baseline at once").toEqual([]);
+  }, 60_000);
 });
