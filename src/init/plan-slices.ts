@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { type HeldFinding, planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { contentsDigest, sliceCacheDir } from "./machine.js";
 import { sessionBudget } from "./plan-review.js";
@@ -28,7 +28,7 @@ export interface SlicePlan {
   readonly tickets: DraftedTicket[];
   readonly questions: PlanQuestion[];
   /** Findings a slice's second review still held; shown at PRESENT. */
-  readonly remaining: { readonly slice: string; readonly findings: PlanReview["findings"] }[];
+  readonly remaining: { readonly slice: string; readonly findings: readonly HeldFinding[] }[];
   /** PRDR-196: what each revision round did, for the slices that needed one. */
   readonly revisions: readonly RevisionOutcome[];
   /** C-4⁗″ (PRDR-200): the same arithmetic over reads of an unchanged draft — the null for the line above. */
@@ -425,8 +425,13 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       );
     }
 
-    /* C-4⁗″: what the filter held back is judgement, not noise to discard — D-24 sends it to the human. */
-    const held = [...normalised.findings, ...leftover, ...(review?.seenOnce ?? [])];
+    /*
+     * C-4⁗″: what the filter held back is judgement, not noise to discard —
+     * D-24 sends it to the human. D-24′ (PRDR-209): marked with WHY it is
+     * held — survived a paid revision, or seen in one read and never again —
+     * because the two are different signals and PRESENT says which.
+     */
+    const held: HeldFinding[] = [...normalised.findings, ...leftover.map((f) => ({ ...f, held: "after-revision" as const })), ...(review?.seenOnce ?? []).map((f) => ({ ...f, held: "seen-once" as const }))];
     if (!reviewed) {
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);

@@ -313,6 +313,16 @@ export const planDraftSchema = z.strictObject({
 export type PlanDraft = z.infer<typeof planDraftSchema>;
 export type PlanDraftTicket = PlanDraft["tickets"][number];
 
+/**
+ * D-24′ (PRDR-209): why a finding is still in front of the human. `seen-once`
+ * is C-4⁗″'s `seenOnce` — one read of three, never reproduced, the kind the
+ * null says is mostly noise. `after-revision` survived a revision that was
+ * paid to remove it — the stronger signal. Absent means an older cache or a
+ * finding the pipeline itself added (an unreviewed slice); it renders plain.
+ */
+export type HeldKind = "seen-once" | "after-revision";
+export type HeldFinding = PlanReview["findings"][number] & { readonly held?: HeldKind };
+
 /*
  * ---------------------------------------------------------------------------
  * SLICE's artifact (C-2‴, PRDR-117)

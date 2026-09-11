@@ -77,12 +77,12 @@ function scripted(reads: readonly (readonly object[])[]): {
   return { stage, draftFindings };
 }
 
-async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: string[] }> {
+async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: string[]; message: string }> {
   const root = repo(LONE_CANDIDATE);
   const backend = new MockBackend({ planner: stage });
   const notes: string[] = [];
-  await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
-  return { backend, notes };
+  const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+  return { backend, notes, message: result.interrupt?.message ?? "" };
 }
 
 const reviews = (b: MockBackend): number => b.calls.filter((c) => c.spec.artifactOut.endsWith("plan-review.json")).length;
@@ -111,6 +111,13 @@ describe("C-4⁗″ the review is sampled and only what recurs buys the revision
     const { stage } = scripted(READS);
     const { notes } = await init(stage);
     expect(notes.some((t) => /sampled 3.*2 of 3|3 sample|recurr/i.test(t))).toBe(true);
+  });
+
+  it("the findings seen once reach PRESENT marked as such, apart from what survived a revision (D-24′, PRDR-209)", async () => {
+    const { stage } = scripted(READS);
+    const { message } = await init(stage);
+    /* Six findings were seen in one read only; PRESENT says so on each, rather than listing them as if they had survived. */
+    expect(message).toMatch(/coherence \(t-102\)[^\n]*seen once/);
   });
 
   it("a reviewer that agrees with itself loses nothing to the filter", async () => {

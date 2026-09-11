@@ -957,6 +957,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   that names nothing yields today's findings unchanged. The symbol and test-file findings on
   gate-313 were the plan's, and were right.
 
+- **D-24′ (3.1.1, PRDR-209).** The advice D-24 hands the human is rendered so a human can act
+  on it. gate-313's PRESENT printed 144 held findings as one flat list, twice — once at init and
+  again at `--approve` — and buried in it were the twenty-six tickets some read called too big
+  for a session, the most actionable thing the review found, and which findings had survived a
+  paid revision against which were seen in one read and never again, the kind C-4⁗″'s null says
+  is mostly noise. A list that long is not read, so the judgement D-24 reserved was not made.
+  Every held finding now carries **why** it is held — `seen-once` or `after-revision`, marked
+  where the reviews produce them — and PRESENT renders up to a named number inline, each with
+  its kind, and above it the totals by tag and by kind, the tickets drawing the most (by distinct
+  tags, then count), the plan-wide count, and the path of `.detent/state/advice.md`, where the
+  whole list lives grouped the same way with every finding in full. Nothing is dropped, ranked
+  away or resolved by the machine: all of it is still the human's, and the file is the proof.
+  The number is a constant beside PRDR-119's noise rules, not a knob; `--approve` re-presents
+  the same summary, since the wall is in the file.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

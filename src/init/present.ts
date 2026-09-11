@@ -4,7 +4,8 @@ import { stateDir } from "../fs/layout.js";
 import { approvalSchema, type Approval, type Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
-import type { PlanQuestion, PlanReview } from "../schemas/init.js";
+import type { HeldFinding, PlanQuestion, PlanReview } from "../schemas/init.js";
+import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -40,8 +41,10 @@ export interface PresentInput {
   readonly slices?: readonly { readonly id: string; readonly title: string; readonly tickets: readonly string[] }[];
   /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on. */
   readonly questions?: readonly PlanQuestion[];
-  /** Findings the reviews still held after their revision round. */
-  readonly findings?: PlanReview["findings"];
+  /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
+  readonly findings?: readonly HeldFinding[];
+  /** D-24′ (PRDR-209): where the full list went when it did not fit on the screen. */
+  readonly adviceFile?: string;
   /**
    * PRDR-196: what `applyContracts` PROVED, kept apart from what the review
    * judged.
@@ -260,10 +263,7 @@ export function renderPresentation(input: PresentInput): string {
     for (const f of proved) lines.push(`  ${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`);
   }
   const findings = input.findings ?? [];
-  if (findings.length > 0) {
-    lines.push("", `Review findings held after revision (${findings.length}) — judgement calls for you, not defects the machine kept grinding on (D-24):`);
-    for (const f of findings) lines.push(`  ${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`);
-  }
+  if (findings.length > 0) lines.push(...renderHeldFindings(findings, input.adviceFile));
   lines.push("", "Bindings and tickets are overridable — edit them and re-run `detent init` (C-3b/C-8).");
   /** S-3″ (PRDR-121): shown only when this run produced evidence it would have helped. */
   const reminder = symbolReminder(input.symbols, findings);
@@ -304,7 +304,10 @@ export interface PresentDeps extends PresentInput {
 }
 
 export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
-  const presentation = renderPresentation(deps);
+  /* D-24′ (PRDR-209): a wall goes to a file and the screen gets the summary; a short list stays inline. */
+  const held = deps.findings ?? [];
+  const adviceFile = held.length > ADVICE_INLINE_MAX ? writeAdvice(deps.root, held) : undefined;
+  const presentation = renderPresentation(adviceFile === undefined ? deps : { ...deps, adviceFile });
   deps.print?.(presentation);
 
   /**
@@ -363,3 +366,4 @@ function recordApproval(root: string, approvedBy: string, nowMs: number): Approv
   writeFileSync(approvalPath(root), `${JSON.stringify(approval, null, 2)}\n`);
   return approval;
 }
+

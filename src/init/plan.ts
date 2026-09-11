@@ -1,3 +1,4 @@
+import { heldAs } from "./present-advice.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -329,7 +330,8 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    * call "held after revision", which is the one thing it is not. Shown once,
    * under the heading that says what it is.
    */
-  const findings = [...held, ...reviewed.remaining, ...written.findings];
+  /* D-24′ (PRDR-209): the whole-plan review's leftovers survived its revision round, and are marked so. */
+  const findings = [...held, ...heldAs(reviewed.remaining, "after-revision"), ...written.findings];
   return {
     kind: "complete",
     outputs: {
