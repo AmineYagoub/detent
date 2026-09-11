@@ -106,10 +106,7 @@ export class SessionArm {
     const generation = currentGeneration(current);
     current = {
       ...current,
-      generations: withCurrentCounters(current.generations, generation.index, {
-        ...counters,
-        sessions: counters.sessions + 1,
-      }),
+      generations: withCurrentCounters(current.generations, generation.index, { ...counters, sessions: counters.sessions + 1 }),
     };
     writeTicket(ctx.root, current);
 
@@ -199,6 +196,17 @@ export class SessionArm {
      * what the half-done session left).
      */
     rmSync(artifactOut, { force: true });
+    /*
+     * PRDR-225: the signals a session writes and the referee consumes are
+     * cleared here too, or a stale one impersonates this session — gate-313's
+     * t-s01-004 review-fix wrote `falsified.json` (a stage that never consumes
+     * one), it survived a requeue, and the next generation's implementer, which
+     * wrote nothing, was falsified against it. `oversized.json` is NOT cleared:
+     * it is cross-run evidence sizing-evidence reads for a later PLAN (X-4″).
+     * The crash-resume skip returns above, so a genuinely in-flight session's
+     * signal is kept for B-5, exactly as its artifact is.
+     */
+    for (const s of ["falsified.json", "surface_request.json"]) rmSync(path.join(runsDir(ctx.root, id), s), { force: true });
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "start",

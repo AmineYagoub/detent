@@ -1166,6 +1166,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the session; a criterion that cannot be met as specified is `{"note"}` at `falsified_out`; and
   a protected path is a falsification, not a request. What is grantable does not change.
 
+- **X-4⁵ (3.1.1, PRDR-225).** A signal is cleared before a fresh launch, so the referee never
+  reads one no session in this generation wrote. PRDR-072 clears a stale ARTIFACT before every
+  launch — a refused reviewer once replayed the previous verdict live — but the signal files a
+  session writes were not cleared. `falsified.json` is consumed only after an IN_PROGRESS
+  session (X-3 admits a falsification mid-implementation alone), so one written in any other
+  stage is never consumed and simply stays. gate-313's t-s01-004: a generation 0 review-fix
+  session wrote `falsified.json` (the wrong stage, not even the documented shape); it survived a
+  requeue; generation 1's implementer wrote nothing, and the referee admitted PREMISE_FALSIFIED
+  against it — NEEDS_HUMAN on a signal with no author in that generation. Now the referee
+  removes `falsified.json` and `surface_request.json` at the same seam it removes the artifact,
+  after the B-5 crash-resume skip (so a genuinely in-flight session's signal is kept, as its
+  artifact is). `oversized.json` is deliberately NOT cleared: it is cross-run evidence
+  `sizing-evidence` reads for a later PLAN of the same documents (X-4″), and its own stale-consume
+  re-lands a requeued oversized ticket at NEEDS_HUMAN rather than passing silently.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
