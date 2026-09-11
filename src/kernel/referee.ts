@@ -1,6 +1,3 @@
-import { discover } from "../adapter/discover/index.js";
-import { readBindings, writeBindings } from "../adapter/drift.js";
-import type { Binding } from "../schemas/records.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { buildDossier, dossierSummary, writeDossier } from "./dossier.js";
@@ -14,11 +11,12 @@ import {
   type KernelEvent,
 } from "./events.js";
 import { finalizeBootstrap } from "../init/plan.js";
+import { BOOTSTRAP_TICKET_ID } from "../init/plan-write.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked, stageAll } from "./git.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
-import { finalizeStranded, requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
+import { bootstrapFinalizeDeps, finalizeStranded, promoteBootstrapBindings, requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -149,6 +147,8 @@ export class RefereeCore {
     requeueOutageVictims(this.root, (t, e) => this.commit(t, e), this.ctx.iso());
     /* PRDR-217: a DONE ticket the crash left unmerged is finalized before anyone builds on the run branch. */
     finalizeStranded(this.root, this.ctx, (id) => this.finalizeDone(id), (id) => this.closeGen(id, "done"));
+    /* PRDR-218: a baseline the bootstrap finalize could not take is taken now, from the merged root. */
+    promoteBootstrapBindings(this.root, (text) => appendNote(this.root, BOOTSTRAP_TICKET_ID, { author: "kernel", text }));
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );
@@ -360,12 +360,8 @@ export class RefereeCore {
      * C-4: bootstrap #1's gates just passed, so greenfield's provisional
      * bindings become the baseline. A no-op for every other ticket.
      */
-    finalizeBootstrap(this.root, ticket.id, {
-      readBindings: () => readBindings(this.root),
-      writeBindings: (file) => writeBindings(this.root, file as { bindings: Binding[]; skips: never[] }),
-      rediscover: () => discover(this.root).candidates,
-      note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
-    });
+    /* PRDR-218: rediscovery runs in the work directory — the tree that passed — never the root before the merge. */
+    finalizeBootstrap(this.root, ticket.id, bootstrapFinalizeDeps(this.root, workDir, (text) => appendNote(this.root, ticket.id, { author: "kernel", text })));
     /* V-1⁗ (PRDR-211): what the referee installed is never part of the change set; the lockfile it produced is. PRDR-216: an ignored directory is never named. */
     stageAll(workDir, this.ctx.ecosystems.map((e) => e.dir));
     const dirty = git(workDir, "status", "--porcelain").trim();

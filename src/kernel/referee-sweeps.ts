@@ -1,6 +1,9 @@
 import { existsSync } from "node:fs";
 import { discover } from "../adapter/discover/index.js";
-import { assertNoDrift, readBindings } from "../adapter/drift.js";
+import { assertNoDrift, readBindings, writeBindings } from "../adapter/drift.js";
+import { finalizeBootstrap } from "../init/plan.js";
+import { BOOTSTRAP_TICKET_ID } from "../init/plan-write.js";
+import type { Binding } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { KernelEvent } from "./events.js";
 import { humanRequeue, outageRequeue } from "./events.js";
@@ -106,4 +109,44 @@ export function finalizeStranded(
     resumed.push(ticket.id);
   }
   return resumed;
+}
+
+/**
+ * C-4's finalize, with rediscovery run WHERE THE GATES RAN (PRDR-218).
+ *
+ * `finalizeDone` rediscovered on the root, before the merge — and under B-2″'s
+ * default worktrees the scaffold bootstrap #1 created is not on the root yet.
+ * gate-313 noted, twice, "test, lint, typecheck, build stayed provisional —
+ * nothing discoverable backs them", and V-3 was exempt for the whole build;
+ * the 3.1.0 gate, run without worktrees, promoted 4 of 4 at the same moment.
+ * The work directory's tree is the one that passed, and its config hashes are
+ * the merged result's hashes. Non-worktree mode passes the root, as before.
+ */
+export function bootstrapFinalizeDeps(
+  root: string,
+  workDir: string,
+  note: (text: string) => void,
+): Parameters<typeof finalizeBootstrap>[2] {
+  return {
+    readBindings: () => readBindings(root),
+    writeBindings: (file) => writeBindings(root, file as { bindings: Binding[]; skips: never[] }),
+    rediscover: () => discover(workDir).candidates,
+    note,
+  };
+}
+
+/**
+ * PRDR-218's other half: a root the defect already left behind heals at the
+ * next pool. A provisional binding after the bootstrap ticket is DONE is a
+ * stranded record — the merge landed, the baseline did not — so the same
+ * finalize runs from the root, which by then carries the scaffold. A crash
+ * between the merge and the bindings write heals the same way. A slot nothing
+ * discoverable backs stays provisional, as C-4 says, and is asked again next
+ * pool; that costs one discovery per pool and is the honest record.
+ */
+export function promoteBootstrapBindings(root: string, note: (text: string) => void): boolean {
+  const bootstrap = allTickets(root).find((t) => t.id === BOOTSTRAP_TICKET_ID);
+  if (bootstrap === undefined || bootstrap.state !== "DONE") return false;
+  if (!readBindings(root).bindings.some((b) => b.status === "provisional")) return false;
+  return finalizeBootstrap(root, BOOTSTRAP_TICKET_ID, bootstrapFinalizeDeps(root, root, (text) => note(`late (PRDR-218): ${text}`)));
 }

@@ -1070,6 +1070,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   closes; a closed generation with a surviving worktree is a human's and is left alone. Both
   drivers get it, because it lives in `pool()`.
 
+- **V-3″ (3.1.1, PRDR-218).** The bootstrap's baseline is taken from the tree that passed. C-4
+  finalizes greenfield's provisional bindings when bootstrap #1's gates pass, by rediscovering
+  the tooling the bootstrap created; `finalizeDone` ran that discovery on the ROOT, before the
+  merge — and under B-2″'s default worktrees the scaffold is not on the root yet. gate-313
+  noted, twice, *"test, lint, typecheck, build stayed provisional — nothing discoverable backs
+  them"*, while the 3.1.0 gate, run without worktrees, promoted 4 of 4 at the same moment. The
+  cost was V-3 itself: a provisional binding is exempt from drift, rightly, so for the whole
+  build no gate command's config region would have been watched. Now rediscovery runs in the
+  ticket's WORK DIRECTORY — the tree that passed, whose hashes are the merged result's — and,
+  because a root can already carry the aftermath, the pool heals it: a provisional binding
+  after the bootstrap ticket is DONE is promoted from the root at the next pool with the same
+  note, marked late, exactly as B-2‴ finalizes a stranded ticket. A slot nothing discoverable
+  backs stays provisional, as C-4 says. Non-worktree mode is unchanged: its work directory is
+  the root.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
