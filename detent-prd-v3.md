@@ -1041,6 +1041,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   driver rule and the guard itself all read. Reads and controls of tasks spawn nothing and stay
   the allowlist's. Sub-agents are denied, not metered.
 
+- **V-1⁵ (3.1.1, PRDR-216).** Finalize never names an ignored path. V-1⁗ kept the install out
+  of the change set with an exclusion pathspec — `git add -A -- . :!node_modules` — and git
+  refuses a pathspec that names an ignored path even as an exclusion: *"The following paths
+  are ignored by one of your .gitignore files"*. The fixture that proved V-1⁗ had no
+  `.gitignore`; gate-313's bootstrap wrote `node_modules/` into its own, the referee's install
+  created the directory, and the first DONE after an install exited 1 with the ticket already
+  DONE, its work unmerged (PRDR-217). Now the referee asks git first: an ecosystem directory
+  `check-ignore` already ignores is `-A`'s own skip and gets no pathspec; one the project does
+  not ignore is excluded by name exactly as before — per directory, since a project may ignore
+  some ecosystems and not others. What the referee installed is still never part of the change
+  set, and the lockfile still is.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

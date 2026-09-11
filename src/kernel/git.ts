@@ -31,6 +31,33 @@ export function git(cwd: string, ...args: string[]): string {
 }
 
 /**
+ * PRDR-216: stage the tree for finalize without naming an ignored path.
+ *
+ * V-1⁗ excluded the install directory by pathspec — `git add -A -- . :!<dir>`
+ * — and git refuses a pathspec that names an ignored path even as an
+ * exclusion: "The following paths are ignored by one of your .gitignore
+ * files". gate-313's bootstrap wrote `node_modules/` into its own `.gitignore`,
+ * the referee's install created the directory, and finalize exited 1 with the
+ * ticket already DONE. A directory git already ignores is `-A`'s own skip and
+ * needs no pathspec; only one git does NOT ignore is excluded by name. Asked
+ * per directory, since a project may ignore some ecosystems and not others.
+ */
+export function isIgnored(cwd: string, rel: string): boolean {
+  try {
+    execFileSync("git", ["check-ignore", "-q", "--", rel], { cwd, stdio: "ignore" });
+    return true;
+  } catch {
+    /* Exit 1 is "not ignored"; anything else is a git that could not answer, and an explicit exclusion is the safe reading. */
+    return false;
+  }
+}
+
+export function stageAll(cwd: string, excludeDirs: readonly string[]): void {
+  const excludes = excludeDirs.filter((dir) => !isIgnored(cwd, dir)).map((dir) => `:!${dir}`);
+  git(cwd, "add", "-A", "--", ".", ...excludes);
+}
+
+/**
  * P7′ (PRDR-130): did git RUN and merely answer non-zero, or could it not run
  * at all? The two were one `null` and the difference is the whole defect: a
  * failed spawn, a permissions error or an output overrun read as "found

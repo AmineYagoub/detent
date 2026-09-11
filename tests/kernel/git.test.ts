@@ -13,6 +13,7 @@ import {
   parseTicketTrailers,
   resolveBaseRef,
   snapshotRefs,
+  stageAll,
   worktreePath,
 } from "../../src/kernel/git.js";
 import { mkdtempSync } from "node:fs";
@@ -416,5 +417,37 @@ describe("B-2′ a conflicting worktree merge keeps the work and says so", () =>
     expect(existsSync(wt)).toBe(false);
     expect(git(root, "branch", "--list", "ticket/t2").trim()).toBe("");
     expect(existsSync(path.join(root, "b.txt"))).toBe(true);
+  });
+});
+
+/** PRDR-216: staging asks git before naming an exclusion — an ignored directory is `-A`'s own skip. */
+describe("PRDR-216 stageAll excludes only what git does not already ignore", () => {
+  function repoWithInstall(ignore: boolean): string {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-stage-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "README.md": "seed\n", ...(ignore ? { ".gitignore": "node_modules/\n" } : {}) });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "seed");
+    writeTree(root, { "src/a.ts": "export const a = 1;\n", "node_modules/x/index.js": "module.exports = 1;\n" });
+    return root;
+  }
+
+  it("an ignored install directory does not break the add, and stays out of the index", () => {
+    const root = repoWithInstall(true);
+    expect(() => stageAll(root, ["node_modules"])).not.toThrow();
+    const staged = git(root, "diff", "--cached", "--name-only");
+    expect(staged).toContain("src/a.ts");
+    expect(staged).not.toContain("node_modules");
+  });
+
+  it("an install directory the project does not ignore is excluded by pathspec, exactly as before", () => {
+    const root = repoWithInstall(false);
+    stageAll(root, ["node_modules"]);
+    const staged = git(root, "diff", "--cached", "--name-only");
+    expect(staged).toContain("src/a.ts");
+    expect(staged).not.toContain("node_modules");
   });
 });

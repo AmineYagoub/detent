@@ -111,3 +111,48 @@ describe("audit of PRDR-211: an install the session's Stop hook made is on the r
     expect(installs[0]).toContain("2026-09-11T06:13:00.000Z");
   });
 });
+
+/**
+ * PRDR-216 — the exclusion git refuses to hear.
+ *
+ * gate-313's bootstrap, generation 2: DONE at 07:51:06, dead one second later.
+ * Its own scaffold had written `node_modules/` into `.gitignore`, the referee's
+ * install had created the directory, and `git add -A -- . :!node_modules`
+ * exited 1 with "The following paths are ignored by one of your .gitignore
+ * files" — git refuses a pathspec naming an ignored path even as an EXCLUSION.
+ * The fixture above has no `.gitignore`, which is why V-1⁗'s proof passed.
+ */
+describe("PRDR-216 finalize survives a project that ignores its install directory", () => {
+  async function ignoringFixture(): Promise<string> {
+    const root = await fixture();
+    writeFileSync(path.join(root, ".gitignore"), ".fail\n.flake\nnode_modules/\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "ignore the install directory");
+    return root;
+  }
+
+  it("reaches DONE with exit 0; the run branch carries the feature and never the install directory", async () => {
+    const root = await ignoringFixture();
+    addTicket(root, { id: "t1" });
+    const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
+    const outcome = await run({ root, backend, prompts: loadPromptSet(), runId: "test", ecosystems: [FAKE] });
+    /* Before: exit 1 — `git add -A -- . :!node_modules` refused, the ticket already DONE. */
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    expect(readTicket(root, "t1").state).toBe("DONE");
+    const tree = git(root, "ls-tree", "-r", "--name-only", "HEAD");
+    expect(tree).toContain("src/feature-t1.txt");
+    expect(tree).not.toContain("node_modules");
+  });
+
+  it("and in worktree mode, the default — where the gate found it", async () => {
+    const root = await ignoringFixture();
+    addTicket(root, { id: "t1" });
+    const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
+    const outcome = await run({ root, backend, prompts: loadPromptSet(), runId: "test", ecosystems: [FAKE], worktree: true });
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    expect(readTicket(root, "t1").state).toBe("DONE");
+    const tree = git(root, "ls-tree", "-r", "--name-only", "HEAD");
+    expect(tree).toContain("src/feature-t1.txt");
+    expect(tree).not.toContain("node_modules");
+  }, 60_000);
+});
