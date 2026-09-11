@@ -252,6 +252,14 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       backend: opts.backend.name,
       budgets: loaded.config.budgets,
       model_routing: loaded.config.model_routing,
+      /**
+       * PRDR-235: beside the models, because this event's stated contract is
+       * "the run records the configuration it actually loaded" and effort was
+       * the one routed dimension it omitted — so a run at `max` and a run at
+       * the SDK default left identical records, and no experiment that raises
+       * effort could be told apart from one that did not.
+       */
+      effort_routing: loaded.config.effort_routing,
       protected: loaded.config.protected,
       risk: loaded.config.risk,
     });

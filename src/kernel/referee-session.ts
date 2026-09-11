@@ -222,6 +222,23 @@ export class SessionArm {
       generation: generation.index,
       /* The audit trail names the prompt that actually ran. */
       prompt: `${role}@${ctx.prompts.hashes[role]}`,
+      /**
+       * PRDR-235: the effort this session was launched with.
+       *
+       * PRDR-197 mirrored the SDK's closed set of levels and justified it with
+       * "a configured effort is recorded per session rather than assumed to
+       * have been honoured" (`src/schemas/roles.ts`) — a mechanism that was
+       * never written. The models half is fully observed: `models` on the
+       * ledger row, `model_fallback` in this journal, a note on the ticket. So
+       * a reader could always answer which MODEL ran and never which effort.
+       *
+       * `"default"` rather than an omitted key, because the two facts a reader
+       * must tell apart are "no level was routed, so the SDK's own default
+       * governed" and "this build did not record it" — an absent field says
+       * both. What the SDK settled on AFTER any silent downgrade is a further
+       * fact, exposed to hooks as `effort.level`, and not this one.
+       */
+      effort: ctx.loaded.config.effort_routing[role] ?? "default",
     });
     const result = await ctx.backend.run(spec);
     if (result.modelFallback !== undefined) {

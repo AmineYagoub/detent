@@ -687,6 +687,26 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   ran. The journal keeps saying, truthfully, that it did not. B-5's skip-once and B-5′'s
   generation scoping are both unchanged — this restores the property each was written to provide.
 
+- **S-4‴ (3.1.1, PRDR-235).** A configured **effort** is recorded, not assumed to have been
+  honoured. PRDR-197 mirrored the SDK's closed set of levels so a typo is refused at config load,
+  and justified that in `src/schemas/roles.ts` with *"the SDK downgrades silently for a model that
+  cannot serve one, which is why a configured effort is recorded per session rather than assumed
+  to have been honoured."* No such recording existed. The models half of the same routing is fully
+  observed — `models` on every ledger row, a `model_fallback` event, a note on the ticket — so a
+  reader could always answer which MODEL ran and never which effort, and PRDR-092's config audit
+  event listed `budgets`, `model_routing`, `protected` and `risk` while omitting `effort_routing`
+  from the very record whose contract is *"the run records the configuration it actually loaded."*
+  The consequence is not a wrong number but an unfalsifiable knob: a run at `max` and a run at the
+  SDK default leave identical journals, so an experiment that raises effort cannot be
+  distinguished afterwards from one that did not, and the 188 sessions already on gate-313 cannot
+  be established as a baseline either. The run's config event now names `effort_routing`, and each
+  session's `start` names the level it launched with — `"default"` where none was routed, because
+  an absent field cannot tell *"the SDK's own default governed"* apart from *"this build did not
+  record it."* What the SDK settles on AFTER a silent downgrade is a further fact, exposed to hooks
+  as `effort.level`, and deliberately not this one. Noted while amending: effort routing appears in
+  neither PRD, so PRDR-197 shipped an operator-facing knob with no PRD entry at all; this is the
+  first, and it covers only the recording.
+
 - **C-14″ (3.1.1, PRDR-129).** The porcelain runs LIVE. `detent run` defaulted to the fixture
   backend while `detent referee` defaulted to the live one and `detent init` refused the fixture
   outright — and the README's two-command golden path, test-locked to exactly `detent init` and
