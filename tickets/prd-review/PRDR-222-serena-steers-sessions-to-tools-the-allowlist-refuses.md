@@ -51,3 +51,13 @@ missing sentence; on gate-313 the first post-S-3⁷ session spent its first two 
 `check_onboarding_performed` and `list_dir`, both refused. Then the change; then green. The
 next take of the gate is the measurement: refused Serena calls per session, expected zero.
 
+
+## Audit
+
+Cold re-read of the sentence against Serena's full tool list as the session sees it. The
+enumeration named onboarding, memories, directory listing and editing; the server also exposes
+`find_file` and `search_for_pattern` — file search, the very shape a session reaches for next
+when told not to grep — and three `think_about_*` tools. The generic clause already refused
+them, but the enumeration is what a model reads, so file search and thinking join it. Marker
+unchanged, manifest re-hashed, agents regenerated. The measurement stands as stated: refused
+Serena calls per session on the next take, expected zero.
