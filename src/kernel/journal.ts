@@ -120,7 +120,29 @@ export class RunJournal {
       if (record.stage !== role) continue;
       if ((typeof record.generation === "number" ? record.generation : 0) !== generation) continue;
       if (record.event === "start") starts += 1;
-      else if (record.event === "end") ends += 1;
+      /**
+       * PRDR-234: the skip DISCHARGES the start it was written for.
+       *
+       * B-5 skips the launch that crashed, once. This counted only `start` and
+       * `end`, and the skip event is neither — so the imbalance that fired the
+       * skip survived it, and every later launch of that role in that
+       * generation was skipped in turn. B-5′ above fixed the SCOPE and left the
+       * imbalance exactly as it found it, which is why the sentence it wrote —
+       * "the skip event rebalanced neither" — still described the code.
+       *
+       * It hid because the ladder normally moves ON after a skip: blind_fix to
+       * research to informed_fix, different roles, separate tallies. The role
+       * the ladder RE-ENTERS is REVIEW_FIX, and on gate-313 that spent two of
+       * t-s01-012's three review-fix rounds on launches that never happened,
+       * re-reviewed an unchanged tree each time, and halted the run on a
+       * NEEDS_HUMAN whose finding no fixer had ever been handed.
+       *
+       * Counted here rather than by appending a synthetic `end`, because `end`
+       * carries `ok` and `cost` that every ledger and report reader trusts: a
+       * fabricated one would claim a session ran. The journal keeps saying,
+       * truthfully, that it did not.
+       */
+      else if (record.event === "end" || record.event === "skipped_after_crash") ends += 1;
     }
     return starts > ends;
   }

@@ -668,6 +668,25 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   one count toward generation 0, the conservative reading that preserves B-5 for the resume it
   was written for.
 
+- **B-5‴ (3.1.1, PRDR-234).** The skip **discharges** the start it was written for. B-5′ above
+  fixed the SCOPE of the crash skip and left its arithmetic alone, so the sentence B-5′ itself
+  wrote — *"the skip event rebalanced neither"* — went on describing the code after the fix as
+  accurately as before it. `unfinished` counted `start` against `end`; `skipped_after_crash` is
+  neither, so the imbalance that FIRED the skip survived it and every later launch of that role,
+  in that generation, was skipped in turn. Across a generation X-8's zeroed counters cleared it,
+  which is what B-5′ measured and why it read as fixed. Within one, the original defect was
+  untouched. It stayed invisible because the ladder normally moves ON after a skip — blind_fix to
+  research to informed_fix, different roles, separate tallies, which is the shape the crash-resume
+  test pins. The role the ladder RE-ENTERS is REVIEW_FIX, and nothing covered it. On gate-313 that
+  spent two of `t-s01-012`'s three review-fix rounds on launches that never happened: each time
+  the reviewer re-read a tree nobody had touched, re-raised the same finding, and the ticket
+  reached NEEDS_HUMAN — halting the run — with that finding never once handed to a running fixer.
+  Its ledger holds ONE review_fix session against a counter reading three. The discharge is
+  counted in the predicate rather than written as a synthetic `end`, because `end` carries `ok`
+  and `cost` that every ledger and report reader trusts: fabricating one would claim a session
+  ran. The journal keeps saying, truthfully, that it did not. B-5's skip-once and B-5′'s
+  generation scoping are both unchanged — this restores the property each was written to provide.
+
 - **C-14″ (3.1.1, PRDR-129).** The porcelain runs LIVE. `detent run` defaulted to the fixture
   backend while `detent referee` defaulted to the live one and `detent init` refused the fixture
   outright — and the README's two-command golden path, test-locked to exactly `detent init` and
