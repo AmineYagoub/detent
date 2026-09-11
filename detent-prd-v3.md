@@ -1126,6 +1126,18 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   editing and memory tools stay refused (S-3′), and symbols stay the operator's flag (S-3⁗).
   The next tickets are the measurement.
 
+- **S-3⁷′ (3.1.1, PRDR-222).** The session is told where the symbol server's boundary is. S-3⁷
+  put all eighteen of the server's tools on the turn-one list — the stdio config has no
+  per-tool policy — each with Serena's own description, and those descriptions recommend a
+  workflow: check onboarding, read memories, list the directory. gate-313's first session after
+  S-3⁷ did what the nearest text said: its first two Serena calls were the onboarding check and
+  the directory listing, both refused by the allowlist, two turns before the first granted
+  tool, and sessions are fresh (P1) so it repeats per session. Now the same sentence that names
+  the four tools says only those are granted and the server's other tools — onboarding,
+  memories, directory listing, editing — are refused and must not be called. Nothing is
+  granted that was not: memory is cross-session state Detent does not control (C-8, S-6), and
+  listing and reading are the session's own tools' job.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
