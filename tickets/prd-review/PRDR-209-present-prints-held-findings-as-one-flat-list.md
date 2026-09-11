@@ -72,3 +72,19 @@ stages and slicing tests.
 **Two files at their ceilings.** `present.ts` gave up the rendering to its own module;
 `plan-slices.ts` took the kinds inline on one line rather than an import. Both are exactly at
 300 counted lines now, which is the next ticket's problem to notice before it starts.
+
+## Audit
+
+Read cold after the close.
+
+- **The kinds survive the trip.** A finding's `held` rides through PLAN's outputs, the C-8
+  checkpoint and `presentInputsFromOutputs` — whose guard checks the fields it needs and keeps
+  the rest — and the end-to-end sampling test asserts "seen once" in PRESENT's own message.
+- **`advice.md` never travels.** `.detent/state/` is in the local set F-1 ignores
+  (`git check-ignore` on the gate root says so), so the file is an operator's screen, not
+  repository content.
+- **`--approve` re-presents the summary.** It runs the same `presentStage`, which rewrites the
+  file and prints the same first screen — the second wall is gone with the first.
+- **Unmarked is a real bucket, said as such.** Findings the pipeline itself adds — a slice
+  planned but unreviewed, a rename `writePlan` made — carry no kind and are counted as
+  `unmarked`; an older cache reads the same way. Neither is hidden.
