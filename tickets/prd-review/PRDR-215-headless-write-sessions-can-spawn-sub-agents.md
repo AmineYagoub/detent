@@ -5,7 +5,7 @@ state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "D-28", "budgets", "containment", "sdk", "parity", "gate-313"]
-surface: ["src/sessions/guard.ts", "src/kernel/hook-policy.ts", "src/plugin/hook.ts", "hooks/dist/detent-hook.cjs", "tests/sessions/guard.test.ts", "tests/sessions/sdk.test.ts", "tests/plugin/hook.test.ts", "tests/referee/hook-policy.test.ts", "detent-prd-v3.md"]
+surface: ["src/fs/hook-files.ts", "src/sessions/guard.ts", "src/kernel/hook-policy.ts", "src/plugin/hook.ts", "hooks/dist/detent-hook.cjs", "tests/sessions/guard.test.ts", "tests/sessions/sdk.test.ts", "tests/plugin/hook.test.ts", "tests/referee/hook-policy.test.ts", "detent-prd-v3.md"]
 prd_refs: ["D-28", "D-21", "D-27", "P6", "S-2‴", "S-3", "X-1", "V-6", "N-6", "PRDR-065", "PRDR-122", "PRDR-180"]
 acceptance_criteria: ["Under the headless driver, every session's PreToolUse hook denies `Task`, `Agent` and `TaskCreate` with D-28's reason, for every role, BEFORE the path judgement. Observed FIRST (V-6): `guardToolUse(\"Agent\", { prompt: \"…\" }, policy)` abstains today (no path), the platform grants the spawn without consulting `allowedTools`, and gate-313's review-fix sessions #2 and #3 each ran a `general-purpose` sub-agent — 20 assistant messages, 10–12 tool calls, ~420k input tokens — outside the session's `num_turns` and outside the S-3 surface's turn ceiling.", "One list, both drivers: the plugin hook's `deny_tools`, the driver policy's spawn entries and the headless hook read the SAME exported constant, and a test pins them equal.", "The denial's reason names the rule and the alternative — the session does the work itself; a billable session exists only through the metered path.", "A guard-level test proves the verdict does not depend on the role: implement, review_fix and review are all denied the spawn."]
 non_goals: ["Does not meter sub-agents: they stay denied, not billed.", "Does not change the driver policy (D-27) or the plugin hook's file format.", "Does not decide whether a sub-agent's tokens were inside the parent's reported cost on gate-313 — the record cannot say, which is the point of D-28."]
@@ -73,3 +73,18 @@ hook returned no decision for an `Agent` call; over the bundle, a worker policy 
 hook-policy test now asserts the published list IS the guard's constant — and the full suite
 green.
 
+
+## Audit
+
+The close commit went in with `lint` RED — the gate loop printed the colour and did not stop
+the chain, which is the auditor's own defect and is fixed in the loop. What lint refused was
+the placement: `hook-policy.ts` importing `SPAWN_TOOLS` from `src/sessions/guard.ts` breaks
+ARCH-1 (`src/kernel/**` may import only the SessionBackend interface from `src/sessions`). The
+list now lives in `src/fs/hook-files.ts` — the dependency-free module the plugin bundle, the
+kernel and the guard may all import, next to the hook filenames it belongs with — and the guard
+re-exports it so readers of the decision still find it there. The kernel's policy and the plugin
+hook import it from that home. Also checked: the plugin hook's silence on an ABSENT or EXPIRED
+policy is unchanged and right — outside a Detent attempt the ambient hook has no opinion, and a
+spawn there is the user's own; and gate-313's sub-agent transcripts carry no hook denial, so
+whatever refused the sub-agent's own `git rm` and `rm` was the platform, not Detent — one more
+reason the spawn itself is refused rather than its consequences.

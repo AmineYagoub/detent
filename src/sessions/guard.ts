@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readlinkSync, realpathSync } from "node:fs";
 import picomatch from "picomatch";
+import { SPAWN_TOOLS } from "../fs/hook-files.js";
 import { commandOf, readGitRm, type GitRmReading } from "./git-rm.js";
 
 /**
@@ -15,23 +16,17 @@ import { commandOf, readGitRm, type GitRmReading } from "./git-rm.js";
  */
 
 /**
- * D-28's ambient billable spawn tools, by every name the platform has shipped
- * them under: `Task` (classic subagent launcher), `Agent` (its successor),
- * `TaskCreate` (background-task spawn). T-124's live leg found a build whose
- * print-mode sessions expose only the newer names — an exact-match list
- * pinned to "Task" alone guarded yesterday's platform. Reads/controls
- * (TaskGet/TaskOutput/TaskStop) spawn nothing and stay allowed.
- *
- * D-28″ (PRDR-215): ONE list, both drivers. It lived in the kernel's claim
- * policy, published for the plugin driver's session file, and this guard —
- * the headless hook, and the plugin hook's worker policy — never read it. A
- * spawn names no path, so the guard abstained, and the platform grants `Agent`
- * without consulting `allowedTools`. gate-313's review-fix sessions each ran a
- * sub-agent outside the turn ceiling and outside anything the ledger can name.
+ * D-28″ (PRDR-215): the spawn names the guard refuses, re-exported from their
+ * dependency-free home so every reader of the decision finds them here. The
+ * denial itself is in `guardToolUse`: a spawn names no path, so the guard
+ * abstained, and the platform grants `Agent` without consulting `allowedTools`
+ * — gate-313's review-fix sessions each ran a sub-agent outside the turn
+ * ceiling and outside anything the ledger can name.
  */
-export const SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+export { SPAWN_TOOLS };
 
 export interface GuardPolicy {
+
 
   /** The ticket's declared surface plus the artifact-out area. */
   readonly surface: readonly string[];

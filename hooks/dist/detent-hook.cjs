@@ -1554,6 +1554,7 @@ var import_node_path2 = __toESM(require("node:path"), 1);
 // src/fs/hook-files.ts
 var HOOK_SURFACE_FILE = "active_surface.json";
 var HOOK_STAGE_FILE = "stage.json";
+var SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"];
 
 // src/sessions/guard.ts
 var import_node_path = __toESM(require("node:path"), 1);
@@ -1594,7 +1595,6 @@ function readGitRm(command) {
 }
 
 // src/sessions/guard.ts
-var SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"];
 function matchAny(rel, patterns) {
   const clean = rel.replace(/^\.\//, "");
   for (const raw of patterns) {

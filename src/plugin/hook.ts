@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/hook-files.js";
-import { SPAWN_TOOLS, guardToolUse, pathOf } from "../sessions/guard.js";
+import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, SPAWN_TOOLS } from "../fs/hook-files.js";
+import { guardToolUse, pathOf } from "../sessions/guard.js";
 
 /**
  * T-113 — the D-21 containment hook in plugin form (S-2′, SEC-6, D-29).

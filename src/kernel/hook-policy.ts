@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { SPAWN_TOOLS } from "../fs/hook-files.js";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, stateDir } from "../fs/layout.js";
-import { SPAWN_TOOLS } from "../sessions/guard.js";
 
 /**
  * T-120/T-121 — the referee's half of the plugin containment hook (D-21,
