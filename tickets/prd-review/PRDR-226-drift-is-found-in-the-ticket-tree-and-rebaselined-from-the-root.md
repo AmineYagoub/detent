@@ -78,3 +78,18 @@ accepting requeues, the rerun reaches DONE, the merge carries the change, the ro
 follows and agrees with its tree, the acceptance is consumed; the root-only sync leaves the
 ticket blocked and the run human-gated instead of looping; and the base is proved frozen at
 branch creation against a later root re-baseline. Full suite green, six gates green.
+
+## Audit
+
+Cold re-read of the four seams. The root's re-baseline runs AFTER the merge in `finalizeDone`
+(line order: finalize bootstrap, stage, commit, merge, re-baseline, note the unit) — so the
+root's discovery sees the merged config; before the merge it would have seen the old one,
+consumed the acceptance and left the baseline behind the tree, and the next ticket to branch
+would have been accused of this one's change. The base is recorded per TICKET, not per
+generation, which is right: B-2″ keeps one worktree per ticket across generations, so what the
+tree branched from does not change on a requeue. One operational consequence, recorded here
+because gate-313 is in that state: a ticket blocked BEFORE this landed carries the old halt
+note without the `--ticket` marker, so the sweep would requeue it on a clean root into the same
+halt — accept it with `verify sync --ticket` before relaunching, which requeues it with the
+marked reason. Non-worktree mode was re-read as unchanged: the tree is the root and every read
+is the old read. No code change.
