@@ -1,7 +1,7 @@
 ---
 id: PRDR-217
 title: "A DONE ticket whose finalize crashed is never finalized: its work stays on an unmerged branch, its generation stays in flight, and the next run builds on a run branch without it"
-state: OPEN
+state: DONE
 severity: critical
 category: defect
 labels: ["prd-review", "finalize", "resume", "D-30", "B-2", "worktree", "gate-313"]
@@ -47,4 +47,20 @@ closed is a human's, and the sweep leaves it alone.
 
 ## What implementation changed
 
-_(open)_
+**One more sweep in `pool()`.** `finalizeStranded` in `referee-sweeps.ts` runs after the
+outage sweep, under both drivers. Its signal is exact — DONE with the last generation still
+`in_flight` — and it takes the core's own `finalizeDone` and `closeGen` as callbacks, the way
+the other sweeps take `commit`: the sweep decides nothing about integration; finalize does. A
+standing worktree is registered as the ticket's work directory for the call (the crashed run's
+registration died with it), finalized, unregistered; the generation closes as done; a kernel
+note and a `finalize` journal event marked `resumed: true` say what happened. A throw from
+finalize — B-2′'s conflict — closes the generation first and stands. In flight with no worktree
+is the crash between merge and close: the record closes, nothing else moves. Non-worktree mode
+returns at once (the ticket's non-goal).
+
+**V-6, in order.** Observed on the tree as it was, on a fixture built as the crash's aftermath
+(DONE, generation in flight, `ticket/t1` worktree with a commit, run branch behind): the run
+exited 0 with an empty pool and the run branch's tree did not contain the commit. Then the
+change; then merged, worktree gone, generation `done`, note and journal event present; and the
+closed-generation shape untouched, before and after.
+

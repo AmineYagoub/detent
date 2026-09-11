@@ -1053,6 +1053,23 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   some ecosystems and not others. What the referee installed is still never part of the change
   set, and the lockfile still is.
 
+- **B-2‴ (3.1.1, PRDR-217).** A DONE ticket whose finalize did not complete is finalized at the
+  next pool. `finalizeDone` runs after the DONE transition — stage, commit, merge the worktree
+  into the run branch, remove it — and B-2′ made a merge CONFLICT a breach the driver routes to
+  a human. Any other throw in it (gate-313: PRDR-216's `git add`) escaped as exit 1 with the
+  ticket DONE, its generation `in_flight`, its branch and worktree intact and its work absent
+  from the run branch; `pool()` healed claims and requeued drift and outage victims and never
+  looked at a DONE ticket, so the next run's tickets would have built on a run branch without
+  the bootstrap's scaffold. D-30 says resume is a referee property; this was the one DONE-side
+  state a resume did not see. Now the pool's sweeps include it: DONE with the last generation
+  still in flight and a worktree still standing is finalized by the same `finalizeDone` — a
+  no-op commit for a clean tree, idempotent for the bootstrap's bindings — then the generation
+  closes as done with a kernel note and a `finalize` journal event marked `resumed`. A conflict
+  during that finalize closes the generation and the breach stands, which is B-2′'s state; DONE
+  and in flight with no worktree is a crash between merge and close, and only the record
+  closes; a closed generation with a surviving worktree is a human's and is left alone. Both
+  drivers get it, because it lives in `pool()`.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

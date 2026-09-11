@@ -18,7 +18,7 @@ import { currentCounters, currentGeneration, openGeneration, withCurrentCounters
 import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked, stageAll } from "./git.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
-import { requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
+import { finalizeStranded, requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -147,6 +147,8 @@ export class RefereeCore {
      */
     healStaleClaims(this.root, RESUMABLE, this.ctx.isAlive);
     requeueOutageVictims(this.root, (t, e) => this.commit(t, e), this.ctx.iso());
+    /* PRDR-217: a DONE ticket the crash left unmerged is finalized before anyone builds on the run branch. */
+    finalizeStranded(this.root, this.ctx, (id) => this.finalizeDone(id), (id) => this.closeGen(id, "done"));
     const resumable = allTickets(this.root).filter(
       (t) => RESUMABLE.includes(t.state) && !isClaimed(this.root, t.id) && !readyPool.some((r) => r.id === t.id),
     );
