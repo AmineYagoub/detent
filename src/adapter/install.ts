@@ -1,4 +1,4 @@
-import { existsSync, statSync, utimesSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { GateResult } from "./run.js";
 
@@ -30,7 +30,12 @@ export interface Ecosystem {
   readonly lockfile: string | null;
   /** What the install creates. Never part of a ticket's change set. */
   readonly dir: string;
-  /** What the package manager writes when an install completes — the freshness mark. */
+  /**
+   * The freshness mark, written by the ADAPTER after a successful install —
+   * not by the package manager. Audit of PRDR-211: npm writes no hidden
+   * lockfile for a manifest that declares nothing, so a mark borrowed from npm
+   * was absent forever there and the install ran on every gate.
+   */
   readonly stamp: string;
   /** The install command, run in the work directory through the gate runner. */
   readonly install: string;
@@ -42,8 +47,7 @@ export const ECOSYSTEMS: readonly Ecosystem[] = [
     manifest: "package.json",
     lockfile: "package-lock.json",
     dir: "node_modules",
-    /** npm ≥ 7 writes the hidden lockfile when an install completes; it is the mark. */
-    stamp: path.join("node_modules", ".package-lock.json"),
+    stamp: path.join("node_modules", ".detent-installed"),
     /**
      * `npm install`, not `npm ci`. `ci` refuses a lockfile out of step with the
      * manifest, and that is the ordinary case here: a ticket adds a dependency
@@ -96,15 +100,14 @@ export async function ensureDependencies(
     const result = await run(eco.install);
     if (!result.green) return { kind: "failed", ecosystem: eco.name, reason, result };
     /*
-     * The mark is the newest thing in the tree from here. npm may write the
-     * root lockfile after the hidden one, and a mark older than the lockfile
-     * it produced would install again on every gate.
+     * The mark is written last, so it is the newest thing in the tree: a mark
+     * older than the lockfile the install just rewrote would install again on
+     * every gate. Detent's own file, inside the install directory so it leaves
+     * with it and is excluded from the change set with it.
      */
     const stamp = path.join(workDir, eco.stamp);
-    if (existsSync(stamp)) {
-      const now = new Date();
-      utimesSync(stamp, now, now);
-    }
+    mkdirSync(path.dirname(stamp), { recursive: true });
+    writeFileSync(stamp, `${new Date().toISOString()}\n`);
     return { kind: "installed", ecosystem: eco.name, reason, result };
   }
   return { kind: "none", reason: "nothing to install" };

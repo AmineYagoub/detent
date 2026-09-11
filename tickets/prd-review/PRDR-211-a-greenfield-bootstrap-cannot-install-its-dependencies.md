@@ -127,3 +127,29 @@ the new files and the suite.
 
 The runner clone moves to this commit, the bootstrap is requeued, and the walking skeleton runs
 again — the D-16 criterion this ticket exists for, on the machine that found it.
+
+## Audit
+
+Read cold after the close, with three live checks.
+
+- **The mark was npm's, and npm does not always write it.** `npm install` on a manifest that
+  declares nothing writes `package-lock.json` and NO `node_modules` at all — checked in a
+  temporary directory: exit 0, no `node_modules/.package-lock.json`. The freshness rule would
+  have found the mark absent on every gate and installed on every gate, ~2 s and a journal record
+  each time, on exactly the manifest a bootstrap starts from. The mark is now Detent's own file,
+  `node_modules/.detent-installed`, written by the adapter after any successful install, inside
+  the install directory so it leaves with it and is excluded from the change set with it. A test
+  pins it with a "package manager" that succeeds and creates nothing.
+- **The finalize pathspec does what it claims.** In a temporary repository, `git add -A -- .
+  ':!node_modules'` staged a deletion, an addition and a new `package-lock.json`, and left
+  `node_modules/` untracked.
+- **The V-6 probe needs no install of its own.** `falsify.ts` reverts the source half of the
+  diff and re-runs the gate in the same work directory, where the install already happened.
+- **The install runs with the environment gates run with** — `runGate` merges the operator's
+  `process.env` — as every gate always has. SEC-4 bounds sessions, not gates; nothing here widens
+  it, and nothing here narrows it either. Recorded, not changed.
+- **Every worktree ticket installs once.** A fresh checkout has no `node_modules`, so each ticket
+  pays one `npm install` before its first gate — seconds with npm's cache warm. Accepted; a shared
+  cache is an optimisation for a gate that shows it matters.
+- **The Stop hook swallows an install failure.** It is advisory — the referee's own evaluation
+  records the failure as a red gate with the tail. Accepted.

@@ -96,5 +96,15 @@ describe("V-1⁗ the adapter installs before the gate runs", () => {
     expect(node.install.startsWith("npm install")).toBe(true);
     expect(node.install).not.toContain("npm ci");
     expect(node.dir).toBe("node_modules");
+    /* Audit: the mark is Detent's, not npm's — npm writes none for a manifest that declares nothing. */
+    expect(node.stamp).toBe(path.join("node_modules", ".detent-installed"));
+  });
+
+  it("the mark is written by the adapter, so a package manager that leaves none still installs once (audit of PRDR-211)", async () => {
+    const dir = workDir({ "package.json": "{}\n" });
+    /* An install that succeeds and creates nothing — npm on a dependency-less manifest. */
+    const silent: Ecosystem = { ...FAKE, install: "true" };
+    expect((await ensureDependencies(dir, runHere(dir), [silent])).kind).toBe("installed");
+    expect(installNeeded(dir, silent), "installed once; the adapter's own mark says so").toBeNull();
   });
 });
