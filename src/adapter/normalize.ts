@@ -36,7 +36,37 @@ export function substituteBase(command: string, baseRef: string): string {
 }
 
 /** V-4: `CI=1`. Runners that watch by default fall back to a single run. */
-export const CI_ENV: Readonly<Record<string, string>> = { CI: "1" };
+/**
+ * SEC-5 (PRDR-232): the referee runs nothing the judged tree DECLARES.
+ *
+ * `npm install` runs a manifest's preinstall/install/postinstall/prepare, and
+ * `npm run <gate>` runs that script's `pre`/`post` siblings — both from a tree
+ * a session just wrote, both as the referee's own child, and neither visible to
+ * the drift check, because none of those names binds a gate and so none has a
+ * config region. Everything else a session does passes the D-21 hook.
+ *
+ * Suppression rides the ENVIRONMENT rather than the command string, and that is
+ * the whole reason it is safe to ship mid-run: appending `--ignore-scripts` to a
+ * bound command would move `resolved`, which `checkBinding` compares for every
+ * status, and folding sibling bodies into the region would move every
+ * `config_hash` — either one re-blocks every ticket in flight. This moves
+ * neither. Measured: the variable suppresses both hops, still runs the named
+ * script, and beats a project `.npmrc` that sets `ignore-scripts=false`.
+ *
+ * The operator may lift it for a project that genuinely builds on install, by
+ * exporting `DETENT_ALLOW_LIFECYCLE_SCRIPTS=1` for the run. A session cannot:
+ * it does not compose the referee's environment. Per-project, per-script
+ * approval is PRDR-233.
+ */
+export function suppressionEnv(approved: boolean): Readonly<Record<string, string>> {
+  return { npm_config_ignore_scripts: approved ? "false" : "true" };
+}
+
+export function lifecycleApproved(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env["DETENT_ALLOW_LIFECYCLE_SCRIPTS"] === "1";
+}
+
+export const CI_ENV: Readonly<Record<string, string>> = { CI: "1", ...suppressionEnv(lifecycleApproved()) };
 
 /**
  * How each package manager forwards extra arguments to a script. Only npm

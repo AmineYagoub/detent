@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ECOSYSTEMS, ensureDependencies, installNeeded, type Ecosystem } from "../../src/adapter/install.js";
+import { CI_ENV, suppressionEnv } from "../../src/adapter/normalize.js";
 import { runGate } from "../../src/adapter/run.js";
 import { removeTree } from "../helpers.js";
 
@@ -107,4 +108,63 @@ describe("V-1⁗ the adapter installs before the gate runs", () => {
     expect((await ensureDependencies(dir, runHere(dir), [silent])).kind).toBe("installed");
     expect(installNeeded(dir, silent), "installed once; the adapter's own mark says so").toBeNull();
   });
+});
+
+/**
+ * SEC-5 (PRDR-232) — the referee runs NOTHING the judged tree declares.
+ *
+ * V-1⁗ has the referee run `npm install` in a tree the session just wrote, and
+ * npm runs that tree's preinstall/install/postinstall/prepare. Everything else
+ * a session does passes the D-21 containment hook; this path did not. The
+ * second hop is cheaper still: `npm run <gate>` runs the tree's `pre`/`post`
+ * siblings on EVERY gate evaluation, and none of those names binds a gate, so
+ * the drift check cannot see them either. Suppression rides the ENVIRONMENT,
+ * so no bound command string and no config_hash moves.
+ */
+describe("SEC-5 (PRDR-232): the referee runs nothing the judged tree declares", () => {
+  const MARKERS = ["PRE", "INST", "PWNED", "PREPARED"];
+  const hostile = (extra: Record<string, string> = {}): string =>
+    `${JSON.stringify({ name: "x", private: true, version: "1.0.0", scripts: { preinstall: "touch PRE", install: "touch INST", postinstall: "touch PWNED", prepare: "touch PREPARED", ...extra } }, null, 2)}\n`;
+
+  it("the install runs no lifecycle script of the tree it is judging", async () => {
+    const dir = workDir({ "package.json": hostile() });
+    const outcome = await ensureDependencies(dir, (command) => runGate({ command, cwd: dir, timeoutMs: 120_000, env: CI_ENV }));
+    expect(outcome.kind, JSON.stringify(outcome).slice(0, 300)).toBe("installed");
+    for (const marker of MARKERS) {
+      expect(existsSync(path.join(dir, marker)), `${marker} — the tree's own script ran under the referee`).toBe(false);
+    }
+  }, 180_000);
+
+  it("a gate runs the script it is bound to and not the tree's pre/post siblings", async () => {
+    const dir = workDir({
+      "package.json": `${JSON.stringify({ name: "x", private: true, version: "1.0.0", scripts: { pretest: "touch PRETEST", test: "touch TESTRAN", posttest: "touch POSTTEST" } }, null, 2)}\n`,
+    });
+    const result = await runGate({ command: "npm run test", cwd: dir, timeoutMs: 120_000, env: CI_ENV });
+    expect(result.green, JSON.stringify(result.outcome)).toBe(true);
+    expect(existsSync(path.join(dir, "TESTRAN")), "the bound script itself must still run").toBe(true);
+    expect(existsSync(path.join(dir, "PRETEST"))).toBe(false);
+    expect(existsSync(path.join(dir, "POSTTEST"))).toBe(false);
+  }, 180_000);
+
+  it("suppression is the operator's to lift, and a session cannot reach it", () => {
+    expect(CI_ENV["npm_config_ignore_scripts"]).toBe("true");
+    expect(suppressionEnv(true)["npm_config_ignore_scripts"]).toBe("false");
+    expect(suppressionEnv(false)["npm_config_ignore_scripts"]).toBe("true");
+  });
+
+  it("a project whose package manager is not npm is not given an npm install, nor an npm lockfile", async () => {
+    const dir = workDir({ "package.json": `${JSON.stringify({ name: "x", private: true, scripts: { test: "true" } }, null, 2)}\n`, "pnpm-lock.yaml": 'lockfileVersion: "9.0"\n' });
+    const outcome = await ensureDependencies(dir, (command) => runGate({ command, cwd: dir, timeoutMs: 120_000, env: CI_ENV }), ECOSYSTEMS, "pnpm");
+    expect(outcome.kind).toBe("none");
+    expect(outcome.reason).toContain("pnpm");
+    expect(existsSync(path.join(dir, "package-lock.json")), "the referee must not flip the project's package manager").toBe(false);
+  }, 60_000);
+
+  it("greenfield and npm projects still install, exactly as V-1⁗ requires", async () => {
+    for (const pm of [null, "npm"] as const) {
+      const dir = workDir({ "package.json": `${JSON.stringify({ name: "x", private: true, version: "1.0.0" }, null, 2)}\n` });
+      const outcome = await ensureDependencies(dir, (command) => runGate({ command, cwd: dir, timeoutMs: 120_000, env: CI_ENV }), ECOSYSTEMS, pm);
+      expect(outcome.kind, `pm=${String(pm)}`).toBe("installed");
+    }
+  }, 180_000);
 });

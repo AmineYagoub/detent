@@ -1,11 +1,11 @@
 ---
 id: PRDR-232
 title: "The referee runs `npm install` in a tree the session just wrote, executing that tree's lifecycle scripts outside the containment hook — and the lockfile it writes can flip the package manager and drift a ticket that changed nothing"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "SEC-5", "V-1⁗", "containment", "install", "drift", "design-panel"]
-surface: ["src/adapter/install.ts", "src/kernel/referee-gate.ts", "src/adapter/discover/index.ts", "tests/kernel/install-run.test.ts", "detent-prd-v3.md"]
+surface: ["src/adapter/install.ts", "src/adapter/normalize.ts", "src/kernel/referee-gate.ts", "src/sessions/live.ts", "tests/adapter/install.test.ts", "detent-prd-v3.md"]
 prd_refs: ["SEC-5", "SEC-3", "V-1⁗", "V-4", "D-21", "S-2″", "R-7", "V-6", "N-6", "PRDR-211", "PRDR-230"]
 acceptance_criteria: ["The referee's dependency install does not execute the work tree's own lifecycle scripts: the node ecosystem's install command carries `--ignore-scripts`, or an equivalent that provably does not run `prepare`, `postinstall`, `preinstall` or `prepublish` from the tree under judgement. Observed FIRST (V-6): `ECOSYSTEMS[0].install` is `npm install --no-audit --no-fund`, `ensureDependencies` runs it in `workDir` at `referee-gate.ts:142` on every gate evaluation, and none of those lifecycle names appears in `SCRIPT_RULES` in `src/adapter/discover/node.ts`, so no candidate and no config region exists for them and the drift check at line 123 cannot see them. A session granted `package.json` can therefore have arbitrary shell executed by the referee's own process, outside the `PreToolUse` containment hook that governs everything else it does.", "A ticket whose ecosystem is not npm does not acquire an npm lockfile from the referee's install: either the install is chosen by the discovered package manager (V-4/R-7) or it writes no lockfile the discovery would read. Observed FIRST: `PM_BY_LOCKFILE` in `src/adapter/discover/index.ts` puts `package-lock.json` first, so a `package-lock.json` written into a pnpm or yarn worktree flips the discovered package manager, changes every bound command's `resolved` string, and `checkBinding`'s command check — which runs for every status — drifts and blocks a ticket that changed nothing.", "Both are proved by a test that fails on today's tree: one where a manifest's `postinstall` writes a marker the install must not create, and one where a non-npm project's worktree is not given an npm lockfile by the referee."]
 non_goals: ["Does not remove the install (V-1⁗ needs it: a greenfield bootstrap's gates cannot run without one).", "Does not sandbox the gate commands themselves, which are operator-approved by construction."]
@@ -69,4 +69,26 @@ manager rather than assuming npm, or write no lockfile the discovery would then 
 
 ## What implementation changed
 
-_(open)_
+**Suppression rides the environment.** `suppressionEnv(approved)` in `src/adapter/normalize.ts`
+yields `npm_config_ignore_scripts`, and `CI_ENV` — the environment every gate and the install
+run under — carries it. That closes both hops at once: the install's lifecycle scripts and a
+bound script's `pre`/`post` siblings. No bound command and no config region moves, which is why
+it is safe to land while a run is in flight. `lifecycleApproved()` reads
+`DETENT_ALLOW_LIFECYCLE_SCRIPTS` from the referee's own environment, so an operator can lift it
+for a project that genuinely builds on install and a session cannot.
+
+**The npm row is npm's.** `Ecosystem` gains an optional `pms`; the node row declares
+`["npm", null]` — npm and greenfield, which C-4's provisional table makes npm's. A row whose
+package managers exclude the discovered one installs nothing, and the outcome's reason names the
+manager it saw. `ensureDependencies` takes the package manager; the referee passes the
+discovery it already performs for the drift check, and the init backend passes the root's.
+
+**V-6, in order.** Observed on the tree as it was, with real npm: a manifest declaring
+`preinstall`, `install`, `postinstall` and `prepare` had all four executed by the referee's own
+install — `PRE — the tree's own script ran under the referee` — and `npm run test` executed the
+tree's `pretest` and `posttest`; `CI_ENV` carried no suppression; and a project with only
+`pnpm-lock.yaml` was given an npm install and an npm lockfile. Then the change; then none of the
+four markers is created, the bound script still runs while its siblings do not, the pnpm project
+gets no install and a reason naming pnpm, and greenfield and npm projects install exactly as
+V-1⁗ requires.
+

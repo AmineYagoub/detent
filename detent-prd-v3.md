@@ -1261,6 +1261,31 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   weakening; observed answering `allow` under the production policy before the move. A tree
   still runs the gate definitions it was cut with, which this records rather than hides.
 
+- **V-1⁵ (3.1.1, PRDR-232).** The referee runs nothing the judged tree DECLARES, and installs
+  only with the project's own package manager. V-1⁗ has the referee install a work directory's
+  dependencies before its gates run, with `npm install` — in a tree a session has just written,
+  and npm runs that manifest's `preinstall`, `install`, `postinstall` and `prepare`. Everything
+  else a session does passes the D-21 hook; this did not, so a session whose surface includes
+  `package.json` could have arbitrary shell executed by the referee's own process. The drift
+  check cannot see it: those names appear in no adapter's rules, so they bind no gate and have
+  no config region. A second, cheaper hop was found the same day: `npm run <gate>` runs that
+  script's `pre` and `post` siblings, on EVERY gate evaluation, equally unbound and equally
+  unseen. Suppression therefore rides the ENVIRONMENT — `npm_config_ignore_scripts` in the gate
+  runner's `CI_ENV` — and not the command string, which is what makes it safe to land mid-run:
+  appending a flag to a bound command would move `resolved`, which `checkBinding` compares for
+  every status, and folding sibling bodies into the region would move every `config_hash`;
+  either re-blocks every ticket in flight. This moves neither. Measured: the variable suppresses
+  both hops, still runs the named script, and beats a project `.npmrc` setting
+  `ignore-scripts=false`. An operator who needs a project's install to build exports
+  `DETENT_ALLOW_LIFECYCLE_SCRIPTS=1` for the run; a session cannot, because it does not compose
+  the referee's environment, and per-project per-script approval is PRDR-233. Second: an
+  ecosystem row declares the package managers it may install for, and the npm row is npm's and
+  greenfield's alone. Run in a pnpm or yarn project it wrote `package-lock.json`, which
+  `PM_BY_LOCKFILE` reads first, so the referee's own install flipped the discovered package
+  manager, moved every bound command's `resolved`, and blocked a ticket that had changed nothing
+  — measured as `pnpm run test` before the install and `npm run test` after. A row that is not
+  the project's installs nothing and the outcome names the manager it saw.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

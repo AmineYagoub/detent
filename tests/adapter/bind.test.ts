@@ -65,7 +65,8 @@ describe("T-026 execute before approve (V-1, P4)", () => {
     };
     await bindSlot("test", discover(root).candidates, { root, runner, now: NOW });
     expect(seen!.command).toBe("npm run test -- --run");
-    expect(seen!.env).toEqual({ CI: "1" });
+    /* PRDR-232: the probe runs under the same suppression every gate does. */
+    expect(seen!.env).toEqual({ CI: "1", npm_config_ignore_scripts: "true" });
   });
 });
 

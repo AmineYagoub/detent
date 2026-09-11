@@ -1,4 +1,5 @@
 import { ensureDependencies } from "../adapter/install.js";
+import { discover } from "../adapter/discover/index.js";
 import { CI_ENV } from "../adapter/normalize.js";
 import { runGate as runCommand } from "../adapter/run.js";
 import { execFile, execFileSync } from "node:child_process";
@@ -75,7 +76,13 @@ export function buildLiveBackend(root: string): ClaudeCodeBackend {
      * own gate run records it.
      */
     runScopedGate: async (command, cwd = root) => {
-      await ensureDependencies(cwd, (install) => runCommand({ command: install, cwd, timeoutMs: CEILINGS.gate_timeout_ms.default, env: CI_ENV }));
+      await ensureDependencies(
+        cwd,
+        (install) => runCommand({ command: install, cwd, timeoutMs: CEILINGS.gate_timeout_ms.default, env: CI_ENV }),
+        undefined,
+        /* PRDR-232: never an npm install in a project that chose another manager. */
+        discover(cwd).stack.pm,
+      );
       return runGate(command, cwd);
     },
   });

@@ -119,8 +119,9 @@ export class GateArm {
     const bindings = inWorktree
       ? bindingsForTree(ctx.root, ticket.id, workDir, ctx.runBranch.branch)
       : readBindings(ctx.root).bindings;
+    const here = discover(workDir);
     try {
-      assertNoDrift(bindings, discover(workDir));
+      assertNoDrift(bindings, here);
     } catch (err) {
       if (err instanceof DriftHaltError) {
         const verb = inWorktree ? `\`detent verify sync ${ctx.root} --ticket ${ticket.id}\`` : `\`detent verify sync ${ctx.root}\``;
@@ -143,6 +144,8 @@ export class GateArm {
       workDir,
       (command) => runGate({ command, cwd: workDir, timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
       ctx.ecosystems,
+      /* PRDR-232: the project's own package manager decides which row may install, so the referee cannot flip it. */
+      here.stack.pm,
     );
     if (install.kind !== "none") {
       ctx.journal.appendTicketEvent(ticket.id, {

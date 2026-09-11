@@ -49,7 +49,9 @@ describe("T-028 CI-mode flags", () => {
   it("always sets CI=1 (V-4)", () => {
     const root = tree(pkg({ test: "vitest run" }));
     expect(normalizeInvocation(testCandidate(root)).env).toEqual(CI_ENV);
-    expect(CI_ENV).toEqual({ CI: "1" });
+    expect(CI_ENV["CI"]).toBe("1");
+    /* PRDR-232: and the suppression that keeps a judged tree's own lifecycle and pre/post scripts from running. */
+    expect(CI_ENV).toEqual({ CI: "1", npm_config_ignore_scripts: "true" });
   });
 });
 

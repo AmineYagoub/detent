@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { GateResult } from "./run.js";
+import type { PackageManager } from "./discover/types.js";
 
 /**
  * V-1⁗ (PRDR-211) — the adapter installs what the manifest declares before a
@@ -39,6 +40,15 @@ export interface Ecosystem {
   readonly stamp: string;
   /** The install command, run in the work directory through the gate runner. */
   readonly install: string;
+  /**
+   * SEC-5/V-4 (PRDR-232): the package managers this row may install for.
+   * Absent means any. The npm row is npm's alone: run in a pnpm or yarn
+   * project it writes `package-lock.json`, which `PM_BY_LOCKFILE` reads FIRST,
+   * so the referee's own install flipped the discovered package manager, moved
+   * every bound command's `resolved`, and blocked a ticket that changed
+   * nothing. Measured: `pnpm run test` before, `npm run test` after.
+   */
+  readonly pms?: readonly (PackageManager | null)[];
 }
 
 export const ECOSYSTEMS: readonly Ecosystem[] = [
@@ -56,6 +66,8 @@ export const ECOSYSTEMS: readonly Ecosystem[] = [
      * the result with the rest of the change set.
      */
     install: "npm install --no-audit --no-fund",
+    /* Greenfield (no lockfile yet) is npm's by C-4's provisional table; a project that chose another manager is not. */
+    pms: ["npm", null],
   },
 ];
 
@@ -108,10 +120,17 @@ export async function ensureDependencies(
   workDir: string,
   run: (command: string) => Promise<GateResult>,
   ecosystems: readonly Ecosystem[] = ECOSYSTEMS,
+  pm: PackageManager | null = null,
 ): Promise<InstallOutcome> {
+  let declined: string | null = null;
   for (const eco of ecosystems) {
     const reason = installNeeded(workDir, eco);
     if (reason === null) continue;
+    /* PRDR-232: a row that is not this project's package manager installs nothing and says which manager it saw. */
+    if (eco.pms !== undefined && !eco.pms.includes(pm)) {
+      declined = `${eco.name}: this project's package manager is ${pm ?? "undetected"}, and Detent installs only with ${eco.pms.filter((p) => p !== null).join(", ")}`;
+      continue;
+    }
     const result = await run(eco.install);
     if (!result.green) return { kind: "failed", ecosystem: eco.name, reason, result };
     /*
@@ -125,5 +144,5 @@ export async function ensureDependencies(
     writeFileSync(stamp, `${new Date().toISOString()}\n`);
     return { kind: "installed", ecosystem: eco.name, reason, result };
   }
-  return { kind: "none", reason: "nothing to install" };
+  return { kind: "none", reason: declined ?? "nothing to install" };
 }
