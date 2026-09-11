@@ -21,7 +21,13 @@ import { appendNote, writeTicket } from "./tickets/mutations.js";
 
 export type Commit = (ticket: Ticket, event: KernelEvent) => Ticket;
 
-/** V-3: after `verify sync` re-baselines, every drift-blocked ticket returns to the pool. */
+/**
+ * V-3: after `verify sync` re-baselines the ROOT, a drift-blocked ticket
+ * returns to the pool. V-3‴ (PRDR-226): a ticket blocked for ITS OWN tree's
+ * change — its note names the `--ticket` verb — is not the root's to requeue;
+ * `verify sync --ticket` accepts and requeues it, and a root-level sync would
+ * only send it back into the same halt.
+ */
 export function requeueDriftBlocked(root: string, commit: Commit, at: string): void {
   const bindings = readBindings(root).bindings;
   if (bindings.length === 0) return;
@@ -32,6 +38,7 @@ export function requeueDriftBlocked(root: string, commit: Commit, at: string): v
   }
   for (const ticket of allTickets(root)) {
     if (ticket.state !== "BLOCKED" || !lastNote(ticket).startsWith("drift-blocked:")) continue;
+    if (lastNote(ticket).includes("--ticket")) continue;
     const requeued = commit(ticket, humanRequeue("verify-sync-rebaseline"));
     const generations = openGeneration(requeued, { at, reason: `gate drift re-baselined via verify sync; ${lastNote(ticket)}` });
     writeTicket(root, { ...requeued, generations });

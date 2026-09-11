@@ -1181,6 +1181,24 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `sizing-evidence` reads for a later PLAN of the same documents (X-4″), and its own stale-consume
   re-lands a requeued oversized ticket at NEEDS_HUMAN rather than passing silently.
 
+- **V-3‴ (3.1.1, PRDR-226).** Drift is judged against the baseline a ticket's tree BRANCHED FROM,
+  and a verification change is accepted per ticket. Under B-2″'s worktrees a granted change to a
+  gate's config region lives on the ticket's branch until the merge, and the run branch's
+  `.detent/` is not tracked — so judging that tree against the ROOT's baseline halted the run,
+  and the only sanctioned recovery, `verify sync` on the root, found nothing to re-baseline and
+  requeued the ticket into the same halt. gate-313, take 9: t-s01-018 was granted `package.json`,
+  changed `scripts.lint` to add a rules check, and exited 2 on a loop no operator could break.
+  Now the gate arm judges a worktree against the hashes it started from (recorded once at branch
+  creation under the ticket's runs directory) plus any an operator accepted for it; the halt
+  names `detent verify sync <root> --ticket <id>`, which judges the ticket's own tree, executes
+  its bound gates (V-1, never an unexecuted acceptance), records the accepted hashes and requeues
+  it; and the ticket's merge carries the change while `finalizeDone` re-baselines the root from
+  the merged tree and consumes the acceptance. Non-worktree mode is unchanged: the tree is the
+  root, `verify sync` on the root is the recovery, and the base is read straight from the root.
+  SEC-5 holds — a session writes none of these files (SEC-3's structural floor plus the runs
+  directory being off every surface), so only an operator's executed re-baseline makes a changed
+  tree agree with itself.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

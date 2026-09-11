@@ -3,6 +3,7 @@ import path from "node:path";
 import picomatch from "picomatch";
 import { discover } from "../adapter/discover/index.js";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
+import { bindingsForTree } from "./drift-base.js";
 import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
 import { ensureDependencies, readMark } from "../adapter/install.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
@@ -107,13 +108,23 @@ export class GateArm {
     slots: readonly GateSlot[] = ["lint", "typecheck", "test"],
   ): Promise<KernelEvent> {
     const ctx = this.ctx;
-    const bindings = readBindings(ctx.root).bindings;
+    /*
+     * V-3‴ (PRDR-226): the tree is judged against the baseline it STARTED FROM,
+     * with any hashes an operator accepted for this ticket over it — see
+     * drift-base.ts. Judged against the root's current baseline, a worktree
+     * that legitimately changed a gate's config halted a run that `verify sync`
+     * on the root could never clear. The halt names the verb that can.
+     */
+    const inWorktree = workDir !== ctx.root;
+    const bindings = inWorktree ? bindingsForTree(ctx.root, ticket.id) : readBindings(ctx.root).bindings;
     try {
       assertNoDrift(bindings, discover(workDir));
     } catch (err) {
       if (err instanceof DriftHaltError) {
-        this.lastHalt = err;
-        throw new DriftHaltSignal(err);
+        const verb = inWorktree ? `\`detent verify sync ${ctx.root} --ticket ${ticket.id}\`` : `\`detent verify sync ${ctx.root}\``;
+        const named = new DriftHaltError(err.halting.map((h) => ({ ...h, message: h.message.replace("`detent verify sync`", verb) })));
+        this.lastHalt = named;
+        throw new DriftHaltSignal(named);
       }
       throw err;
     }

@@ -14,6 +14,7 @@ import { finalizeBootstrap } from "../init/plan.js";
 import { BOOTSTRAP_TICKET_ID } from "../init/plan-write.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked, stageAll } from "./git.js";
+import { rebaselineAccepted, recordGenerationBaseline } from "./drift-base.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
 import { bootstrapFinalizeDeps, finalizeStranded, promoteBootstrapBindings, requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
@@ -173,6 +174,8 @@ export class RefereeCore {
     /** T-120/T-121: publish the driver-session containment for this claim (D-21). */
     this.ctx.publishHookPolicy(id);
     this.ctx.recordClaimBase(id, workDir);
+    /* V-3‴ (PRDR-226): the verification baseline this tree started from, recorded once. */
+    recordGenerationBaseline(this.root, id);
 
     const ticket = readTicket(this.root, id);
     /**
@@ -381,6 +384,9 @@ export class RefereeCore {
         throw new Breach(err.message);
       }
     }
+    /* V-3‴ (PRDR-226): an accepted verification change is now the run branch's — the baseline follows it. */
+    const rebased = rebaselineAccepted(this.root, ticket.id, this.ctx.iso());
+    if (rebased.length > 0) appendNote(this.root, ticket.id, { author: "kernel", text: `verification re-baselined at merge (V-3‴): ${rebased.join(", ")}` });
     /**
      * X-1⁵ (PRDR-191): a ticket reached DONE and its work is merged, so the run
      * has completed a unit and the no-progress breaker resets. Last in the

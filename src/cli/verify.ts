@@ -6,6 +6,10 @@ import { SETUP_REQUIRED_SLOTS } from "../init/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
 import { scrub } from "../kernel/scrub.js";
+import { existsSync } from "node:fs";
+import { acceptDrift, bindingsForTree } from "../kernel/drift-base.js";
+import { worktreePath } from "../kernel/git.js";
+import { requeueTicket } from "../kernel/plumbing.js";
 
 /**
  * T-027 — `detent verify sync` (C-12 plumbing, V-3).
@@ -191,15 +195,71 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
  * a verification binding is a human decision (C-6a), and a non-interactive
  * caller must not be taken to have made it.
  */
+/**
+ * V-3‴ (PRDR-226): accept ONE ticket's verification change.
+ *
+ * Under worktrees the change lives on the ticket's branch, so the root has
+ * nothing to re-baseline. This judges the ticket's tree against the base it
+ * started from (drift-base.ts), executes the bound gates THERE with the same
+ * consent the root sync takes (PRDR-165: never an unexecuted acceptance),
+ * records the accepted hashes on the ticket, and requeues it. The root's
+ * baseline follows at the merge, where the run branch actually changes.
+ */
+export async function acceptTicketDrift(root: string, id: string, deps: VerifySyncDeps): Promise<SyncResult> {
+  const messages: string[] = [];
+  const stored = readBindings(root);
+  const tree = worktreePath(root, id);
+  const summaryOf = (drift: readonly DriftCheck[], proposed: readonly Binding[], notices: readonly string[]): SyncSummary =>
+    ({ drift, proposed, stored: stored.bindings, skips: [...stored.skips], notices });
+  if (!existsSync(tree)) {
+    messages.push(`${id}: no worktree at ${tree} — nothing to judge (B-2″)`);
+    return { exitCode: EXIT_NOT_READY, summary: summaryOf([], [], []), rebaselined: false, messages };
+  }
+  const discovery = discover(tree);
+  const drift = checkAll(bindingsForTree(root, id), discovery).checks;
+  const halting = drift.filter((d) => d.status === "drifted" || d.status === "vanished");
+  if (halting.length === 0) {
+    messages.push(`${id}: its tree matches the baseline it started from — nothing to accept`);
+    return { exitCode: EXIT_OK, summary: summaryOf(drift, [], []), rebaselined: false, messages };
+  }
+  const at = deps.now?.() ?? new Date().toISOString();
+  const bind = deps.bind ?? bindAll;
+  const report = await bind(discovery, {
+    root: tree,
+    approvedBy: deps.user ?? "auto",
+    status: "approved",
+    redact: scrub,
+    ...(deps.now === undefined ? {} : { now: deps.now }),
+  });
+  for (const notice of report.notices) messages.push(notice);
+  const summary = summaryOf(drift, report.bindings, report.notices);
+  const missing = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
+  if (missing.length > 0 || report.interrupts.length > 0) {
+    messages.push(`${id}: its tree cannot be gated as it stands (${[...missing, ...report.interrupts.map((i) => i.slot)].join(", ")}) — a change that removes a gate is not accepted (P2)`);
+    return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
+  }
+  if (!(await deps.consent(summary))) {
+    messages.push("declined — the ticket stays blocked (V-3).");
+    return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
+  }
+  const hashes = Object.fromEntries(halting.flatMap((d) => (typeof d.current_hash === "string" ? [[d.slot, d.current_hash]] : [])));
+  if (deps.write !== false) {
+    acceptDrift(root, id, deps.user ?? "operator", at, hashes);
+    messages.push(requeueTicket(root, id, deps.user ?? "operator", `verification change accepted (V-3‴): ${Object.keys(hashes).join(", ")}`).message);
+  }
+  messages.push(`accepted ${Object.keys(hashes).length} change(s) for ${id}; the root's baseline follows at the merge.`);
+  return { exitCode: EXIT_OK, summary, rebaselined: true, messages };
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     allowPositionals: true,
-    options: { yes: { type: "boolean", default: false } },
+    options: { yes: { type: "boolean", default: false }, ticket: { type: "string" } },
   });
   const [sub, maybeRoot] = positionals;
   if (sub !== "sync") {
-    process.stderr.write("usage: detent verify sync [root] [--yes]\n");
+    process.stderr.write("usage: detent verify sync [root] [--yes] [--ticket <id>]\n");
     return 2;
   }
   const root = maybeRoot ?? process.cwd();
@@ -223,7 +283,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
 
-  const result = await verifySync(root, {
+  const deps: VerifySyncDeps = {
     user: process.env["USER"] ?? "operator",
     consent: async (summary) => {
       if (values.yes === true) return true;
@@ -247,7 +307,9 @@ export async function main(argv: readonly string[]): Promise<number> {
         rl.close();
       }
     },
-  });
+  };
+  /* V-3‴ (PRDR-226): a ticket's own change is accepted in its tree; the root sync stays what it was. */
+  const result = values.ticket === undefined ? await verifySync(root, deps) : await acceptTicketDrift(root, values.ticket, deps);
   for (const message of result.messages) process.stdout.write(`${message}\n`);
   return result.exitCode;
 }
