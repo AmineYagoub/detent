@@ -267,7 +267,7 @@ describe("C-4⁗‴ the draws launch together", () => {
       await settle();
       /* Before PRDR-204 this stays at one: the loop awaited the whole first draw. */
       expect(r.launches(), "the rest launch on the first response").toBe(3);
-      expect(notes.some((n) => /the first answered after \d+ s — launching 2 more/.test(n)), "and says so").toBe(true);
+      expect(notes.some((n) => /the first began its answer after \d+ s — launching 2 more/.test(n)), "and says so").toBe(true);
       for (const n of [1, 2, 3]) r.release(n);
       const review = await pending;
       expect(review?.reads).toHaveLength(3);
@@ -311,7 +311,7 @@ describe("C-4⁗‴ the draws launch together", () => {
       await settle();
       expect(r.launches(), "the wait ran out, the rest launched").toBe(3);
       expect(waited, "and it was the named wait, not an ad-hoc one").toBe(FIRST_RESPONSE_WAIT_MS);
-      expect(notes.some((n) => n.includes("did not answer in time")), "and says which way it went").toBe(true);
+      expect(notes.some((n) => n.includes("did not begin answering in time")), "and says which way it went").toBe(true);
       for (const n of [1, 2, 3]) r.release(n);
       await pending;
     } finally {

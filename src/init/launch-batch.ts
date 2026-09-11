@@ -23,7 +23,7 @@ export interface LaunchBatch {
   passed: boolean;
   /**
    * C-4⁗‴ (PRDR-204): resolves when the first session of the batch has
-   * answered its first turn. The draws share one first turn, so whoever
+   * begun its first answer (C-4⁗⁵: begun, not completed). The draws share one first turn, so whoever
    * launches the batch waits on this before launching the rest: the first
    * writes the cache, the others read it (S-6).
    */

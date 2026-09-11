@@ -123,6 +123,14 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
     ...(spec.model === "" ? {} : { model: spec.model }),
     /**
+     * C-4⁗⁵ (PRDR-210): a session someone is waiting on streams its events, so
+     * the wait can end when the first response BEGINS — the moment its first
+     * turn's prompt is cached — rather than when the turn completes. Requested
+     * only then: nothing else reads the events, and a session nobody waits on
+     * gets the stream it always had.
+     */
+    ...(spec.onFirstResponse === undefined ? {} : { includePartialMessages: true }),
+    /**
      * PRDR-197: effort where a role is routed to one.
      *
      * Omitted entirely otherwise, so a project that configures nothing gets the
@@ -323,6 +331,13 @@ export class ClaudeCodeBackend implements SessionBackend {
     let result: SessionResult | null = null;
     let observedTurns = 0;
     let mcpFailures: { name: string; status: string }[] | null = null;
+    /** C-4⁗⁵ (PRDR-210): said once, on the first frame that proves a response is under way. */
+    let responded = false;
+    const respond = (): void => {
+      if (responded) return;
+      responded = true;
+      spec.onFirstResponse?.();
+    };
     try {
       const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
       for await (const message of stream) {
@@ -343,10 +358,23 @@ export class ClaudeCodeBackend implements SessionBackend {
             if (bad.length > 0) mcpFailures = bad;
           }
         }
+        /**
+         * C-4⁗⁵ (PRDR-210): `message_start` is the API's first streaming event
+         * for a turn — the response has begun, and the prompt that produced it
+         * is cached from here. PRDR-204 fired on the completed `assistant`
+         * frame, which on gate-313 arrived after the 60 s wait on three slices
+         * of fourteen because the reviewer's first turn was a long generation.
+         * The `assistant` frame remains the signal for a stream without events.
+         */
+        if (
+          (message as { type?: string }).type === "stream_event" &&
+          (message as { event?: { type?: string } }).event?.type === "message_start"
+        ) {
+          respond();
+        }
         if ((message as { type?: string }).type === "assistant") {
           observedTurns += 1;
-          /* C-4⁗‴ (PRDR-204): the first turn is answered, so its prompt is cached now. */
-          if (observedTurns === 1) spec.onFirstResponse?.();
+          respond();
         }
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);

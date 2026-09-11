@@ -64,9 +64,9 @@ export async function sampleReviewPlan(
   if (k > 1) {
     const t0 = Date.now();
     const why = await Promise.race([
-      batch.firstResponse.then(() => "answered"),
+      batch.firstResponse.then(() => "began its answer"),
       first.then(() => "returned"),
-      (deps.sleep ?? unrefSleep)(FIRST_RESPONSE_WAIT_MS).then(() => "did not answer in time"),
+      (deps.sleep ?? unrefSleep)(FIRST_RESPONSE_WAIT_MS).then(() => "did not begin answering in time"),
     ]);
     /* Said, because whether the stagger did its job is a thing the ledger's cache columns are read against. */
     deps.note?.(`review draws: the first ${why} after ${String(Math.round((Date.now() - t0) / 1000))} s — launching ${String(k - 1)} more (C-4⁗‴)`);

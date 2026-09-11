@@ -879,6 +879,19 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   cold one's 46.4k — the stagger's test deferred from C-4⁗‴, passed. What a session is told and
   where its file goes are two facts now, and the prompt carries only the one the cache should.
 
+- **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
+  first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
+  prompt cache is readable from the moment a response starts, and on the null harness the two
+  coincided only because the reviewer's first turn was a three-second tool call. On gate-313's
+  fourteen slices the first turn was often a long generation: **three slices waited the full 60 s
+  and launched their other draws cold** (s01's draws created 76k, 77k and 41k), three more waited
+  27–50 s. A session someone is waiting on now streams its events, and the signal is the first
+  `message_start` — the API's first streaming event for a turn — with the completed `assistant`
+  frame kept as the signal for a stream that carries no events. Telemetry reads exactly what it
+  read: turns are completed turns, never events. Measured on a never-cached slice, launched
+  together: the first began its answer after **2 s**, and the two warm draws created 9.4k and
+  12.5k against the cold one's 54k. The wait no longer depends on how long the first turn is.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,
