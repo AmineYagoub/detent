@@ -295,6 +295,19 @@ export class SpendLedger {
     const spent = Math.max(this.accumulated, readRecordedSpend(this.root));
     this.accumulated = spent;
     this.announceAdvisoryTotal();
+    /*
+     * X-1⁶ (PRDR-219): the MARK is re-read too. `noteUnitComplete` writes it
+     * from wherever work completes, and the run's one ledger — built once in
+     * the referee context — read it only in the constructor, so every DONE
+     * after that moved a file this instance never saw; gate-313 halted a
+     * working run on its second ticket. Adopted only when it has moved, so
+     * memory never runs ahead of the file and an unreadable file changes nothing.
+     */
+    const mark = readProgressMark(this.root);
+    if (mark.spent !== null && mark.spent > this.progressMark) {
+      this.progressMark = mark.spent;
+      this.lastUnitCost = mark.unitCost ?? this.lastUnitCost;
+    }
     const sinceProgress = spent - this.progressMark;
     const threshold = this.progressThreshold();
     if (sinceProgress > threshold) throw new NoProgressError(sinceProgress, threshold);

@@ -1085,6 +1085,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   backs stays provisional, as C-4 says. Non-worktree mode is unchanged: its work directory is
   the root.
 
+- **X-1⁶ (3.1.1, PRDR-219).** The breaker's mark is read from the file at every launch, as the
+  ledger is (X-1‴). X-1⁵'s mark — spend at the last completed unit — lives in `progress.json`,
+  written by `noteUnitComplete` from wherever work completes: a slice checkpoint in `init`, the
+  DONE finalize in the run. The ledger read it once, in its constructor. `init` builds a
+  ledger per session launch and so always saw a fresh mark, and PRDR-191's proof ran on that
+  shape; the run builds ONE ledger in its referee context, and every ticket that reached DONE
+  after that moved a file the instance never read again. gate-313, take 4: the run's ledger
+  was built at 08:04:32 with the mark init had left, $228.51; the bootstrap was finalized two
+  seconds later and t-s01-001 reached DONE at 08:12:19, the file recording $278.31 and a unit
+  cost of $1.56; at 08:26:33 the instance measured $281.27 − $228.51 = $52.76 against $52.09
+  and halted a working run on its second ticket, taking two freshly claimed tickets with it.
+  Now the launch gate re-reads the mark and adopts it when it has moved, deriving the
+  threshold from the unit cost it carries; memory never runs ahead of the file, and a file
+  that cannot be read leaves the memory value in force.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

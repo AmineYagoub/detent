@@ -2,14 +2,14 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RunJournal } from "../../src/kernel/journal.js";
-import { NoProgressError, SpendLedger, readRecordedSpend } from "../../src/kernel/ledger.js";
-import { EXIT_HUMAN_GATED, run } from "../../src/kernel/run.js";
+import { NoProgressError, SpendLedger, noteUnitComplete, readRecordedSpend } from "../../src/kernel/ledger.js";
+import { EXIT_HUMAN_GATED, EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { ledgerRowSchema } from "../../src/schemas/records.js";
-import { MockBackend, okResult } from "../../src/sessions/mock.js";
+import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
-import { addTicket, implementRed, makeRunRepo } from "./run-fixture.js";
+import { addTicket, implementGreen, implementRed, makeRunRepo, reviewApprove } from "./run-fixture.js";
 
 /** T-048 — the ledger and the cross-generation spend backstop (S-4, X-8, D-25). */
 
@@ -364,4 +364,59 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
     /* 10 + 3; the 7 was swallowed by the torn line — a lower bound, not a halt. */
     expect(readRecordedSpend(root)).toBe(13);
   });
+});
+
+/**
+ * PRDR-219 — a breaker that stopped listening.
+ *
+ * The mark lives in `progress.json`, written by `noteUnitComplete(root)` from
+ * wherever work completes. `SpendLedger` read it once, in its constructor.
+ * `init` builds a ledger per launch and never noticed; the run builds ONE, so
+ * every DONE after 08:04:32 on gate-313 moved a file the instance never read
+ * again, and at 08:26:33 it measured $52.76 "without completing a unit"
+ * fourteen minutes after a ticket had.
+ */
+describe("PRDR-219 the breaker measures from the mark on disk, not the one it was born with", () => {
+  const BREAKER = { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 };
+
+  it("a unit noted through the file resets a ledger constructed before it", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, BREAKER);
+      for (let i = 0; i < 3; i += 1) {
+        ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
+      }
+      /* The run's DONE path: the file moves; the instance was never told. */
+      noteUnitComplete(root);
+      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      /* And the unit's cost on disk is what the threshold derives from now. */
+      ledger.record("t3", 0, "implement", okResult({ costEstimateUsd: 30 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed(), "12 × 3 = 36 allowed since the unit").not.toThrow();
+      ledger.record("t4", 0, "implement", okResult({ costEstimateUsd: 10 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed()).toThrow(NoProgressError);
+    } finally {
+      journal.close();
+    }
+  });
+
+  it("end to end: one ledger for the run, three tickets completing, no halt", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    const configPath = path.join(root, ".detent/config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as { budgets: Record<string, number> };
+    config.budgets = { ...config.budgets, spend_without_progress_floor_usd: 5, spend_without_progress_multiple: 1, spend_without_progress_sessions: 1 };
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    for (const id of ["t1", "t2", "t3"]) addTicket(root, { id });
+    const priced = (stage: StageFn): StageFn => (spec) => ({ ...stage(spec), costEstimateUsd: 5 });
+    const outcome = await run({
+      root,
+      backend: new MockBackend({ implement: priced(implementGreen), review: priced(reviewApprove) }),
+      prompts: PROMPTS,
+      runId: "keeps-finishing",
+    });
+    /* Before PRDR-219: the second ticket's launch measured $10 since a mark of $0 and halted — exit 10. */
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    for (const id of ["t1", "t2", "t3"]) expect(readTicket(root, id).state, id).toBe("DONE");
+  }, 60_000);
 });
