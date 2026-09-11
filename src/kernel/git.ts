@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { LOCAL, STATE_DIR } from "../fs/layout.js";
 
 /**
  * T-042 — the branch & merge contract (B-1…B-5, D-8, P7).
@@ -52,8 +53,17 @@ export function isIgnored(cwd: string, rel: string): boolean {
   }
 }
 
+/**
+ * PRDR-228: F-1's LOCAL set never joins a change set, whichever path wrote into
+ * it. A tree whose `.detent/` is untracked — gate-313's — has no
+ * `.detent/.gitignore` to hide a stray write, and `t-s01-007: finalize` staged
+ * a session artifact into the product. Named here, next to the install
+ * directory, and asked of git first for the same reason (V-1⁵).
+ */
+const LOCAL_STATE: readonly string[] = LOCAL.map((entry) => path.posix.join(STATE_DIR, entry.rel));
+
 export function stageAll(cwd: string, excludeDirs: readonly string[]): void {
-  const excludes = excludeDirs.filter((dir) => !isIgnored(cwd, dir)).map((dir) => `:!${dir}`);
+  const excludes = [...excludeDirs, ...LOCAL_STATE].filter((dir) => !isIgnored(cwd, dir)).map((dir) => `:!${dir}`);
   git(cwd, "add", "-A", "--", ".", ...excludes);
 }
 

@@ -1199,6 +1199,33 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   directory being off every surface), so only an operator's executed re-baseline makes a changed
   tree agree with itself.
 
+- **C-9″ (3.1.1, PRDR-227).** A kernel surface grant leaves the approval valid. C-9′ checks
+  the approval's hash at every run start over the fields the human was shown; PRDR-153 anchored
+  it to the tickets the plan named so the run's own bookkeeping cannot stale it. A grant
+  (PRDR-073, SEC-3's lever) appended the granted path to `surface`, an approved field, so the
+  first restart after a grant refused: gate-313, take 10, exit 2 one second after launch on
+  t-s01-018's granted `package.json`, with the justification on the record and nobody having
+  edited the plan. Now the grant is a field: `granted` carries what the kernel added, `surface`
+  stays the effective surface every reader uses, and the approved projection hashes `surface`
+  minus `granted` — the surface as planned. An edit to any approved field still stales the
+  approval, and the cap of three grants and the SEC-3 floor stand. A root granted before this
+  landed carries the grant as a note only; its approval is stale once and `detent init
+  --approve` re-stamps it.
+
+- **F-1″ (3.1.1, PRDR-228).** The local set never travels, whichever path wrote into it. A
+  session is told an absolute artifact path under the root's `.detent/runs/<ticket>/`, and B-2″
+  admits that directory as `artifactRoot`; the policy ALSO listed `.detent/runs/**` in the
+  surface, which resolves against the WORK ROOT — the worktree, under B-2″'s default — so a
+  session's write to its worktree-relative runs path was admitted, finalize's `git add -A`
+  staged it, and `t-s01-007: finalize` merged `.detent/runs/t-s01-007/blind_fix.json` into
+  gate-313's run branch: run state in every later worktree and in the product a reader would
+  clone. A tree whose `.detent/` is untracked, gate-313's, has no `.detent/.gitignore` to hide
+  it. Now the surface admits the artifact root and nothing else of `.detent/` (S-1′ unchanged:
+  the told path stays writable), and finalize excludes every F-1 local entry by name — `runs`,
+  `state`, `claims`, `worktrees`, `logs`, the ledger, the transitions and the hook files — the
+  way it excludes an install directory, asking git first (V-1⁵). Non-worktree mode is
+  unchanged: the artifact root is the same directory both ways.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

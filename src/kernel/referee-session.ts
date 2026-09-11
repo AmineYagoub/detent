@@ -175,7 +175,14 @@ export class SessionArm {
          * write the vendored prompt promises. `review` and `research` grant
          * only their artifact.
          */
-        surface: ARTIFACT_ONLY_ROLES.has(role) ? [".detent/runs/**"] : [...ticket.surface, ".detent/runs/**"],
+        /*
+         * PRDR-228: the artifact area is `artifactRoot` below — the ROOT's runs
+         * directory for this ticket — and nothing else. `.detent/runs/**` here
+         * resolved against the WORK ROOT, which under B-2″ is the worktree, so a
+         * session's write to its worktree-relative runs path was admitted,
+         * finalize staged it, and t-s01-007's artifact merged into the product.
+         */
+        surface: ARTIFACT_ONLY_ROLES.has(role) ? [] : [...ticket.surface],
         protectedGlobs: [...ctx.loaded.config.protected, ...STRUCTURAL_PROTECTED],
         workRoot: workDir,
         /**
@@ -397,7 +404,8 @@ export class SessionArm {
       appendNote(ctx.root, ticketId, { author: "kernel", text: `surface DENIED: ${refusal}${said} (SEC-3)` });
       return;
     }
-    writeTicket(ctx.root, { ...ticket, surface: [...ticket.surface, target] });
+    /* PRDR-227: the effective surface widens; the approved projection subtracts `granted`, so the approval stands. */
+    writeTicket(ctx.root, { ...ticket, surface: [...ticket.surface, target], granted: [...ticket.granted, target] });
     appendNote(ctx.root, ticketId, { author: "kernel", text: `surface granted: ${target} — ${why} (SEC-3)` });
   }
 

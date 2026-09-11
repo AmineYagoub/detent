@@ -156,6 +156,8 @@ export function newTicket(input: NewTicket, at = new Date().toISOString()): Tick
     acceptance_criteria: [...input.acceptance_criteria],
     non_goals: [...(input.non_goals ?? [])],
     surface: [...(input.surface ?? [])],
+    /** PRDR-227: nothing granted at creation — the kernel fills this, after a session, with a note. */
+    granted: [],
     blockers: [...(input.blockers ?? [])],
     provides: [...(input.provides ?? [])],
     consumes: [...(input.consumes ?? [])],

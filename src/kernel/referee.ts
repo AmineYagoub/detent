@@ -367,8 +367,9 @@ export class RefereeCore {
     finalizeBootstrap(this.root, ticket.id, bootstrapFinalizeDeps(this.root, workDir, (text) => appendNote(this.root, ticket.id, { author: "kernel", text })));
     /* V-1⁗ (PRDR-211): what the referee installed is never part of the change set; the lockfile it produced is. PRDR-216: an ignored directory is never named. */
     stageAll(workDir, this.ctx.ecosystems.map((e) => e.dir));
-    const dirty = git(workDir, "status", "--porcelain").trim();
-    if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
+    /* PRDR-228: commit what was STAGED — an excluded untracked path (run state) is dirty to `status` and must not force an empty commit. */
+    const staged = git(workDir, "diff", "--cached", "--name-only").trim();
+    if (staged !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
     /** B-2: worktree mode merges --no-ff into the RUN branch — never the base. */
     if (this.ctx.worktree) {
       try {

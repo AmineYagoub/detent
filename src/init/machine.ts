@@ -253,7 +253,17 @@ const APPROVED_FIELDS: readonly (keyof Ticket)[] = [
 
 function approvedProjection(raw: unknown): string {
   const t = (raw ?? {}) as Record<string, unknown>;
-  return JSON.stringify(APPROVED_FIELDS.map((k) => [k, t[k] ?? null]));
+  /**
+   * PRDR-227: the surface AS PLANNED. A kernel grant (SEC-3's lever) appends to
+   * `surface` and records the path in `granted`; the human approved the plan,
+   * not the run's later, capped, justified widening of one ticket — so the
+   * grant is subtracted here, and the first restart after a grant no longer
+   * refuses "a different plan".
+   */
+  const granted = new Set(Array.isArray(t["granted"]) ? (t["granted"] as unknown[]).filter((p): p is string => typeof p === "string") : []);
+  const value = (k: keyof Ticket): unknown =>
+    k === "surface" && Array.isArray(t["surface"]) ? (t["surface"] as unknown[]).filter((p) => !granted.has(p as string)) : (t[k] ?? null);
+  return JSON.stringify(APPROVED_FIELDS.map((k) => [k, value(k)]));
 }
 
 /**

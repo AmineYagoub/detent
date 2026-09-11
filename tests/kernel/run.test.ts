@@ -301,7 +301,8 @@ describe("C-9′ a run executes only the plan a human approved", () => {
      * which refused the next resume of any run that discovered anything.
      * `blockers` is genuinely plan-time: no run-time writer exists.
      */
-    const runState = new Set(["schema_version", "state", "generations", "notes", "waits_on", "links"]);
+    /* PRDR-227: `granted` is written by the kernel after a session (a surface grant) and subtracted from the approved surface. */
+    const runState = new Set(["schema_version", "state", "generations", "notes", "waits_on", "links", "granted"]);
 
     for (const field of Object.keys(ticket)) {
       if (runState.has(field)) continue;

@@ -468,3 +468,23 @@ describe("audit of PRDR-216: an ignored directory that does not exist yet", () =
     expect(git(root, "diff", "--cached", "--name-only")).toContain("src/a.ts");
   });
 });
+
+/** PRDR-228: finalize never stages F-1's local set, whichever path wrote into it. */
+describe("PRDR-228 stageAll leaves the run's local state out of the change set", () => {
+  it("an untracked .detent/runs artifact in the tree is not staged; the feature beside it is", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-stage-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "README.md": "seed\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "seed");
+    writeTree(root, { "src/a.ts": "export const a = 1;\n", ".detent/runs/t1/blind_fix.json": "{}\n", ".detent/state/progress.json": "{}\n" });
+    stageAll(root, []);
+    const staged = git(root, "diff", "--cached", "--name-only");
+    expect(staged).toContain("src/a.ts");
+    expect(staged).not.toContain(".detent/runs");
+    expect(staged).not.toContain(".detent/state");
+  });
+});

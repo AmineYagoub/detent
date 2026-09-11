@@ -48,6 +48,8 @@ export const ticketSchema = z.strictObject({
   acceptance_criteria: z.array(nonEmptyString).min(1),
   non_goals: z.array(z.string()).default([]),
   surface: z.array(glob).default([]),
+  /** PRDR-227: what the kernel GRANTED (SEC-3's lever) — in `surface` too, and left out of the approved projection. */
+  granted: z.array(glob).default([]),
   blockers: z.array(nonEmptyString).default([]),
   /**
    * A-1‴ (PRDR-120): the interface this ticket owns, and the interfaces it

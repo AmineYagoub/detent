@@ -57,9 +57,10 @@ async function specFromAttempt(stage: "implement" | "review" | "diagnose" = "imp
 }
 
 describe("T-140 the session arm publishes the per-ticket policy", () => {
-  it("surface = the ticket's declared surface plus ONLY the runs area", async () => {
+  it("surface = the ticket's declared surface; the artifact area is the artifact root, not a surface entry (PRDR-228)", async () => {
     const spec = await specFromAttempt();
-    expect(spec.policy?.surface).toEqual(["src/**", "tests/**", ".detent/runs/**"]);
+    expect(spec.policy?.surface).toEqual(["src/**", "tests/**"]);
+    expect(spec.policy?.artifactRoot).toBe(path.join(spec.cwd, ".detent", "runs", "t-1"));
     expect(spec.policy?.workRoot).toBe(spec.cwd);
   });
 
@@ -75,7 +76,8 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
    */
   it("a read-only role's surface is its artifact, never the ticket's code", async () => {
     const spec = await specFromAttempt("review");
-    expect(spec.policy?.surface, "review must not carry the implementation surface").toEqual([".detent/runs/**"]);
+    /* PRDR-228: the artifact area is the artifact root; the surface itself is empty. */
+    expect(spec.policy?.surface, "review must not carry the implementation surface").toEqual([]);
     const policy = spec.policy as GuardPolicy;
     expect(guardToolUse("Edit", { file_path: path.join(spec.cwd, "src/payments.ts") }, policy).decision).toBe("deny");
     expect(
@@ -95,16 +97,12 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
    */
   it("diagnose keeps the ticket surface its prompt grants, while review does not", async () => {
     const diagnose = await specFromAttempt("diagnose");
-    expect(diagnose.policy?.surface, "the prompt promises a repro test inside the surface").toEqual([
-      "src/**",
-      "tests/**",
-      ".detent/runs/**",
-    ]);
+    expect(diagnose.policy?.surface, "the prompt promises a repro test inside the surface").toEqual(["src/**", "tests/**"]);
     const repro = path.join(diagnose.cwd, "tests/repro_t-1.test.ts");
     expect(guardToolUse("Write", { file_path: repro }, diagnose.policy as GuardPolicy).decision).toBe("allow");
 
     const review = await specFromAttempt("review");
-    expect(review.policy?.surface, "review grants only its artifact").toEqual([".detent/runs/**"]);
+    expect(review.policy?.surface, "review grants only its artifact — through the artifact root").toEqual([]);
     expect(guardToolUse("Write", { file_path: repro }, review.policy as GuardPolicy).decision).toBe("deny");
   });
 
@@ -142,6 +140,8 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
       ["another ticket's artifacts", path.join(spec.cwd, ".detent", "runs", "t-2", "review.json")],
       ["the operator's own checkout", path.join(spec.cwd, "src", "payments.ts")],
       ["the spend ledger", path.join(spec.cwd, ".detent", "ledger.jsonl")],
+      /* PRDR-228: the worktree-relative runs path is INSIDE the product tree — t-s01-007 shipped an artifact through it. */
+      ["the worktree's own relative runs path", path.join(worktree, ".detent", "runs", "t-1", "review.json")],
     ] as [string, string][]) {
       expect(guardToolUse("Write", { file_path: file }, policy).decision, label).toBe("deny");
     }
