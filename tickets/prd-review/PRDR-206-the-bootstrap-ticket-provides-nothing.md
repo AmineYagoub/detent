@@ -89,3 +89,25 @@ longer prints the false proof.
 
 **Not touched, on purpose.** `t-s07-009 → symbol presentTicket` and `t-s12-012 → file
 tests/docs/readme-golden-path.test.ts` on gate-313 were the plan's gaps and stay findings.
+
+## Audit
+
+Read cold after the close.
+
+- **Brownfield is untouched.** `stack` is `null` there, `bootstrapScaffold` returns undefined,
+  the check ignores the parameter, and no bootstrap exists to provide anything. The
+  contract-check tests without a scaffold argument are that path.
+- **An existing root does not re-plan for this.** ANALYZE's digest is the documents, the stack
+  markers and the planner prompt hash; the skeleton and the instruction are inputs the digest
+  never reads. A resumed root replays its old analysis — no `scaffold_files`, today's findings —
+  and only a fresh ANALYZE writes the field. The planner prompt was deliberately not edited.
+- **The placeholder can be copied verbatim.** An analyst that leaves the skeleton's
+  `"<each file … >"` in place produces a bootstrap providing a file no ticket will ever consume
+  — harmless, and the same property every other skeleton placeholder has. The instruction says
+  to replace it; the validator cannot tell a placeholder from a path, and should not try.
+- **Both call sites, one helper.** `bootstrapScaffold` is the single source for what the
+  bootstrap provides, used by the two contract checks and by the bootstrap's own construction;
+  the end-to-end test drives all three through `runInit`.
+- **The two real findings survive.** The symbol and the test-file consumes on gate-313 are not
+  scaffold files and are reported exactly as before; the scaffold test's second case pins that
+  a file that merely sounds like one is not excused.
