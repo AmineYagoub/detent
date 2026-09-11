@@ -60,3 +60,13 @@ directory before the run was consumed against a fresh implement that wrote no si
 NEEDS_HUMAN. Then the change; then that run reaches DONE, while a signal the launching session
 does write still falsifies and is consumed and removed exactly as before.
 
+
+## Audit
+
+Cold re-read of the seam and the three signals. The clearing loop names `falsified.json` and
+`surface_request.json` only; `oversized.json` is absent, as intended, and `consumeOversizedSignal`
+still keeps it for sizing-evidence. The loop sits after the B-5 `unfinished` early return, so a
+crashed in-flight session's signals survive with its artifact. Order across a session is
+correct: launch clears any stale request, the session writes a fresh one if it hits the
+boundary, and the post-session `handleSurfaceRequest`/`discardSurfaceRequest` consumes that one —
+the launch clearing only removes a request no session in this generation made. No code change.
