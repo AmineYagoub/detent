@@ -85,3 +85,21 @@ implement prompt by its old hash. The runner moves to this commit and `detent in
 checkpoint holds except PREPARE_AGENTS, whose digest carries the prompt hashes, so it rewrites
 the assignments for $0 and PRESENT re-presents an unchanged plan under its standing approval.
 Then the bootstrap is requeued and the skeleton runs.
+
+## Audit
+
+Read cold after the close.
+
+- **The gate note overstated the mechanism.** The session arm builds a session's prefix from the
+  LOADED prompt set and journals `role@hash` from the loaded manifest; it never consults
+  `assignments.json` to choose a prompt. A stale assignment cannot refuse a run. Re-running
+  `init` on the gate root is still done — so the record names the hash the sessions actually ran
+  with — but it is for the record, not a precondition. Corrected here.
+- **A retraction outranks `missing`.** A signal carrying both `retracted: true` and a `missing`
+  list is withdrawn; the dependency claim goes with it. A session that means the dependency
+  writes the signal without the retraction. Reasoned, not tested — the second test pins the
+  boundary that matters, that only the boolean retracts.
+- **The prompt's account of the Stop hook is true.** `stopGate` blocks with the command and the
+  last 1,500 bytes of the gate's output in its reason, which the SDK feeds back to the session.
+- **One reader.** `consumeFalsifiedSignal` is the only place the signal is read, and `attempt`
+  the only caller; the retraction cannot be bypassed by another path.
