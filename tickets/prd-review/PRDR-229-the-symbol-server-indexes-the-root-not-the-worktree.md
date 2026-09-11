@@ -50,3 +50,16 @@ join a change set.
 carried `--project <root>` while the session's cwd was the worktree; an untracked `.serena/`
 beside a feature was staged. Then the change; then both green.
 
+
+## Audit
+
+Cold re-read. `symbolServer` has one caller, the session arm, and receives the same `workDir`
+the policy's `workRoot` and the session's `cwd` already carry, so the three agree by
+construction. Starting the server per worktree costs a language-server initialisation per
+session, which Serena runs in the background while the MCP server answers (PRDR-220's probe:
+milliseconds to the server, a second to the language server); the `.serena/` it writes there is
+removed with the worktree at the merge. The root's own `.serena/`, left by the sessions before
+this, stays untracked and inert. One edge left as is: a project that legitimately tracks a
+`.serena/` of its own keeps a session's edit to it out of finalize — a session has no business
+there, and the exclusion errs toward the change set carrying nothing a tool wrote. No code
+change.
