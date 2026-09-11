@@ -62,3 +62,13 @@ worktree — exited 1 with the ticket already DONE, the gate's exact shape; the 
 import of `stageAll` did not exist. Then the change; then the six install/finalize E2E cases and
 the two staging unit cases green, and the full suite green.
 
+
+## Audit
+
+Cold re-read. `finalizeDone` is the only `git add -A` in the tree, so the one helper covers
+every staging. `check-ignore`'s three answers are read as two: exit 0 is "ignored, name
+nothing"; exit 1 ("not ignored") and a git that could not answer both keep the explicit
+exclusion, which is the pre-PRDR-216 behaviour and safe in both cases — a tracked directory
+is not subject to ignore rules, so git never refuses an exclusion naming it, and an absent one
+matches nothing. That last shape, an ignore rule with no install yet, is the commonest of all
+and was untested; it is pinned now. No code change.

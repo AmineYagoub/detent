@@ -451,3 +451,20 @@ describe("PRDR-216 stageAll excludes only what git does not already ignore", () 
     expect(staged).not.toContain("node_modules");
   });
 });
+
+/** Audit of PRDR-216: the commonest shape — an ignore rule and no install yet — must stage as before. */
+describe("audit of PRDR-216: an ignored directory that does not exist yet", () => {
+  it("names nothing git would refuse and stages the rest", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-stage-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "README.md": "seed\n", ".gitignore": "node_modules/\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "seed");
+    writeTree(root, { "src/a.ts": "export const a = 1;\n" });
+    expect(() => stageAll(root, ["node_modules"])).not.toThrow();
+    expect(git(root, "diff", "--cached", "--name-only")).toContain("src/a.ts");
+  });
+});
