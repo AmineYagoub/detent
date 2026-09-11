@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { probeSymbols, type SymbolsConfig, type SymbolsStatus } from "../adapter/symbols.js";
 import { stateDir, writeArtifact } from "../fs/layout.js";
+import { loadConfig } from "../kernel/worstcase.js";
 import { CEILINGS } from "../schemas/budgets.js";
 import { DEFAULT_MODEL_ROUTING } from "../schemas/roles.js";
 
@@ -68,4 +70,50 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });
   return spendCapUsd === undefined ? "written-default" : "written";
+}
+
+export type SymbolsDecision = "on" | "off";
+
+/**
+ * S-3⁗ (PRDR-208): `--symbols` / `--no-symbols` — a person deciding, carried
+ * where a TTY prompt cannot go.
+ *
+ * S-3″ made `symbols.enabled` tri-state so only a person enables a tool that
+ * reads a private codebase (D-4, F-2). The only way to decide was a prompt, and
+ * the runs that matter most have none: the self-build gate, CI, a background
+ * launch. gate-313 planned and ran with serena installed and undecided, and
+ * sent 80 symbol-level couplings to review that code could have checked.
+ *
+ * "On" is honoured only when the probe finds the tool: `enabled: true` for a
+ * command that cannot run would be the silent failure S-3‴ exists to report,
+ * so it refuses and names the install instead, writing nothing. "Off" is the
+ * decline S-3″ honours absolutely.
+ */
+export function decideSymbols(
+  root: string,
+  decision: SymbolsDecision,
+  probe: (config: SymbolsConfig) => SymbolsStatus = probeSymbols,
+): { readonly ok: true; readonly enabled: boolean; readonly command: string } | { readonly ok: false; readonly message: string } {
+  const file = configFilePath(root);
+  const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+  /* The schema supplies `command` and `pinned` for a config that never mentioned symbols. */
+  const current = loadConfig(raw).config.symbols;
+  const symbols: SymbolsConfig = { command: current.command, pinned: current.pinned, enabled: decision === "on" };
+  if (decision === "on") {
+    const status = probe(symbols);
+    if (status.kind !== "ready") {
+      const reason = status.kind === "missing" ? status.reason : "not enabled";
+      return {
+        ok: false,
+        message: [
+          `--symbols asked for symbol intelligence, but \`${symbols.command}\` could not be run: ${reason}.`,
+          "Detent does not install tooling — it binds to what the machine has (D-4).",
+          `Install it yourself, pinned:   uv tool install -p 3.13 serena-agent==${symbols.pinned}`,
+          "Or pass --no-symbols to record the decline.",
+        ].join("\n"),
+      };
+    }
+  }
+  writeArtifact(root, "config.json", { ...raw, symbols });
+  return { ok: true, enabled: symbols.enabled === true, command: symbols.command };
 }

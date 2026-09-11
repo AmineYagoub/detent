@@ -927,6 +927,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   proceeds. Only the boolean `true` retracts; a malformed file remains the standing signal it
   always was, and a standing signal is still X-4's — signal, not failure, the human's to judge.
 
+- **S-3⁗ (3.1.1, PRDR-208).** Symbol intelligence is decided by a **flag**: `detent init
+  --symbols` records `enabled: true`, `--no-symbols` records the decline S-3″ honours absolutely,
+  and neither leaves the tri-state as it was. S-3″ was right that only a person enables a tool
+  that reads a private codebase (D-4, F-2); it left the person one place to say so, a TTY prompt,
+  and the runs that matter most have none — the self-build gate (D-16), CI, a background
+  launch. Same machine, serena installed and ready: gate-312, interactive, ran with the four read
+  tools; gate-313, in the background, planned and ran undecided and sent 80 symbol-level
+  couplings to review that code could have checked, until a hand edit of the config before
+  `run`. A flag is a person deciding, carried where the prompt cannot go. `--symbols` is honoured
+  only when the probe finds the tool — `enabled: true` for a command that cannot run would be
+  the silent failure S-3‴ exists to report — so it refuses, names the install command and writes
+  nothing; both flags at once are refused before anything runs. The self-build harness passes
+  whichever the runner's probe supports, and says which, so the permanent gate carries the
+  tooling the host has and its record shows it. Nothing is installed, and the read-only surface
+  of an enabled session is unchanged (SEC-3).
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

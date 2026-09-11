@@ -10,7 +10,7 @@ import { CEILINGS } from "../schemas/budgets.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { loadPromptSet } from "../sessions/prompts.js";
-import { ensureConfig } from "../init/config.js";
+import { ensureConfig, decideSymbols, type SymbolsDecision } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
@@ -40,6 +40,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       defer: { type: "boolean", default: false },
       by: { type: "string" },
       "spend-cap-usd": { type: "string" },
+      /** S-3⁗ (PRDR-208): the symbol-intelligence decision, as a flag. */
+      symbols: { type: "boolean", default: false },
+      "no-symbols": { type: "boolean", default: false },
     },
   });
   const root = positionals[0] ?? process.cwd();
@@ -51,6 +54,11 @@ export async function main(argv: readonly string[]): Promise<number> {
     return EXIT_ERROR;
   }
   const approvalFlag: ApprovalFlag | undefined = flags[0];
+  if (values.symbols && values["no-symbols"]) {
+    process.stderr.write("pass at most one of --symbols / --no-symbols\n");
+    return EXIT_ERROR;
+  }
+  const symbolsDecision: SymbolsDecision | undefined = values.symbols ? "on" : values["no-symbols"] ? "off" : undefined;
 
   /**
    * C-1: root-only, with the root path hinted — and no `.detent/` created.
@@ -155,6 +163,23 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
     if (ensured === "exists" && cap !== undefined) {
       process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
+    }
+    /**
+     * S-3⁗ (PRDR-208): a decision, not a ceiling — so unlike the cap it is
+     * honoured on an existing config too. On is refused, with the install
+     * named, when the tool cannot run; nothing is written in that case.
+     */
+    if (symbolsDecision !== undefined) {
+      const decided = decideSymbols(root, symbolsDecision);
+      if (!decided.ok) {
+        process.stderr.write(`${decided.message}\n`);
+        return EXIT_NOT_READY;
+      }
+      process.stdout.write(
+        decided.enabled
+          ? `symbol intelligence enabled — \`${decided.command}\` is ready; sessions get its read tools (S-3′)\n`
+          : "symbol intelligence declined — recorded in .detent/config.json, never mentioned again (S-3″)\n",
+      );
     }
 
     const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;

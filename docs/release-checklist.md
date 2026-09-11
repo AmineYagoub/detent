@@ -22,7 +22,10 @@ this file exists to make unskippable.
    folder containing only `detent-prd-v3.md` must reach DONE on the walking
    skeleton. Credentials: `ANTHROPIC_API_KEY` or, on a subscription plan,
    `CLAUDE_CODE_OAUTH_TOKEN` minted with `claude setup-token` — either as a
-   repo secret. Locally, a logged-in claude CLI suffices.
+   repo secret. Locally, a logged-in claude CLI suffices. The harness passes
+   `--symbols` when the runner's serena probe is ready and `--no-symbols`
+   otherwise, and prints which (S-3⁗) — a gate on a runner with serena is the
+   one to trust for the symbol-level checks.
    No green, no release — every version bump and every S-5 backend upgrade
    re-runs it.
 6. **Version pins coherent (SEC-2/S-5).** `plugin.json` version equals

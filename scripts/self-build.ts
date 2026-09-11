@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { main as initMain } from "../src/cli/init.js";
+import { probeSymbols, type SymbolsStatus } from "../src/adapter/symbols.js";
 import { stateDir } from "../src/fs/layout.js";
 import { run } from "../src/kernel/run.js";
 import { LIVE_AUTH_HINT, buildLiveBackend, hasLiveBackendAuth } from "../src/sessions/live.js";
@@ -26,6 +27,16 @@ import { git, gitInit } from "../tests/helpers.js";
  * (workflow_dispatch — the click is the consent) or a terminal with the key
  * and a cap.
  */
+
+/**
+ * S-3⁗ (PRDR-208): the permanent gate carries the tooling the runner has. A
+ * flag is a person deciding — the harness author, for the runner it runs on —
+ * where a TTY prompt cannot reach. Ready means `--symbols`; anything else,
+ * including a tool that is installed but cannot run, means `--no-symbols`.
+ */
+export function symbolsFlagFor(status: SymbolsStatus): "--symbols" | "--no-symbols" {
+  return status.kind === "ready" ? "--symbols" : "--no-symbols";
+}
 
 export interface SelfBuildResult {
   readonly ok: boolean;
@@ -58,6 +69,10 @@ export async function selfBuild(opts: {
     git(dir, "commit", "-q", "-m", "n7: the PRD, and nothing else");
   }
 
+  /* S-3⁗ (PRDR-208): decided once per firing from what this runner has, and said. */
+  const symbolsFlag = symbolsFlagFor(probeSymbols({ enabled: true, command: "serena", pinned: "0.1.4" }));
+  process.stdout.write(`symbol intelligence: ${symbolsFlag === "--symbols" ? "serena ready on this runner — enabled" : "serena not runnable on this runner — declined"} (S-3⁗)\n`);
+
   if (opts.dryRun === true) {
     /*
      * DETENT_NO_LIVE forces the auth gate shut even on a logged-in machine
@@ -67,7 +82,7 @@ export async function selfBuild(opts: {
     const saved = process.env["DETENT_NO_LIVE"];
     process.env["DETENT_NO_LIVE"] = "1";
     try {
-      const code = await initMain([dir, "--spend-cap-usd", String(opts.capUsd)]);
+      const code = await initMain([dir, "--spend-cap-usd", String(opts.capUsd), symbolsFlag]);
       const refused = code === 2 && !existsSync(path.join(stateDir(dir), "config.json"));
       return {
         ok: refused,
@@ -96,7 +111,7 @@ export async function selfBuild(opts: {
   const approved = existsSync(path.join(stateDir(dir), "plan", "approval.json"));
   if (!approved) {
     /* 2 = an interrupt (AWAIT_APPROVAL expected; any other prints itself and reds out below). */
-    const initCode = await initMain([dir, "--spend-cap-usd", String(opts.capUsd)]);
+    const initCode = await initMain([dir, "--spend-cap-usd", String(opts.capUsd), symbolsFlag]);
     if (initCode !== 2 && initCode !== 0) {
       return { ok: false, phase: "init", detail: `init exited ${initCode} before PRESENT`, dir };
     }
