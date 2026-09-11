@@ -241,6 +241,7 @@ function bootstrapTicket(deps: WriteDeps): Ticket {
           `${stack.test_framework === "" ? "" : `, tested with ${stack.test_framework}`}. ${stack.rationale}`,
       "",
       "Configuration you create here is ticket work product, reviewed as code (C-4) — it lives in project files, never in `.detent/` (F-2).",
+      "Dependencies: Detent installs what the manifest declares before every gate run (V-1⁗) — write the manifest and its configuration; the package manager is not among your tools.",
     ]
       .filter((l) => l !== "")
       .join("\n"),

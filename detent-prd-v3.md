@@ -892,6 +892,25 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   together: the first began its answer after **2 s**, and the two warm draws created 9.4k and
   12.5k against the cold one's 54k. The wait no longer depends on how long the first turn is.
 
+- **V-1⁗ (3.1.1, PRDR-211).** Before a bound gate runs, the adapter **installs what the work
+  directory's manifest declares** — `npm install` for a `package.json` whose install mark is
+  absent or older than the manifest or its lockfile — through the gate runner, in the work
+  directory, recorded in the ticket journal as its own `install` record. An install that fails
+  is a red gate carrying the install's own tail; what the install creates is never part of the
+  change set, and the lockfile it produces is. The session's surface does not change: its Bash
+  stays `git add` and `git commit` (S-3), and S-2‴'s abstention stands. Found by the first gate
+  to run without the hole PRDR-122 closed: at 3.1.0 the guard answered a path-less tool call
+  with `allow`, terminal in the SDK's order, so a greenfield bootstrap could run `npm install`
+  and did — `detent-n7-310`'s bootstrap commit carries an npm-written lockfile. With the hole
+  closed, gate-313's bootstrap wrote a correct scaffold, could not install it, and went
+  NEEDS_HUMAN at ticket one with every other ticket blocked behind it. Installing is a property
+  of executing a gate, not of implementing a ticket; a session that can run a package manager can
+  run whatever a dependency's install script asks, past the hook, and the referee running the
+  same command is one process the operator chose, logged, once per work directory. The Stop
+  hook's scoped gate now runs where the session works — its worktree since B-2″ — and only after
+  the same install there; it used to run in the root, which on gate-313 was `npm test` against a
+  tree with no `package.json`.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

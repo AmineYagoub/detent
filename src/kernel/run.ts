@@ -1,3 +1,4 @@
+import type { Ecosystem } from "../adapter/install.js";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
@@ -41,6 +42,8 @@ export interface RunOptions {
   readonly backend: SessionBackend;
   readonly worker?: string;
   readonly maxTickets?: number;
+  /** V-1⁗ (PRDR-211): test seam for the ecosystems the referee installs for; production uses the table. */
+  readonly ecosystems?: readonly Ecosystem[];
   readonly runId?: string;
   /** B-2: per-ticket worktrees, merged `--no-ff` into the run branch on DONE. */
   readonly worktree?: boolean;
@@ -261,6 +264,8 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
         ...(opts.worker !== undefined ? { worker: opts.worker } : {}),
         ...(opts.now !== undefined ? { now: opts.now } : {}),
         ...(opts.worktree !== undefined ? { worktree: opts.worktree } : {}),
+        /** V-1⁗ (PRDR-211): the seam is forwarded, or the install table is the only reachable value. */
+        ...(opts.ecosystems !== undefined ? { ecosystems: opts.ecosystems } : {}),
         /** PRDR-104: the headless loop has no model session to govern — no hook files. */
         hookFiles: false,
         /* X-1⁵ (audit finding 1): the advisory total speaks on BOTH drivers. */

@@ -361,7 +361,8 @@ export class RefereeCore {
       rediscover: () => discover(this.root).candidates,
       note: (text) => appendNote(this.root, ticket.id, { author: "kernel", text }),
     });
-    git(workDir, "add", "-A");
+    /* V-1⁗ (PRDR-211): what the referee installed is never part of the change set; the lockfile it produced is. */
+    git(workDir, "add", "-A", "--", ".", ...this.ctx.ecosystems.map((e) => `:!${e.dir}`));
     const dirty = git(workDir, "status", "--porcelain").trim();
     if (dirty !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
     /** B-2: worktree mode merges --no-ff into the RUN branch — never the base. */

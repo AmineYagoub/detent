@@ -1,3 +1,6 @@
+import { ensureDependencies } from "../adapter/install.js";
+import { CI_ENV } from "../adapter/normalize.js";
+import { runGate as runCommand } from "../adapter/run.js";
 import { execFile, execFileSync } from "node:child_process";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { readBindings } from "../adapter/drift.js";
@@ -63,7 +66,18 @@ export function buildLiveBackend(root: string): ClaudeCodeBackend {
     /** PRDR-149: the same structural floor the per-session policies carry. */
     policy: { surface: ["**"], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root },
     gateCmd,
-    runScopedGate: (command) => runGate(command, root),
+    /**
+     * PRDR-211: the scoped gate runs where the session works — its worktree
+     * since B-2″, which this used to ignore: on gate-313 it ran `npm test` in a
+     * root with no `package.json`, and the session read the ENOENT as proof the
+     * gate runner had npm. And it runs only after what the manifest declares is
+     * installed there (V-1⁗); a failed install here is advisory, the referee's
+     * own gate run records it.
+     */
+    runScopedGate: async (command, cwd = root) => {
+      await ensureDependencies(cwd, (install) => runCommand({ command: install, cwd, timeoutMs: CEILINGS.gate_timeout_ms.default, env: CI_ENV }));
+      return runGate(command, cwd);
+    },
   });
 }
 

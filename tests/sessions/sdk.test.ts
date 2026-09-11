@@ -578,3 +578,30 @@ describe("C-4⁗⁵ the first response's beginning, not its completion", () => {
     expect("includePartialMessages" in buildOptions(spec(), CONFIG)).toBe(false);
   });
 });
+
+/**
+ * PRDR-211 — the Stop hook's scoped gate runs where the session works.
+ *
+ * `buildLiveBackend` ran it in the ROOT; since B-2″ the session works in a
+ * per-ticket worktree, so the hook tested a tree the session was not changing.
+ * On gate-313 that was `npm test` in a root with no `package.json` — the ENOENT
+ * the bootstrap session misread as proof the gate runner had npm.
+ */
+describe("PRDR-211 the scoped gate runs in the session's directory", () => {
+  it("hands the runner the spec's cwd", async () => {
+    const seen: (string | undefined)[] = [];
+    const config: SdkBackendConfig = {
+      ...CONFIG,
+      gateCmd: "true",
+      runScopedGate: async (_command, cwd) => {
+        seen.push(cwd);
+        return { green: true, outputTail: "" };
+      },
+    };
+    const options = buildOptions(spec({ cwd: "/wt/.detent/worktrees/t1" }), config);
+    const stop = options.hooks?.Stop?.[0]?.hooks[0];
+    expect(stop).toBeDefined();
+    await stop!({ hook_event_name: "Stop", stop_hook_active: false } as never, undefined, { signal: new AbortController().signal });
+    expect(seen).toEqual(["/wt/.detent/worktrees/t1"]);
+  });
+});

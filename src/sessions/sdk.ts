@@ -19,7 +19,7 @@ export interface SdkBackendConfig {
   /** X-6/S-3 docs domains for research roles. No config home yet: PRDR-062. */
   readonly docsDomains?: readonly string[];
   /** The scoped gate the Stop hook runs (S-2's continuation accelerant). */
-  readonly runScopedGate?: (command: string) => Promise<{ green: boolean; outputTail: string }>;
+  readonly runScopedGate?: (command: string, cwd?: string) => Promise<{ green: boolean; outputTail: string }>;
   readonly gateCmd?: string | null;
   /** Test seam (PRDR-114): the SDK's `query`, injectable so the fallback can be exercised without a backend. */
   readonly queryFn?: (args: { prompt: string; options: Options }) => AsyncIterable<unknown>;
@@ -63,7 +63,7 @@ export function buildPreToolUseHook(policy: GuardPolicy, alias?: ArtifactAlias):
   };
 }
 
-function buildStopHook(config: SdkBackendConfig, role: string): NonNullable<Options["hooks"]> {
+function buildStopHook(config: SdkBackendConfig, role: string, cwd: string): NonNullable<Options["hooks"]> {
   const runScopedGate = config.runScopedGate;
   if (runScopedGate === undefined) return {};
   return {
@@ -72,8 +72,9 @@ function buildStopHook(config: SdkBackendConfig, role: string): NonNullable<Opti
         hooks: [
           async (input) => {
             const active = Boolean((input as { stop_hook_active?: unknown }).stop_hook_active);
+            /* PRDR-211: the scoped gate runs where the session works — the worktree, since B-2″ — not in the root. */
             const decision = await stopGate(
-              { stage: role, gateCmd: config.gateCmd ?? null, stopHookActive: active },
+              { stage: role, gateCmd: config.gateCmd ?? null, stopHookActive: active, cwd },
               runScopedGate,
             );
             if (decision.decision === "allow") return { continue: true };
@@ -144,7 +145,7 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
         spec.policy ?? config.policy,
         spec.artifactTold === undefined ? undefined : { told: spec.artifactTold, actual: spec.artifactOut },
       ),
-      ...buildStopHook(config, spec.role),
+      ...buildStopHook(config, spec.role, spec.cwd),
     },
   };
 }

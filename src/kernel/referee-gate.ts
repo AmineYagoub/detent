@@ -4,6 +4,7 @@ import picomatch from "picomatch";
 import { discover } from "../adapter/discover/index.js";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
 import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
+import { ensureDependencies } from "../adapter/install.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import type { GateSlot } from "../schemas/gates.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -113,6 +114,37 @@ export class GateArm {
         throw new DriftHaltSignal(err);
       }
       throw err;
+    }
+
+    /**
+     * V-1⁗ (PRDR-211): what the manifest declares is installed before any gate
+     * runs — through the gate runner, in the work directory, recorded as its
+     * own journal record. A session cannot do this (its Bash is two git verbs),
+     * and a gate that cannot execute for want of its dependencies is not red
+     * because of the ticket. An install that FAILS is a red gate carrying the
+     * install's own tail, so the ladder sees it as it sees any red.
+     */
+    const install = await ensureDependencies(
+      workDir,
+      (command) => runGate({ command, cwd: workDir, timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
+      ctx.ecosystems,
+    );
+    if (install.kind !== "none") {
+      ctx.journal.appendTicketEvent(ticket.id, {
+        event: "install",
+        ok: install.kind === "installed",
+        at: ctx.iso(),
+        ecosystem: install.ecosystem,
+        cmd: install.result.command,
+        exit: install.result.exitCode,
+        ms: install.result.durationMs,
+        reason: install.reason,
+        ...(install.kind === "failed" ? { tail: scrub(install.result.output.slice(-1500)) } : {}),
+      });
+      if (install.kind === "failed") {
+        this.recordFailure(ticket.id, install.result);
+        return gateRed(install.result);
+      }
     }
 
     const result = await this.runScopedGates(bindings, slots, workDir);

@@ -13,6 +13,7 @@ import { resolveOwner } from "../init/contracts.js";
 import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, type SymbolsConfig } from "../adapter/symbols.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
+import { ECOSYSTEMS, type Ecosystem } from "../adapter/install.js";
 import { SpendLedger } from "./ledger.js";
 import type { Budgets } from "../schemas/budgets.js";
 import type { LoadedConfig } from "./worstcase.js";
@@ -87,6 +88,8 @@ export interface CoreOptions {
   readonly isAlive?: (pid: number) => boolean;
   /** B-2: per-ticket worktrees, merged `--no-ff` into the run branch on DONE. */
   readonly worktree?: boolean;
+  /** V-1⁗ (PRDR-211): the package ecosystems the adapter installs for before a gate; the table by default, a seam for tests. */
+  readonly ecosystems?: readonly Ecosystem[];
   /**
    * PRDR-104: whether this referee publishes the plugin hook files
    * (`active_surface.json`, `stage.json`). True on the plugin path, where the
@@ -115,6 +118,8 @@ export class RefereeContext {
   readonly hookFiles: boolean;
   readonly refs: RefSnapshot;
   readonly baseRef: string | null;
+  /** V-1⁗ (PRDR-211): what the referee installs before running a gate, and never commits. */
+  readonly ecosystems: readonly Ecosystem[];
   private readonly workDirs = new Map<string, string>();
 
   constructor(
@@ -128,6 +133,7 @@ export class RefereeContext {
     this.prompts = opts.prompts;
     this.worker = opts.worker ?? "w1";
     this.now = opts.now ?? (() => Date.now());
+    this.ecosystems = opts.ecosystems ?? ECOSYSTEMS;
     this.isAlive = opts.isAlive ?? pidAlive;
     this.worktree = opts.worktree === true;
     this.rulesText = readRules(opts.root);

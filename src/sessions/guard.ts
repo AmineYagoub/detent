@@ -302,6 +302,8 @@ export interface StopGateInput {
   readonly gateCmd: string | null;
   /** True when this stop is already a stop-hook continuation — the loop guard. */
   readonly stopHookActive: boolean;
+  /** PRDR-211: where the session works — the scoped gate runs THERE, not in the root. */
+  readonly cwd?: string;
 }
 
 export interface StopGateDecision {
@@ -317,7 +319,7 @@ export interface StopGateDecision {
  */
 export async function stopGate(
   input: StopGateInput,
-  runScopedGate: (command: string) => Promise<{ readonly green: boolean; readonly outputTail: string }>,
+  runScopedGate: (command: string, cwd?: string) => Promise<{ readonly green: boolean; readonly outputTail: string }>,
 ): Promise<StopGateDecision> {
   if (input.stopHookActive) {
     return { decision: "allow", reason: "stop-hook continuation already active; the kernel judges from here" };
@@ -325,7 +327,7 @@ export async function stopGate(
   if (input.gateCmd === null || input.gateCmd.trim() === "" || READ_ONLY_STAGES.has(input.stage)) {
     return { decision: "allow", reason: "no stop gate for this stage" };
   }
-  const result = await runScopedGate(input.gateCmd);
+  const result = await runScopedGate(input.gateCmd, input.cwd);
   if (result.green) return { decision: "allow", reason: "scoped gate green" };
   return {
     decision: "block",
