@@ -8,11 +8,13 @@ import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from ".
 import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
 import { currentCounters, currentGeneration, withCurrentCounters } from "./generations.js";
-import { Breach, KernelBoundaryError, SessionRefusal, publicTicket, type RefereeContext } from "./referee-context.js";
+import { Breach, KernelBoundaryError, SessionRefusal, type RefereeContext } from "./referee-context.js";
 import type { FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
 import { appendNote, readClaim, writeTicket } from "./tickets/mutations.js";
 import { scrub } from "./scrub.js";
+import { recordEffort } from "./session-effort.js";
+import { attemptInputs } from "./session-inputs.js";
 
 /**
  * T-104 — the session arm (R-4, S-2…S-6, D-25, B-3/P7, SEC-3).
@@ -34,27 +36,9 @@ export class SessionArm {
 
   constructor(private readonly ctx: RefereeContext) {}
 
-  /** Inputs for the driver-launched attempt states, exactly as v2 assembled them. */
+  /** PRDR-236: assembled in `session-inputs.ts`; this stays the arm's public entry. */
   attemptInputs(ticket: Ticket, state: SessionState, workDir: string): Record<string, unknown> {
-    switch (state) {
-      case "IN_PROGRESS":
-        return { ticket: publicTicket(ticket, this.ctx.root) };
-      case "INFORMED_FIX":
-        return { ...this.fixInputs(ticket, workDir), research: this.ctx.maybeArtifact(ticket.id, "research.json") };
-      case "REVIEW_FIX":
-        return { ...this.fixInputs(ticket, workDir), review: this.ctx.maybeArtifact(ticket.id, "review.json") };
-      default:
-        return this.fixInputs(ticket, workDir);
-    }
-  }
-
-  fixInputs(ticket: Ticket, workDir: string): Record<string, unknown> {
-    return {
-      ticket: publicTicket(ticket, this.ctx.root),
-      failure: this.ctx.maybeArtifact(ticket.id, "last_failure.json"),
-      hypothesis: this.ctx.maybeArtifact(ticket.id, "hypothesis.json"),
-      diff: this.ctx.diff(workDir),
-    };
+    return attemptInputs(this.ctx, ticket, state, workDir);
   }
 
   async launch(ticket: Ticket, state: SessionState, inputs: Record<string, unknown>, workDir: string): Promise<void> {
@@ -214,6 +198,7 @@ export class SessionArm {
      * signal is kept for B-5, exactly as its artifact is.
      */
     for (const s of ["falsified.json", "surface_request.json"]) rmSync(path.join(runsDir(ctx.root, id), s), { force: true });
+    const routedEffort = ctx.loaded.config.effort_routing[role] ?? "default";
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "start",
@@ -236,11 +221,13 @@ export class SessionArm {
        * must tell apart are "no level was routed, so the SDK's own default
        * governed" and "this build did not record it" — an absent field says
        * both. What the SDK settled on AFTER any silent downgrade is a further
-       * fact, exposed to hooks as `effort.level`, and not this one.
+       * fact, exposed to hooks as `effort.level`, and PRDR-237 reads it below.
        */
-      effort: ctx.loaded.config.effort_routing[role] ?? "default",
+      effort: routedEffort,
     });
     const result = await ctx.backend.run(spec);
+    /** PRDR-237: what the session RAN at, against what it was asked for. */
+    recordEffort(ctx.journal, ctx.root, id, role, generation.index, ctx.iso(), routedEffort, result.effort);
     if (result.modelFallback !== undefined) {
       /* PRDR-114: the routing asked for a model this runtime cannot serve; the ledger's `models` says what ran. */
       const { requested } = result.modelFallback;

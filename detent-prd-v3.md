@@ -707,6 +707,46 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   neither PRD, so PRDR-197 shipped an operator-facing knob with no PRD entry at all; this is the
   first, and it covers only the recording.
 
+- **C-12″ (3.1.1, PRDR-236).** Requeue guidance reaches the SESSION, not only the judge of it.
+  C-12's one lever over a stopped ticket is a requeue carrying guidance; `requeueTicket` records it
+  as a ticket note and as the new generation's `reason`, and the confirmation says the generation
+  was opened *with the guidance recorded*. Recorded, and never delivered: `attemptInputs` handed an
+  attempt session `publicTicket`, which is id, type, title, description, criteria, non-goals,
+  contracts and surface, and carries no notes under any name — `lastNote`'s only readers were the
+  operator exit summary and the drift sweeps. The reviewer, since PRDR-080, received the whole trail.
+  That ticket's own comment lists the operator acts a session must be able to see — surface grants,
+  **requeue guidance**, claim breaks — and fixed only the reviewer, which is the right audience for
+  two of the three: a grant and a claim break are facts a judge needs, and guidance is an
+  INSTRUCTION, delivered to the one party not meant to act on it. Found when gate-313's t-s01-012
+  was requeued with its reviewer's finding relayed verbatim, generation 1 rebuilt the ticket from
+  its acceptance criteria alone, and the next review opened *"The requeue guidance's finding is
+  still unaddressed"* — the reviewer quoting a record the implementer could not read. The key is
+  added at the `attemptInputs` seam, so all four attempt roles inherit it rather than each
+  remembering it, and shares the reviewer's window and its one definition so a long-lived ticket
+  cannot push its own criteria out of context. The four attempt prompts describe it as binding; the
+  reviewer's closed input set is untouched. Corrected in the same pass: `prompts/review_fix.md` still
+  told its reader that *a second round of review findings escalates to a human*, which X-1‴ made
+  false — findings buy a budgeted number of rounds — so a fixer with four rounds left believed it
+  had one.
+
+- **S-4⁗ (3.1.1, PRDR-237).** The effort a session RAN at, beside the one it was asked for. S-4‴
+  recorded the routed level, and the sentence that justified recording anything is about the other
+  half: *"the SDK downgrades silently for a model that cannot serve one, which is why a configured
+  effort is recorded per session rather than assumed to have been honoured."* Recording the request
+  detects no downgrade. The model half of the same routing has had both ends since PRDR-114 — a
+  fallback is detected, carried on the result, journaled and noted — so *which model ran* always had
+  an answer while *which effort ran* had none. The SDK publishes it: every tool-context hook input
+  carries `effort.level`, documented as the active level after any silent downgrade, and Detent's
+  D-21 containment hook — the one layer that sees every tool call a session makes — read `tool_name`
+  and `tool_input` off that input and dropped the rest. It now reports the first level it sees, once,
+  as observation that cannot reach the decision; the result carries it, and the kernel journals
+  routed against active, noting the ticket when they disagree. Neither refuses nor retries the
+  session, following PRDR-114. A session that calls no tool reports nothing, and that is recorded as
+  UNOBSERVED rather than as agreement — a missing signal read as a matching one is the failure this
+  exists to prevent. Found when gate-313's first `max` session came in 10% above the baseline mean in
+  output tokens and 2% in cost, with no way to say whether that was a small real effect or a level
+  that never took.
+
 - **C-14″ (3.1.1, PRDR-129).** The porcelain runs LIVE. `detent run` defaulted to the fixture
   backend while `detent referee` defaulted to the live one and `detent init` refused the fixture
   outright — and the README's two-command golden path, test-locked to exactly `detent init` and

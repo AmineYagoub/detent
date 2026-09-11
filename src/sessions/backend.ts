@@ -141,6 +141,13 @@ export interface SessionResult {
    */
   readonly modelFallback?: { readonly requested: string; readonly reason: string };
   /**
+   * PRDR-237: the effort the turns actually ran at, as the containment hook saw
+   * it — the SDK's level AFTER any silent downgrade. Absent means no tool call
+   * reported one (a model without effort support, or a session that called no
+   * tool), and absent is UNOBSERVED, never "it matched what was routed".
+   */
+  readonly effort?: string;
+  /**
    * S-3‴ (PRDR-123): configured MCP servers this session did NOT get. Absent
    * means the session reported nothing either way — never read as success.
    */

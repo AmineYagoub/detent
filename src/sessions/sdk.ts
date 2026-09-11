@@ -31,13 +31,44 @@ export interface SdkBackendConfig {
  * absent from the options this module builds: a callback there would be
  * skipped for exactly the writing tools S-3 grants (the shadowing failure).
  */
-export function buildPreToolUseHook(policy: GuardPolicy, alias?: ArtifactAlias): NonNullable<Options["hooks"]> {
+/**
+ * PRDR-237: `onEffort` receives the level the turn actually ran at, ONCE.
+ *
+ * PRDR-235 recorded the level that was ASKED for, and the sentence justifying
+ * that record (`schemas/roles.ts`) is about the other half: the SDK downgrades
+ * silently for a model that cannot serve a level, so a configured effort must
+ * be recorded rather than assumed honoured. Recording the request detects
+ * nothing. The SDK publishes the settled value on every tool-context hook input
+ * as `effort.level` — "after any silent downgrade for the selected model" — and
+ * this hook, which sees every tool call a session makes, read `tool_name` and
+ * `tool_input` off that input and dropped the rest.
+ *
+ * Reported once because it is one fact about the session, not one per call, and
+ * a callback per tool call would put a journal write on the containment path.
+ * A model without effort support sends no field and nothing is reported: the
+ * caller records that as unobserved, never as agreement — the failure this
+ * exists to prevent is a missing signal read as a matching one.
+ *
+ * Observation only. It cannot reach `decision`, and the deny path above is
+ * asserted unchanged with an observer attached.
+ */
+export function buildPreToolUseHook(
+  policy: GuardPolicy,
+  alias?: ArtifactAlias,
+  onEffort?: (level: string) => void,
+): NonNullable<Options["hooks"]> {
+  let reported = false;
   return {
     PreToolUse: [
       {
         hooks: [
           async (input) => {
-            const payload = input as { tool_name?: unknown; tool_input?: unknown };
+            const payload = input as { tool_name?: unknown; tool_input?: unknown; effort?: { level?: unknown } };
+            const level = payload.effort?.level;
+            if (!reported && typeof level === "string" && level !== "" && onEffort !== undefined) {
+              reported = true;
+              onEffort(level);
+            }
             const toolName = typeof payload.tool_name === "string" ? payload.tool_name : "";
             /* PRDR-205: a write to the path the session was told is carried out at the file it has. */
             const carried = alias === undefined ? null : carryArtifact(toolName, payload.tool_input, alias, policy.workRoot);
@@ -97,7 +128,8 @@ function buildStopHook(config: SdkBackendConfig, role: string, cwd: string): Non
  * - `hooks.PreToolUse` (D-21/PRDR-050): containment that allow rules cannot
  *   shadow.
  */
-export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Options {
+/** PRDR-237: `onEffort` is handed to the containment hook, the one layer that sees the settled level. */
+export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffort?: (level: string) => void): Options {
   return {
     cwd: spec.cwd,
     settingSources: [],
@@ -144,6 +176,7 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig): Optio
       ...buildPreToolUseHook(
         spec.policy ?? config.policy,
         spec.artifactTold === undefined ? undefined : { told: spec.artifactTold, actual: spec.artifactOut },
+        onEffort,
       ),
       ...buildStopHook(config, spec.role, spec.cwd),
     },
@@ -332,6 +365,8 @@ export class ClaudeCodeBackend implements SessionBackend {
     let result: SessionResult | null = null;
     let observedTurns = 0;
     let mcpFailures: { name: string; status: string }[] | null = null;
+    /** PRDR-237: the level the turns actually ran at; null means no tool call reported one. */
+    let settledEffort: string | null = null;
     /** C-4⁗⁵ (PRDR-210): said once, on the first frame that proves a response is under way. */
     let responded = false;
     const respond = (): void => {
@@ -340,7 +375,12 @@ export class ClaudeCodeBackend implements SessionBackend {
       spec.onFirstResponse?.();
     };
     try {
-      const stream = query({ prompt: fullPrompt(spec), options: buildOptions(spec, this.config) });
+      const stream = query({
+        prompt: fullPrompt(spec),
+        options: buildOptions(spec, this.config, (level) => {
+          settledEffort = level;
+        }),
+      });
       for await (const message of stream) {
         /**
          * S-3‴ (PRDR-123): the init message is the only per-session truth
@@ -412,6 +452,7 @@ export class ClaudeCodeBackend implements SessionBackend {
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
     const out = result ?? parseResultMessage({});
-    return mcpFailures === null ? out : { ...out, mcpFailures };
+    const observed = settledEffort === null ? out : { ...out, effort: settledEffort };
+    return mcpFailures === null ? observed : { ...observed, mcpFailures };
   }
 }
