@@ -40,6 +40,28 @@ so in a pnpm or yarn project the referee's own install changes the discovered pa
 which changes every bound command's `resolved` string, which `checkBinding`'s status-blind
 command check reports as drift — blocking a ticket that touched nothing.
 
+## Measured, before implementing
+
+The package-manager half, reproduced by hand on a scratch project carrying `package.json` and
+`pnpm-lock.yaml` and nothing else:
+
+```
+discovery before the install: pm: pnpm   test candidate: "test"
+$ npm install --no-audit --no-fund        (the referee's own command, run in the work directory)
+lockfiles now: package-lock.json pnpm-lock.yaml
+discovery after  the install: pm: npm    resolved command: npm run test
+```
+
+The stored binding would read `pnpm run test`; the discovered command is now `npm run test`;
+`checkBinding` compares exactly those two, for every status, before anything else. A ticket that
+changed nothing is blocked, and the thing that changed the project was Detent.
+
+The lifecycle half needs no measurement beyond the code: `ECOSYSTEMS[0].install` is
+`npm install --no-audit --no-fund`, `ensureDependencies` runs it in `workDir`, and npm runs a
+manifest's `preinstall`/`install`/`postinstall`/`prepare` unless told otherwise. Worth recording
+for the fix's cost: the project gate-313 is building declares `test`, `lint`, `typecheck` and
+`build` and no lifecycle script at all, so suppressing them costs that run nothing.
+
 ## The shape
 
 Do not run the judged tree's lifecycle scripts. Pick the install by the discovered package
