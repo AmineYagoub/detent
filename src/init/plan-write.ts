@@ -221,6 +221,19 @@ export function writePlan(
 }
 
 /**
+ * A-1⁶ (PRDR-206): what the bootstrap will provide — the scaffold files ANALYZE
+ * named — for the contract check, which runs over drafted tickets before the
+ * bootstrap exists. Undefined in brownfield: there is no bootstrap.
+ */
+export function bootstrapScaffold(
+  greenfield: boolean,
+  analysis: Analysis | null,
+): { readonly owner: string; readonly files: readonly string[] } | undefined {
+  if (!greenfield) return undefined;
+  return { owner: BOOTSTRAP_TICKET_ID, files: analysis?.stack?.scaffold_files ?? [] };
+}
+
+/**
  * C-4's bootstrap ticket, constructed rather than drafted. Its criteria name
  * every slot that bound, because "prove every bound slot executes green" is
  * the ticket's actual job — and F-2 is stated in its non-goals so the session
@@ -258,6 +271,14 @@ function bootstrapTicket(deps: WriteDeps): Ticket {
     surface: ["**"],
     /* claimed first */
     priority: 100,
+    /**
+     * A-1⁶ (PRDR-206): the ground it lays, declared. Each scaffold file the
+     * analysis named is a `file` contract the bootstrap provides, so a later
+     * ticket consuming `package.json` resolves here instead of being reported
+     * — and handed to the review as proved — as consuming a file no ticket
+     * creates.
+     */
+    provides: (stack?.scaffold_files ?? []).map((id) => ({ kind: "file" as const, id, note: "created by the bootstrap's scaffold (C-4)" })),
   });
 }
 

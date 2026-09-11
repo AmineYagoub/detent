@@ -243,3 +243,28 @@ describe("PRDR-118 re-planning does not destroy work", () => {
     expect(again.interrupt?.message).toContain("is NOT in the plan");
   });
 });
+
+/** A-1⁶ (PRDR-206): the analysis names the scaffold; the bootstrap provides it; the check resolves it. */
+describe("A-1⁶ the bootstrap ticket provides the scaffold files the analysis names", () => {
+  it("provides each as a file contract, and a ticket consuming one is no longer a finding at PRESENT", async () => {
+    /* Greenfield: a document and nothing else, so ANALYZE chooses the stack and C-4 constructs the bootstrap. */
+    const root = repo({ "PRD.md": "# build it\n" });
+    const stack = { language: "TypeScript", runtime: "Node.js 22", test_framework: "vitest", rationale: "", scaffold_files: ["package.json", "tsconfig.json"] };
+    const draft = {
+      schema_version: 1,
+      tickets: [
+        ticket("t-s01-001"),
+        { ...ticket("t-s01-002", ["t-s01-001"]), consumes: [{ kind: "file", id: "package.json" }] },
+      ],
+      questions: [],
+    };
+    const backend = new MockBackend({ planner: plannerWith(draft, ONE_SLICE, stack) });
+    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
+
+    const bootstrap = readTicket(root, BOOTSTRAP_TICKET_ID);
+    expect(bootstrap.provides.map((p) => `${p.kind}:${p.id}`)).toEqual(["file:package.json", "file:tsconfig.json"]);
+    /* Before PRDR-206 PRESENT said `consumes the file package.json, which no ticket creates` — proved by code, and false. */
+    expect(result.interrupt?.message ?? "").not.toContain("`package.json`, which no ticket creates");
+  });
+});

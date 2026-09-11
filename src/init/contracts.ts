@@ -100,6 +100,11 @@ export function applyContracts(
    * question. Both production call sites in `plan.ts` pass it.
    */
   assigned: readonly SliceSpec[] = [],
+  /**
+   * A-1⁶ (PRDR-206): the files the bootstrap's scaffold creates, owned by the
+   * bootstrap ticket. Undefined in brownfield — there is no bootstrap.
+   */
+  scaffold?: { readonly owner: string; readonly files: readonly string[] },
 ): ContractResult {
   const findings: PlanReview["findings"] = [];
   const derived: { consumer: string; provider: string; contract: string }[] = [];
@@ -137,9 +142,17 @@ export function applyContracts(
   };
 
   /* Deterministic order: the same plan derives the same edges, every time (C-8). */
+  const scaffoldFiles = new Set(scaffold?.files ?? []);
   for (const t of input) {
     for (const c of t.consumes) {
       const key = contractKey(c);
+      /**
+       * A-1⁶ (PRDR-206): a file the bootstrap's scaffold creates is provided
+       * by the bootstrap, which every ticket already blocks on (C-4) — so it is
+       * neither a finding nor an edge worth deriving. Only files the analysis
+       * NAMED; a file that merely sounds like a scaffold's is judged as before.
+       */
+      if (c.kind === "file" && scaffoldFiles.has(c.id)) continue;
       const providers = owners.get(key) ?? [];
       if (providers.length === 0) {
         /* Work already finished still owns its names, even when this plan no longer redrafts it. */

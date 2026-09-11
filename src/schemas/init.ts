@@ -86,6 +86,16 @@ export const analysisSchema = z.strictObject({
       test_framework: z.string().default(""),
       rationale: z.string().default(""),
       /**
+       * A-1⁶ (PRDR-206): the files the chosen stack's scaffold creates that
+       * later tickets lean on — the manifest, the compiler and test
+       * configuration. The bootstrap ticket PROVIDES each as a `file`
+       * contract, so a ticket consuming `package.json` resolves to it instead
+       * of being reported as consuming a file no ticket creates. Additive and
+       * defaulted: an analysis written before the field reads with none, and
+       * nothing is ever inferred from a file's name.
+       */
+      scaffold_files: z.array(nonEmptyString).default([]),
+      /**
        * PRDR-115: the verification commands the DOCUMENTS name, exactly as
        * written. When present they are the provisional bindings; the stack
        * table is only the fallback for documents that name none.

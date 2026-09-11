@@ -943,6 +943,20 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   tooling the host has and its record shows it. Nothing is installed, and the read-only surface
   of an enabled session is unchanged (SEC-3).
 
+- **A-1⁶ (3.1.1, PRDR-206).** The bootstrap ticket **provides the scaffold it creates**. C-4
+  has Detent construct the bootstrap in greenfield and block every ticket on it; it declared no
+  `provides`, so a ticket consuming `file:package.json` — a file the bootstrap's own description
+  promises — was reported as consuming a file no ticket creates, printed at PRESENT under the
+  heading that says it was proved by code, and handed to the whole-plan review as
+  `already_found` (PRDR-193): a false proof, twice over. gate-313's four contract findings held
+  two of them. ANALYZE, which already chooses the stack (D-10), now names the files that stack's
+  scaffold creates and later tickets lean on — `stack.scaffold_files`, additive and defaulted to
+  none (F-3) — and the bootstrap provides each as a `file` contract. The check resolves a consume
+  of one to the bootstrap without deriving an edge every ticket already carries, and reports
+  every other file exactly as before: nothing is inferred from a file's name, and an analysis
+  that names nothing yields today's findings unchanged. The symbol and test-file findings on
+  gate-313 were the plan's, and were right.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

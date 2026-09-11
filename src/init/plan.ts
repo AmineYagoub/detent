@@ -65,7 +65,7 @@ const DRAFT_MAPPING_IS_TOTAL: UnmappedDraftKeys extends never ? true : never = t
 void DRAFT_MAPPING_IS_TOTAL;
 
 export { BOOTSTRAP_TICKET_ID } from "./plan-write.js";
-import { BOOTSTRAP_TICKET_ID, writePlan, type DraftedTicket } from "./plan-write.js";
+import { BOOTSTRAP_TICKET_ID, bootstrapScaffold, writePlan, type DraftedTicket } from "./plan-write.js";
 
 export function planDraftPath(root: string): string {
   return path.join(stateDir(root), "state", "plan-draft.json");
@@ -267,7 +267,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    * redraft rewrites that text.
    */
   /* A-1⁵: the specs too, so coverage is decided here rather than read by the review. */
-  const early = applyContracts(planned.tickets, slices.map((s) => s.id), [], slices);
+  const early = applyContracts(planned.tickets, slices.map((s) => s.id), [], slices, bootstrapScaffold(deps.greenfield, deps.analysis));
   if (early.findings.length > 0) {
     deps.note?.(
       `contract checks before review: ${String(early.findings.length)} finding(s) proved by code, not paid for — ${early.findings.map((f) => f.tag).join(", ")}`,
@@ -286,7 +286,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const settledNames = allTickets(deps.root)
     .filter((t) => t.state === "DONE" && !inPlan.has(t.id))
     .flatMap((t) => t.provides.map((p) => contractKey(p)));
-  const contracts = applyContracts(reviewed.tickets, slices.map((s) => s.id), settledNames, slices);
+  const contracts = applyContracts(reviewed.tickets, slices.map((s) => s.id), settledNames, slices, bootstrapScaffold(deps.greenfield, deps.analysis));
   const drafted = contracts.tickets;
   for (const d of contracts.derived) {
     deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);

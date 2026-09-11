@@ -63,6 +63,9 @@ export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
           runtime: "<runtime or empty string>",
           test_framework: "<test framework or empty string>",
           rationale: "<why this stack — may be empty>",
+          scaffold_files: [
+            "<each file the scaffold you chose creates that later tickets may lean on — the manifest (package.json), the compiler and test configuration, the lockfile if the tooling writes one; repo-relative; an empty array if none>",
+          ],
           verification: {
             test: "<the test command the documents name, exactly as written — omit the key if the documents name none>",
             lint: "<lint command or omit>",
@@ -103,7 +106,7 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     instruction:
       `${
         greenfield
-          ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object."
+          ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object, and `stack.scaffold_files` must name every file the scaffold creates that later tickets may lean on — the bootstrap ticket provides each of them, so a ticket consuming one is not reported as consuming a file no ticket creates (A-1⁶)."
           : "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen."
       } Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone. A question the documents cannot answer goes in \`questions\` WITH the assumption the plan proceeds on while it is unanswered; \`blocking: true\` only when no assumption can carry it — questions are asked once, with the whole plan (C-3′).`,
   });

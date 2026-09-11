@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
+import { BOOTSTRAP_TICKET_ID } from "../../src/init/plan-write.js";
+import { analysisSchema } from "../../src/schemas/init.js";
 import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
@@ -413,5 +415,46 @@ describe("A-1⁵ coverage is a set operation over what the ticket declares", () 
       [slice({ baseline_items: ["PB-004", "PB-009"] })],
     );
     expect(out.findings.map((f) => f.finding).join("\n")).toContain("PB-009");
+  });
+});
+
+/**
+ * A-1⁶ (PRDR-206) — the bootstrap creates the ground and, until now, declared
+ * none of it. Two of gate-313's four "proved by code" contract findings were
+ * tickets consuming `file:package.json`, which the bootstrap creates and the
+ * checker could not know about — a false proof, handed to the whole-plan
+ * review as `already_found`.
+ */
+describe("A-1⁶ a scaffold file the bootstrap creates is provided, not unowned", () => {
+  const consumer = t("t-s01-001", { consumes: [{ kind: "file", id: "package.json" }] });
+  const scaffold = { owner: BOOTSTRAP_TICKET_ID, files: ["package.json", "tsconfig.json"] };
+
+  it("is not reported and derives no edge — every ticket already blocks on the bootstrap (C-4)", () => {
+    /* Before PRDR-206: `consumes the file package.json, which no ticket creates`. */
+    const withScaffold = applyContracts([consumer], ["s01"], [], [], scaffold);
+    expect(withScaffold.findings).toEqual([]);
+    expect(withScaffold.derived).toEqual([]);
+    const without = applyContracts([consumer], ["s01"], [], []);
+    expect(without.findings.map((f) => f.tag)).toEqual(["dependency"]);
+    expect(without.findings[0]?.finding).toContain("no ticket creates");
+  });
+
+  it("a file the scaffold does not create is still reported — nothing is inferred from a name", () => {
+    const other = t("t-s01-002", { consumes: [{ kind: "file", id: "src/never-made.ts" }] });
+    const result = applyContracts([other], ["s01"], [], [], scaffold);
+    expect(result.findings.map((f) => f.tag)).toEqual(["dependency"]);
+    expect(result.findings[0]?.finding).toContain("src/never-made.ts");
+  });
+
+  it("an analysis written before the field reads with no scaffold files (F-3)", () => {
+    const parsed = analysisSchema.parse({
+      schema_version: 1,
+      summary: "s",
+      stack: { language: "TypeScript", runtime: "", test_framework: "", rationale: "" },
+      questions: [],
+      assumptions: [],
+      docs_read: [],
+    });
+    expect(parsed.stack?.scaffold_files).toEqual([]);
   });
 });

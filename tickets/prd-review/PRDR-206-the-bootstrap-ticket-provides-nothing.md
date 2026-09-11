@@ -1,11 +1,11 @@
 ---
 id: PRDR-206
 title: "The bootstrap ticket provides nothing, so a ticket that consumes a scaffold file the bootstrap creates is reported — and handed to the review as proved — as consuming a file no ticket creates"
-state: OPEN
+state: DONE
 severity: minor
 category: defect
 labels: ["prd-review", "contracts", "bootstrap", "init", "false-positive"]
-surface: ["src/init/plan-write.ts", "src/init/contracts.ts", "src/init/analyze.ts", "src/schemas/init.ts", "prompts/planner.md", "tests/init/contracts.test.ts", "tests/init/plan-write.test.ts"]
+surface: ["src/schemas/init.ts", "src/init/analyze.ts", "src/init/contracts.ts", "src/init/plan.ts", "src/init/plan-write.ts", "tests/init/contracts.test.ts", "tests/init/plan-write.test.ts", "detent-prd-v3.md"]
 prd_refs: ["C-4", "A-1‴", "A-1⁵", "F-3", "V-6", "N-6", "PRDR-193", "PRDR-201"]
 acceptance_criteria: ["The ANALYZE artifact's `stack` names the files the chosen stack's scaffold creates — `scaffold_files`, additive and defaulted to `[]` so every analysis written before it still reads (F-3) — and the analyst is asked for them in the skeleton, beside the stack it already chooses.", "The bootstrap ticket PROVIDES `file:<each scaffold file>`, with a note saying the bootstrap creates it, so `applyContracts` resolves a slice ticket's `consumes: file:package.json` to `t-001-bootstrap` and derives the edge instead of reporting a file no ticket creates. Observed FIRST as the finding (V-6): a fixture ticket consuming `file:package.json` under an analysis naming it produces the `dependency` finding today.", "A consumed file NOT among the scaffold files is still reported exactly as before — the fix narrows one false positive, it does not widen what counts as provided.", "Nothing is guessed from file names: an analysis with an empty `scaffold_files` yields the same findings as today."]
 non_goals: ["Does not touch the symbol case (`t-s07-009` consumes `presentTicket` that no ticket provides) or the test-file case (`t-s12-012`) — those are the plan's gaps and were correctly reported.", "Does not let the checker infer scaffold files from the stack name. `package.json` is universal for Node; what else a scaffold creates is the analyst's decision, made once, at ANALYZE.", "Does not change what the bootstrap ticket DOES — its criteria and surface stand."]
@@ -64,3 +64,28 @@ V-6 order: a fixture analysis with `scaffold_files: ["package.json"]` and a slic
 consumes `file:package.json`. Observed first: the `dependency` finding. Then the field, the
 provides, and the resolution — and a second fixture consuming `file:src/never-made.ts` still
 reports.
+
+## What implementation changed
+
+**`stack.scaffold_files`** on the ANALYZE artifact — `z.array(nonEmptyString).default([])`, so
+every analysis written before it reads with none (F-3). The greenfield skeleton carries the
+field with its instruction in the placeholder, and ANALYZE's instruction string names it; the
+planner PROMPT is untouched, so no root's PLAN checkpoints are invalidated by this ticket (the
+skeleton and instruction are inputs, not the S-6 prefix, and ANALYZE's digest reads neither).
+
+**`bootstrapScaffold(greenfield, analysis)`** in `plan-write.ts` — the bootstrap's home — says
+what the bootstrap will provide, for a check that runs over drafted tickets before the bootstrap
+exists; `bootstrapTicket` provides each file as a `file` contract with a note. `applyContracts`
+gained a fifth parameter and one rule: a `file` consume the scaffold names is neither a finding
+nor an edge worth deriving. Both call sites in `plan.ts` pass it. `plan.ts` sat at its line
+ceiling, which is why the helper lives where it does.
+
+**V-6, in order.** Observed on the tree as it was: the scaffold parameter ignored and the
+finding produced (`expected [ { tag: 'dependency', … } ] to deeply equal []`); the schema
+refusing the field (`Unrecognized key: "scaffold_files"`); the parsed default `undefined`. Then
+the change; then 40 of 40 across the contract and plan-write tests, including the end-to-end one
+through `runInit` in which the bootstrap on disk provides `file:package.json` and PRESENT no
+longer prints the false proof.
+
+**Not touched, on purpose.** `t-s07-009 → symbol presentTicket` and `t-s12-012 → file
+tests/docs/readme-golden-path.test.ts` on gate-313 were the plan's gaps and stay findings.
