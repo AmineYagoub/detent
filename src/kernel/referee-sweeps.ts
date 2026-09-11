@@ -147,6 +147,15 @@ export function bootstrapFinalizeDeps(
 export function promoteBootstrapBindings(root: string, note: (text: string) => void): boolean {
   const bootstrap = allTickets(root).find((t) => t.id === BOOTSTRAP_TICKET_ID);
   if (bootstrap === undefined || bootstrap.state !== "DONE") return false;
-  if (!readBindings(root).bindings.some((b) => b.status === "provisional")) return false;
-  return finalizeBootstrap(root, BOOTSTRAP_TICKET_ID, bootstrapFinalizeDeps(root, root, (text) => note(`late (PRDR-218): ${text}`)));
+  const provisional = readBindings(root).bindings.filter((b) => b.status === "provisional");
+  if (provisional.length === 0) return false;
+  /*
+   * Audit of PRDR-218: discovery is asked once, and the finalize runs only when
+   * it can promote something. Left to itself it wrote "0 provisional binding(s)
+   * finalized … stayed provisional" on EVERY pool for a slot nothing backs.
+   */
+  const found = discover(root).candidates;
+  if (!provisional.some((b) => found.some((c) => c.slot === b.slot))) return false;
+  const deps = { ...bootstrapFinalizeDeps(root, root, (text) => note(`late (PRDR-218): ${text}`)), rediscover: () => found };
+  return finalizeBootstrap(root, BOOTSTRAP_TICKET_ID, deps);
 }

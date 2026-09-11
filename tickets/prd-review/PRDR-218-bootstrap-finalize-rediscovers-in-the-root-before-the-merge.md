@@ -72,3 +72,17 @@ the change; then both green — all four `approved:node-scripts`, the ticket not
 provisional binding(s) finalized` in the first case and a `PRDR-218` note in the second — with
 the stranded-finalize and init back-half suites unchanged.
 
+
+## Audit
+
+Cold re-read of the late promotion. It ran the C-4 finalize on every pool while any provisional
+binding remained — and a slot nothing discoverable backs stays provisional by design, so on
+such a root every pool appended *"late (PRDR-218): bootstrap complete: 0 provisional
+binding(s) finalized … stayed provisional"* to the bootstrap ticket, forever. Now the sweep
+asks discovery once, finalizes only when a provisional slot is among what it found, and hands
+those candidates to the finalize so nothing is discovered twice. Pinned on a scaffold that
+backs two of four slots: one note on the first pool, none on the second — observed at two
+before the fix. Also checked: `finalizeDone` under non-worktree mode passes the root as the
+work directory, so its discovery is byte-for-byte what it was; and `pool()`'s new call sits
+after the stranded-finalize sweep, so a bootstrap merged by B-2‴ in the same pool is promoted
+in the same pool.

@@ -109,3 +109,36 @@ describe("PRDR-218 the bootstrap's baseline is taken from the tree that passed",
   }, 60_000);
 });
 
+
+/** Audit of PRDR-218: a slot nothing backs stays provisional WITHOUT a note per pool. */
+describe("audit of PRDR-218: the late promotion speaks only when it promotes", () => {
+  const lateNotes = (root: string): number =>
+    readTicket(root, BOOTSTRAP_TICKET_ID).notes.filter((n) => n.text.includes("late (PRDR-218)")).length;
+
+  it("two slots backed, two not: one note on the first pool, none on the next", async () => {
+    const root = await greenfieldRepo();
+    ensureRunBranch(root, "partial");
+    const partial = { name: "new", private: true, scripts: { test: 'node -e "process.exit(0)"', lint: 'node -e "process.exit(0)"' } };
+    writeTree(root, { "package.json": `${JSON.stringify(partial, null, 2)}\n` });
+    git(root, "add", "package.json");
+    git(root, "commit", "-q", "-m", "merge t-001-bootstrap");
+    const ticket = readTicket(root, BOOTSTRAP_TICKET_ID);
+    const [generation] = ticket.generations;
+    writeTicket(root, { ...ticket, state: "DONE", generations: [{ ...generation!, outcome: "done", ended_at: "2026-09-11T08:04:34.000Z" }] });
+    approveFixturePlan(root);
+
+    const options = { root, prompts: PROMPTS, worktree: true, ecosystems: [] } as const;
+    expect((await run({ ...options, backend: new MockBackend({}), runId: "partial" })).exitCode).toBe(EXIT_OK);
+    expect(statuses(root)).toEqual({
+      test: "approved:node-scripts",
+      lint: "approved:node-scripts",
+      typecheck: "provisional:greenfield:typescript",
+      build: "provisional:greenfield:typescript",
+    });
+    expect(lateNotes(root)).toBe(1);
+
+    /* A second run: typecheck and build are still unbacked, and that is not news. */
+    expect((await run({ ...options, backend: new MockBackend({}), runId: "partial-2" })).exitCode).toBe(EXIT_OK);
+    expect(lateNotes(root), "no note for a pool that promoted nothing").toBe(1);
+  }, 60_000);
+});
