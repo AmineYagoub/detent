@@ -186,12 +186,13 @@ export class RefereeContext {
     return tools;
   }
 
-  symbolServer(): Record<string, unknown> {
+  /** PRDR-229: started on the session's WORK DIRECTORY — under B-2″ the worktree, the tree the session edits — never the root. */
+  symbolServer(workDir: string): Record<string, unknown> {
     const status = this.symbolStatus();
     if (status.kind !== "ready") return {};
     /* PRDR-223: the server's surface is Detent's own context file, written before every launch. */
     writeSymbolContext(this.root);
-    return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, this.root) };
+    return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, workDir) };
   }
 
   private symbolProbe: ReturnType<typeof probeSymbols> | null = null;

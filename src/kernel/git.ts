@@ -62,8 +62,11 @@ export function isIgnored(cwd: string, rel: string): boolean {
  */
 const LOCAL_STATE: readonly string[] = LOCAL.map((entry) => path.posix.join(STATE_DIR, entry.rel));
 
+/** PRDR-229: the symbol server's own project directory, written where the server is started — the worktree now — and never the change set's. */
+const TOOL_STATE: readonly string[] = [".serena"];
+
 export function stageAll(cwd: string, excludeDirs: readonly string[]): void {
-  const excludes = [...excludeDirs, ...LOCAL_STATE].filter((dir) => !isIgnored(cwd, dir)).map((dir) => `:!${dir}`);
+  const excludes = [...excludeDirs, ...LOCAL_STATE, ...TOOL_STATE].filter((dir) => !isIgnored(cwd, dir)).map((dir) => `:!${dir}`);
   git(cwd, "add", "-A", "--", ".", ...excludes);
 }
 

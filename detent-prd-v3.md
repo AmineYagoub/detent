@@ -1226,6 +1226,17 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   way it excludes an install directory, asking git first (V-1⁵). Non-worktree mode is
   unchanged: the artifact root is the same directory both ways.
 
+- **S-3⁷‴ (3.1.1, PRDR-229).** The symbol server is started on the session's work directory.
+  `symbolServer()` built its config from the root; before B-2″ the root was the tree, and since
+  PRDR-145b the session works in a per-ticket worktree — so every Serena process gate-313
+  launched indexed the run branch checkout while the session edited its worktree: a symbol the
+  session had just added was "not defined", and the callers of a function it was changing were
+  the last merge's. Now the server's `--project` is the work directory, the tree the session
+  edits, uncommitted work included; Detent's context file stays under the root's local state,
+  since it is Detent's; and Serena's own project directory, which lands in the worktree once
+  the server is started there, joins the paths finalize never stages, beside F-1's local set.
+  Non-worktree mode is unchanged: the work directory is the root.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

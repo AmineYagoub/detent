@@ -144,7 +144,7 @@ export class SessionArm {
        * and runnable. Read tools only — its editing tools write from inside
        * the server process, where the D-21 hook below cannot see them.
        */
-      ...ctx.symbolServer(),
+      ...ctx.symbolServer(workDir),
       permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
       /* PRDR-197: ARCH-2 — the loop routes effort exactly as init does, or neither driver has it. */

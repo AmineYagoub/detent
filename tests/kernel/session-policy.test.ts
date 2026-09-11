@@ -399,3 +399,38 @@ describe("PRDR-221 the inputs name the symbol tools when the server is attached"
     expect(inputs).not.toHaveProperty("symbol_tools");
   });
 });
+
+/**
+ * PRDR-229 — the right tool on the wrong tree. `symbolServer()` built the
+ * server config from the ROOT, so under B-2″ every Serena process gate-313
+ * launched indexed the run branch checkout while the session worked in its
+ * worktree: a symbol the session just added was "not defined", its callers
+ * were the last merge's. The server is now started on the work directory.
+ */
+describe("PRDR-229 the symbol server is started on the session's work directory", () => {
+  it("under worktrees, --project names the worktree the session edits, not the root", async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const configPath = path.join(stateDir(repo.root), "config.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    const loaded = loadConfig({ ...raw, symbols: { enabled: true, command: "serena", pinned: "0.1.4" } });
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({ implement: () => okResult() });
+    const core = new RefereeCore(
+      { root: repo.root, backend, prompts: loadPromptSet(), worktree: true, probeSymbols: () => ({ kind: "ready", command: "serena" }) },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, "symbols-worktree"),
+    );
+    installTrailerHook(repo.root);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    const spec = backend.calls[0]?.spec;
+    if (spec === undefined) throw new Error("no session launched");
+    expect(spec.cwd, "the session works in its worktree").toBe(path.join(repo.root, ".detent", "worktrees", "t-1"));
+    const serena = (spec.mcpServers as { serena: { args: string[] } }).serena;
+    expect(serena.args[serena.args.indexOf("--project") + 1], "and its symbol server indexes that tree").toBe(spec.cwd);
+  });
+});

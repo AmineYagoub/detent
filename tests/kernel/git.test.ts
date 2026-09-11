@@ -488,3 +488,22 @@ describe("PRDR-228 stageAll leaves the run's local state out of the change set",
     expect(staged).not.toContain(".detent/state");
   });
 });
+
+/** PRDR-229: Serena's own project directory lands in the worktree once the server is started there; finalize never stages it. */
+describe("PRDR-229 stageAll leaves Serena's project directory out of the change set", () => {
+  it("an untracked .serena/ beside the feature is not staged", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-stage-"));
+    roots.push(root);
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@t");
+    git(root, "config", "user.name", "t");
+    writeTree(root, { "README.md": "seed\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "seed");
+    writeTree(root, { "src/a.ts": "export const a = 1;\n", ".serena/project.yml": "project_name: x\n" });
+    stageAll(root, []);
+    const staged = git(root, "diff", "--cached", "--name-only");
+    expect(staged).toContain("src/a.ts");
+    expect(staged).not.toContain(".serena");
+  });
+});
