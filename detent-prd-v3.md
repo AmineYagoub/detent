@@ -1237,6 +1237,30 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the server is started there, joins the paths finalize never stages, beside F-1's local set.
   Non-worktree mode is unchanged: the work directory is the root.
 
+- **V-3⁗ (3.1.1, PRDR-230).** The baseline a ticket's tree is judged against is a COMMIT, and
+  the record accepting a change is beyond every session's reach. V-3‴ gave each ticket a stored
+  hash, written once at first claim from the root's current bindings. It was wrong twice: it
+  holds whatever the root held at the instant of writing, and its write-once guard keys on a
+  file that did not exist for worktrees cut before it shipped — so on gate-313 it was written
+  late, against a root that had already accepted another ticket's lint change, and t-s01-003 was
+  BLOCKED for a change the run branch made. Its tree and its fork both carried `eslint .`, and
+  its own commits touched only its two source files; three further worktrees were primed to fail
+  identically. Now the base is `git merge-base HEAD <run branch>`, computed in the work
+  directory at check time: derivable by any build at any time, naming a tree nothing can edit,
+  immune to a late write — and verified equal to the long-standing `claim_base.json` sha on all
+  four live worktrees. The fork's configuration is read by materialising that commit's
+  root-level markers into a scratch directory and running the ORDINARY discovery over them, so
+  one implementation produces both sides of a region-level comparison; a fork that cannot be
+  resolved, or that defines no candidate for a bound slot, falls back to the check against the
+  root's approved binding, never to a weaker answer. Capturing the base by discovering in the
+  tree at first claim was considered and refused as a real SEC-5 hole: that base comes from a
+  directory the session writes, and it coincides with the branch point only in the case that
+  never needed fixing. And the acceptance record moves from `.detent/runs/<id>/` — the session's
+  own `artifactRoot`, which the containment guard admits for mutation — to `.detent/state/`,
+  because a session that weakens its gate must not be able to sign the acceptance of the
+  weakening; observed answering `allow` under the production policy before the move. A tree
+  still runs the gate definitions it was cut with, which this records rather than hides.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

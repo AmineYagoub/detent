@@ -53,7 +53,7 @@ export interface DriftCheck {
 }
 
 /** A stored binding matches the candidate that would be proposed for it today. */
-function currentFor(binding: Binding, discovery: Discovery): Candidate | undefined {
+export function currentFor(binding: Binding, discovery: Discovery): Candidate | undefined {
   return discovery.candidates.find(
     (c) => c.slot === binding.slot && c.adapter === binding.adapter && c.ref === binding.ref,
   );

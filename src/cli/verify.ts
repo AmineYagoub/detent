@@ -8,7 +8,7 @@ import type { Binding } from "../schemas/records.js";
 import { scrub } from "../kernel/scrub.js";
 import { existsSync } from "node:fs";
 import { acceptDrift, bindingsForTree } from "../kernel/drift-base.js";
-import { worktreePath } from "../kernel/git.js";
+import { git, worktreePath } from "../kernel/git.js";
 import { requeueTicket } from "../kernel/plumbing.js";
 
 /**
@@ -205,6 +205,15 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
  * records the accepted hashes on the ticket, and requeues it. The root's
  * baseline follows at the merge, where the run branch actually changes.
  */
+/** The branch the root is checked out on — the run branch a ticket's worktree was cut from (B-2″). */
+function runBranchOf(root: string): string {
+  try {
+    return git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+  } catch {
+    return "HEAD";
+  }
+}
+
 export async function acceptTicketDrift(root: string, id: string, deps: VerifySyncDeps): Promise<SyncResult> {
   const messages: string[] = [];
   const stored = readBindings(root);
@@ -216,7 +225,7 @@ export async function acceptTicketDrift(root: string, id: string, deps: VerifySy
     return { exitCode: EXIT_NOT_READY, summary: summaryOf([], [], []), rebaselined: false, messages };
   }
   const discovery = discover(tree);
-  const drift = checkAll(bindingsForTree(root, id), discovery).checks;
+  const drift = checkAll(bindingsForTree(root, id, tree, runBranchOf(root)), discovery).checks;
   const halting = drift.filter((d) => d.status === "drifted" || d.status === "vanished");
   if (halting.length === 0) {
     messages.push(`${id}: its tree matches the baseline it started from — nothing to accept`);

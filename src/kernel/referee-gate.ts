@@ -116,7 +116,9 @@ export class GateArm {
      * on the root could never clear. The halt names the verb that can.
      */
     const inWorktree = workDir !== ctx.root;
-    const bindings = inWorktree ? bindingsForTree(ctx.root, ticket.id) : readBindings(ctx.root).bindings;
+    const bindings = inWorktree
+      ? bindingsForTree(ctx.root, ticket.id, workDir, ctx.runBranch.branch)
+      : readBindings(ctx.root).bindings;
     try {
       assertNoDrift(bindings, discover(workDir));
     } catch (err) {

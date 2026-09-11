@@ -5,6 +5,7 @@ import { discover } from "../../src/adapter/discover/index.js";
 import { checkAll, readBindings } from "../../src/adapter/drift.js";
 import { acceptTicketDrift, verifySync } from "../../src/cli/verify.js";
 import { EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK, run } from "../../src/kernel/run.js";
+import { ensureRunBranch, ensureWorktree } from "../../src/kernel/git.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
@@ -70,7 +71,7 @@ describe("PRDR-226 drift is judged against the base a tree started from, and acc
     const accepted = await acceptTicketDrift(root, "t1", { consent: async () => true, user: "operator" });
     expect(accepted.exitCode, accepted.messages.join(" | ")).toBe(EXIT_OK);
     expect(readTicket(root, "t1").state, "accepting requeues the ticket").toBe("READY");
-    expect(existsSync(path.join(root, ".detent/runs/t1/drift_accept.json"))).toBe(true);
+    expect(existsSync(driftAcceptPath(root, "t1")), "recorded where no session can write it (PRDR-230)").toBe(true);
 
     const resumed = await worktreeRun(root, buildOn);
     /* Before PRDR-226: the root was clean, the sweep requeued, the gate drifted on the same tree, exit 2 again. */
@@ -80,7 +81,7 @@ describe("PRDR-226 drift is judged against the base a tree started from, and acc
     expect(git(root, "show", "HEAD:Makefile")).toContain("extended by t1");
     expect(testHash(root)).not.toBe(before);
     expect(checkAll(readBindings(root).bindings, discover(root)).halting, "root config and baseline agree").toEqual([]);
-    expect(existsSync(path.join(root, ".detent/runs/t1/drift_accept.json")), "the acceptance is consumed").toBe(false);
+    expect(existsSync(driftAcceptPath(root, "t1")), "the acceptance is consumed").toBe(false);
     expect(readTicket(root, "t1").notes.map((n) => n.text).join("\n")).toContain("re-baselined at merge");
   }, 120_000);
 
@@ -95,32 +96,76 @@ describe("PRDR-226 drift is judged against the base a tree started from, and acc
   }, 120_000);
 });
 
-import { recordGenerationBaseline, bindingsForTree, acceptDrift } from "../../src/kernel/drift-base.js";
+import { acceptDrift, bindingsForTree, discoverAtCommit, driftAcceptPath, forkCommit } from "../../src/kernel/drift-base.js";
 import { writeBindings } from "../../src/adapter/drift.js";
 
 /**
- * PRDR-226, at the seam: the base a tree is judged by is FROZEN at branch
- * creation, so a change the root accepts for another ticket after this tree
- * branched cannot be charged to this one. This is the "predates" guarantee,
- * proved directly rather than through the serial driver that rarely produces it.
+ * PRDR-230, at the seam: the baseline a tree is judged by is the CONFIG AT ITS
+ * FORK COMMIT, so a root that moves on cannot move it. PRDR-226 stored the
+ * root's hashes instead and this is the property it failed to hold.
  */
-describe("PRDR-226 the generation baseline is what the tree branched from", () => {
+describe("PRDR-230 the tree's baseline is its fork commit, not whatever the root now holds", () => {
   const testHashOf = (root: string): string | undefined => readBindings(root).bindings.find((b) => b.slot === "test")?.config_hash;
 
-  it("records the root's hashes once, and a later root re-baseline does not move it", async () => {
+  it("a root re-baseline does not move the tree's baseline; an acceptance for this ticket does", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
+    ensureRunBranch(root, "seam");
+    const tree = ensureWorktree(root, "t9");
     const original = testHashOf(root);
-    expect(recordGenerationBaseline(root, "t9")["test"]).toBe(original);
     expect(original).toBeDefined();
 
+    const sha = forkCommit(tree, "seam-missing-branch");
+    expect(sha, "an unresolvable run branch yields no fork").toBeNull();
+    const fork = forkCommit(tree, git(root, "rev-parse", "--abbrev-ref", "HEAD").trim());
+    expect(fork, "the fork commit is derivable from the worktree alone").not.toBeNull();
+    expect(discoverAtCommit(tree, fork as string)?.candidates.some((c) => c.slot === "test")).toBe(true);
+
+    /* The root moves on — another ticket's change, accepted and merged. */
     const file = readBindings(root);
     writeBindings(root, { bindings: file.bindings.map((b) => (b.slot === "test" ? { ...b, config_hash: "b".repeat(64) } : b)), skips: [...file.skips] });
-    /* The root moved on; the tree's base is still what it started from. */
-    expect(bindingsForTree(root, "t9").find((b) => b.slot === "test")?.config_hash).toBe(original);
+    const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    expect(bindingsForTree(root, "t9", tree, runBranch).find((b) => b.slot === "test")?.config_hash,
+      "the tree is still judged by what it was cut from").toBe(original);
 
-    /* An operator's acceptance for THIS ticket overlays the base — nothing else does. */
+    /* An operator's acceptance for THIS ticket overlays the fork — nothing else does. */
     acceptDrift(root, "t9", "operator", "2026-09-11T00:00:00.000Z", { test: "c".repeat(64) });
-    expect(bindingsForTree(root, "t9").find((b) => b.slot === "test")?.config_hash).toBe("c".repeat(64));
-  });
+    expect(bindingsForTree(root, "t9", tree, runBranch).find((b) => b.slot === "test")?.config_hash).toBe("c".repeat(64));
+
+    /* Non-worktree mode reads the root's bindings untouched, exactly as before. */
+    expect(bindingsForTree(root, "t9", root, runBranch).find((b) => b.slot === "test")?.config_hash).toBe("b".repeat(64));
+  }, 60_000);
+});
+
+describe("PRDR-230 a worktree cut before an accepted change is judged against its own fork", () => {
+  it("the stale ticket changed nothing and runs; the ticket that did change the gate was still caught", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t1", surface: ["src/**", "Makefile"] });
+    addTicket(root, { id: "t2", surface: ["src/**"] });
+    /* t2's worktree is cut NOW, from the run branch as it stands before t1's change lands. */
+    ensureRunBranch(root, "stale");
+    const stale = ensureWorktree(root, "t2");
+    const forkRecipe = readFileSync(path.join(stale, "Makefile"), "utf8");
+
+    /* t1 changes a bound gate's recipe: caught, blocked, and the halt names the per-ticket verb. */
+    const halted = await run({ root, backend: new MockBackend({ implement: changeTheGate, review: reviewApprove }), prompts: PROMPTS, runId: "stale", worktree: true, maxTickets: 1 });
+    expect(halted.exitCode, "the ticket that really changed the gate is still charged").toBe(EXIT_NOT_READY);
+    expect(readTicket(root, "t1").state).toBe("BLOCKED");
+    expect(readTicket(root, "t1").notes.map((n) => n.text).join("\n")).toContain("--ticket t1");
+
+    const accepted = await acceptTicketDrift(root, "t1", { consent: async () => true, user: "operator" });
+    expect(accepted.exitCode, accepted.messages.join(" | ")).toBe(EXIT_OK);
+    const finished = await run({ root, backend: new MockBackend({ implement: buildOn, review: reviewApprove }), prompts: PROMPTS, runId: "stale", worktree: true, maxTickets: 1 });
+    expect(finished.exitCode, finished.summary.reason ?? "").toBe(EXIT_OK);
+    expect(readTicket(root, "t1").state).toBe("DONE");
+    expect(git(root, "show", "HEAD:Makefile")).toContain("extended by t1");
+
+    /* t2's tree is now older than the run branch, through no act of its own. */
+    expect(readFileSync(path.join(stale, "Makefile"), "utf8"), "t2 never touched the recipe").toBe(forkRecipe);
+    const resumed = await run({ root, backend: new MockBackend({ implement: implementGreen, review: reviewApprove }), prompts: PROMPTS, runId: "stale", worktree: true, maxTickets: 1 });
+    /* Before PRDR-230: BLOCKED and exit 2 — judged against a root that had moved past it. */
+    expect(resumed.exitCode, resumed.summary.reason ?? "").toBe(EXIT_OK);
+    expect(readTicket(root, "t2").state).toBe("DONE");
+  }, 180_000);
 });

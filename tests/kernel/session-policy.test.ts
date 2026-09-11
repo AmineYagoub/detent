@@ -13,6 +13,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, diagnoseValid, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
+import { driftAcceptPath } from "../../src/kernel/drift-base.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { claim } from "../../src/kernel/tickets/mutations.js";
 
@@ -142,6 +143,8 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
       ["the spend ledger", path.join(spec.cwd, ".detent", "ledger.jsonl")],
       /* PRDR-228: the worktree-relative runs path is INSIDE the product tree — t-s01-007 shipped an artifact through it. */
       ["the worktree's own relative runs path", path.join(worktree, ".detent", "runs", "t-1", "review.json")],
+      /* PRDR-230: the record that ACCEPTS a verification change must not be writable by the session it judges (SEC-5). */
+      ["its own drift acceptance", driftAcceptPath(spec.cwd, "t-1")],
     ] as [string, string][]) {
       expect(guardToolUse("Write", { file_path: file }, policy).decision, label).toBe("deny");
     }

@@ -40,7 +40,7 @@ export const ENGINES: readonly Engine[] = [
 ];
 
 /** Files whose presence is a stack fact (C-2). Scanned at the root only (D-5). */
-const MARKERS: readonly string[] = [
+export const MARKERS: readonly string[] = [
   "package.json",
   "package-lock.json",
   "pnpm-lock.yaml",
