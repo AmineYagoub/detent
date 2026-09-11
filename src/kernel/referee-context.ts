@@ -10,7 +10,7 @@ import { pidAlive } from "./tickets/mutations.js";
 import { allTickets } from "./tickets/readers.js";
 import { contractKey } from "../schemas/init.js";
 import { resolveOwner } from "../init/contracts.js";
-import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, type SymbolsConfig } from "../adapter/symbols.js";
+import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, writeSymbolContext, type SymbolsConfig } from "../adapter/symbols.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { ECOSYSTEMS, type Ecosystem } from "../adapter/install.js";
@@ -189,6 +189,8 @@ export class RefereeContext {
   symbolServer(): Record<string, unknown> {
     const status = this.symbolStatus();
     if (status.kind !== "ready") return {};
+    /* PRDR-223: the server's surface is Detent's own context file, written before every launch. */
+    writeSymbolContext(this.root);
     return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, this.root) };
   }
 

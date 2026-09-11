@@ -1138,6 +1138,34 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   granted that was not: memory is cross-session state Detent does not control (C-8, S-6), and
   listing and reading are the session's own tools' job.
 
+- **S-3⁷″ (3.1.1, PRDR-223).** The symbol server exposes exactly what is granted. S-3⁷ put
+  the server's tools on the turn-one list; S-3⁷′ told the session which were granted. The first
+  session launched with that sentence still opened with `check_onboarding_performed`, refused,
+  as every gate-313 session before it had: Serena describes that tool as the one to call before
+  beginning work, and a model weighs the description beside a tool above a sentence read
+  earlier. Twenty-one of the twenty-four listed tools were ones Detent refuses. Serena's
+  `--context` accepts a path to a custom context YAML whose `excluded_tools` removes tools from
+  the MCP surface itself, so Detent now writes its own context under the root's local state
+  before every launch and passes it: every tool of the pinned inventory is excluded but
+  `find_symbol`, `find_referencing_symbols` and `get_symbols_overview`, with a two-line prompt
+  on how to use them. Observed live: *"excluded 21 tools … Number of exposed tools: 3"*. And
+  the read set is three, not four: `find_implementations`, allowlisted since PRDR-121 and named
+  to sessions since S-3⁷, is not a tool the pinned Serena has — the test now reads `serena
+  tools list` where the tool is installed. The S-3⁷′ sentence shrinks to what stays true: the
+  listed tools are the server's whole surface. Nothing under `~/.serena` is touched (D-4).
+
+- **X-4⁴ (3.1.1, PRDR-224).** The fix roles are told the two signal shapes the implementer is
+  told. Every write-role session is handed `surface_request_out` and `falsified_out`; PRDR-073
+  documented the request's shape and PRDR-212 the falsification's, both in the implementer's
+  prompt only. gate-313's t-s01-004 review-fix sessions, facing a criterion that names
+  `.detent/bindings.json` — immutable to sessions under SEC-3's structural floor, so never
+  grantable — guessed a request shape, `{"requested_paths": […], "reason": …}`, and were refused
+  twice for naming no path, then spent a third round the same way and went to a human over a
+  file no request could have opened. Now blind-fix, informed-fix and review-fix carry one
+  sentence: the request is `{"path", "justification"}` at `surface_request_out`, ruled on after
+  the session; a criterion that cannot be met as specified is `{"note"}` at `falsified_out`; and
+  a protected path is a falsification, not a request. What is grantable does not change.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

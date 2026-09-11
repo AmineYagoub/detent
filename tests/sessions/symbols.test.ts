@@ -1,10 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   SYMBOL_EDITING_TOOLS,
   SYMBOL_READ_TOOLS,
+  SYMBOL_CONTEXT_YAML,
+  writeSymbolContext,
+  symbolContextPath,
   assertNoEditingTools,
   probeSymbols,
   symbolServerConfig,
@@ -51,7 +55,7 @@ const CONFIG = { enabled: true, command: "serena-agent", pinned: "0.1.4" };
 
 describe("S-3′ symbol intelligence cannot become a containment hole", () => {
   it("grants read tools only, and every editing tool is named so the prohibition is testable", () => {
-    expect(SYMBOL_READ_TOOLS).toEqual(["find_symbol", "find_referencing_symbols", "find_implementations", "get_symbols_overview"]);
+    expect(SYMBOL_READ_TOOLS).toEqual(["find_symbol", "find_referencing_symbols", "get_symbols_overview"]);
     for (const read of SYMBOL_READ_TOOLS) expect(SYMBOL_EDITING_TOOLS).not.toContain(read);
     /** The ones that would bypass the hook are enumerated, not merely absent. */
     for (const banned of ["replace_symbol_body", "insert_after_symbol", "safe_delete", "rename", "execute_shell_command"]) {
@@ -79,7 +83,7 @@ describe("S-3′ symbol intelligence cannot become a containment hole", () => {
   it("passes the context, mode and project Serena accepts — values read from the tool, not chosen", () => {
     const server = symbolServerConfig(CONFIG, "/repo") as { serena: { args: string[] } };
     const args = server.serena.args;
-    expect(args.slice(0, 2)).toEqual(["start-mcp-server", "--context"]);
+    expect(args[0]).toBe("start-mcp-server");
     /**
      * `serena context list` -> agent, chatgpt, codex, context.template,
      * desktop-app, ide-assistant. `ide-assistant` excludes `create_text_file`,
@@ -87,7 +91,8 @@ describe("S-3′ symbol intelligence cannot become a containment hole", () => {
      * `replace_regex` — the duplication a session driven by the Agent SDK must
      * avoid. Verified live: the server reaches "lifetime setup complete".
      */
-    expect(args[args.indexOf("--context") + 1]).toBe("ide-assistant");
+    /* PRDR-223: the context is Detent's own file, whose exclusions Serena applied live ("Number of exposed tools: 3"). */
+    expect(args[args.indexOf("--context") + 1]).toBe(symbolContextPath("/repo"));
     /** `serena mode list` -> editing, interactive, no-onboarding, onboarding, one-shot, planning. */
     expect(args[args.indexOf("--mode") + 1]).toBe("no-onboarding");
     expect(args[args.indexOf("--project") + 1]).toBe("/repo");
@@ -314,5 +319,51 @@ describe("PRDR-221 the symbol server's tools are on the tool list, not behind to
   it("the server config asks the SDK never to defer this server's tools", () => {
     const server = symbolServerConfig(CONFIG, "/repo") as { serena: { alwaysLoad?: boolean } };
     expect(server.serena.alwaysLoad).toBe(true);
+  });
+});
+
+/**
+ * PRDR-223 — a surface that says one thing and shows another.
+ *
+ * Twenty-one of the twenty-four tools on the server's list are ones Detent
+ * refuses, and Serena's own description of `check_onboarding_performed` says
+ * to call it first — which every gate-313 session did, refused, PRDR-222's
+ * sentence or not. Serena's `--context` accepts a path to a custom context
+ * whose `excluded_tools` removes tools from the MCP surface itself, so the
+ * server now shows exactly what the allowlist admits. And `find_implementations`
+ * is not a tool the pinned Serena has: the read set is three.
+ */
+describe("PRDR-223 the symbol server exposes exactly what is granted", () => {
+  it("the read set is the three tools the pinned Serena has — no phantom", () => {
+    expect([...SYMBOL_READ_TOOLS]).toEqual(["find_symbol", "find_referencing_symbols", "get_symbols_overview"]);
+  });
+
+  it("the launch passes Detent's own context file, written under the root's local state", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "detent-symbols-"));
+    try {
+      const file = writeSymbolContext(root);
+      expect(file).toBe(path.join(root, ".detent", "state", "serena-context.yml"));
+      const server = symbolServerConfig(CONFIG, root) as { serena: { args: string[] } };
+      expect(server.serena.args[server.serena.args.indexOf("--context") + 1]).toBe(file);
+      const yaml = readFileSync(file, "utf8");
+      for (const tool of SYMBOL_READ_TOOLS) expect(yaml, `${tool} must stay exposed`).not.toMatch(new RegExp(`^\\s*- ${tool}$`, "m"));
+      for (const tool of ["check_onboarding_performed", "list_dir", "write_memory", "replace_symbol_body", "read_file", "think_about_task_adherence"]) {
+        expect(yaml, `${tool} must be excluded`).toMatch(new RegExp(`^\\s*- ${tool}$`, "m"));
+      }
+      expect(yaml).toContain("excluded_tools:");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("the excluded inventory is the pinned tool's own — read from `serena tools list` where it is installed", () => {
+    const listed = spawnSync("serena", ["tools", "list"], { encoding: "utf8" });
+    if (listed.error !== undefined || listed.status !== 0) return;
+    const names = [...listed.stdout.matchAll(/`([a-z_]+)`/g)].map((m) => m[1] ?? "").filter((n) => n !== "");
+    for (const tool of SYMBOL_READ_TOOLS) expect(names, `${tool} exists in the pinned Serena`).toContain(tool);
+    expect(names).not.toContain("find_implementations");
+    const excluded = names.filter((n) => !SYMBOL_READ_TOOLS.includes(n));
+    const yaml = SYMBOL_CONTEXT_YAML;
+    for (const tool of excluded) expect(yaml, `${tool} is a Serena tool Detent must exclude`).toMatch(new RegExp(`^\\s*- ${tool}$`, "m"));
   });
 });

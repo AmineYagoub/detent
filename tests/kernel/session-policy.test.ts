@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
@@ -356,8 +356,9 @@ describe("D-19 attempt refuses what no claim makes legal", () => {
  * root without symbols keeps its byte-identical prefix and variable (S-6).
  */
 describe("PRDR-221 the inputs name the symbol tools when the server is attached", () => {
+  let repo: { root: string };
   async function launchedInputs(ready: boolean): Promise<Record<string, unknown>> {
-    const repo = await makeRunRepo();
+    repo = await makeRunRepo();
     cleanups.push(() => removeTree(repo.root));
     addTicket(repo.root, { id: "t-1" });
     const configPath = path.join(stateDir(repo.root), "config.json");
@@ -388,12 +389,9 @@ describe("PRDR-221 the inputs name the symbol tools when the server is attached"
 
   it("ready: `symbol_tools` carries the four read tools by their callable names", async () => {
     const inputs = await launchedInputs(true);
-    expect(inputs["symbol_tools"]).toEqual([
-      "mcp__serena__find_symbol",
-      "mcp__serena__find_referencing_symbols",
-      "mcp__serena__find_implementations",
-      "mcp__serena__get_symbols_overview",
-    ]);
+    /* PRDR-223: three — `find_implementations` was a phantom the pinned Serena never had. */
+    expect(inputs["symbol_tools"]).toEqual(["mcp__serena__find_symbol", "mcp__serena__find_referencing_symbols", "mcp__serena__get_symbols_overview"]);
+    expect(existsSync(path.join(repo.root, ".detent", "state", "serena-context.yml")), "the context file is written before launch").toBe(true);
   });
 
   it("not ready: the field is absent — the variable is what it always was", async () => {

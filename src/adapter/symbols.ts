@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { stateDir } from "../fs/layout.js";
 
 /**
  * S-3′ (PRDR-121) — symbol intelligence as an optional adapter.
@@ -31,9 +34,57 @@ import { execFileSync } from "node:child_process";
 export const SYMBOL_READ_TOOLS: readonly string[] = [
   "find_symbol",
   "find_referencing_symbols",
-  "find_implementations",
   "get_symbols_overview",
 ];
+
+/**
+ * PRDR-223: the pinned Serena's WHOLE loaded inventory, read from its own
+ * startup log ("Loaded tools (36)") for 0.1.4. Everything here but the read
+ * set above is excluded by the context Detent writes, so the MCP surface a
+ * session sees is exactly what the allowlist admits — Serena describes
+ * `check_onboarding_performed` as the tool to call first, and every gate-313
+ * session did, refused, whatever the prompt said. `find_implementations`,
+ * allowlisted since PRDR-121, is not in this list because the tool never had
+ * it. The test reads `serena tools list` where the tool is installed.
+ */
+export const SERENA_TOOLS: readonly string[] = [
+  "activate_project", "check_onboarding_performed", "create_text_file", "delete_lines", "delete_memory",
+  "execute_shell_command", "find_file", "find_referencing_symbols", "find_symbol", "get_current_config",
+  "get_symbols_overview", "initial_instructions", "insert_after_symbol", "insert_at_line", "insert_before_symbol",
+  "jet_brains_find_referencing_symbols", "jet_brains_find_symbol", "jet_brains_get_symbols_overview", "list_dir",
+  "list_memories", "onboarding", "prepare_for_new_conversation", "read_file", "read_memory", "remove_project",
+  "replace_lines", "replace_regex", "replace_symbol_body", "restart_language_server", "search_for_pattern",
+  "summarize_changes", "switch_modes", "think_about_collected_information", "think_about_task_adherence",
+  "think_about_whether_you_are_done", "write_memory",
+];
+
+/** The context file's content: Serena's own YAML shape (description, prompt, excluded_tools, overrides). */
+export const SYMBOL_CONTEXT_YAML: string = [
+  "description: Detent symbol intelligence — the three symbolic reads, nothing else",
+  "prompt: |",
+  "  Only find_symbol, find_referencing_symbols and get_symbols_overview are available here.",
+  "  Use get_symbols_overview to see a file's symbols and find_symbol for targeted reads.",
+  "  Everything else — reading, searching, editing, memory — is the session's own tools' job.",
+  "",
+  "excluded_tools:",
+  ...SERENA_TOOLS.filter((t) => !SYMBOL_READ_TOOLS.includes(t)).map((t) => `  - ${t}`),
+  "",
+  "tool_description_overrides: {}",
+  "",
+].join("\n");
+
+/** Under the root's LOCAL state (F-1): one machine's run file, never committed. */
+export function symbolContextPath(root: string): string {
+  return path.join(stateDir(root), "state", "serena-context.yml");
+}
+
+/** Written before every launch — idempotent, and the file is Detent's, never anything under `~/.serena` (D-4). */
+export function writeSymbolContext(root: string): string {
+  const file = symbolContextPath(root);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, SYMBOL_CONTEXT_YAML);
+  return file;
+}
 
 /**
  * The tools that must never be granted. They edit through the server process,
@@ -171,8 +222,6 @@ function defaultProbe(command: string): void {
  */
 export const SYMBOL_SERVER_ARGS: readonly string[] = [
   "start-mcp-server",
-  "--context",
-  "ide-assistant",
   "--mode",
   "no-onboarding",
   "--enable-web-dashboard",
@@ -186,7 +235,8 @@ export function symbolServerConfig(config: SymbolsConfig, root: string): Record<
   return {
     serena: {
       command: config.command,
-      args: [...SYMBOL_SERVER_ARGS, "--project", root],
+      /* PRDR-223: the context is Detent's own file — the surface is exactly the read set. */
+      args: [...SYMBOL_SERVER_ARGS, "--context", symbolContextPath(root), "--project", root],
       /**
        * PRDR-221: on the turn-one tool list, never behind tool search. The
        * platform defers MCP tools by default; gate-313's 113 sessions saw the
