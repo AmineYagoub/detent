@@ -911,6 +911,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the same install there; it used to run in the root, which on gate-313 was `npm test` against a
   tree with no `package.json`.
 
+- **X-4‴ (3.1.1, PRDR-212).** A falsification its author takes back is no falsification, and the
+  implementer is told what it can do. The implement prompt said *"run the scoped gate command
+  you were given as you work"* to a session whose Bash is `git add` and `git commit` (S-3), and
+  never said so; gate-313's bootstrap session tried `npm`, `mkdir`, `rm` and `env`, was refused
+  each time, read the wall as the ticket being unimplementable — the prompt's own trigger for the
+  signal — wrote the falsified signal, then understood, finished the scaffold, and wrote the
+  retraction INTO the signal, since it cannot delete a file. The referee read a file and admitted
+  PREMISE_FALSIFIED: prose is not a field. Now the prompt states the surface as it is — files
+  inside the surface, the two git verbs, nothing else; gates are the referee's, run after the
+  session ends with what the manifest declares installed first, and the Stop hook hands a red
+  scoped gate back — and names a refusal as containment working, never evidence about the
+  ticket. And the signal can be taken back: `{"retracted": true, "note"}` overwrites it, the
+  referee reads that as no signal, records the withdrawal in the ticket's notes and journal, and
+  proceeds. Only the boolean `true` retracts; a malformed file remains the standing signal it
+  always was, and a standing signal is still X-4's — signal, not failure, the human's to judge.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

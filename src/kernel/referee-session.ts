@@ -456,17 +456,34 @@ export class SessionArm {
     if (!existsSync(file)) return null;
     let note = "premise falsified";
     let missing: string[] = [];
+    let retracted = false;
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown };
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown; retracted?: unknown };
       /* SEC-4 (PRDR-169): the session wrote this file; its free text is scrubbed before a note or journal event carries it. */
       if (typeof parsed.note === "string" && parsed.note !== "") note = scrub(parsed.note);
       if (Array.isArray(parsed.missing)) {
         missing = parsed.missing.filter((m): m is string => typeof m === "string" && m.trim() !== "").map((m) => m.trim());
       }
+      /* X-4‴ (PRDR-212): the boolean `true`, and only that — prose inside a standing signal is still a signal. */
+      retracted = parsed.retracted === true;
     } catch {
       /* the signal's existence is the event; the note is best-effort */
     }
     rmSync(file, { force: true });
+    /**
+     * X-4‴ (PRDR-212): a falsification its author took back is no
+     * falsification. gate-313's bootstrap session wrote the signal on the
+     * strength of a permission wall it had not been told about, finished the
+     * ticket, and wrote the retraction into the signal; the referee read a file
+     * and admitted PREMISE_FALSIFIED. A session cannot delete a file, so the
+     * retraction is an overwrite, and it is a field. Recorded in both places a
+     * human reads: the ticket's notes and its journal.
+     */
+    if (retracted) {
+      appendNote(ctx.root, ticketId, { author: "kernel", text: `falsification withdrawn by the session: ${note}` });
+      ctx.journal.appendTicketEvent(ticketId, { event: "falsification_withdrawn", at: ctx.iso(), note });
+      return null;
+    }
     const detail = missing.length === 0 ? note : `${note} — missing: ${missing.join(", ")}`;
     appendNote(ctx.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${detail}` });
     return { note, missing };

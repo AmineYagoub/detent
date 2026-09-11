@@ -118,7 +118,8 @@ describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () 
   const CHECKLIST: Record<string, readonly string[]> = {
     planner: ["A-2", "acceptance criteria", "artifact_out", "P2"],
     diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified"],
-    implement: ["falsified", "surface", "never suppress", "commit with the ticket id"],
+    /* PRDR-212: the surface is stated, a refusal is named as containment, and a signal can be taken back. */
+    implement: ["falsified", "surface", "never suppress", "commit with the ticket id", "git add", "refus", "retracted"],
     blind_fix: ["ONE attempt", "failure", "never suppress", "no second blind fix"],
     informed_fix: ["research brief", "LAST", "what_would_falsify", "escalates to a human"],
     review_fix: ["own budget", "never route to research", "scope findings", "commit with the ticket id"],
