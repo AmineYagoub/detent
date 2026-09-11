@@ -58,3 +58,16 @@ a change set whichever path wrote into it.
 `.detent/` — gate-313's shape — merged a session's relative runs write into the run branch.
 Then the change; then all three green, the existing artifact-root cases untouched.
 
+
+## Audit
+
+Cold re-read of the two seams and what fell out of them. Finalize committed on `status
+--porcelain`, which reads an excluded untracked path as dirty and forced an empty commit that
+git refuses — the E2E caught it as a run that exited 1 on `git commit` — so finalize now
+commits only when the index has something, which in non-worktree mode is exactly the set
+`git add -A` used to stage. The exclusion list is F-1's local entries by name, so the committed
+set (`config.json`, `bindings.json`, `plan/`, the research directories, `agents/`) still joins
+a change set where a project tracks it — an operator's root-mode `verify sync` still lands.
+Three T-140 pins that encoded the old surface shape were updated to the artifact-root truth
+rather than kept as a regression fence for a defect. gate-313's run branch still carries the
+leaked file; untracking it is an operator commit, made and noted.

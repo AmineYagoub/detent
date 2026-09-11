@@ -58,3 +58,13 @@ same root exited 2 with `the approval … is for a different plan`. Then the cha
 grant is a field, the hash is unchanged, the second run starts and finishes the next ticket,
 and a hand edit to a surface still stales the approval.
 
+
+## Audit
+
+Cold re-read. The field defaults to empty through the schema, so every ticket on every root
+parses without migration and the projection of an ungranted ticket is byte-for-byte what it
+was — the approval hashes of every existing root stand. The grant cap still counts notes, which
+is the record that existed before the field and is still written beside it. The census test
+that asserts every ticket field is either approved content or declared run state now declares
+`granted` as run state with its reason, so the next field added cannot slip past C-9 the way
+this one did. No code change.
