@@ -153,3 +153,23 @@ Read cold after the close, with three live checks.
   cache is an optimisation for a gate that shows it matters.
 - **The Stop hook swallows an install failure.** It is advisory — the referee's own evaluation
   records the failure as a red gate with the tail. Accepted.
+
+## Audit, second — from the gate
+
+The ticket's own claim was *"recorded in the ticket journal as its own record"*, and the gate
+showed a green bootstrap whose journal held one failed install and no successful one.
+
+- **What happened.** The blind-fix session changed `zod` to `^4.0.0`; its Stop hook then ran
+  the scoped gate in the worktree, which installs first (PRDR-211's own change) — and that
+  install, the one that mattered, succeeded there. The referee's evaluation found the mark
+  fresh, installed nothing, and journaled nothing. The Stop hook cannot journal: the run holds
+  the journal and it is single-writer (F-1).
+- **The fix.** The adapter's mark carries the install's timestamp. The referee reads it before
+  the gate: a mark it did not write itself is journaled once per ticket and mark as an install
+  `by: "session"`, with the timestamp — observed first as a green gate whose journal carried no
+  install (V-6), then pinned by a session that writes the mark in its own work directory, as the
+  Stop hook does.
+- **A session that commits its install directory.** finalize's exclusion protects finalize's
+  commit; a session running `git add -A` in a scaffold with no `.gitignore` would commit
+  `node_modules` itself. gate-313's bootstrap wrote the ignore, as a competent scaffold does, and
+  a committed `node_modules` is the review's `scope` finding to make. Recorded, not guarded.

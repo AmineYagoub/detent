@@ -1,4 +1,4 @@
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { GateResult } from "./run.js";
 
@@ -67,6 +67,21 @@ export type InstallOutcome =
 function mtime(file: string): number | null {
   try {
     return statSync(file).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The mark's content — the timestamp of the install that wrote it — or `null`
+ * with no manifest or no mark. The referee reads it to put an install it did
+ * not make on the record: the Stop hook installs during a session so the
+ * scoped gate can run, and cannot journal.
+ */
+export function readMark(workDir: string, eco: Ecosystem): string | null {
+  if (!existsSync(path.join(workDir, eco.manifest))) return null;
+  try {
+    return readFileSync(path.join(workDir, eco.stamp), "utf8").trim();
   } catch {
     return null;
   }

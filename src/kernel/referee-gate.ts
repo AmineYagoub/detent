@@ -4,7 +4,7 @@ import picomatch from "picomatch";
 import { discover } from "../adapter/discover/index.js";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
 import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
-import { ensureDependencies } from "../adapter/install.js";
+import { ensureDependencies, readMark } from "../adapter/install.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import type { GateSlot } from "../schemas/gates.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -37,6 +37,8 @@ export class DriftHaltSignal extends Error {
 export class GateArm {
   private readonly flakeLedgers = new Map<string, RerunLedger>();
   private lastHalt: DriftHaltError | null = null;
+  /** V-1⁗ audit: the install mark last put on each ticket's record, so an install made during a session is journaled once. */
+  private readonly marks = new Map<string, string>();
 
   constructor(private readonly ctx: RefereeContext) {}
 
@@ -145,6 +147,21 @@ export class GateArm {
         this.recordFailure(ticket.id, install.result);
         return gateRed(install.result);
       }
+    }
+    /**
+     * Second audit of PRDR-211, from the gate: the install that mattered was
+     * not on the record. A session's Stop hook installs in the work directory
+     * so the scoped gate can run, and cannot journal — the run holds the
+     * journal. The referee then finds the mark fresh and, before this, wrote
+     * nothing: a green gate with a failed install as the only install record.
+     * A mark the referee did not write is journaled once, as the session's.
+     */
+    for (const eco of ctx.ecosystems) {
+      const mark = readMark(workDir, eco);
+      if (mark === null || this.marks.get(`${ticket.id}:${eco.name}`) === mark) continue;
+      this.marks.set(`${ticket.id}:${eco.name}`, mark);
+      if (install.kind === "installed" && install.ecosystem === eco.name) continue;
+      ctx.journal.appendTicketEvent(ticket.id, { event: "install", ok: true, by: "session", at: ctx.iso(), ecosystem: eco.name, mark, reason: `installed during the session — the mark was written at ${mark}` });
     }
 
     const result = await this.runScopedGates(bindings, slots, workDir);

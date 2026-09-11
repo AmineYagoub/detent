@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Ecosystem } from "../../src/adapter/install.js";
@@ -75,5 +75,38 @@ describe("V-1⁗ the referee installs the manifest's dependencies before the gat
     const failure = path.join(root, ".detent/runs/t1/last_failure.json");
     expect(existsSync(failure)).toBe(true);
     expect(readFileSync(failure, "utf8")).toContain("registry unreachable");
+  });
+});
+
+/**
+ * Second audit of PRDR-211, from the gate: the install that mattered was not on
+ * the record. The blind-fix session fixed the manifest, its Stop hook installed
+ * in the worktree so the scoped gate could run, and the referee then found the
+ * mark fresh and journaled nothing — the bootstrap's journal shows one failed
+ * install and no successful one, under a gate that went green. The Stop hook
+ * cannot journal (the run holds the journal, single-writer); the referee can
+ * say what it found.
+ */
+describe("audit of PRDR-211: an install the session's Stop hook made is on the record", () => {
+  it("a fresh mark the referee did not write is journaled once as an install made during the session", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    /* The Stop hook installs during the session, in the session's work directory; the mark is there before the referee looks. */
+    const backend = new MockBackend({
+      implement: (spec) => {
+        mkdirSync(path.join(spec.cwd, "node_modules"), { recursive: true });
+        writeFileSync(path.join(spec.cwd, "node_modules", ".installed"), "2026-09-11T06:13:00.000Z\n");
+        return implementGreen(spec);
+      },
+      review: reviewApprove,
+    });
+    const outcome = await run({ root, backend, prompts: loadPromptSet(), runId: "test", ecosystems: [FAKE] });
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    const journal = readFileSync(path.join(root, ".detent/runs/t1/journal.jsonl"), "utf8");
+    const installs = journal.split("\n").filter((l) => l.includes('"event":"install"'));
+    /* Before: the referee found the mark fresh, installed nothing, and wrote nothing — a green gate with no install on the record. */
+    expect(installs, "once, for the mark the session's hook wrote — not once per gate evaluation").toHaveLength(1);
+    expect(installs[0]).toContain('"by":"session"');
+    expect(installs[0]).toContain("2026-09-11T06:13:00.000Z");
   });
 });
