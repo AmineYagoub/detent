@@ -1563,7 +1563,7 @@ var import_picomatch = __toESM(require_picomatch2(), 1);
 // src/sessions/git-rm.ts
 var KNOWN_OPTIONS = /* @__PURE__ */ new Set(["-f", "--force", "-q", "--quiet", "--cached"]);
 var PLAIN_TOKEN = /^[A-Za-z0-9._/@+,=-]+$/;
-var GIT_RM_COMMAND = /(^|[;&|(`\n]\s*)git\s+rm(\s|$)/;
+var GIT_RM_COMMAND = /(^|[;&|({`\r\n])\s*git\s+rm(\s|$)/;
 function commandOf(toolInput) {
   if (typeof toolInput !== "object" || toolInput === null) return "";
   const command = toolInput["command"];
@@ -1578,7 +1578,7 @@ function readGitRm(command) {
   const paths = [];
   let optionsDone = false;
   for (const token of tokens.slice(2)) {
-    if (!PLAIN_TOKEN.test(token)) return { ok: false, detail: `\`${token}\` is not a plain path or a known option` };
+    if (!PLAIN_TOKEN.test(token)) return { ok: false, detail: `${JSON.stringify(token)} is not a plain path or a known option` };
     if (!optionsDone && token === "--") {
       optionsDone = true;
       continue;

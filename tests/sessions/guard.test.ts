@@ -310,3 +310,24 @@ describe("S-3⁵ (PRDR-213): `git rm` is the third verb, judged per pathspec lik
     expect(bash("git rmx src/calc.py").decision).toBe("abstain");
   });
 });
+
+/**
+ * Audit of PRDR-213, cold re-read of the reading: two commands the allowlist's
+ * prefix rule would have passed were "not a git rm" to the guard and abstained.
+ */
+describe("audit of PRDR-213: what the prefix rule reads past, the guard reads too", () => {
+  const bash = (command: string) => guardToolUse("Bash", { command }, POLICY);
+
+  it("leading whitespace is still the whole command — judged, not abstained", () => {
+    expect(bash("  git rm -f AGENTS.md").reason).toContain("protected");
+    expect(bash("\tgit rm -f src/calc.py").decision).toBe("allow");
+  });
+
+  it("a brace group, an OR chain and a CRLF split are compound — denied as unreadable", () => {
+    for (const command of ["{ git rm -f src/calc.py; }", "git add x || git rm -f src/calc.py", "git rm -f src/calc.py \r\n rm x"]) {
+      const decision = bash(command);
+      expect(decision.decision, command).toBe("deny");
+      expect(decision.reason, command).toContain("cannot read");
+    }
+  });
+});

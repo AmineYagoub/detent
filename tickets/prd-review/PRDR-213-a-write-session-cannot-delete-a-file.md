@@ -102,3 +102,14 @@ same way; four prompt-marker tests failed on the missing verb. Then the change; 
 SDK, plugin and prompt suites green, the V-1⁗ verb pin updated to three, and the full suite
 1,104 green.
 
+
+## Audit
+
+Cold re-read of the reading against what the SDK's prefix rule accepts. Two commands the rule
+reads past were "not a `git rm`" to the guard, which abstained and handed them to that rule:
+`  git rm -f AGENTS.md` (leading whitespace — the pattern anchored `git` to the start of the
+string) and `{ git rm -f x; }` (a brace group — `{` was not among the separators that start a
+command). Both are now read: whitespace before the verb is skipped after any separator and at
+the start, and `{` joins `;`, `&&`, `|`, `(`, the backtick, `\r` and `\n`. An unreadable token
+is now quoted with `JSON.stringify` in the reason, so a CRLF split reads as `"\r\n"` rather than
+a line break inside the denial. Pinned by two tests; the bundle regenerated.

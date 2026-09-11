@@ -29,8 +29,13 @@ const PLAIN_TOKEN = /^[A-Za-z0-9._/@+,=-]+$/;
  * `git rm` as a command — at the start, or after a separator that starts one.
  * A mention inside a quoted argument is somebody's commit message, not a
  * deletion, and stays the allowlist's call.
+ *
+ * Audit of PRDR-213: leading whitespace and a brace group both slipped past
+ * the first reading — `  git rm -f AGENTS.md` and `{ git rm -f x; }` were
+ * "not a git rm" here, and the allowlist's prefix rule reads past both.
  */
-const GIT_RM_COMMAND = /(^|[;&|(`\n]\s*)git\s+rm(\s|$)/;
+const GIT_RM_COMMAND = /(^|[;&|({`\r\n])\s*git\s+rm(\s|$)/;
+
 
 export function commandOf(toolInput: unknown): string {
   if (typeof toolInput !== "object" || toolInput === null) return "";
@@ -48,7 +53,7 @@ export function readGitRm(command: string): GitRmReading | null {
   const paths: string[] = [];
   let optionsDone = false;
   for (const token of tokens.slice(2)) {
-    if (!PLAIN_TOKEN.test(token)) return { ok: false, detail: `\`${token}\` is not a plain path or a known option` };
+    if (!PLAIN_TOKEN.test(token)) return { ok: false, detail: `${JSON.stringify(token)} is not a plain path or a known option` };
     if (!optionsDone && token === "--") {
       optionsDone = true;
       continue;
