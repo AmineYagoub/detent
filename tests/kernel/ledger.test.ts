@@ -420,3 +420,25 @@ describe("PRDR-219 the breaker measures from the mark on disk, not the one it wa
     for (const id of ["t1", "t2", "t3"]) expect(readTicket(root, id).state, id).toBe("DONE");
   }, 60_000);
 });
+
+/** Audit of PRDR-219: the file is adopted only when it has MOVED PAST memory — never behind it. */
+describe("audit of PRDR-219: memory never falls behind the file", () => {
+  it("an older mark on disk does not lower the mark the breaker measures from", async () => {
+    const root = await fixture();
+    const journal = RunJournal.open(root);
+    try {
+      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
+      for (let i = 0; i < 3; i += 1) {
+        ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
+      }
+      noteUnitComplete(root);
+      ledger.assertLaunchAllowed();
+      /* A stale write: an older mark lands on disk after the instance adopted the newer one. */
+      writeFileSync(path.join(root, ".detent/state/progress.json"), JSON.stringify({ spent: 0, unitCost: 0, advisoryAnnounced: false }));
+      ledger.record("t3", 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
+      expect(() => ledger.assertLaunchAllowed(), "$4 since the $12 unit, not $16 since nothing").not.toThrow();
+    } finally {
+      journal.close();
+    }
+  });
+});

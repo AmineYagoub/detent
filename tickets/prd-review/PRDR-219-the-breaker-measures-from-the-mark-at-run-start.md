@@ -67,3 +67,15 @@ a session exited 10 on the second ticket. Then the change; then both green: the 
 disk derives the threshold (36 allowed after a $12 unit, refused at 40), and the run finishes
 all three.
 
+
+## Audit
+
+Cold re-read of the one condition. The file is adopted only when its mark is PAST the one in
+memory: a stale or older write on disk — a `--replan` wiping state, a crash mid-write, a
+second writer — must not hand the breaker a smaller mark and a false "nothing has finished".
+Pinned by a test that plants an older mark after the instance adopted the newer one; observed
+failing under the mutation that adopts the file whenever it differs, then green as written.
+Also checked: a $0 unit on disk (C-8 reuse) lowers the unit cost to zero exactly as
+`noteProgress` always has, and the floor and the per-session term still govern; `init`, which
+builds a ledger per launch, reads the same value at construction and at launch, so nothing
+there moves.
