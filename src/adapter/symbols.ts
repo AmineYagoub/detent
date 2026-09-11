@@ -241,12 +241,24 @@ export const SYMBOL_SERVER_ARGS: readonly string[] = [
 ];
 
 
-export function symbolServerConfig(config: SymbolsConfig, root: string): Record<string, unknown> {
+/**
+ * Correction of PRDR-229: the context and the project are TWO arguments.
+ *
+ * They were derived from one, so pointing the project at the session's worktree
+ * — which S-3⁷‴ wanted, so symbol answers describe the tree being edited —
+ * also pointed the context at `<worktree>/.detent/state/serena-context.yml`,
+ * which nothing writes: `writeSymbolContext` writes the ROOT's copy, because
+ * the context is Detent's file and not the tree's. Serena exited 1 with
+ * FileNotFoundError, the referee recorded `serena (failed)`, and every session
+ * ran without symbol tools while looking exactly like a healthy degrade. The
+ * `workDir` default keeps every non-worktree caller identical.
+ */
+export function symbolServerConfig(config: SymbolsConfig, root: string, workDir: string = root): Record<string, unknown> {
   return {
     serena: {
       command: config.command,
       /* PRDR-223: the context is Detent's own file — the surface is exactly the read set. */
-      args: [...SYMBOL_SERVER_ARGS, "--context", symbolContextPath(root), "--project", root],
+      args: [...SYMBOL_SERVER_ARGS, "--context", symbolContextPath(root), "--project", workDir],
       /**
        * PRDR-221: on the turn-one tool list, never behind tool search. The
        * platform defers MCP tools by default; gate-313's 113 sessions saw the

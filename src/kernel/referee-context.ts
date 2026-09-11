@@ -192,7 +192,7 @@ export class RefereeContext {
     if (status.kind !== "ready") return {};
     /* PRDR-223: the server's surface is Detent's own context file, written before every launch. */
     writeSymbolContext(this.root);
-    return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, workDir) };
+    return { mcpServers: symbolServerConfig(this.symbols as SymbolsConfig, this.root, workDir) };
   }
 
   private symbolProbe: ReturnType<typeof probeSymbols> | null = null;

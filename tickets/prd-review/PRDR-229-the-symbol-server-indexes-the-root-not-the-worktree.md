@@ -63,3 +63,26 @@ this, stays untracked and inert. One edge left as is: a project that legitimatel
 `.serena/` of its own keeps a session's edit to it out of finalize — a session has no business
 there, and the exclusion errs toward the change set carrying nothing a tool wrote. No code
 change.
+
+## Correction, ninety minutes after the close
+
+The implementation split one thing that had to be two. `symbolServerConfig` derived BOTH
+`--context` and `--project` from a single parameter, so passing the work directory — which this
+ticket wanted, so symbol answers describe the tree being edited — also pointed the context at
+`<worktree>/.detent/state/serena-context.yml`. Nothing writes that: `writeSymbolContext` writes
+the ROOT's copy, exactly as this ticket's own text says it should. Serena exited 1 with
+`FileNotFoundError`, the referee recorded `MCP server unavailable … serena (failed)` on the
+ticket, and every session from about 17:30 ran without symbol tools — a silent loss of the
+capability PRDR-221 through PRDR-223 spent the day making usable.
+
+Nothing was incorrect as a result: the referee notices a configured server that never attached
+and records it, and sessions fell back to the reading and searching they used all day before.
+What was lost was the measurement and the capability.
+
+The verb takes the context root and the project directory separately now, with the project
+defaulting to the root so every non-worktree caller is unchanged. Proved twice: the test this
+ticket shipped asserted `--project` and never `--context`, which is precisely how the defect
+shipped green, so it now asserts both and that the file exists where the server is told to look
+— it fails on the tree as it was. And against the live root, Serena started with the corrected
+arguments exits 0, excludes 21 tools and exposes exactly `find_symbol`,
+`find_referencing_symbols` and `get_symbols_overview`.

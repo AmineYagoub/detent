@@ -13,6 +13,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, diagnoseValid, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
+import { symbolContextPath } from "../../src/adapter/symbols.js";
 import { driftAcceptPath } from "../../src/kernel/drift-base.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { claim } from "../../src/kernel/tickets/mutations.js";
@@ -435,5 +436,17 @@ describe("PRDR-229 the symbol server is started on the session's work directory"
     expect(spec.cwd, "the session works in its worktree").toBe(path.join(repo.root, ".detent", "worktrees", "t-1"));
     const serena = (spec.mcpServers as { serena: { args: string[] } }).serena;
     expect(serena.args[serena.args.indexOf("--project") + 1], "and its symbol server indexes that tree").toBe(spec.cwd);
+    /*
+     * Correction of PRDR-229: the CONTEXT is Detent's own file under the ROOT,
+     * and only the PROJECT moved to the worktree. One argument fed both, so
+     * pointing the project at the tree pointed the context at a file nothing
+     * writes there — Serena exited 1 with FileNotFoundError and every session
+     * silently lost its symbol tools. This test asserted the project and not
+     * the context, which is exactly how it shipped green.
+     */
+    expect(serena.args[serena.args.indexOf("--context") + 1], "the context stays the root's file").toBe(
+      symbolContextPath(repo.root),
+    );
+    expect(existsSync(symbolContextPath(repo.root)), "and it is written where the server is told to look").toBe(true);
   });
 });
