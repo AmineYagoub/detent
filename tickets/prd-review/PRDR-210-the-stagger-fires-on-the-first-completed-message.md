@@ -90,3 +90,24 @@ reproduce gate-313's 60 s case; what it shows is the property the fix has by con
 wait now ends at the response's start, whatever the turn's length — and that the warm draws read
 what the cold one wrote. The next gate init is where the three 60 s slices would have recurred,
 and cannot.
+
+## Audit
+
+Re-read cold after the close, with the diff and the live rows in front of me.
+
+- **Turn accounting under partial messages, live.** The three s01 draws recorded `turns` of 3,
+  10 and 10 in the ledger — completed turns, not the hundreds of stream events they carried. The
+  scripted tests said so; the ledger agrees.
+- **PRDR-114's fallback re-run fires the batch early.** A routed model the runtime refuses costs a
+  $0 attempt whose stream may still carry a `message_start` before the refusal is known; the batch
+  would launch its other draws on that, then the first draw re-runs on the fallback model. The
+  draws would still be correct, the cache would be missed once, and the case is one $0 attempt per
+  model per run. Accepted and recorded rather than coded around.
+- **The note said "answered".** Fixed at the close: *the first began its answer after N s* / *did
+  not begin answering in time*, and the test regex with it. A note that names the old signal
+  would have mis-described every log from here on.
+- **The live slice opened with a short first turn.** So the run shows the property (2 s, warm
+  draws) rather than reproducing the 60 s case. Nothing in the fix depends on the turn's length
+  any more, which is the point; the next gate init is the reproduction.
+- **Nothing unreachable.** `includePartialMessages` is set in the one options builder every live
+  session passes through, and the live run's 2 s is the proof it reached the SDK.
