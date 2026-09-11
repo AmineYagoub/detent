@@ -187,6 +187,14 @@ export function symbolServerConfig(config: SymbolsConfig, root: string): Record<
     serena: {
       command: config.command,
       args: [...SYMBOL_SERVER_ARGS, "--project", root],
+      /**
+       * PRDR-221: on the turn-one tool list, never behind tool search. The
+       * platform defers MCP tools by default; gate-313's 113 sessions saw the
+       * eighteen Serena tools only as deferred names and called none. The
+       * SDK's `alwaysLoad` is the API's `defer_loading: false`; it also waits
+       * for the server to connect (capped at 5 s) before the first prompt.
+       */
+      alwaysLoad: true,
     },
   };
 }

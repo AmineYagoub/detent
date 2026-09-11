@@ -300,3 +300,19 @@ describe("PRDR-220 the symbol server opens nothing on the operator's machine", (
     expect(help.stdout).toContain("--enable-gui-log-window");
   });
 });
+
+/**
+ * PRDR-221 — a server nobody was introduced to.
+ *
+ * The platform defers MCP tools behind tool search by default, so Serena's
+ * eighteen tools reached a session only as names in a `deferred_tools_delta`
+ * — callable after a `ToolSearch`, never before — and across 113 gate-313
+ * sessions there were zero searches and zero calls. The SDK's per-server
+ * `alwaysLoad` keeps a server's tools on the turn-one tool list.
+ */
+describe("PRDR-221 the symbol server's tools are on the tool list, not behind tool search", () => {
+  it("the server config asks the SDK never to defer this server's tools", () => {
+    const server = symbolServerConfig(CONFIG, "/repo") as { serena: { alwaysLoad?: boolean } };
+    expect(server.serena.alwaysLoad).toBe(true);
+  });
+});

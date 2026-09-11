@@ -90,6 +90,8 @@ export interface CoreOptions {
   readonly worktree?: boolean;
   /** V-1⁗ (PRDR-211): the package ecosystems the adapter installs for before a gate; the table by default, a seam for tests. */
   readonly ecosystems?: readonly Ecosystem[];
+  /** PRDR-221: readiness is a probe of the machine; a test decides the machine. */
+  readonly probeSymbols?: typeof probeSymbols;
   /**
    * PRDR-104: whether this referee publishes the plugin hook files
    * (`active_surface.json`, `stage.json`). True on the plugin path, where the
@@ -135,6 +137,7 @@ export class RefereeContext {
     this.now = opts.now ?? (() => Date.now());
     this.ecosystems = opts.ecosystems ?? ECOSYSTEMS;
     this.isAlive = opts.isAlive ?? pidAlive;
+    this.probe = opts.probeSymbols ?? probeSymbols;
     this.worktree = opts.worktree === true;
     this.rulesText = readRules(opts.root);
     const bindings = readBindings(opts.root).bindings;
@@ -190,9 +193,10 @@ export class RefereeContext {
   }
 
   private symbolProbe: ReturnType<typeof probeSymbols> | null = null;
+  private readonly probe: typeof probeSymbols;
 
   private symbolStatus(): ReturnType<typeof probeSymbols> {
-    this.symbolProbe ??= probeSymbols(this.symbols);
+    this.symbolProbe ??= this.probe(this.symbols);
     return this.symbolProbe;
   }
 

@@ -115,13 +115,15 @@ export class SessionArm {
 
     const artifactOut = path.join(runsDir(ctx.root, id), artifactNameFor(role));
     mkdirSync(path.dirname(artifactOut), { recursive: true });
+    /* PRDR-221: a session with a symbol server is told, in the variable part only (S-6). */
+    const symbols = ctx.symbolTools();
     const spec: SessionSpec = {
       role,
       ticketId: id,
       promptPrefix: this.prefixFor(role),
       promptVariable: JSON.stringify(
         {
-          inputs,
+          inputs: symbols.length === 0 ? inputs : { ...inputs, symbol_tools: symbols },
           artifact_out: artifactOut,
           falsified_out: path.join(runsDir(ctx.root, id), "falsified.json"),
           oversized_out: path.join(runsDir(ctx.root, id), "oversized.json"),
@@ -138,8 +140,8 @@ export class SessionArm {
        * the A-contract demands.
        */
       allowedTools: READ_ONLY_ROLES.has(role)
-        ? [...this.toolsFor(role), ...ctx.symbolTools(), artifactWriteRule(artifactOut)]
-        : [...this.toolsFor(role), ...ctx.symbolTools()],
+        ? [...this.toolsFor(role), ...symbols, artifactWriteRule(artifactOut)]
+        : [...this.toolsFor(role), ...symbols],
       /**
        * S-3′ (PRDR-121): the optional symbol server, when one is configured
        * and runnable. Read tools only — its editing tools write from inside

@@ -345,3 +345,59 @@ describe("D-19 attempt refuses what no claim makes legal", () => {
     expect(backend.calls, "the holder launches normally").toHaveLength(1);
   });
 });
+
+/**
+ * PRDR-221 — a session with a symbol server is TOLD.
+ *
+ * The four read tools were allowlisted and never named: the prompt says
+ * "reading and searching the repository", the session reads Read, Grep and
+ * Glob, and gate-313's 113 sessions called Serena zero times. The names now
+ * ride in the variable inputs when the server is ready — and only then, so a
+ * root without symbols keeps its byte-identical prefix and variable (S-6).
+ */
+describe("PRDR-221 the inputs name the symbol tools when the server is attached", () => {
+  async function launchedInputs(ready: boolean): Promise<Record<string, unknown>> {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const configPath = path.join(stateDir(repo.root), "config.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    const loaded = loadConfig({ ...raw, symbols: { enabled: true, command: "serena", pinned: "0.1.4" } });
+    const journal = RunJournal.open(repo.root);
+    cleanups.push(() => journal.close());
+    const backend = new MockBackend({ implement: () => okResult() });
+    const core = new RefereeCore(
+      {
+        root: repo.root,
+        backend,
+        prompts: loadPromptSet(),
+        /* The seam: readiness is a probe of the machine, and the test decides the machine. */
+        probeSymbols: () => (ready ? { kind: "ready", command: "serena" } : { kind: "off" }),
+      },
+      loaded,
+      journal,
+      ensureRunBranch(repo.root, ready ? "symbols-on" : "symbols-off"),
+    );
+    installTrailerHook(repo.root);
+    expect(core.acquire("t-1").ok).toBe(true);
+    await core.attempt("t-1", "IN_PROGRESS");
+    const spec = backend.calls[0]?.spec;
+    if (spec === undefined) throw new Error("no session launched");
+    return (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
+  }
+
+  it("ready: `symbol_tools` carries the four read tools by their callable names", async () => {
+    const inputs = await launchedInputs(true);
+    expect(inputs["symbol_tools"]).toEqual([
+      "mcp__serena__find_symbol",
+      "mcp__serena__find_referencing_symbols",
+      "mcp__serena__find_implementations",
+      "mcp__serena__get_symbols_overview",
+    ]);
+  });
+
+  it("not ready: the field is absent — the variable is what it always was", async () => {
+    const inputs = await launchedInputs(false);
+    expect(inputs).not.toHaveProperty("symbol_tools");
+  });
+});

@@ -1110,6 +1110,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   declines, per launch, a window it never wanted. Symbol intelligence — its tools, its read-only
   surface, its pin — is unchanged.
 
+- **S-3⁷ (3.1.1, PRDR-221).** A symbol server is on the tool list and the session is told it is
+  there. S-3′ attached Serena to every write-role and read-only-role session of a root with
+  symbols on; the platform defers MCP tools behind tool search by default, so its eighteen
+  tools reached a session only as names in a deferred-tools delta — callable after a search,
+  never before — and no prompt said they existed. gate-313 measured it: 113 sessions with a
+  server, zero tool searches, zero Serena calls, a language-server initialisation per session
+  for a capability nobody was introduced to. Now the server config asks the SDK never to defer
+  this server's tools (`alwaysLoad`, the API's `defer_loading: false`), so the four read tools
+  are on the turn-one list with their descriptions; and when the server is ready the variable
+  inputs carry `symbol_tools` — the four callable names — while every role that receives the
+  server is told what they are for: a symbol's definition, its references, its implementations
+  and a file's symbol overview, before grep, and absent when the field is. A root without
+  symbols keeps a byte-identical prefix and variable (S-6). The surface does not widen: the
+  editing and memory tools stay refused (S-3′), and symbols stay the operator's flag (S-3⁗).
+  The next tickets are the measurement.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

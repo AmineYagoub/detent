@@ -117,15 +117,16 @@ describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () 
   const set = loadPromptSet();
   const CHECKLIST: Record<string, readonly string[]> = {
     planner: ["A-2", "acceptance criteria", "artifact_out", "P2"],
-    diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified"],
+    /* PRDR-221: every role that receives the symbol server is told what symbol_tools are for. */
+    diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified", "symbol_tools"],
     /* PRDR-212: the surface is stated, a refusal is named as containment, and a signal can be taken back. */
     /* PRDR-213: the third verb is stated to every write role. */
-    implement: ["falsified", "surface", "never suppress", "commit with the ticket id", "git add", "git rm", "refus", "retracted"],
-    blind_fix: ["ONE attempt", "failure", "never suppress", "no second blind fix", "git rm"],
-    informed_fix: ["research brief", "LAST", "what_would_falsify", "escalates to a human", "git rm"],
-    review_fix: ["own budget", "never route to research", "scope findings", "commit with the ticket id", "git rm"],
-    research: ["hierarchy", "local_search", "cache_key", "advice", "never authority", "upstream_bug"],
-    review: ["ONLY the diff", "scope", "style preferences are not findings", "approve"],
+    implement: ["falsified", "surface", "never suppress", "commit with the ticket id", "git add", "git rm", "refus", "retracted", "symbol_tools"],
+    blind_fix: ["ONE attempt", "failure", "never suppress", "no second blind fix", "git rm", "symbol_tools"],
+    informed_fix: ["research brief", "LAST", "what_would_falsify", "escalates to a human", "git rm", "symbol_tools"],
+    review_fix: ["own budget", "never route to research", "scope findings", "commit with the ticket id", "git rm", "symbol_tools"],
+    research: ["hierarchy", "local_search", "cache_key", "advice", "never authority", "upstream_bug", "symbol_tools"],
+    review: ["ONLY the diff", "scope", "style preferences are not findings", "approve", "symbol_tools"],
   };
 
   it.each(Object.entries(CHECKLIST))("%s encodes its protocol markers", (role, markers) => {
