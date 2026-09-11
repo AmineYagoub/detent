@@ -14,7 +14,25 @@ import { commandOf, readGitRm, type GitRmReading } from "./git-rm.js";
  * the seven oracle hook tests port without a live session.
  */
 
+/**
+ * D-28's ambient billable spawn tools, by every name the platform has shipped
+ * them under: `Task` (classic subagent launcher), `Agent` (its successor),
+ * `TaskCreate` (background-task spawn). T-124's live leg found a build whose
+ * print-mode sessions expose only the newer names — an exact-match list
+ * pinned to "Task" alone guarded yesterday's platform. Reads/controls
+ * (TaskGet/TaskOutput/TaskStop) spawn nothing and stay allowed.
+ *
+ * D-28″ (PRDR-215): ONE list, both drivers. It lived in the kernel's claim
+ * policy, published for the plugin driver's session file, and this guard —
+ * the headless hook, and the plugin hook's worker policy — never read it. A
+ * spawn names no path, so the guard abstained, and the platform grants `Agent`
+ * without consulting `allowedTools`. gate-313's review-fix sessions each ran a
+ * sub-agent outside the turn ceiling and outside anything the ledger can name.
+ */
+export const SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+
 export interface GuardPolicy {
+
   /** The ticket's declared surface plus the artifact-out area. */
   readonly surface: readonly string[];
   /** SEC-3: ticket/criteria/config self-modification is always denied. */
@@ -205,7 +223,17 @@ export function guardToolUse(
   policy: GuardPolicy,
   resolveReal: (p: string) => string = realpathNearest,
 ): GuardDecision {
+  /* D-28″ (PRDR-215): a spawn names no path; it is refused before the path judgement, for every role. */
+  if ((SPAWN_TOOLS as readonly string[]).includes(toolName)) {
+    return {
+      decision: "deny",
+      reason:
+        `DENY: ${toolName} would spawn a billable session outside the ledger — a session does its own work, ` +
+        "and a billable session exists only through the metered path (D-28).",
+    };
+  }
   /* S-3⁵ (PRDR-213): the one Bash verb that names paths is judged on them. */
+
   if (toolName === "Bash") {
     const reading = readGitRm(commandOf(toolInput));
     if (reading !== null) return judgeGitRm(reading, policy, resolveReal);

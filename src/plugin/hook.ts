@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE } from "../fs/hook-files.js";
-import { guardToolUse, pathOf } from "../sessions/guard.js";
+import { SPAWN_TOOLS, guardToolUse, pathOf } from "../sessions/guard.js";
 
 /**
  * T-113 — the D-21 containment hook in plugin form (S-2′, SEC-6, D-29).
@@ -200,10 +200,11 @@ const DRIVER_DENIED_TOOLS: ReadonlySet<string> = new Set([
   "BashOutput",
   "KillShell",
   "KillBash",
-  "Task",
-  "Agent",
+  /* D-28″ (PRDR-215): the spawn names are the guard's one list, not a second copy. */
+  ...SPAWN_TOOLS,
   "WebFetch",
 ]);
+
 
 /** T-120 (D-27): a driver policy denies every path'd call, and every execution — sequencing only. */
 function driverDecision(tool: string, toolInput: unknown): string | null {

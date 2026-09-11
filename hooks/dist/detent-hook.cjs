@@ -1594,6 +1594,7 @@ function readGitRm(command) {
 }
 
 // src/sessions/guard.ts
+var SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"];
 function matchAny(rel, patterns) {
   const clean = rel.replace(/^\.\//, "");
   for (const raw of patterns) {
@@ -1650,6 +1651,12 @@ function realpathNearest(target, maxHops = 40) {
   }
 }
 function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest) {
+  if (SPAWN_TOOLS.includes(toolName)) {
+    return {
+      decision: "deny",
+      reason: `DENY: ${toolName} would spawn a billable session outside the ledger \u2014 a session does its own work, and a billable session exists only through the metered path (D-28).`
+    };
+  }
   if (toolName === "Bash") {
     const reading = readGitRm(commandOf(toolInput));
     if (reading !== null) return judgeGitRm(reading, policy, resolveReal);
@@ -1790,8 +1797,8 @@ function decidePreToolUse(payload, nowMs) {
     "BashOutput",
     "KillShell",
     "KillBash",
-    "Task",
-    "Agent",
+    /* D-28″ (PRDR-215): the spawn names are the guard's one list, not a second copy. */
+    ...SPAWN_TOOLS,
     "WebFetch"
   ]);
   function driverDecision(tool2, toolInput) {

@@ -1024,6 +1024,23 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   directory — a foreign file in ticket A's tree was written by A's sessions, and B claims in B's
   own tree; a cross-worktree restore has no owner.
 
+- **D-28″ (3.1.1, PRDR-215).** The spawn denial is the **guard's**, for every role, under both
+  drivers. D-28 says the hook denies a direct `Task` spawn; the list existed — `Task`, `Agent`,
+  `TaskCreate`, by every name the platform has shipped the spawn under — and was published in
+  the claim policy the plugin driver's session file carries. The headless hook never read it:
+  `guardToolUse` governs where a mutation lands and abstains on a call that names no path
+  (S-2‴), a spawn names no path, and the platform grants `Agent` without consulting
+  `allowedTools`. gate-313's review-fix sessions #2 and #3 each ran a `general-purpose`
+  sub-agent to attempt the deletions they could not make themselves (PRDR-213): twenty assistant
+  messages, a dozen tool calls, about 420k input tokens each, outside the parent's `num_turns`
+  — what `session_budget` bounds — and outside anything the ledger can attribute. Three things
+  D-28 promises were false of those sessions: the counter was avoidable, the spend was
+  unattributable, the surface was doubled. Now the guard refuses the three names before it
+  judges paths, with D-28's reason, for every role and every policy — write, read-only, init —
+  and the list is one exported constant that the kernel's published policy, the plugin hook's
+  driver rule and the guard itself all read. Reads and controls of tasks spawn nothing and stay
+  the allowlist's. Sub-agents are denied, not metered.
+
 - **S-4′ (3.1.1, PRDR-118).** `init` applies the same telemetry circuit breaker the run loop
   has had since T-046. A stream that ends with no result message parses as success with no
   telemetry, so a session killed in transport returned ok, recorded $0 against the ceiling,

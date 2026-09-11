@@ -110,6 +110,18 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
     expect((await judge("git add src/a.ts")).hookSpecificOutput?.permissionDecision).toBeUndefined();
   });
 
+  it("D-28″ (PRDR-215): the hook denies a sub-agent spawn — the platform would otherwise grant it without the allowlist", async () => {
+    const hooks = buildPreToolUseHook(CONFIG.policy);
+    const callback = hooks.PreToolUse?.[0]?.hooks[0];
+    const output = (await callback!(
+      { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { prompt: "delete the probe", subagent_type: "general-purpose" }, tool_use_id: "x" } as never,
+      undefined,
+      { signal: new AbortController().signal },
+    )) as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } };
+    expect(output.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(output.hookSpecificOutput?.permissionDecisionReason).toContain("D-28");
+  });
+
   /**
    * PRDR-205 — the k draws of one review are TOLD one artifact path, so their
    * first turns are byte-identical and the prompt cache serves all but the

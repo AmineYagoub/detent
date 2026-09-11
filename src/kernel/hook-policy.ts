@@ -1,6 +1,7 @@
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, stateDir } from "../fs/layout.js";
+import { SPAWN_TOOLS } from "../sessions/guard.js";
 
 /**
  * T-120/T-121 — the referee's half of the plugin containment hook (D-21,
@@ -27,15 +28,9 @@ export interface ClaimPolicyInput {
   readonly expiresAtMs: number;
 }
 
-/**
- * D-28's ambient billable spawn tools, by every name the platform has shipped
- * them under: `Task` (classic subagent launcher), `Agent` (its successor),
- * `TaskCreate` (background-task spawn). T-124's live leg found a build whose
- * print-mode sessions expose only the newer names — an exact-match list
- * pinned to "Task" alone guarded yesterday's platform. Reads/controls
- * (TaskGet/TaskOutput/TaskStop) spawn nothing and stay allowed.
- */
-const BILLABLE_SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+/** D-28's spawn tools: the guard's own list (D-28″, PRDR-215) — published here for the plugin driver's session file. */
+const BILLABLE_SPAWN_TOOLS = SPAWN_TOOLS;
+
 
 /** The one-shot Stop nudge (T-120's re-feed; official precedent: ralph-wiggum). */
 export const RUN_REFEED_TEXT =

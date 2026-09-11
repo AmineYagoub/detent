@@ -108,6 +108,12 @@ describe("T-113 PreToolUse over the bundle (T-046 oracle ports)", () => {
     expect(denyReason(tool(cwd, "Bash", { command: "git rm -r src" }).out)).toContain("cannot read");
   });
 
+  it("D-28″ (PRDR-215): a WORKER policy denies a sub-agent spawn over the bundle — one implementation, no deny_tools needed", () => {
+    const cwd = work({ ".detent/active_surface.json": SURFACE });
+    expect(denyReason(tool(cwd, "Agent", { prompt: "delete the probe" }).out)).toContain("D-28");
+    expect(denyReason(tool(cwd, "TaskCreate", { prompt: "x" }).out)).toContain("D-28");
+  });
+
   it("ABSENT surface file is silence — the ambient hook has no opinion outside a Detent attempt", () => {
     const cwd = work();
     expect(pre(cwd, { file_path: "/etc/hosts" })).toEqual({ out: "", code: 0 });
@@ -157,6 +163,12 @@ describe("T-121 D-28 ambient-bypass denies over the bundle", () => {
     expect(reason).toContain("attempt");
   });
 
+
+  it("D-28″ (PRDR-215): a driver policy denies every spawn name, not only the ones its file lists", () => {
+    const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
+    /* The file lists only Task; TaskCreate is refused by the driver rule, whose reason names the billable session. */
+    expect(denyReason(tool(cwd, "TaskCreate", { prompt: "x" }).out)).toContain("billable");
+  });
   it("a Bash command containing a bound verification command is denied — gates run through the referee", () => {
     const cwd = work({ ".detent/active_surface.json": DRIVER_POLICY });
     const reason = denyReason(tool(cwd, "Bash", { command: "cd /tmp && sh scripts/test.sh --fast" }).out);

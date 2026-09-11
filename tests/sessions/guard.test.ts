@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   READ_ONLY_STAGES,
+  SPAWN_TOOLS,
   guardToolUse,
   matchAny,
   realpathNearest,
@@ -329,5 +330,38 @@ describe("audit of PRDR-213: what the prefix rule reads past, the guard reads to
       expect(decision.decision, command).toBe("deny");
       expect(decision.reason, command).toContain("cannot read");
     }
+  });
+});
+
+/**
+ * D-28″ (PRDR-215) — a spawn is refused by the hook, for every role, under
+ * both drivers. The denial existed as a list the plugin driver's policy file
+ * carried; the headless hook abstained, because a spawn names no path, and the
+ * platform grants `Agent` without consulting `allowedTools`. gate-313's
+ * review-fix sessions #2 and #3 each ran a general-purpose sub-agent — twenty
+ * assistant messages, a dozen tool calls, about 420k input tokens — outside the
+ * turn ceiling and outside anything the ledger can attribute.
+ */
+describe("D-28″ (PRDR-215): a billable spawn is denied before the path judgement, for every role", () => {
+  it("the list is the one the plugin driver already published", () => {
+    expect([...SPAWN_TOOLS]).toEqual(["Task", "Agent", "TaskCreate"]);
+  });
+
+  it("Task, Agent and TaskCreate are denied with D-28's reason under a write policy", () => {
+    for (const tool of SPAWN_TOOLS) {
+      const decision = guardToolUse(tool, { prompt: "delete two files", subagent_type: "general-purpose" }, POLICY);
+      expect(decision.decision, tool).toBe("deny");
+      expect(decision.reason, tool).toContain("D-28");
+    }
+  });
+
+  it("and under a read-only role's artifact policy — the role does not matter", () => {
+    const readOnly: GuardPolicy = { ...POLICY, surface: [], artifactRoot: "/wt/.detent/runs/t1" };
+    expect(guardToolUse("Agent", { prompt: "x" }, readOnly).decision).toBe("deny");
+  });
+
+  it("reads and controls of tasks spawn nothing and stay the allowlist's", () => {
+    expect(guardToolUse("TaskOutput", { task_id: "1" }, POLICY).decision).toBe("abstain");
+    expect(guardToolUse("TaskStop", { task_id: "1" }, POLICY).decision).toBe("abstain");
   });
 });

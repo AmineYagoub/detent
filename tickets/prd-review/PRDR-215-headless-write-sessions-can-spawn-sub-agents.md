@@ -1,11 +1,11 @@
 ---
 id: PRDR-215
 title: "Headless write sessions can spawn sub-agents: D-28's spawn denial is published for the plugin driver and never applied under the SDK"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "D-28", "budgets", "containment", "sdk", "parity", "gate-313"]
-surface: ["src/sessions/guard.ts", "src/sessions/sdk.ts", "src/kernel/hook-policy.ts", "src/plugin/hook.ts", "tests/sessions/guard.test.ts", "tests/sessions/sdk.test.ts", "detent-prd-v3.md"]
+surface: ["src/sessions/guard.ts", "src/kernel/hook-policy.ts", "src/plugin/hook.ts", "hooks/dist/detent-hook.cjs", "tests/sessions/guard.test.ts", "tests/sessions/sdk.test.ts", "tests/plugin/hook.test.ts", "tests/referee/hook-policy.test.ts", "detent-prd-v3.md"]
 prd_refs: ["D-28", "D-21", "D-27", "P6", "S-2‴", "S-3", "X-1", "V-6", "N-6", "PRDR-065", "PRDR-122", "PRDR-180"]
 acceptance_criteria: ["Under the headless driver, every session's PreToolUse hook denies `Task`, `Agent` and `TaskCreate` with D-28's reason, for every role, BEFORE the path judgement. Observed FIRST (V-6): `guardToolUse(\"Agent\", { prompt: \"…\" }, policy)` abstains today (no path), the platform grants the spawn without consulting `allowedTools`, and gate-313's review-fix sessions #2 and #3 each ran a `general-purpose` sub-agent — 20 assistant messages, 10–12 tool calls, ~420k input tokens — outside the session's `num_turns` and outside the S-3 surface's turn ceiling.", "One list, both drivers: the plugin hook's `deny_tools`, the driver policy's spawn entries and the headless hook read the SAME exported constant, and a test pins them equal.", "The denial's reason names the rule and the alternative — the session does the work itself; a billable session exists only through the metered path.", "A guard-level test proves the verdict does not depend on the role: implement, review_fix and review are all denied the spawn."]
 non_goals: ["Does not meter sub-agents: they stay denied, not billed.", "Does not change the driver policy (D-27) or the plugin hook's file format.", "Does not decide whether a sub-agent's tokens were inside the parent's reported cost on gate-313 — the record cannot say, which is the point of D-28."]
@@ -51,4 +51,25 @@ policy and the headless hook all read, pinned equal by a test — one more place
 
 ## What implementation changed
 
-_(open)_
+**One list, in the guard.** `SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"]` is exported from
+`src/sessions/guard.ts`, where the decision lives. `guardToolUse` refuses those names FIRST —
+before the `git rm` reading and before any path — with D-28's reason: the tool would spawn a
+billable session outside the ledger; a session does its own work. The role does not enter the
+decision, so write, read-only and init sessions are all covered by the same line; task reads and
+controls (`TaskOutput`, `TaskStop`) name no path and abstain as before.
+
+**Both drivers read it.** `hook-policy.ts` no longer keeps its own copy: the claim policy it
+publishes for the plugin driver's session file carries `SPAWN_TOOLS`. The plugin hook's driver
+rule spreads the same constant into `DRIVER_DENIED_TOOLS` (which had `Task` and `Agent` and
+lacked `TaskCreate`), and its worker path — `guardToolUse` in a third skin — denies the spawn
+with no `deny_tools` in the file at all. The bundle is regenerated. `sdk.ts` needed no change:
+its hook already calls the guard.
+
+**V-6, in order.** Observed on the tree as it was: `SPAWN_TOOLS` did not exist; `Agent` under
+a write policy and under a read-only artifact policy abstained where `deny` was expected; the SDK
+hook returned no decision for an `Agent` call; over the bundle, a worker policy was silent on
+`Agent` and `TaskCreate`, and a driver policy whose file listed only `Task` was silent on
+`TaskCreate`. Then the change; then the guard, SDK, plugin and hook-policy suites green — the
+hook-policy test now asserts the published list IS the guard's constant — and the full suite
+green.
+

@@ -5,6 +5,7 @@ import { readBindings } from "../../src/adapter/drift.js";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, stateDir } from "../../src/fs/layout.js";
 import { ensureRunBranch, installTrailerHook } from "../../src/kernel/git.js";
 import { RUN_REFEED_TEXT } from "../../src/kernel/hook-policy.js";
+import { SPAWN_TOOLS } from "../../src/sessions/guard.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { RefereeCore } from "../../src/kernel/referee.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
@@ -62,7 +63,8 @@ describe("T-120/T-121 claim-scoped surface policy", () => {
     expect(policy["driver"]).toBe(true);
     expect(policy["ticket_id"]).toBe("t-1");
     expect(policy["surface"]).toEqual([]);
-    expect(policy["deny_tools"]).toEqual(["Task", "Agent", "TaskCreate"]);
+    /* D-28″ (PRDR-215): one list, both drivers — the file carries the guard's own constant. */
+    expect(policy["deny_tools"]).toEqual([...SPAWN_TOOLS]);
     const bound = readBindings(root).bindings.map((b) => b.resolved);
     expect(bound.length).toBeGreaterThan(0);
     expect(policy["deny_bash_containing"]).toEqual(bound);
