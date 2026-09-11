@@ -164,10 +164,22 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (ensured === "exists" && cap !== undefined) {
       process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
     }
+
+    const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
+    let config: ReturnType<typeof configFor>;
+    try {
+      config = configFor(root);
+    } catch (err) {
+      process.stderr.write(`${(err as Error).message}\nFix it (or delete it to start over) — init will not plan against a config it cannot read (R-9′).\n`);
+      return EXIT_ERROR;
+    }
     /**
      * S-3⁗ (PRDR-208): a decision, not a ceiling — so unlike the cap it is
      * honoured on an existing config too. On is refused, with the install
-     * named, when the tool cannot run; nothing is written in that case.
+     * named, when the tool cannot run; nothing is written in that case. After
+     * the config has loaded (audit: a config init cannot read gets R-9′'s
+     * refusal above, not a thrown stack from here), and the config is reloaded
+     * so the pipeline plans with the decision, not the tri-state it replaced.
      */
     if (symbolsDecision !== undefined) {
       const decided = decideSymbols(root, symbolsDecision);
@@ -180,15 +192,7 @@ export async function main(argv: readonly string[]): Promise<number> {
           ? `symbol intelligence enabled — \`${decided.command}\` is ready; sessions get its read tools (S-3′)\n`
           : "symbol intelligence declined — recorded in .detent/config.json, never mentioned again (S-3″)\n",
       );
-    }
-
-    const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
-    let config: ReturnType<typeof configFor>;
-    try {
       config = configFor(root);
-    } catch (err) {
-      process.stderr.write(`${(err as Error).message}\nFix it (or delete it to start over) — init will not plan against a config it cannot read (R-9′).\n`);
-      return EXIT_ERROR;
     }
     const handlers = buildPipeline({
       root,

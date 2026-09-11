@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli/init.js";
@@ -83,5 +83,35 @@ describe("S-3⁗ symbol intelligence is decided by a flag", () => {
       else process.env["CLAUDE_CODE_OAUTH_TOKEN"] = saved;
     }
     expect((symbolsOf(root) as { enabled: boolean }).enabled).toBe(false);
+  });
+});
+
+/** Audit of PRDR-208: the decision must not outrun R-9′'s refusal of a config init cannot read. */
+describe("audit of PRDR-208", () => {
+  it("a config init cannot read is refused with R-9′'s message, `--symbols` or not — never a thrown stack", async () => {
+    const root = repo();
+    ensureConfig(root, 10);
+    writeFileSync(path.join(root, ".detent/config.json"), "{ not json\n");
+    const saved = process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+    process.env["CLAUDE_CODE_OAUTH_TOKEN"] = "test-token-never-used";
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      expect(await main([root, "--symbols"])).toBe(1);
+      expect(err.mock.calls.join("")).toMatch(/R-9′/);
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      if (saved === undefined) delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+      else process.env["CLAUDE_CODE_OAUTH_TOKEN"] = saved;
+    }
+  });
+
+  it("a recorded decline is reversed by a later `--symbols` when the tool is ready — a person re-deciding", () => {
+    const root = repo();
+    ensureConfig(root, 10);
+    expect(decideSymbols(root, "off", missing).ok).toBe(true);
+    expect(decideSymbols(root, "on", ready).ok).toBe(true);
+    expect((symbolsOf(root) as { enabled: boolean }).enabled).toBe(true);
   });
 });

@@ -76,3 +76,21 @@ in its arguments.
 **The end-to-end test spends nothing by construction.** It satisfies R-10 with a token the SDK
 never sees: a git root with no planning document reaches DISCOVER and stops there with
 AWAIT_DOCS, after the config — and the decision — is written and before any session.
+
+## Audit
+
+Read cold after the close, with one thing found and fixed.
+
+- **The decision outran R-9′.** It was applied right after `ensureConfig`, before the config had
+  been read through the schema. A config init cannot read — `{ not json` — plus `--symbols`
+  therefore threw a JSON parse error out of `main` instead of R-9′'s refusal, which sits later.
+  Observed as a thrown `Expected property name or '}' in JSON` from the entry point (V-6); the
+  decision now runs after the config has loaded, and the config is reloaded afterwards so the
+  pipeline plans with the decision rather than the tri-state it replaced. Both pinned.
+- **A decline can be reversed.** `--no-symbols` then `--symbols` with the tool ready records
+  `true` — a person re-deciding is a person deciding. Pinned.
+- **The token in the end-to-end test never reaches a session.** DISCOVER's AWAIT_DOCS is the
+  earlier stop, and the test asserts the exit that proves it.
+- **`--symbols` alongside `--approve`.** The approval relay path returns before a plan runs, and
+  the decision is applied on the planning path only; a decision passed with an approval flag is
+  ignored there. Recorded, not changed — an approval is not an init.
