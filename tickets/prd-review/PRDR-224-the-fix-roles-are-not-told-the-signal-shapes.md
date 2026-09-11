@@ -59,3 +59,13 @@ shapes; on gate-313, t-s01-004's review-fix sessions wrote `requested_paths` twi
 refused twice for naming no path. Then the change; then green. The prompt files landed in the
 same commit as PRDR-223's, which rewrote the neighbouring sentence.
 
+
+## Audit
+
+Cold re-read of the sentence against the two seams. Both names, `surface_request_out` and
+`falsified_out`, are exactly the input keys `SessionArm.launch` serialises for every write role,
+and the shapes are byte-for-byte the implementer's (PRDR-073, PRDR-212). The protected-path
+clause is the part that ends t-s01-004's shape in round one: the kernel's own refusal for a
+protected request says as much, but a session that never sends a well-formed request never sees
+it. No code change; the measurement is the absence of `surface DENIED: the request named no
+path` in the next take's notes.

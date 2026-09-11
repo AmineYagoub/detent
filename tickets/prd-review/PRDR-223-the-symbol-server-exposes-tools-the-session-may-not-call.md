@@ -67,3 +67,15 @@ available."* Manifest re-hashed, agents and bundle regenerated.
 `ide-assistant` and wrote no file; the inventory test found no `SYMBOL_CONTEXT_YAML`; the launch
 test expected four `symbol_tools`; seven prompt markers failed. Then the change; then green.
 
+
+## Audit
+
+Cold re-read, then a second live start with the PRODUCTION file rather than the hand-written
+probe: `writeSymbolContext` on a scratch root wrote 33 exclusions (the 36-name inventory minus
+three); Serena reported *excluded 21 tools* — the other twelve are optional tools it never
+activates — and *Number of exposed tools: 3 … Active tools (3): find_referencing_symbols,
+find_symbol, get_symbols_overview*, no errors. The adapter's long comment still presented
+`ide-assistant` as the answer and the memory tools as exposed; both are now history, and the
+comment says so, including the one thing the context does NOT give — a guarantee about
+remembering — and the one thing it cannot cover: tools a Serena newer than the pin might add,
+which the allowlist still refuses and the inventory test still flags. No behaviour change.

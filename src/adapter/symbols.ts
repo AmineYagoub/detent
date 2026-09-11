@@ -211,6 +211,16 @@ function defaultProbe(command: string): void {
  * before PRDR-198 and after the first draft of its fix. If that guarantee is
  * required it needs a mechanism Detent controls, not a flag.
  *
+ * PRDR-223 (audit): the built-in context is no longer what runs. `ide-assistant`
+ * excluded five tools; Detent's own context file excludes every tool of the
+ * pinned inventory but the three symbolic reads, so the memory tools the
+ * paragraph above measured as exposed are now off the surface too — which is
+ * removal from the MCP surface, not the guarantee about remembering, and that
+ * sentence stays false. A Serena newer than the pin may add tools this list
+ * does not name; they would be exposed, and the allowlist would still refuse
+ * the call (S-3′), so the inventory test is what keeps the pin and the list
+ * together.
+ *
  * PRDR-220: the dashboard and the GUI log window are turned OFF per launch.
  * Serena's machine config (`~/.serena/serena_config.yml`) ships with
  * `web_dashboard: true` and `web_dashboard_open_on_launch: true`, so a server
