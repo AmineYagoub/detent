@@ -113,13 +113,18 @@ export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeo
   }
 }
 
-/** Audit of PRDR-230: PRDR-226 wrote the record here; read it once so an upgrade cannot silently discard an acceptance in flight. */
-function legacyAcceptPath(root: string, id: string): string {
-  return path.join(stateDir(root), "runs", id, "drift_accept.json");
-}
+/**
+ * Correction to the audit of PRDR-230: there is NO read-through to PRDR-226's
+ * path. That migration convenience re-opened the hole PRDR-230 exists to close
+ * — `.detent/runs/<id>/` is the session's own `artifactRoot`, which the
+ * containment guard admits for mutation, so reading an acceptance from there
+ * let a session that weakened its gate write the record accepting it (SEC-5).
+ * Nothing is stranded: an acceptance is consumed at the merge that follows it,
+ * and the halted root carried none.
+ */
 
 export function readAcceptedDrift(root: string, id: string): AcceptRecord | null {
-  const file = existsSync(driftAcceptPath(root, id)) ? driftAcceptPath(root, id) : legacyAcceptPath(root, id);
+  const file = driftAcceptPath(root, id);
   try {
     const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<AcceptRecord>;
     const hashes: Record<string, string> = {};
@@ -198,10 +203,9 @@ export function rebaselineAccepted(root: string, id: string, at: string): string
   });
   if (changed.length > 0) writeBindings(root, { bindings, skips: [...file.skips] });
   rmSync(driftAcceptPath(root, id), { force: true });
-  rmSync(legacyAcceptPath(root, id), { force: true });
   return changed;
 }
 
 export function hasAcceptedDrift(root: string, id: string): boolean {
-  return existsSync(driftAcceptPath(root, id)) || existsSync(legacyAcceptPath(root, id));
+  return existsSync(driftAcceptPath(root, id));
 }

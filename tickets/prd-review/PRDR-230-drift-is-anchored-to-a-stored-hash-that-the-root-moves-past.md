@@ -131,9 +131,14 @@ change — restoring exactly the configuration its fork carries — was blocked 
 only a merge could clear it. The fork's hash and any accepted hash are now both admissible; the
 comparison uses whichever the tree matches.
 
-*The moved acceptance record had no migration.* `readAcceptedDrift` now reads the PRDR-226 path
-when the new one is absent, and `rebaselineAccepted` removes both, so an upgrade mid-flight
-cannot silently discard an acceptance an operator made.
+*The moved acceptance record had no migration.* A read-through to PRDR-226's path was added and
+then REMOVED the same day, by the PRDR-231 design panel's first verdict: `.detent/runs/<id>/` is
+the session's own artifact area, so reading an acceptance from there re-opened the exact hole
+this ticket closes — a session that weakened its gate could write the record accepting it. The
+convenience was not worth the control, and it was buying nothing: an acceptance is consumed at
+the merge that follows it, and the halted root carried none. Corrected in the commit that
+records this, with the migration re-stated as: an acceptance in flight across the upgrade is
+re-made by running the accept verb again.
 
 **Recorded, not changed.**
 
