@@ -76,3 +76,23 @@ describe("PRDR-217 a DONE ticket whose finalize crashed is finalized at the next
     expect(runBranchTree(root)).not.toContain("src/feature-t1.txt");
   }, 60_000);
 });
+
+/** Audit of PRDR-217: the one throw finalize is allowed — B-2′'s conflict — at resume time. */
+describe("audit of PRDR-217: a conflict during the resumed finalize is the human's, and the run says so", () => {
+  it("closes the generation, keeps the worktree, and ends the run with the conflict as the reason", async () => {
+    const root = await strandedRepo();
+    /* The run branch moved on with its own `src/feature-t1.txt` — the merge cannot be automatic. */
+    writeTree(root, { "src/feature-t1.txt": "someone else\n" });
+    git(root, "add", "src/feature-t1.txt");
+    git(root, "commit", "-q", "-m", "a conflicting change on the run branch");
+
+    const outcome = await run({ root, backend: new MockBackend({}), prompts: PROMPTS, runId: "stranded", worktree: true });
+    expect(outcome.exitCode).not.toBe(EXIT_OK);
+    expect(outcome.summary.reason ?? "").toContain("conflict");
+    expect(existsSync(worktreePath(root, "t1")), "the worktree and branch stay for the human (B-2′)").toBe(true);
+    const ticket = readTicket(root, "t1");
+    expect(ticket.state).toBe("DONE");
+    expect(currentGeneration(ticket).outcome, "closed, so the next resume leaves it alone").toBe("done");
+    expect(JSON.stringify(ticket.notes)).toContain("conflict");
+  }, 60_000);
+});

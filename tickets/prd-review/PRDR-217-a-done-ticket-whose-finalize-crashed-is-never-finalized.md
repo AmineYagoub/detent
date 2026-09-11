@@ -64,3 +64,17 @@ exited 0 with an empty pool and the run branch's tree did not contain the commit
 change; then merged, worktree gone, generation `done`, note and journal event present; and the
 closed-generation shape untouched, before and after.
 
+
+## Audit
+
+Cold re-read of the sweep against the one throw finalize is allowed. A merge conflict during
+the resumed finalize propagates out of `pool()` as a breach: the registry maps it to a
+`BREACH` tool error, the driver's `next` call raises it, and nothing in the loop catches a
+breach from `next`, so the run ends through `run()`'s catch with the conflict as the exit
+reason. That is the right stop — the human must integrate — and better than the in-loop
+route, where PRDR-112's outage backoff now catches PRDR-151's refusal and waits a minute
+instead (pre-existing, noted, not this ticket's). Pinned: the generation closes first, the
+worktree stays, the ticket's note names the conflict, and the run exits non-zero with it —
+observed failing with the sweep neutralized (exit 0, nothing closed), then green. Also checked:
+`closeGen` is idempotent on a closed generation; the sweep runs only in worktree mode; the
+journal event lands in the ticket's runs directory whether or not this run created it.
