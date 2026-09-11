@@ -72,3 +72,21 @@ a launch with a ready probe serialised no `symbol_tools`; seven prompt-marker te
 the missing mention. Then the change; then all green, `prompts:check` re-hashed, the agents and
 the hook bundle regenerated.
 
+
+## Audit
+
+Cold re-read against the SDK's server types. `alwaysLoad` loads ALL of the server's tools onto
+the turn-one list, the editing and memory ones included; the per-tool `tools` policy the SDK
+offers exists on the HTTP and SSE server configs only ("carried on mcp_set_servers for remote
+servers"), not on the stdio config Serena uses, so nothing narrows what the model SEES. What
+it may CALL is unchanged: the allowlist carries the four read tools and nothing else, the
+guard abstains on an MCP call so the allowlist decides (S-2‴), and a headless session's
+unlisted tool is refused — S-3′'s posture exactly, now with the refusal visible to the model
+as one wasted turn rather than a hidden hole. `alwaysLoad` also waits for the server to connect
+before the first prompt, capped at five seconds; Serena reaches its MCP server within
+milliseconds of start and initialises the language server in the background, observed on the
+PRDR-220 probe. The research prompt's sentence sits before the source-hierarchy recording
+instruction, where local search is described. The measurement (AC 4) is pending: gate-313's
+running take was launched before this landed, so the count begins with the next restart —
+`grep -o '"name":"mcp__serena__' <transcript>.jsonl | wc -l` per session under
+`~/.claude/projects/-Users-workstation-detent-gate-313--detent-worktrees-*`. No code change.
