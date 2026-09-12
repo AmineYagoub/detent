@@ -729,6 +729,27 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   false — findings buy a budgeted number of rounds — so a fixer with four rounds left believed it
   had one.
 
+- **C-12‴ (3.1.1, PRDR-238).** A human may restart the attempt of a ticket that is **not finished**,
+  not only one that has already halted. `HUMAN_REQUEUE` had exactly two rows in X-3's table —
+  NEEDS_HUMAN and BLOCKED — which was right when PRDR-078 built these verbs for a halted ticket, and
+  was never revisited once crash-resume existed. A crash does not leave a ticket halted; it leaves it
+  mid-flight. So a session killed mid-implement left its ticket IN_PROGRESS, where B-5's skip then
+  sent an implementation nobody had written down the entire ladder — a blind fix, a research session,
+  an informed fix, each spending real sessions against a near-empty tree — before NEEDS_HUMAN finally
+  made C-12's requeue admissible. The documented remedy was gated behind the failure path it exists
+  to short-circuit. A machine restart during gate-313's take 15 stranded two tickets that way at
+  once, at a measured cost of roughly $10-16 and an hour to reach a state a human could already see
+  was correct from the outside. The admissible set is now one exported constant the table and the
+  plumbing check both read, so the second copy that lived in `requeueTicket` cannot drift from the
+  first. APPROVED is deliberately absent: its diff passed the authoritative gate and a review,
+  finalize is mechanical from there, and a requeue would discard verified work on a keystroke —
+  `approve` is the verb for re-examining it. DONE is merged and READY is what a requeue produces.
+  What makes the widening safe is the guard that did NOT move with it: `guardClaim` still refuses a
+  claim held by a live process, naming the pid and the claim's age, and breaks only a verifiably dead
+  owner on this host — the predicate `unclaim` and the pool's crash-resume self-heal already share
+  (PRDR-079). A requeue therefore cannot pull a ticket out from under a running session in any newly
+  admitted state, which is why this is a widening of the table rather than a new verb.
+
 - **S-4⁗ (3.1.1, PRDR-237).** The effort a session RAN at, beside the one it was asked for. S-4‴
   recorded the routed level, and the sentence that justified recording anything is about the other
   half: *"the SDK downgrades silently for a model that cannot serve one, which is why a configured

@@ -4,6 +4,7 @@ import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { humanApproved, humanRequeue, type KernelEvent } from "./events.js";
+import { REQUEUEABLE } from "./machine.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
 import { RunJournal } from "./journal.js";
 import { apply } from "./machine.js";
@@ -140,7 +141,7 @@ export function approveTicket(root: string, id: string, user: string, deps: Plum
 }
 
 /**
- * `detent requeue <id> [--guidance]`: NEEDS_HUMAN|BLOCKED → READY, opening
+ * `detent requeue <id> [--guidance]`: any REQUEUEABLE state → READY, opening
  * generation N+1 with zeroed counters; generation N stays frozen with its
  * record (X-8/D-17). The guidance is recorded on the generation it opens.
  */
@@ -155,10 +156,11 @@ export function requeueTicket(
   if (!guard.ok) return { exitCode: PLUMBING_EXIT_REFUSED, message: guard.refusal ?? "claimed" };
 
   const ticket = readTicket(root, id);
-  if (ticket.state !== "NEEDS_HUMAN" && ticket.state !== "BLOCKED") {
+  /** PRDR-238: the machine's own set, so this check cannot drift from the table. */
+  if (!REQUEUEABLE.includes(ticket.state)) {
     return {
       exitCode: PLUMBING_EXIT_REFUSED,
-      message: `requeue is admissible only from NEEDS_HUMAN or BLOCKED; ${id} is ${ticket.state} (X-3 offers no such row)`,
+      message: `requeue is admissible from ${REQUEUEABLE.join(", ")}; ${id} is ${ticket.state} (X-3 offers no such row)`,
     };
   }
 
