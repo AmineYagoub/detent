@@ -11,7 +11,7 @@ import { consentLogPath, proposeConfigWrite, runConsented } from "../../src/init
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { BOOTSTRAP_TICKET_ID, bootstrapBlocks, finalizeBootstrap, planPath } from "../../src/init/plan.js";
-import { renderPresentation, approvalPath } from "../../src/init/present.js";
+import { readPresentation, approvalPath } from "../../src/init/present.js";
 import { readTicket, allTickets, ready } from "../../src/kernel/tickets/readers.js";
 import { assignmentsFileSchema, planSchema } from "../../src/schemas/records.js";
 import { CEILINGS, type Budgets } from "../../src/schemas/budgets.js";
@@ -617,23 +617,29 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
     expect(allTickets(root).map((t) => t.id)).toEqual(["t-100"]);
   });
 
-  it("a non-TTY init defers to `run`, which presents the SAME summary (C-7's dual exit)", async () => {
+  it("a non-TTY init defers, and persists the rendering `run` replays (C-7's dual exit)", async () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.message).toContain("deferred");
-    /** The renderer is shared, so `run` shows exactly what `init` showed. */
-    const stored = readBindings(root);
-    const same = renderPresentation({
-      root,
-      tickets: allTickets(root),
-      bindings: stored.bindings,
-      skips: stored.skips as never[],
-      bootstrap: null,
-      assignments: {},
-    });
-    expect(result.interrupt?.message).toContain(same.split("\n")[0] as string);
+    /**
+     * PRDR-255: this test was named "which presents the SAME summary" and then
+     * called `renderPresentation` in its own process, comparing init's message
+     * to init's own first line under the comment "the renderer is shared, so
+     * `run` shows exactly what `init` showed". The renderer was not shared —
+     * `run` had no importer of it — so the assertion proved the renderer is
+     * deterministic and nothing about the second exit. The name is the only
+     * place the missing leg was ever asserted, which is why nobody looked.
+     *
+     * What this file can honestly hold is init's end of the contract: the
+     * rendering is on disk, and it is the text init showed. The far end — that
+     * `run` prints it and offers the decision — is driven through the real
+     * entry point in `tests/cli/run-approval.test.ts`.
+     */
+    const stored = readPresentation(root);
+    expect(stored, "the second exit has something to replay").not.toBe(null);
+    expect(result.interrupt?.message).toContain(stored?.presentation as string);
   });
 
   it("PRESENT is reached only after every earlier phase completed", async () => {

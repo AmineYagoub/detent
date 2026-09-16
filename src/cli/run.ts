@@ -4,7 +4,9 @@ import { buildLiveBackend } from "../sessions/live.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { makeTtyEscalation } from "./escalate.js";
+import { makeTtyApproval } from "./approve.js";
 import type { SessionBackend } from "../sessions/backend.js";
+import type { ApprovalDecision } from "../init/present.js";
 import { noteRunPhase } from "../kernel/run-lock.js";
 import { setInFlight } from "./exit-record.js";
 
@@ -33,6 +35,14 @@ import { setInFlight } from "./exit-record.js";
  */
 export interface RunMainDeps {
   readonly buildBackend?: (root: string) => SessionBackend;
+  /**
+   * C-7 (PRDR-255): the approval transport, injectable on the same argument as
+   * `buildBackend` above. The real one is `makeTtyApproval`, which reads a line
+   * from `process.stdin` — under vitest that never arrives and the test hangs
+   * to its timeout, which is why neither TTY asker in this repository has a
+   * test and both are supplied at composition instead.
+   */
+  readonly approve?: (presentation: string) => Promise<ApprovalDecision>;
 }
 
 export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}): Promise<number> {
@@ -126,6 +136,27 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
       noteRunPhase(root, text);
     },
     ...(interactive ? { escalate: makeTtyEscalation(process.env["USER"] ?? "operator") } : {}),
+    /**
+     * C-7 (PRDR-255): the second exit's transport, gated on the same
+     * `interactive` as C-10's escalation directly above — one expression, so
+     * the two decisions a human makes inside `run` can never disagree about
+     * whether one is present.
+     *
+     * The name is sourced exactly as `cli/init.ts` sources it for the first
+     * exit, so one plan approved at either exit records the same `approved_by`.
+     * What the environment supplies is the LABEL; what no environment can
+     * supply is the answer, and that is what the TTY gate protects — off a TTY
+     * the seam is absent and `offerDeferredApproval` presents and refuses.
+     *
+     * `mainDeps.approve` is the PRDR-174 seam applied to the asker: the real
+     * one reads a line from `process.stdin`, which under vitest never arrives,
+     * so a test that could not inject here could only reach this decision by
+     * faking a TTY — testing Node's line reader rather than Detent. It is an
+     * override, never a default: absent, nothing changes.
+     */
+    ...(interactive || mainDeps.approve !== undefined
+      ? { approve: mainDeps.approve ?? makeTtyApproval(process.env["USER"] ?? "operator") }
+      : {}),
     ...(maxTickets === undefined ? {} : { maxTickets }),
   });
 

@@ -5,6 +5,13 @@ import type { ApprovalDecision } from "../init/present.js";
  * C-7's inline approval prompt. The dual exit means declining here is not a
  * failure — the plan stays READY-unapproved and `detent run` presents it
  * again, so a user who wants to read the tickets first can simply say no.
+ *
+ * That second sentence was the whole rationale for calling a decline harmless,
+ * and until PRDR-255 it named a mechanism that did not exist: `run` refused an
+ * unapproved plan with a string sending the reader back to `init`. The exit is
+ * `offerDeferredApproval` in `kernel/run.ts`, which replays the rendering
+ * `presentStage` persisted and offers this same decision through
+ * `RunOptions.approve` — this module's `makeTtyApproval`, wired by `cli/run.ts`.
  */
 
 /** The one C-5 decision a flag may answer (T-131). */

@@ -62,7 +62,16 @@ function unwrap(id: string, result: SchemaCheck<Ticket>): Ticket {
  * rather than leaving readers to maintain an exclusion list.
  */
 /** PRDR-153: the one definition. `planHash` and `run` each had their own, and both were wrong. */
-export const NON_TICKET_FILES: ReadonlySet<string> = new Set(["approval.json", "plan.json"]);
+/**
+ * PRDR-255 grew it a third time, for C-7's persisted presentation — and the
+ * doc-block above predicted exactly how: a new artifact in `plan/` is a ticket
+ * until this list says otherwise, so `allTickets` parsed `presentation.json`
+ * and `run` exited 1 with a schema error naming `presentation`, `plan_hash` and
+ * `blocking` as unrecognized ticket keys. Being ONE list is what made that a
+ * one-line fix instead of the three-site hunt PRDR-153 describes; F-1 still
+ * owes the positive definition PRDR-064 asked for.
+ */
+export const NON_TICKET_FILES: ReadonlySet<string> = new Set(["approval.json", "plan.json", "presentation.json"]);
 
 export function allTickets(root: string): Ticket[] {
   const dir = ticketsDir(root);

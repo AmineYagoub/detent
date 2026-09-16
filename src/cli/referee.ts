@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { approvalState } from "../init/machine.js";
+import { readPresentation } from "../init/present.js";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -73,6 +74,27 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
    */
   const approved = approvalState(root);
   if (!approved.approved) {
+    /**
+     * C-7 (PRDR-255): the PRESENTATION half of the second exit, on this driver.
+     *
+     * ARCH-2 makes a precondition on one driver a precondition on both, and the
+     * doc-block above is this file's own record of that rule being broken. So
+     * the refusal carries the same rendering `detent run` replays: the human in
+     * chat sees the plan they are being asked about, which is C-7's first verb.
+     *
+     * It does NOT offer the decision, and that asymmetry is deliberate rather
+     * than overlooked. C-7's second verb needs a prompt, and this driver must
+     * not grow one — `tests/docs/golden-path.test.ts` sanctions the prompting
+     * primitives in exactly three modules on the grounds that a fourth would be
+     * "a sixth interrupt class in disguise", and this file is not among them. The
+     * parity-faithful decision channel is a plan-level kind on the R-1 `record`
+     * tool that both drivers reach through, which is a change to the tool
+     * surface and takes its own ticket (N-6). Until then the model relays the
+     * answer through `init`'s T-131 flags, and C-7 is whole on one driver and
+     * half-built on this one — stated here rather than left to be discovered.
+     */
+    const shown = readPresentation(root);
+    if (shown !== null) process.stderr.write(`${shown.presentation}\n\n`);
     process.stderr.write("no approved plan — run `detent init` and approve it first (C-9)\n");
     return 2;
   }

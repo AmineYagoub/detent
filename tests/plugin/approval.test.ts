@@ -62,7 +62,14 @@ describe("T-131 the flag relay maps to makeTtyApproval's three outcomes", () => 
     expect(outcome.message).toContain("declined");
   });
 
-  it("--defer hands presentation to the first `run` (C-7)", async () => {
+  /**
+   * PRDR-255: named for the far end and asserting the near one. `--defer` is
+   * tested here — no approval written, AWAIT_APPROVAL raised, the word in the
+   * message — and what `run` then DOES with it is driven through the real entry
+   * point in `tests/cli/run-approval.test.ts`, because until that ticket it did
+   * nothing at all. The name now says which end this is.
+   */
+  it("--defer records no approval and raises AWAIT_APPROVAL, for `run` to take up (C-7)", async () => {
     const root = presentRoot();
     const outcome = await presentStage({ ...DEPS(root), ask: makeFlagApproval("defer", "amine") });
 

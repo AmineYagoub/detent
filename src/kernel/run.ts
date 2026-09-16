@@ -9,6 +9,7 @@ import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
 import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "./run-lock.js";
 import { approvalState } from "../init/machine.js";
+import { readPresentation, recordApproval, type ApprovalDecision } from "../init/present.js";
 import { NON_TICKET_FILES } from "./tickets/readers.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
 import { RunJournal } from "./journal.js";
@@ -62,6 +63,15 @@ export interface RunOptions {
    * ticket stays pending and the run exits 10 with the JSON summary.
    */
   readonly escalate?: (input: EscalationInput) => Promise<EscalationAction>;
+  /**
+   * C-7 (PRDR-255): the SECOND exit. An approval deferred at `init` is offered
+   * here, on the same terms C-10 offers an escalation — the precondition lives
+   * in the driver so it is not one CLI verb's private behaviour, and only the
+   * transport of the human's answer is injected. Absent (every non-TTY
+   * invocation), the plan is presented and the run refuses; an absent human is
+   * never an approving one, so nothing is ever synthesized from the environment.
+   */
+  readonly approve?: (presentation: string) => Promise<ApprovalDecision>;
   /** C-13: resume announcements and similar user-facing notices. */
   readonly announce?: (message: string) => void;
   /**
@@ -126,7 +136,10 @@ export async function run(opts: RunOptions): Promise<RunOutcome> {
 export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Promise<RunOutcome> {
   const { root } = opts;
   const approval = readApproval(root);
-  if (approval !== "ok") return notReady(approval);
+  if (approval !== "ok") {
+    const decided = await offerDeferredApproval(opts, approval);
+    if (decided !== "ok") return decided;
+  }
   /**
    * C-9′ (PRDR-139): the approval must be OF THIS PLAN. `run` parsed the file
    * and never compared it, so tickets edited after approval executed
@@ -299,6 +312,72 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
 
 function notReady(reason: string): RunOutcome {
   return { exitCode: EXIT_NOT_READY, summary: { schema_version: 1, exit: EXIT_NOT_READY, pending: [], reason } };
+}
+
+/**
+ * C-7 (PRDR-255): the SECOND exit — `run` presents a plan that was deferred.
+ *
+ * C-7 is dual-exit — "offered inline at the end of `init` (TTY), and, if
+ * deferred or non-TTY, presented by the first `detent run`" — with the AC
+ * "unapproved plan → `run` presents it before executing; declining leaves state
+ * READY-unapproved, exit 2". Only the init half was ever built: this function's
+ * caller refused with a string pointing the operator back at `init`, while
+ * `init` had already told them, in the present indicative and cited to C-7,
+ * that `run` would present the plan. Sixteen sites said so, two of them strings
+ * a human reads at the terminal.
+ *
+ * It sits at the very top of `runWithConfig`, before the lock, the journal and
+ * the branch, so a refusal here touches nothing — the placement PRDR-181 argued
+ * for the preconditions beside it.
+ *
+ * What it does NOT do is re-render. The text comes from the record `presentStage`
+ * persisted, so what `run` shows is what the human was shown, byte for byte.
+ * Rebuilding it from `state/` checkpoints would derive a fresh rendering from
+ * inputs F-4 may have invalidated, which is exactly how C-7′'s defect was
+ * produced (PRDR-087: forced re-execution re-ran ANALYZE and PLAN, and a
+ * DIFFERENT plan reached approval — eleven reviewed tickets, fourteen approved).
+ * No record means no presentation and no approval, not a substitute rendering.
+ *
+ * A STALE approval is deliberately not handled here. `readApproval` returns
+ * "ok" for one, and the C-9′ comparison below refuses it by name; C-7′ made
+ * staleness an init-side PRESENT replay and PRDR-087 closed it there.
+ */
+async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise<RunOutcome | "ok"> {
+  const shown = readPresentation(opts.root);
+  if (shown === null) {
+    return notReady(
+      `${refusal} There is no presentation on record for this plan, so there is nothing a human could be shown here — ` +
+        "re-run `detent init` to draft and present it (C-7).",
+    );
+  }
+  opts.announce?.(shown.presentation);
+  /**
+   * C-3′: `init` refuses to OFFER approval while a question blocks. The second
+   * exit must not become the way around the first one's gate, so it presents
+   * and stops rather than asking.
+   */
+  if (shown.blocking > 0) {
+    return notReady(
+      `${String(shown.blocking)} blocking question(s) must be answered before this plan can be approved — ` +
+        "answer them and re-run `detent init` (C-3′).",
+    );
+  }
+  /**
+   * C-5: no asker means no human — every non-TTY invocation lands here, and the
+   * plan has now been presented, which is the half of C-7 that is available
+   * without one. Nothing is synthesized from the environment.
+   */
+  if (opts.approve === undefined) return notReady(refusal);
+  const decision = await opts.approve(shown.presentation);
+  if (decision.kind !== "approved") {
+    return notReady(
+      decision.kind === "declined"
+        ? "approval declined — the plan stays READY-unapproved (C-7); edit it with `detent init` or approve it on the next run"
+        : "approval deferred — the plan stays READY-unapproved (C-7) and the next `detent run` presents it again",
+    );
+  }
+  recordApproval(opts.root, decision.by, opts.now?.() ?? Date.now());
+  return "ok";
 }
 
 function readApproval(root: string): string {

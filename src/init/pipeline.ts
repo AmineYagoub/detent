@@ -61,7 +61,13 @@ export interface PipelineDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   /** PRDR-189: the clock a stated reset is measured against. */
   readonly now?: () => Date;
-  /** C-7: present inline on a TTY; absent defers approval to the first `run`. */
+  /**
+   * C-7: present inline on a TTY; absent defers approval to the first `run`,
+   * which presents the persisted rendering and offers the decision there
+   * (PRDR-255 — `kernel/run.ts`'s `offerDeferredApproval`). Absent is never
+   * approved: `presentStage` returns `deferred`, and the second exit refuses
+   * without an asker of its own.
+   */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
   readonly print?: (text: string) => void;
 }

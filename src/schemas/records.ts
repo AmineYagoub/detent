@@ -212,6 +212,29 @@ export const approvalSchema = z.strictObject({
 export type Approval = z.infer<typeof approvalSchema>;
 
 /**
+ * C-7 (PRDR-255): what PRESENT showed, kept for the second exit to replay.
+ *
+ * The rendered TEXT, not the inputs it was rendered from. C-7 says the first
+ * `detent run` presents the deferred plan, and `present.ts` says the summary is
+ * "rendered identically by `init` and by `run`" — a claim only a stored
+ * rendering can keep. Rebuilding it at run time from `state/` would re-derive
+ * it from checkpoints F-4 may have invalidated, which is how C-7′'s defect was
+ * produced (PRDR-087: ANALYZE and PLAN re-ran and a DIFFERENT plan reached
+ * approval).
+ *
+ * `blocking` travels with it because `presentStage` refuses to offer approval
+ * while a question blocks (C-3′), and the second exit must not become the way
+ * around the first's gate.
+ */
+export const presentationSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  presentation: nonEmptyString,
+  plan_hash: sha256Hex,
+  blocking: z.number().int().nonnegative(),
+});
+export type Presentation = z.infer<typeof presentationSchema>;
+
+/**
  * F-1's `bindings.json`: the committed collection of A-6 records. One file, so
  * V-3 can re-resolve every slot in one read before a gate runs.
  */

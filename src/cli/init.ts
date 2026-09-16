@@ -254,7 +254,10 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       /*
        * C-7: a relayed flag answer wins (T-131 — the plugin path, where the
        * model presented and the human answered in chat); otherwise approval is
-       * offered inline on a TTY and deferred to `run` everywhere else.
+       * offered inline on a TTY and deferred to `run` everywhere else — where
+       * PRDR-255 built the exit that clause had been naming since T-068. The
+       * name is sourced the same way at both exits, so one plan records the
+       * same `approved_by` whichever one takes the answer.
        */
       ...(approvalFlag !== undefined
         ? { askApproval: makeFlagApproval(approvalFlag, values.by ?? process.env["USER"] ?? "operator") }

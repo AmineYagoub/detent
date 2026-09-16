@@ -1,7 +1,14 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { stateDir } from "../fs/layout.js";
-import { approvalSchema, type Approval, type Binding } from "../schemas/records.js";
+import { stateDir, writeArtifact } from "../fs/layout.js";
+import { parseArtifact } from "../schemas/common.js";
+import {
+  approvalSchema,
+  presentationSchema,
+  type Approval,
+  type Binding,
+  type Presentation,
+} from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { HeldFinding, PlanQuestion, PlanReview } from "../schemas/init.js";
@@ -25,10 +32,30 @@ import type { PhaseOutcome } from "./machine.js";
  * Approval is dual-exit (C-7): offered inline on a TTY, and otherwise
  * deferred to the first `detent run`, which presents the same summary. A
  * declined approval is not a failure — it leaves the plan READY-unapproved.
+ *
+ * PRDR-255 built the second exit. Until then this paragraph described it in the
+ * present indicative and `run` refused with a string pointing back at `init`;
+ * the rendering is now persisted here (`presentation.json`) and replayed there,
+ * which is what makes "the same summary" a fact rather than an intention.
  */
 
 export function approvalPath(root: string): string {
   return path.join(stateDir(root), "plan", "approval.json");
+}
+
+/**
+ * C-7 (PRDR-255): what PRESENT showed, for the second exit to replay.
+ *
+ * `null` when the file is absent or will not parse, and the caller REFUSES on
+ * null rather than rendering something else. A plan `init` never presented has
+ * no approved-by-a-human rendering to show, and inventing one at run time is
+ * the failure this record exists to prevent.
+ */
+export function readPresentation(root: string): Presentation | null {
+  const file = path.join(stateDir(root), "plan", "presentation.json");
+  if (!existsSync(file)) return null;
+  const parsed = parseArtifact(presentationSchema, JSON.parse(readFileSync(file, "utf8")));
+  return parsed.ok ? parsed.value : null;
 }
 
 export interface PresentInput {
@@ -182,7 +209,13 @@ export function presentInputsFromOutputs(
   };
 }
 
-/** The PRESENT summary. Rendered identically by `init` and by `run` (C-7). */
+/**
+ * The PRESENT summary. Rendered here, by `init`, and replayed verbatim by
+ * `run` from the record `presentStage` persists (C-7, PRDR-255) — `run` does
+ * not call this function, and a second rendering is exactly what must not
+ * happen: it would be derived from whatever the tree holds at run time rather
+ * than from what the human was shown.
+ */
 export function renderPresentation(input: PresentInput): string {
   const lines = [
     "Plan ready for approval.",
@@ -301,7 +334,11 @@ export type ApprovalDecision =
   | { readonly kind: "deferred" };
 
 export interface PresentDeps extends PresentInput {
-  /** Absent on a non-TTY: approval defers to the first `run` (C-7). */
+  /**
+   * Absent on a non-TTY: approval defers to the first `run` (C-7), which
+   * presents this same rendering and offers the decision there on a TTY of its
+   * own (PRDR-255). Absent must never mean approved — see `RunOptions.approve`.
+   */
   readonly ask?: (presentation: string) => Promise<ApprovalDecision>;
   readonly print?: (text: string) => void;
   readonly now?: () => number;
@@ -313,6 +350,22 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   const adviceFile = held.length > ADVICE_INLINE_MAX ? writeAdvice(deps.root, held) : undefined;
   const presentation = renderPresentation(adviceFile === undefined ? deps : { ...deps, adviceFile });
   deps.print?.(presentation);
+
+  /**
+   * C-7 (PRDR-255): the rendering is kept, so the second exit can replay it.
+   *
+   * Written on EVERY branch — before the blocking-question return below, and
+   * whatever the decision turns out to be — because `run` may be reached from
+   * any of them and what it shows must be what was shown here. That is the
+   * whole content of "rendered identically by `init` and by `run`", which was
+   * prose for as long as `run` had nothing to render from.
+   */
+  writeArtifact(deps.root, path.posix.join("plan", "presentation.json"), {
+    schema_version: 1,
+    presentation,
+    plan_hash: planHash(deps.root),
+    blocking: (deps.questions ?? []).filter((q) => q.blocking).length,
+  } satisfies Presentation);
 
   /**
    * C-3′ (PRDR-117): the whole plan is written and shown FIRST; a question no
@@ -344,9 +397,9 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   }
 
   /*
-   * C-7: declining or deferring both leave the plan READY-unapproved. The
-   * difference is only what the user was told; neither is an error, and the
-   * first `run` presents the same summary either way.
+   * C-7: declining or deferring both leave the plan READY-unapproved. Neither
+   * is an error, and the first `run` presents the same summary either way —
+   * the rendering persisted above is the one it replays (PRDR-255).
    */
   return {
     kind: "interrupt",
@@ -359,8 +412,16 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   };
 }
 
-/** C-7: approval is recorded with who, when, and the hash of what was approved. */
-function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
+/**
+ * C-7: approval is recorded with who, when, and the hash of what was approved.
+ *
+ * Exported for the second exit (PRDR-255). It stays the ONE writer of
+ * `approval.json` on both exits, so the who/when/plan-hash record has a single
+ * shape and a single place to get it wrong. `approvedBy` is the decision's own
+ * `by` at every call site — there is no environment fallback on this path,
+ * because an absent human is not an approving one (C-5).
+ */
+export function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
   const approval = approvalSchema.parse({
     schema_version: 1,
     approved_by: approvedBy,
