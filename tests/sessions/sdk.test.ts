@@ -391,6 +391,44 @@ describe("S-4 partial telemetry is absent telemetry", () => {
     });
     expect(withUsage.telemetryParsed).toBe(true);
   });
+
+  /**
+   * S-4 (PRDR-248) — the same shape, on the sibling field.
+   *
+   * PRDR-181 tightened `modelUsage` from key-presence to entry-count and left
+   * the flat field at `m.usage !== undefined`, which is the test it had just
+   * moved away from. The parser reads exactly `input_tokens` and
+   * `output_tokens` off a flat usage — the non-breakdown path hardcodes both
+   * cache figures to 0 — so a usage carrying neither bounds nothing.
+   */
+  it("refuses a flat usage that carries no token field", () => {
+    const base = { type: "result", subtype: "success", total_cost_usd: 0.5, num_turns: 3 };
+    expect(parseResultMessage({ ...base, usage: {} }).telemetryParsed, "an empty usage carries no tokens").toBe(false);
+    expect(parseResultMessage({ ...base, usage: null }).telemetryParsed, "nor does a null one").toBe(false);
+    expect(
+      parseResultMessage({ ...base, usage: { cache_read_input_tokens: 5 } }).telemetryParsed,
+      "nor does one with only keys this parser never reads",
+    ).toBe(false);
+  });
+
+  /**
+   * PRDR-053 — zeroed is not absent, and this is the constraint the fix above
+   * must not break: the live backend mints exactly this shape on a transport
+   * death, so the predicate keys on the fields being PRESENT, never non-zero.
+   */
+  it("still accepts a crash result whose token fields are zeroed", () => {
+    const crash = parseResultMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      num_turns: 2,
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+      result: "transport closed",
+    });
+    expect(crash.telemetryParsed, "a crash reports zeroed telemetry, not absent telemetry").toBe(true);
+    expect(crash.crashed, "and `zeroed` still derives the crash flag").toBe(true);
+  });
 });
 
 /**

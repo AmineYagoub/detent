@@ -225,14 +225,22 @@ export function parseResultMessage(message: unknown): SessionResult {
    * the tests only covered telemetry entirely ABSENT or a hand-injected
    * `telemetryParsed: false`, neither of which is this.
    *
-   * The fix closed the `modelUsage` branch only. The `m.usage !== undefined`
-   * disjunct below admits the SAME shape on the flat field: `usage: {}`,
-   * `usage: null` and any object carrying no token key all parse as telemetry
-   * present with zero tokens. The first sentence of this block is therefore
-   * still false for `usage`, and no test covers it.
+   * PRDR-248: that fix closed the `modelUsage` branch and left the flat field
+   * at `!== undefined`, which is the key-presence test it had just moved away
+   * from — so `usage: {}`, `usage: null` and an object carrying only keys this
+   * parser never reads all still counted. The two keys read off a flat usage
+   * are `input_tokens` and `output_tokens` (the non-breakdown path hardcodes
+   * both cache figures to 0), so a usage carrying neither bounds nothing.
+   *
+   * PRESENCE of those fields, never a non-zero value: PRDR-053 requires a crash
+   * to report telemetry ZEROED rather than absent, and the live backend mints
+   * `{ input_tokens: 0, output_tokens: 0 }` on a transport death. A value check
+   * would read every crash as absent and lose the `crashed` flag.
    */
   const usageEntries = Object.keys(m.modelUsage ?? {}).length;
-  const hasTelemetry = m.total_cost_usd !== undefined && (usageEntries > 0 || m.usage !== undefined);
+  const usage = (m.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
+  const usageCarriesTokens = typeof usage.input_tokens === "number" || typeof usage.output_tokens === "number";
+  const hasTelemetry = m.total_cost_usd !== undefined && (usageEntries > 0 || usageCarriesTokens);
   if (!hasTelemetry) {
     return {
       ok,
@@ -268,7 +276,6 @@ export function parseResultMessage(message: unknown): SessionResult {
     perModelEntries.reduce((acc, [, u]) => acc + (pick(u) ?? 0), 0);
 
   const fromBreakdown = perModelEntries.length > 0;
-  const usage = (m.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
 
   const inputTokens = fromBreakdown ? sum((u) => u.inputTokens) : (usage.input_tokens ?? 0);
   const outputTokens = fromBreakdown ? sum((u) => u.outputTokens) : (usage.output_tokens ?? 0);
