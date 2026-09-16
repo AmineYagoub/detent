@@ -72,14 +72,29 @@ export interface GuardDecision {
  * and its children; `dir/**` also matches the bare directory. picomatch is the
  * one glob engine (R-6); the conveniences are layered explicitly.
  */
-export function matchAny(rel: string, patterns: readonly string[]): boolean {
+const asciiFold = (s: string): string => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
+
+/**
+ * SEC-3 (PRDR-245): `nocase` folds ASCII case, and only the PROTECTED side
+ * passes it.
+ *
+ * Folding the deny direction can only refuse more; folding the grant direction
+ * would let `SRC/evil.ts` in under a `src/**` surface. The fold is ASCII rather
+ * than `toLowerCase`, which is locale-sensitive, and it reaches the literal
+ * comparison only — the glob matches take picomatch's own `nocase`, so a
+ * character class in an operator-supplied pattern is not rewritten underneath
+ * them.
+ */
+export function matchAny(rel: string, patterns: readonly string[], opts: { readonly nocase?: boolean } = {}): boolean {
+  const nocase = opts.nocase === true;
   const clean = rel.replace(/^\.\//, "");
+  const folded = nocase ? asciiFold(clean) : clean;
   for (const raw of patterns) {
     const p = String(raw).replace(/^\.\//, "");
     const bare = p.replace(/\/\*\*$/, "").replace(/\/$/, "");
-    if (clean === bare) return true;
-    if (picomatch.isMatch(clean, p, { dot: true })) return true;
-    if (picomatch.isMatch(clean, `${bare}/**`, { dot: true })) return true;
+    if (folded === (nocase ? asciiFold(bare) : bare)) return true;
+    if (picomatch.isMatch(clean, p, { dot: true, nocase })) return true;
+    if (picomatch.isMatch(clean, `${bare}/**`, { dot: true, nocase })) return true;
   }
   return false;
 }
@@ -301,7 +316,15 @@ export function guardToolUse(
   }
   /* Where the two disagree, the human is told which path the verdict is about. */
   const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;
-  if (matchAny(rel, policy.protectedGlobs)) {
+  /**
+   * SEC-3 (PRDR-245): folded, because `realpathNearest` canonicalises only the
+   * EXISTING prefix. A protected path with nothing on disk beneath it keeps the
+   * case the session typed, and on a case-insensitive filesystem the write then
+   * lands on the protected file — `NODE_MODULES/lodash/index.js` was allowed in
+   * a fresh worktree, where PRDR-149 protects `node_modules/**` because writing
+   * a dependency is writing an executable the gate will run.
+   */
+  if (matchAny(rel, policy.protectedGlobs, { nocase: true })) {
     return {
       decision: "deny",
       reason: `DENY: ${rel} is protected${via} (protected globs and ticket criteria are immutable to sessions — SEC-3).`,

@@ -1595,14 +1595,17 @@ function readGitRm(command) {
 }
 
 // src/sessions/guard.ts
-function matchAny(rel, patterns) {
+var asciiFold = (s) => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
+function matchAny(rel, patterns, opts = {}) {
+  const nocase = opts.nocase === true;
   const clean = rel.replace(/^\.\//, "");
+  const folded = nocase ? asciiFold(clean) : clean;
   for (const raw of patterns) {
     const p = String(raw).replace(/^\.\//, "");
     const bare = p.replace(/\/\*\*$/, "").replace(/\/$/, "");
-    if (clean === bare) return true;
-    if (import_picomatch.default.isMatch(clean, p, { dot: true })) return true;
-    if (import_picomatch.default.isMatch(clean, `${bare}/**`, { dot: true })) return true;
+    if (folded === (nocase ? asciiFold(bare) : bare)) return true;
+    if (import_picomatch.default.isMatch(clean, p, { dot: true, nocase })) return true;
+    if (import_picomatch.default.isMatch(clean, `${bare}/**`, { dot: true, nocase })) return true;
   }
   return false;
 }
@@ -1696,7 +1699,7 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2\u2033)` };
   }
   const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;
-  if (matchAny(rel, policy.protectedGlobs)) {
+  if (matchAny(rel, policy.protectedGlobs, { nocase: true })) {
     return {
       decision: "deny",
       reason: `DENY: ${rel} is protected${via} (protected globs and ticket criteria are immutable to sessions \u2014 SEC-3).`
