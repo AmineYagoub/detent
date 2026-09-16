@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,12 +53,13 @@ export function sourceFiles(dir: string, out: string[] = []): string[] {
  * asserting on the text `console.log` is not a `console.log`. Newlines and
  * lengths are preserved so reported line numbers stay true.
  *
- * A hand-written scanner rather than a regex, and the reason is measured: the
- * first version was `/(["'`])(?:\\.|(?!\1)[\s\S])*\1/g`, which treats the
- * apostrophe in a doc comment — "nobody's", "the project's" — as an opening
- * quote, scans to end of file looking for its partner, and backtracks. On this
- * repository's comment density that did not finish in two minutes. A scanner
- * that tracks comment state cannot make that mistake, and is linear.
+ * The first version was a regex, `/(["'`])(?:\\.|(?!\1)[\s\S])*\1/g`, which
+ * treats the apostrophe in a doc comment — "nobody's", "the project's" — as an
+ * opening quote, scans to end of file looking for its partner, and backtracks;
+ * on this repository's comment density it did not finish in two minutes. The
+ * second was a hand-written scanner that tracked comment and string state,
+ * which fixed that and was linear, and it is what PRDR-257 replaced: see the
+ * note on `mask` below for what it could not see.
  */
 export function withoutStringLiterals(source: string): string {
   return mask(source, false);
@@ -71,56 +73,63 @@ export function withoutStringLiterals(source: string): string {
  * hole PRDR-172 closed) nor a log message (the hole it opened by closing the
  * first with a comment-only strip). One scanner, so the gate and that test
  * cannot disagree about what counts as code.
+ *
+ * PRDR-257: "only executable text" is now true in both directions. It used to
+ * be false in both — code inside a `${…}` substitution was blanked with the
+ * literal around it, and a quote inside a regex literal desynchronised the
+ * scanner so that prose survived.
  */
 export function codeOnly(source: string): string {
   return mask(source, true);
 }
 
+/**
+ * PRDR-257 — the parse decides what is code, because a scanner that does not
+ * know the language gets this wrong in both directions.
+ *
+ * The hand-written version tracked comments and strings and knew nothing of a
+ * regex literal, so the first quote or backtick inside one opened string mode
+ * and ran until it found a partner — which was a doc-block, hundreds of lines
+ * later. `src/init/allowlist.ts:63` and `src/sessions/git-rm.ts:37` each hold a
+ * backtick inside a character class; between them they blanked 40 lines of live
+ * code and left comment text standing in the files a rule was scanning. It also
+ * blanked `${…}` substitutions, which are executable text: 32,347 characters
+ * across 188 of 261 files, measured against this parse.
+ *
+ * Literal spans come from the AST, so a substitution falls outside every span
+ * by construction rather than by a rule about braces. Comments come from every
+ * TOKEN's trivia and not every node's: a comment before a closing brace is
+ * leading trivia of the brace, and a node-only walk leaves 68 of them standing.
+ * Lengths and newlines are preserved exactly as before, so line numbers hold.
+ *
+ * `typescript` is already a dependency here and `scripts/` sits in no ARCH-1
+ * zone. The gate reports the same clean result it did before this change — the
+ * instrument was repaired, not the standard.
+ */
 function mask(source: string, blankComments: boolean): string {
   const out = source.split("");
-  let i = 0;
-  const blank = (at: number): void => {
-    if (out[at] !== "\n") out[at] = " ";
+  const blank = (a: number, b: number): void => {
+    for (let i = a; i < Math.min(b, out.length); i += 1) if (out[i] !== "\n") out[i] = " ";
   };
-  while (i < source.length) {
-    const ch = source[i] as string;
-    const next = source[i + 1];
-    if (ch === "/" && next === "*") {
-      const start = i;
-      i += 2;
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i += 1;
-      i += 2;
-      if (blankComments) for (let n = start; n < Math.min(i, source.length); n += 1) blank(n);
-      continue;
-    }
-    if (ch === "/" && next === "/") {
-      const start = i;
-      while (i < source.length && source[i] !== "\n") i += 1;
-      if (blankComments) for (let n = start; n < i; n += 1) blank(n);
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") {
-      const quote = ch;
-      i += 1;
-      while (i < source.length) {
-        const c = source[i] as string;
-        if (c === "\\") {
-          blank(i);
-          blank(i + 1);
-          i += 2;
-          continue;
-        }
-        if (c === quote) break;
-        /* An unterminated ' or " ends at the line break rather than running away. */
-        if (c === "\n" && quote !== "`") break;
-        blank(i);
-        i += 1;
+  const sf = ts.createSourceFile("m.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const seen = new Set<number>();
+  const visit = (n: ts.Node): void => {
+    const k = n.kind;
+    if (k === ts.SyntaxKind.StringLiteral || k === ts.SyntaxKind.NoSubstitutionTemplateLiteral) blank(n.getStart(sf) + 1, n.end - 1);
+    else if (k === ts.SyntaxKind.TemplateHead || k === ts.SyntaxKind.TemplateMiddle) blank(n.getStart(sf) + 1, n.end - 2);
+    else if (k === ts.SyntaxKind.TemplateTail) blank(n.getStart(sf) + 1, n.end - 1);
+    if (blankComments) {
+      const full = n.getFullStart();
+      if (!seen.has(full)) {
+        seen.add(full);
+        for (const r of ts.getLeadingCommentRanges(source, full) ?? []) blank(r.pos, r.end);
+        for (const r of ts.getTrailingCommentRanges(source, full) ?? []) blank(r.pos, r.end);
       }
-      i += 1;
-      continue;
     }
-    i += 1;
-  }
+    for (const c of n.getChildren(sf)) visit(c);
+  };
+  visit(sf);
+  if (blankComments) for (const r of ts.getTrailingCommentRanges(source, sf.endOfFileToken.end) ?? []) blank(r.pos, r.end);
   return out.join("");
 }
 

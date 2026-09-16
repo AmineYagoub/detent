@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { UNCHECKED_RULES, checkRules, violationsIn, withoutStringLiterals } from "../../scripts/check-rules.js";
+import { UNCHECKED_RULES, checkRules, codeOnly, violationsIn, withoutStringLiterals } from "../../scripts/check-rules.js";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 
 /**
  * PRDR-176 — the gate for the AGENTS.md rules `npm run lint` does not reach.
@@ -94,6 +96,56 @@ describe("PRDR-176 the AGENTS.md rules gate catches what it claims", () => {
     expect(masked.split("\n")).toHaveLength(3);
     expect(masked).not.toContain("one");
     expect(masked).toContain("const a =");
+  });
+
+  /**
+   * PRDR-257 — the masker's own tests. It had none: `codeOnly` was reached only
+   * through two oracles, both of which use it positively, so every way it could
+   * over-blank was invisible. These assert both directions on the two
+   * constructs the hand-written scanner did not know about.
+   */
+  it("a quote inside a regex literal does not open a string", () => {
+    const source = ['const SHELL = /[;&|`$()<>]/;', "export const kept = 1;", "/** a doc-block with a `tick` in it */", "console.log(x);", ""].join("\n");
+    expect(codeOnly(source), "the scanner ran past the regex and blanked live code").toContain("export const kept = 1;");
+    expect(codeOnly(source), "and the doc-block behind it survived the strip").not.toContain("tick");
+    expect(rulesOf("src/a.ts", source), "a rule reading masked text must still see the call").toContain("errors/no-console");
+  });
+
+  it("code inside a template substitution is code", () => {
+    const source = "const s = `just ${console.log(x)} end`;\n";
+    expect(codeOnly(source), "`${…}` is executable text, not string content").toContain("console.log(x)");
+    expect(codeOnly(source), "while the literal around it is still blanked").not.toContain("just");
+  });
+
+  it("comment blanking is total across the repository, not merely usual", () => {
+    const roots = ["src", "tests", "scripts"];
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const name of readdirSync(dir).sort()) {
+        const abs = path.join(dir, name);
+        if (statSync(abs).isDirectory()) walk(abs, out);
+        else if (abs.endsWith(".ts")) out.push(abs);
+      }
+      return out;
+    };
+    const standing: string[] = [];
+    for (const root of roots) {
+      for (const file of walk(root)) {
+        const source = readFileSync(file, "utf8");
+        const masked = codeOnly(source).split("\n");
+        source.split("\n").forEach((raw, i) => {
+          const text = raw.trim();
+          const isComment = text.startsWith("*") || text.startsWith("/*") || text.startsWith("//");
+          if (isComment && (masked[i] ?? "").trim() !== "") standing.push(`${file}:${String(i + 1)}`);
+        });
+      }
+    }
+    expect(standing, `prose survived the strip, so it can answer for code: ${standing.slice(0, 6).join(", ")}`).toEqual([]);
+  });
+
+  it("`withoutStringLiterals` still keeps comments and drops string contents", () => {
+    const source = '/** keep me */\nconst a = "drop me";\n';
+    expect(withoutStringLiterals(source)).toContain("keep me");
+    expect(withoutStringLiterals(source)).not.toContain("drop me");
   });
 
   /** The repository itself must pass the gate it ships. */
