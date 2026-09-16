@@ -46,6 +46,8 @@ jobs:
         run: |
           npm run parity:check
           npm run prompts:check
+          npm run rules:check
+          npm run tickets:check
           npm run lint
           npm run typecheck
           npm test

@@ -22,6 +22,10 @@ jobs:
       - run: npm ci
       - run: npm run parity:check
       - run: npm run prompts:check
+      # PRDR-247: both existed and neither ran anywhere. `tickets:check` caught
+      # four real mistakes in one afternoon on a branch it was never gating.
+      - run: npm run rules:check
+      - run: npm run tickets:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
