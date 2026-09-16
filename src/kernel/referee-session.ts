@@ -42,7 +42,7 @@ export class SessionArm {
     return attemptInputs(this.ctx, ticket, state, workDir);
   }
 
-  async launch(ticket: Ticket, state: SessionState, inputs: Record<string, unknown>, workDir: string): Promise<void> {
+  async launch(ticket: Ticket, state: SessionState, inputs: Record<string, unknown>, workDir: string): Promise<number> {
     const ctx = this.ctx;
     const role = roleForState(state);
     const id = ticket.id;
@@ -50,7 +50,8 @@ export class SessionArm {
     const openGen = currentGeneration(ticket).index;
     if (ctx.journal.unfinished(id, role, openGen)) {
       ctx.journal.appendTicketEvent(id, { stage: role, event: "skipped_after_crash", at: ctx.iso(), generation: openGen });
-      return;
+      /** PRDR-250: no session ran, so it consumed no turns. */
+      return 0;
     }
 
     /*
@@ -332,6 +333,12 @@ export class SessionArm {
     if (READ_ONLY_ROLES.has(role)) this.discardSurfaceRequest(id);
     else this.handleSurfaceRequest(id);
     if (!result.telemetryParsed) throw new Breach("telemetry unparsable (S-4 circuit breaker)");
+    /**
+     * X-1 (PRDR-250): the observed turn count, for the one ceiling that reads it
+     * back. Callers that do not bound turns ignore it; `researchStage` compares
+     * it against `failure_research_tool_calls`.
+     */
+    return result.turns;
   }
 
   /**

@@ -4,6 +4,7 @@ import { cacheKey, contradictions, fingerprint, type EnvFingerprint } from "../.
 import { stateDir } from "../../fs/layout.js";
 import { parseArtifact } from "../../schemas/common.js";
 import { researchBriefSchema, type ResearchBrief } from "../../schemas/records.js";
+import type { Budgets } from "../../schemas/budgets.js";
 import { researchDry, researchValid, upstreamBug, type KernelEvent } from "../events.js";
 
 /**
@@ -28,10 +29,23 @@ export function briefCachePath(root: string, key: string): string {
 
 export interface ResearchDeps {
   readonly root: string;
-  readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
+  /**
+   * X-1 (PRDR-250): returns the session's OBSERVED turn count, which the stage
+   * compares against `failure_research_tool_calls`. Turns are the proxy on
+   * init's precedent (`src/init/pipeline.ts`): S-4's telemetry carries no
+   * per-call counter, so a turn is one call's worth of budget (C-3a). A launch
+   * suppressed by B-5's crash skip reports zero, because no session ran.
+   */
+  readonly launch: (inputs: Record<string, unknown>) => Promise<number>;
   readonly readArtifact: () => unknown;
   readonly readFailureSignature: () => string | null;
-  readonly toolCallCeiling: number;
+  /**
+   * X-1 (PRDR-250): the budgets themselves, not a pre-extracted number. The
+   * P6 oracle strips comments AND string literals before matching, so a module
+   * that takes a handed-in figure cannot vouch for enforcing the ceiling it is
+   * named for — the posture PRDR-179 closed for the sibling `init` key.
+   */
+  readonly budgets: Pick<Budgets, "failure_research_tool_calls">;
   readonly note: (text: string) => void;
   /** Injectable for determinism; defaults to the real T-021 fingerprint. */
   readonly env?: () => Promise<EnvFingerprint>;
@@ -70,11 +84,35 @@ export async function researchStage(deps: ResearchDeps): Promise<ResearchOutcome
   }
 
   /* ---- live session --------------------------------------------------------- */
-  await deps.launch({
+  const ceiling = deps.budgets.failure_research_tool_calls;
+  const turns = await deps.launch({
     ...deps.ticketInputs,
-    tool_call_ceiling: deps.toolCallCeiling,
+    tool_call_ceiling: ceiling,
     cache_key: key,
   });
+
+  /**
+   * X-1 (PRDR-250): the ceiling read back, before the brief is trusted.
+   *
+   * `tool_call_ceiling` reached the prompt and nothing ever compared anything to
+   * it, so a session that ignored it had its brief accepted AND written to the
+   * env-keyed cache on the same terms as one that stayed inside its budget —
+   * seeding every later run from an unbounded session. The tokens are already
+   * spent by here and this does not recover them; what it bounds is whether the
+   * result is trusted, which is what RESEARCH_DRY is for.
+   *
+   * It does NOT refuse the ninth call, which is what the implementation plan's
+   * AC asks. The only mechanism that could is a per-session turn ceiling, and
+   * PRDR-106 removed those so that an SDK throw is unambiguously a crash rather
+   * than a budget event; reintroducing one here would make an over-budget
+   * research session indistinguishable from a transport death at the seam that
+   * classifies crashes (S-4/PRDR-053).
+   */
+  if (turns > ceiling) {
+    const detail = `research exceeded its tool-call ceiling: ${String(turns)} turns against ${String(ceiling)} (X-1)`;
+    deps.note(detail);
+    return { event: researchDry(detail), cached: false };
+  }
 
   const raw = deps.readArtifact();
   const parsed = raw === null ? null : parseArtifact(researchBriefSchema, raw);

@@ -155,15 +155,13 @@ async function research(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
   const id = ticket.id;
   const outcome = await researchStage({
     root: ctx.root,
-    launch: async (inputs) => {
-      await sessions.launch(ticket, "RESEARCH", inputs, workDir);
-    },
+    launch: async (inputs) => await sessions.launch(ticket, "RESEARCH", inputs, workDir),
     readArtifact: () => ctx.maybeArtifact(id, "research.json"),
     readFailureSignature: () => {
       const failure = ctx.maybeArtifact(id, "last_failure.json") as { signature?: string } | null;
       return failure?.signature ?? null;
     },
-    toolCallCeiling: ctx.budgets.failure_research_tool_calls,
+    budgets: ctx.budgets,
     note: (text) => appendNote(ctx.root, id, { author: "kernel", text }),
     ticketInputs: {
       ticket: publicTicket(ticket, ctx.root),

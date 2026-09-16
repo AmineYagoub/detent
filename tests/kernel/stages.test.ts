@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CEILINGS } from "../../src/schemas/budgets.js";
@@ -312,10 +312,11 @@ describe("T-045 research cache (X-6, D-18)", () => {
       root,
       launch: async () => {
         launches += 1;
+        return 1;
       },
       readArtifact: () => null,
       readFailureSignature: () => signature,
-      toolCallCeiling: 8,
+      budgets: { failure_research_tool_calls: 8 },
       note: () => {},
       /* same lockfile+runtime → same KEY, contradicting facts */
       env: async () => envB,
@@ -325,6 +326,87 @@ describe("T-045 research cache (X-6, D-18)", () => {
     /** the hit was refused; a live session ran */
     expect(launches).toBe(1);
     expect(outcome.cached).toBe(false);
+  });
+
+  /**
+   * X-1 (PRDR-250) — the ceiling is read back, not only interpolated.
+   *
+   * `tool_call_ceiling` reached the prompt and nothing compared anything to it,
+   * so a session could make any number of calls and have its brief accepted and
+   * CACHED on the same terms as one that stayed inside its budget. Turns are the
+   * proxy, on init's precedent: S-4's telemetry has no per-call counter, so a
+   * turn is one call's worth of budget (C-3a).
+   */
+  it("an over-ceiling research session is RESEARCH_DRY, and its brief is not cached", async () => {
+    const root = await fixture();
+    const signature = "a".repeat(64);
+    const env: EnvFingerprint = {
+      ecosystems: [],
+      lockfile_hash: "c".repeat(64),
+      runtime_version: "node 22.0.0",
+      version_facts: {},
+    };
+    const brief = {
+      schema_version: 1,
+      failure_signature: signature,
+      cache_key: cacheKey(signature, env),
+      root_cause: { claim: "found it", confidence: "high" },
+      evidence: [{ source: "src/x.py", claim: "here" }],
+      version_facts: {},
+      recommended_fix: { strategy: "do the thing" },
+      what_would_falsify: "it stays red",
+      local_search: { docs_checked: ["a"], code_checked: [] },
+    };
+
+    const outcome = await researchStage({
+      root,
+      launch: async () => CEILINGS.failure_research_tool_calls.default + 1,
+      readArtifact: () => brief,
+      readFailureSignature: () => signature,
+      budgets: { failure_research_tool_calls: CEILINGS.failure_research_tool_calls.default },
+      note: () => {},
+      env: async () => env,
+      ticketInputs: {},
+    });
+
+    expect(outcome.event.event, "a session past its ceiling is dry, however good its brief looks").toBe("RESEARCH_DRY");
+    expect(
+      existsSync(briefCachePath(root, cacheKey(signature, env))),
+      "an over-budget brief must not seed the cache for every later run",
+    ).toBe(false);
+  });
+
+  it("a research session inside its ceiling is unaffected", async () => {
+    const root = await fixture();
+    const signature = "b".repeat(64);
+    const env: EnvFingerprint = {
+      ecosystems: [],
+      lockfile_hash: "d".repeat(64),
+      runtime_version: "node 22.0.0",
+      version_facts: {},
+    };
+    const outcome = await researchStage({
+      root,
+      launch: async () => CEILINGS.failure_research_tool_calls.default,
+      readArtifact: () => ({
+        schema_version: 1,
+        failure_signature: signature,
+        cache_key: cacheKey(signature, env),
+        root_cause: { claim: "found it", confidence: "high" },
+        evidence: [{ source: "src/x.py", claim: "here" }],
+        version_facts: {},
+        recommended_fix: { strategy: "do the thing" },
+        what_would_falsify: "it stays red",
+        local_search: { docs_checked: ["a"], code_checked: [] },
+      }),
+      readFailureSignature: () => signature,
+      budgets: { failure_research_tool_calls: CEILINGS.failure_research_tool_calls.default },
+      note: () => {},
+      env: async () => env,
+      ticketInputs: {},
+    });
+
+    expect(outcome.event.event, "at the ceiling is inside it").toBe("RESEARCH_VALID");
   });
 
   it("a changed lockfile is a different key — fresh research, never the old brief (D-18)", () => {
