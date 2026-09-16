@@ -61,6 +61,28 @@ function cliLoggedIn(): boolean {
   }
 }
 
+/**
+ * S-5 (PRDR-251): every entrypoint that can obtain a live backend, and the
+ * module that checks the pin for it.
+ *
+ * Modelled on `ENFORCEMENT_SITES` (X-1), for the same reason: PRDR-181 stated
+ * the rule in a doc-block — "the pinned CLI version is CHECKED, on the path
+ * that runs" — and satisfied it on one of three spending paths. Prose cannot
+ * carry a claim about which modules do a thing; a map the oracle checks for
+ * totality can. A new verb that builds a live backend fails
+ * `tests/oracle/pin-parity.test.ts` until it appears here.
+ *
+ * `cli/run` is the one row whose checker is a different module: it hands the
+ * backend to the headless driver, and `kernel/run.ts` holds the refusal for
+ * both. Stated rather than special-cased, so the exception is readable.
+ */
+export const PIN_CHECK_SITES = {
+  "cli/doctor": "cli/doctor",
+  "cli/init": "cli/init",
+  "cli/referee": "cli/referee",
+  "cli/run": "kernel/run",
+} as const;
+
 export function buildLiveBackend(root: string): ClaudeCodeBackend {
   const gateCmd = readBindings(root).bindings.find((b) => b.slot === "test")?.resolved ?? null;
   return new ClaudeCodeBackend({

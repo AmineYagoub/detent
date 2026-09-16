@@ -9,6 +9,7 @@ import { stateDir } from "../fs/layout.js";
 import { CEILINGS } from "../schemas/budgets.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
+import type { SessionBackend } from "../sessions/backend.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig, decideSymbols, type SymbolsDecision } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
@@ -29,7 +30,11 @@ const EXIT_OK = 0;
 const EXIT_ERROR = 1;
 const EXIT_NOT_READY = 2;
 
-export async function main(argv: readonly string[]): Promise<number> {
+export interface InitMainDeps {
+  readonly buildBackend?: (root: string) => SessionBackend;
+}
+
+export async function main(argv: readonly string[], mainDeps: InitMainDeps = {}): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     allowPositionals: true,
@@ -194,36 +199,33 @@ export async function main(argv: readonly string[]): Promise<number> {
       );
       config = configFor(root);
     }
+    const backend = (mainDeps.buildBackend ?? defaultBackend)(root);
+    /**
+     * S-5 (PRDR-251): the pinned CLI version is checked on THIS path too.
+     *
+     * PRDR-181 wrote "the pinned CLI version is CHECKED, on the path that
+     * runs" and wired the check into `kernel/run.ts` alone. `init` is the
+     * expensive path — it cannot use the fixture backend at all, so its
+     * sessions are the first genuinely billed ones in a project's life — and it
+     * planned against whatever `claude` happened to be on PATH. Before the
+     * pipeline, so a refusal spends nothing.
+     *
+     * `config` is non-null here: `ensureConfig` above wrote one if it was
+     * missing. The guard answers the type, not a policy — there is no path on
+     * which init plans without a config, and a skipped check is not one of the
+     * outcomes this refusal has.
+     */
+    if (config !== null) {
+      try {
+        await backend.checkVersion(config.pinned.claude_code);
+      } catch (err) {
+        process.stderr.write(`${(err as Error).message}\n`);
+        return EXIT_NOT_READY;
+      }
+    }
     const handlers = buildPipeline({
       root,
-      backend: new ClaudeCodeBackend({
-        /**
-         * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to
-         * every path'd tool — READS included — so a write-area-only surface
-         * blinded the analyst to the very documents it must analyze; it could
-         * only echo stale `.detent/state/` leftovers. Reads-open,
-         * writes-guarded: the surface admits the repo, the SEC-3 floor protects
-         * what sessions may never touch, and write-narrowing is the allowlist's
-         * job — an init session carries exactly one write rule, its artifact.
-         */
-        policy: {
-          surface: ["**"],
-          /**
-           * SEC-3 (PRDR-178): the STRUCTURAL floor, not three of its fourteen.
-           *
-           * This listed the plan, config and bindings and omitted `.git/**`,
-           * `.git`, `node_modules/**`, `.detent/ledger.jsonl`,
-           * `.detent/state/**` and the rest — while the surface here is `**`.
-           * Inert only because the per-session spec policy wins at
-           * `sdk.ts`, which is exactly the reasoning PRDR-172 used to fix the
-           * structurally identical site in `referee-context.ts`, and then did
-           * not apply here. Writing into `.git` is executing: `.gitattributes`
-           * plus a clean filter runs a command on `git add`.
-           */
-          protectedGlobs: [...STRUCTURAL_PROTECTED],
-          workRoot: root,
-        },
-      }),
+      backend,
       prompts: loadPromptSet(),
       budgets: budgetsFor(config),
       modelRouting: config?.model_routing ?? {},
@@ -303,6 +305,46 @@ export async function main(argv: readonly string[]): Promise<number> {
     /* Seven return paths above; one release. */
     lock.release();
   }
+}
+
+/**
+ * X-1 (PRDR-251): the live-backend builder is a seam, on PRDR-174's terms.
+ *
+ * `run` and `doctor` were each given an injectable builder so a test could
+ * reach their preconditions without launching real billed sessions. `init`,
+ * the one verb with no fixture path at all, constructed its backend inline —
+ * so the S-5 refusal below could not be tested without a source change first,
+ * which is exactly the argument PRDR-174 made for the other two.
+ */
+function defaultBackend(root: string): SessionBackend {
+  return new ClaudeCodeBackend({
+    /**
+     * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to
+     * every path'd tool — READS included — so a write-area-only surface
+     * blinded the analyst to the very documents it must analyze; it could
+     * only echo stale `.detent/state/` leftovers. Reads-open,
+     * writes-guarded: the surface admits the repo, the SEC-3 floor protects
+     * what sessions may never touch, and write-narrowing is the allowlist's
+     * job — an init session carries exactly one write rule, its artifact.
+     */
+    policy: {
+      surface: ["**"],
+      /**
+       * SEC-3 (PRDR-178): the STRUCTURAL floor, not three of its fourteen.
+       *
+       * This listed the plan, config and bindings and omitted `.git/**`,
+       * `.git`, `node_modules/**`, `.detent/ledger.jsonl`,
+       * `.detent/state/**` and the rest — while the surface here is `**`.
+       * Inert only because the per-session spec policy wins at
+       * `sdk.ts`, which is exactly the reasoning PRDR-172 used to fix the
+       * structurally identical site in `referee-context.ts`, and then did
+       * not apply here. Writing into `.git` is executing: `.gitattributes`
+       * plus a clean filter runs a command on `git add`.
+       */
+      protectedGlobs: [...STRUCTURAL_PROTECTED],
+      workRoot: root,
+    },
+  });
 }
 
 /**

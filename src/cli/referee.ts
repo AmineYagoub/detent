@@ -26,7 +26,23 @@ import { readBindings } from "../adapter/drift.js";
  * and the core, shared verbatim with the in-process driver (ARCH-2).
  */
 
-export async function main(argv: readonly string[]): Promise<number> {
+export interface RefereeMainDeps {
+  readonly buildBackend?: (root: string, protectedGlobs: readonly string[]) => SessionBackend;
+}
+
+/**
+ * X-1 (PRDR-251): the live-backend builder is a seam, on PRDR-174's terms —
+ * the reason `run` and `doctor` have one, and the reason the S-5 refusal above
+ * could not be tested while this was an inline literal.
+ */
+function defaultBackend(root: string, protectedGlobs: readonly string[]): SessionBackend {
+  /** PRDR-149: config globs PLUS the structural floor — this fallback had neither `.git` nor the floor. */
+  return new ClaudeCodeBackend({
+    policy: { surface: ["**"], protectedGlobs: [...protectedGlobs, ...STRUCTURAL_PROTECTED], workRoot: root },
+  });
+}
+
+export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = {}): Promise<number> {
   const { values } = parseArgs({
     args: [...argv],
     options: {
@@ -91,6 +107,33 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
 
+  const backend: SessionBackend =
+    values.backend === "mock"
+      ? new MockBackend()
+      : (mainDeps.buildBackend ?? defaultBackend)(root, loaded.config.protected);
+
+  /**
+   * S-5 (PRDR-251): the pinned CLI version is checked on THIS driver too.
+   *
+   * PRDR-181 added three preconditions to this path — approval, a bound `test`
+   * gate, the run lock — each under the rule it states above: "a precondition
+   * on one driver is a precondition on both" (ARCH-2). The SAME ticket added
+   * the S-5 pin check, and added it to `kernel/run.ts` only. So the doc-block
+   * there reads "the pinned CLI version is CHECKED, on the path that runs"
+   * while the model-driven driver — a path that runs, and the one the plugin
+   * actually drives — verified nothing.
+   *
+   * Before the lock, with the other preconditions, so a refusal touches
+   * nothing. `MockBackend.checkVersion` resolves, so `--backend mock` is
+   * unaffected.
+   */
+  try {
+    await backend.checkVersion(loaded.config.pinned.claude_code);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    return 2;
+  }
+
   /**
    * X-1‴ (PRDR-181): one referee per root, on the terms `run` already uses.
    *
@@ -111,13 +154,6 @@ export async function main(argv: readonly string[]): Promise<number> {
     );
   }
 
-  const backend: SessionBackend =
-    values.backend === "mock"
-      ? new MockBackend()
-      : new ClaudeCodeBackend({
-          /** PRDR-149: config globs PLUS the structural floor — this fallback had neither `.git` nor the floor. */
-          policy: { surface: ["**"], protectedGlobs: [...loaded.config.protected, ...STRUCTURAL_PROTECTED], workRoot: root },
-        });
 
   const journal = RunJournal.open(root);
   const runBranch = ensureRunBranch(root, `referee-${process.pid}`);
