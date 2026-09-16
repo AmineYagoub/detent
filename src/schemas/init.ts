@@ -26,9 +26,16 @@ export type InitPhase = (typeof INIT_PHASES)[number];
 
 /**
  * C-5: the interrupt set is **closed**. Adding one is a spec change — a
- * major-version decision under C-14, not an editorial one. The type is the
- * first enforcement; `tests/init/interrupts.test.ts` is the second, scanning
- * for any prompt raised outside this set.
+ * major-version decision under C-14, not an editorial one.
+ *
+ * The type is the first enforcement. The second named a file that was never
+ * written: `tests/init/interrupts.test.ts` appears once in this tree, in the
+ * sentence that was here (PRDR-256). What exists is the prompt-site inventory
+ * in `tests/docs/golden-path.test.ts`, and it is a weaker claim than the one
+ * this block made — it holds the modules that can block on a human to a
+ * declared list, and it does not bound this tuple: of the five sites it
+ * declares, one presents AWAIT_APPROVAL and the rest present C-10/X-8's
+ * escalation and V-1's re-baseline consent, which are not members.
  */
 export const INTERRUPTS = [
   "AWAIT_DOCS",

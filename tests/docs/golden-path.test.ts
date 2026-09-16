@@ -75,24 +75,166 @@ describe("T-069 C-5: the interrupt set is frozen at five", () => {
   it("exactly five interrupt classes exist", () => {
     expect(INTERRUPTS).toHaveLength(5);
   });
+});
 
-  it("no module raises a prompt outside the closed set (C-5's lint half)", () => {
-    /**
-     * Prompting primitives may appear only where an interrupt is legitimately
-     * presented: escalation (X-8), `verify sync` drift confirmation, and the
-     * init CLI's inline AWAIT_APPROVAL prompt (C-7). Each presents one of the
-     * five closed interrupts; a `readline` anywhere else would be a sixth
-     * interrupt class in disguise.
-     */
-    const SANCTIONED = new Set(["cli/escalate.ts", "cli/verify.ts", "cli/approve.ts"]);
-    const offenders: string[] = [];
-    for (const file of walkTs(SRC)) {
-      const rel = path.relative(SRC, file).split(path.sep).join("/");
-      if (SANCTIONED.has(rel)) continue;
-      const body = readFileSync(file, "utf8");
-      if (/readline|\bprompt\s*\(/.test(body)) offenders.push(rel);
+/**
+ * PRDR-256 — the inventory of modules that can block on a human.
+ *
+ * Five modules in `src/` can put a question in front of a person, by two
+ * different acts, so there are two tiers. A module OPENS a transport when it
+ * imports `node:readline`, builds a line reader and reads an answer from it. A
+ * module WIRES one when it hands a `makeTty*` asker to something that will call
+ * it, opening nothing itself. `cli/run.ts` and `cli/init.ts` do the second and
+ * not the first, which is why the check this replaces could not see them: it
+ * searched for the string `readline`, and neither file contains it. It reported
+ * an empty offender list while two of the three live TTY prompts were raised
+ * from modules it had never heard of, and PRDR-255 made that worse by wiring
+ * the approval asker into `run` — where nothing was looking.
+ *
+ * Exactly one of these five decisions is a C-5 interrupt: `makeTtyApproval`
+ * answers AWAIT_APPROVAL. The escalation in `cli/escalate.ts` is C-10/X-8's and
+ * the re-baseline consent in `cli/verify.ts` is V-1's, and neither is a member
+ * of `INTERRUPTS`. So this is an inventory of the places that can block on a
+ * human; it is not a proof that the interrupt set is five. That proof is the
+ * `INTERRUPTS` tuple and the skill assertion below.
+ *
+ * Matched against the RAW body, with no mask, and that is measured rather than
+ * assumed: raw and `codeOnly` return the identical file set for every pattern
+ * here, so a mask buys nothing while costing three blind channels (PRDR-257).
+ * Every pattern requires a `(`, and this repository writes identifiers in prose
+ * inside backticks without one — which is the discrimination a mask was hired
+ * for. The half that was dropped, a bare `prompt(`, never matched code in any
+ * commit and does match ordinary prose: the block this replaces contained the
+ * words "prompt (C-7)", so the check could fail on its own doc-block (V-6).
+ *
+ * The bound, stated because it is not enforced: this is text matching over
+ * `src/`. An asker imported under an alias, a transport from a package other
+ * than `node:readline`, a prompt raised from `prompts/`, `skills/`, `hooks/` or
+ * `scripts/`, a prompt raised by a child process inheriting fd 0, and
+ * `for await (const chunk of process.stdin)` are all outside what it can see —
+ * and that last idiom already ships at `src/plugin/hook-entry.ts`. This holds a
+ * declared inventory honest against drift, which is the failure that produced
+ * it. It does not resist someone trying to evade it: an adversarial version is
+ * an AST rule over the import graph, which is a separate and unbuilt check.
+ */
+interface PromptSite {
+  readonly constructs: readonly string[];
+  readonly reason: string;
+}
+
+/** Constructs that OPEN a line reader: importing one, building one, reading an answer from one. */
+const OPENS_CONSTRUCTS: Record<string, RegExp> = {
+  "node:readline": /^[ \t]*import\b[^\n]*\bfrom\s*"(?:node:)?readline(?:\/promises)?"/m,
+  "createInterface(": /\bcreateInterface\s*\(/,
+  /**
+   * `question` is live vocabulary here — `src/init/questions.ts`, `openQuestions`,
+   * `similarQuestions`. Measured at zero matches on code in every commit, but a
+   * `q.question(i)` accessor would fire, so the headroom is recorded rather than assumed.
+   */
+  ".question(": /\.question\s*\(/,
+};
+
+/** A CALL to a TTY asker factory. The lookbehind is what makes a declaration not a call. */
+const ASKER_CALL = /(?<!\bfunction\s)\b(makeTty[A-Z][A-Za-z]*)\s*\(/g;
+
+/** Modules that open a line reader of their own. */
+const OPENS: Record<string, PromptSite> = {
+  "cli/approve.ts": {
+    constructs: ["node:readline", "createInterface(", ".question("],
+    reason: "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents",
+  },
+  "cli/escalate.ts": {
+    constructs: ["node:readline", "createInterface(", ".question("],
+    reason: "C-10/X-8's in-run escalation — approve / requeue / skip / quit; not a member of INTERRUPTS",
+  },
+  "cli/verify.ts": {
+    constructs: ["node:readline", "createInterface(", ".question("],
+    reason: "V-1's re-baseline consent inside `verify sync`, C-12 plumbing; not a member of INTERRUPTS",
+  },
+};
+
+/** Modules that hand an asker to something that will call it, and open no transport themselves. */
+const WIRES: Record<string, PromptSite> = {
+  "cli/init.ts": {
+    constructs: ["makeTtyApproval"],
+    reason: "C-7's first exit — the approval asker passed to the init pipeline behind this file's TTY gate",
+  },
+  "cli/run.ts": {
+    constructs: ["makeTtyEscalation", "makeTtyApproval"],
+    reason: "C-10's escalation and C-7's second exit (PRDR-255), both behind the one TTY gate the file computes once",
+  },
+};
+
+function opensIn(body: string): string[] {
+  return Object.entries(OPENS_CONSTRUCTS)
+    .filter(([, re]) => re.test(body))
+    .map(([name]) => name);
+}
+
+function wiresIn(body: string): string[] {
+  return [...new Set([...body.matchAll(ASKER_CALL)].map((m) => m[1] as string))];
+}
+
+/** Every module the walk can see, read once — the key set every assertion below derives from. */
+function modules(): { rel: string; body: string }[] {
+  return walkTs(SRC).map((file) => ({
+    rel: path.relative(SRC, file).split(path.sep).join("/"),
+    body: readFileSync(file, "utf8"),
+  }));
+}
+
+describe("PRDR-256: every module that can block on a human is declared", () => {
+  it("sees a prompt wired from a module that never names `readline`", () => {
+    const run = modules().find((m) => m.rel === "cli/run.ts")?.body ?? "";
+    expect(/readline/.test(run), "the premise: `cli/run.ts` contains no `readline`").toBe(false);
+    expect(
+      wiresIn(run),
+      "`cli/run.ts` hands makeTtyEscalation and makeTtyApproval to the kernel and contains no `readline`, " +
+        "so the predicate this replaces returned false for it — the check reported no offenders while two of " +
+        "the three live TTY prompts were raised from a module it had never heard of",
+    ).toEqual(["makeTtyEscalation", "makeTtyApproval"]);
+  });
+
+  it("every declared site exists, and still does what it is exempt for", () => {
+    const seen = new Map(modules().map((m) => [m.rel, m.body]));
+    for (const [tier, sites, found] of [
+      ["OPENS", OPENS, opensIn],
+      ["WIRES", WIRES, wiresIn],
+    ] as [string, Record<string, PromptSite>, (body: string) => string[]][]) {
+      for (const [rel, site] of Object.entries(sites)) {
+        const body = seen.get(rel);
+        expect(body, `${tier} declares ${rel}, which is not a module in src/`).toBeDefined();
+        for (const construct of site.constructs) {
+          expect(
+            found(body ?? ""),
+            `${tier} exempts ${rel} for ${construct}, which it no longer contains — ${site.reason}`,
+          ).toContain(construct);
+        }
+      }
     }
-    expect(offenders).toEqual([]);
+  });
+
+  it("no undeclared module opens a prompt transport", () => {
+    const offenders = modules()
+      .filter((m) => OPENS[m.rel] === undefined && opensIn(m.body).length > 0)
+      .map((m) => `${m.rel} opens a prompt transport (${opensIn(m.body).join(", ")})`);
+    /** A WIRES module is undeclared HERE, so a wirer that starts opening one fails this. */
+    expect(offenders, `an undeclared module opens a line reader: ${offenders.join("; ")}`).toEqual([]);
+  });
+
+  it("no undeclared module wires a TTY asker", () => {
+    const offenders = modules()
+      .filter((m) => WIRES[m.rel] === undefined && wiresIn(m.body).length > 0)
+      .map((m) => `${m.rel} wires a TTY asker (${wiresIn(m.body).join(", ")})`);
+    expect(offenders, `an undeclared module hands out an asker: ${offenders.join("; ")}`).toEqual([]);
+  });
+
+  it("src/ holds nothing this walk cannot open", () => {
+    expect(
+      walkAny(SRC).filter((f) => !f.endsWith(".ts")),
+      "a `.mts` or `.cts` under src/ is invisible to this walk, to eslint's `src/**/*.ts`, " +
+        "to tsconfig's include and to scripts/check-rules.ts at once",
+    ).toEqual([]);
   });
 });
 
@@ -147,6 +289,17 @@ describe("T-069 N-6: the release checklist carries the freeze", () => {
     expect(section).toContain("re-baseline");
   });
 });
+
+/** Every file, whatever its extension — the walk `walkTs` narrows, so the narrowing can be checked. */
+function walkAny(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir).sort()) {
+    const abs = path.join(dir, name);
+    if (statSync(abs).isDirectory()) out.push(...walkAny(abs));
+    else out.push(path.relative(SRC, abs).split(path.sep).join("/"));
+  }
+  return out;
+}
 
 function walkTs(dir: string): string[] {
   const out: string[] = [];
