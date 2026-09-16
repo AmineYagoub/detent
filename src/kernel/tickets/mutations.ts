@@ -6,7 +6,7 @@ import { SCHEMA_VERSION } from "../../schemas/common.js";
 import { ZERO_COUNTERS } from "../generations.js";
 import { claimPath, claimsDir, ticketPath, ticketsDir } from "./paths.js";
 import { readTicket } from "./readers.js";
-import { scrub } from "../scrub.js";
+import { scrub, scrubJson } from "../scrub.js";
 
 /**
  * T-017 write side. `src/sessions/**` may not import this module (ARCH-1): a
@@ -93,9 +93,33 @@ export function release(root: string, id: string): void {
   rmSync(claimPath(root, id), { force: true });
 }
 
-/** Validate before write: an invalid ticket never reaches disk. */
+/**
+ * Validate before write: an invalid ticket never reaches disk.
+ *
+ * SEC-4 (PRDR-252): and SCRUB before write, here rather than at the callers.
+ *
+ * PRDR-169 put scrubbing on `appendNote` with the argument that "the next site
+ * that appends session text should inherit it rather than remember it — the
+ * rule this audit chain has now forgotten four times". It forgot a fifth time
+ * three lines away: `quarantineTicket` interpolates a failing gate's raw,
+ * unbounded output into `description` and writes it through THIS function,
+ * which is a different seam. `referee-gate.ts` scrubs that same
+ * `GateResult.output` on its own path — and writes it to `.detent/state/`,
+ * which F-1 marks local. The unscrubbed copy went to `.detent/plan/`, which
+ * `fs/layout.ts` marks `tracking: "committed"` and `stageAll` sweeps with
+ * `git add -A`. The local artifact was protected and the committed one was not.
+ *
+ * So the seam is the write itself, and every field inherits it — `description`,
+ * `title`, `acceptance_criteria`, and whatever field the next ticket adds.
+ * Scrubbed BEFORE validation so the object returned to the caller is the object
+ * on disk: a function that writes a redacted file and hands back the secret has
+ * moved the leak, not closed it. `scrub` only rewrites secret-shaped runs into
+ * `[REDACTED]`, which is a valid string in every field the schema has, and no
+ * ticket key is one the assignment rule matches — so this cannot turn a valid
+ * ticket into one the parse below refuses.
+ */
 export function writeTicket(root: string, ticket: Ticket): Ticket {
-  const validated = ticketSchema.parse(ticket);
+  const validated = ticketSchema.parse(scrubJson(ticket));
   mkdirSync(ticketsDir(root), { recursive: true });
   /**
    * F-3′ (PRDR-137): temp file plus rename. This truncated in place on every

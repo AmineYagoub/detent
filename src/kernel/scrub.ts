@@ -77,3 +77,20 @@ export function scrub(text: string): string {
 export function containsSecrets(text: string): boolean {
   return scrub(text) !== text;
 }
+
+/**
+ * SEC-4 (PRDR-252): scrub every string in a JSON-serializable value.
+ *
+ * Returns `unknown` on purpose. The caller re-validates through its own schema,
+ * which both keeps the type honest and proves the redaction left a valid
+ * artifact — `[REDACTED]` is a valid string everywhere Detent's schemas take
+ * one, and a caller that cannot show that should not be scrubbing this way.
+ *
+ * It exists because `fs/layout.ts` cannot hold this. ARCH-1/N-1 keeps kernel
+ * policy out of `fs/` and `adapter/` — the reason `adapter/bind.ts` takes
+ * `redact` as a required parameter rather than importing this module — so
+ * `writeArtifact` is a primitive and the composing layer redacts.
+ */
+export function scrubJson(value: unknown): unknown {
+  return JSON.parse(scrub(JSON.stringify(value)));
+}

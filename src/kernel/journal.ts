@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { ledgerRowSchema, transitionLineSchema, type LedgerRow, type TransitionLine } from "../schemas/records.js";
+import { scrub } from "./scrub.js";
 
 /**
  * T-041 — the run-level journals (F-1, N-5).
@@ -15,10 +16,18 @@ import { ledgerRowSchema, transitionLineSchema, type LedgerRow, type TransitionL
  *
  * `appendTransition` and `appendLedger` schema-validate before they write:
  * N-5 promises the run is reconstructable from these files, which is only true
- * if nothing malformed ever lands in them. `appendTicketEvent` does NOT — it
- * takes `Record<string, unknown>` and stringifies it, so a session-authored
- * value reaches the file unvalidated and unscrubbed (SEC-4). A probe recorded a
- * 363-character `effort_settled.active` carrying a credential.
+ * if nothing malformed ever lands in them. `appendTicketEvent` still does NOT
+ * validate — it takes `Record<string, unknown>`, and there is no schema for a
+ * ticket event to validate against; inventing one is a design change and needs
+ * its own ticket (N-6), not a line here.
+ *
+ * SEC-4 (PRDR-252): it does now SCRUB. The two halves of this gap were recorded
+ * together and only one of them was a leak. A probe recorded a 363-character
+ * `effort_settled.active` carrying a credential; `src/init/session.ts` writes a
+ * session's own `rawTail` through here as `tail`, and `referee-session.ts`
+ * scrubs every string it puts in a journal event while init scrubbed none. On
+ * the write, so the next writer inherits it — the argument PRDR-169 made and
+ * PRDR-252 had to make again for `writeTicket`.
  */
 
 const OPEN_ROOTS = new Set<string>();
@@ -79,7 +88,13 @@ export class RunJournal {
     this.assertOpen();
     const file = this.ticketJournalPath(ticketId);
     mkdirSync(path.dirname(file), { recursive: true });
-    appendFileSync(file, `${JSON.stringify(record)}\n`);
+    /**
+     * SEC-4 (PRDR-252): scrubbed on the serialized line, so no field is
+     * privileged and no writer has to remember. `JSON.stringify` has already
+     * escaped every newline by here, so a redaction cannot tear a JSONL record
+     * that F-3\u2032's readers then have to recover.
+     */
+    appendFileSync(file, `${scrub(JSON.stringify(record))}\n`);
   }
 
   /**

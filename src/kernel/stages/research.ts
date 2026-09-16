@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { cacheKey, contradictions, fingerprint, type EnvFingerprint } from "../../adapter/env.js";
-import { stateDir } from "../../fs/layout.js";
+import { stateDir, writeArtifact } from "../../fs/layout.js";
 import { parseArtifact } from "../../schemas/common.js";
 import { researchBriefSchema, type ResearchBrief } from "../../schemas/records.js";
+import { scrubJson } from "../scrub.js";
 import type { Budgets } from "../../schemas/budgets.js";
 import { researchDry, researchValid, upstreamBug, type KernelEvent } from "../events.js";
 
@@ -124,9 +125,22 @@ export async function researchStage(deps: ResearchDeps): Promise<ResearchOutcome
 
   const brief = parsed.value;
   if (key !== null) {
-    const file = briefCachePath(deps.root, key);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify(brief, null, 2)}\n`);
+    /**
+     * SEC-4 (PRDR-252): through the F-1 seam, not a raw `writeFileSync`.
+     *
+     * `research/failures` is `tracking: "committed"`, and the brief is the
+     * research session's own prose — it reads the repository with Read, Grep
+     * and WebSearch and quotes what it finds into `root_cause.claim`,
+     * `evidence[].claim` and four other free-string fields the schema shapes
+     * but does not constrain. Written raw, an unscrubbed copy went to a path
+     * `git add -A` stages, and stayed there: the cache is keyed by environment,
+     * so every later run with the same signature serves the same bytes.
+     *
+     * `writeArtifact` scrubs, checks containment, and stamps — the F-2/F-3
+     * guarantees this call had been bypassing along with the redaction.
+     */
+    const redacted = researchBriefSchema.parse(scrubJson(brief));
+    writeArtifact(deps.root, path.posix.join("research", "failures", `${key}.json`), redacted);
   }
 
   if (brief.upstream_bug !== undefined && brief.upstream_bug !== "") {

@@ -169,7 +169,17 @@ export function quarantineTicket(
       description:
         `A gate failed and then passed on an isolated rerun, so it was quarantined rather than fixed (X-5).\n\n` +
         `Signature: ${decision.signature}\nCommand: ${decision.result.command}\n\n` +
-        `Failing output:\n${decision.firstOutput}`,
+        /**
+         * PRDR-252: bounded on `recordFailure`'s terms — it keeps
+         * `result.output.slice(-4000)` for the same gate's failure record.
+         * This carried the whole captured output, which `adapter/run.ts` caps
+         * at `DEFAULT_TAIL_BYTES` (64 KiB) and no lower — so the LOCAL failure
+         * record got 4 KB and the ticket under `.detent/plan/`, which F-1 marks
+         * committed and `git add -A` stages, got up to sixteen times that of
+         * build log per flake. The secrets in it are `writeTicket`'s problem
+         * and are scrubbed there (SEC-4); the size is this line's.
+         */
+        `Failing output:\n${decision.firstOutput.slice(-4000)}`,
       acceptance_criteria: [
         `The gate \`${decision.result.command}\` passes on 10 consecutive isolated runs, or the flaky test is fixed or removed.`,
       ],

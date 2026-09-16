@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { stateDir } from "../fs/layout.js";
+import { stateDir, writeArtifact } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
 import { planningBriefSchema, type PlanningBrief } from "../schemas/init.js";
+import { scrubJson } from "../kernel/scrub.js";
 
 /**
  * T-063 — planning research (C-3a, D-11).
@@ -106,8 +107,8 @@ export async function planResearch(
       continue;
     }
     briefs.push(parsed.value);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify(parsed.value, null, 2)}\n`);
+    /** SEC-4 (PRDR-252): the F-1 seam, which scrubs — `research/planning` is a COMMITTED path carrying a model's own prose. */
+    writeArtifact(deps.root, path.posix.join("research", "planning", `${hash}.json`), planningBriefSchema.parse(scrubJson(parsed.value)));
   }
 
   return { briefs, unanswered, toolCallsUsed, cacheHits, sessionsLaunched };

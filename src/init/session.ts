@@ -15,6 +15,7 @@ import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 import type { LaunchBatch } from "./launch-batch.js";
+import { scrub } from "../kernel/scrub.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
 const INIT_TICKET = "init";
@@ -351,8 +352,16 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
      * this, a crashed analyst (PRDR-053 wrap) surfaced as the misleading
      * "produced no analysis artifact".
      */
+    /**
+     * SEC-4 (PRDR-252): `rawTail` is the model's own final message, and this
+     * message reaches the operator's terminal and `init failed:` on stderr.
+     * `referee-session.ts` scrubs the identical value at the identical seam —
+     * "backend refused ${role} session ... (crashed, zero turns)" — and init,
+     * which has no fixture path and runs first, scrubbed none of it. A throw is
+     * the one place a seam cannot cover, so it is done here.
+     */
     throw new Error(
-      `${request.role} session failed${result.rawTail === "" ? "" : `: ${result.rawTail.slice(-300)}`}`,
+      `${request.role} session failed${result.rawTail === "" ? "" : `: ${scrub(result.rawTail.slice(-300))}`}`,
     );
   }
   /**

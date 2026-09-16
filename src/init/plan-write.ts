@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { stateDir } from "../fs/layout.js";
+import { writeArtifact } from "../fs/layout.js";
 import { newTicket as buildTicket, writeTicket } from "../kernel/tickets/mutations.js";
 import { claimBreakable, pidAlive, readClaim } from "../kernel/tickets/mutations.js";
 import { hostname } from "node:os";
@@ -9,6 +9,7 @@ import { claimPath, ticketPath } from "../kernel/tickets/paths.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Analysis, PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
 import { planSchema, type Plan } from "../schemas/records.js";
+import { scrubJson } from "../kernel/scrub.js";
 import type { Ticket } from "../schemas/ticket.js";
 
 /**
@@ -30,10 +31,6 @@ export interface WriteDeps {
   readonly docs: readonly string[];
   readonly boundSlots: readonly string[];
   readonly note?: (text: string) => void;
-}
-
-function planFile(root: string): string {
-  return path.join(stateDir(root), "plan", "plan.json");
 }
 
 function hashFile(file: string): string {
@@ -210,7 +207,8 @@ export function writePlan(
     deps.note?.(`${stale.id} removed — the new plan does not contain it (PRDR-085)`);
   }
 
-  writeFileSync(planFile(deps.root), `${JSON.stringify(plan, null, 2)}\n`);
+  /** SEC-4 (PRDR-252): the F-1 seam, which scrubs — `plan/` is committed and slice titles are the SLICE session's own words. */
+  writeArtifact(deps.root, path.posix.join("plan", "plan.json"), planSchema.parse(scrubJson(plan)));
 
   return {
     tickets: settled.map((t) => t.id),
