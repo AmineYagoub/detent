@@ -21,6 +21,20 @@ class DriverBreach extends Error {}
 class DriverDriftHalt extends Error {}
 /** PRDR-112: a backend refusal or outage — back off and retry before giving up. */
 class DriverRefusal extends Error {}
+/**
+ * B-2′ (PRDR-244): integration failed after the ticket was finalized — a
+ * worktree merge conflict is the case that exists.
+ *
+ * Its own route because PRDR-151 borrowed `DriverRefusal`, which means one
+ * specific thing: PRDR-112's outage, whose whole purpose is to WAIT and RETRY.
+ * A conflict is not transient and no retry resolves it, so it slept the full
+ * backoff, continued, found the pool empty because the ticket is DONE, and
+ * `finish()` reports `pending` from NEEDS_HUMAN and BLOCKED only — exit 0 with
+ * the work unmerged. The ticket stays DONE and the run stops; what failed is a
+ * property of the run, not of the ticket, so this carries a reason rather than
+ * an X-3 state change.
+ */
+class DriverIntegrationHalt extends Error {}
 
 /** PRDR-112: 1, 5, 15 minutes; the retry itself is the probe, and a crashed retry costs $0. */
 export const OUTAGE_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000];
@@ -95,6 +109,13 @@ export class Driver {
       try {
         await this.processTicket(id, acquired);
       } catch (err) {
+        /** B-2′ (PRDR-244): the conflict is already noted on the ticket and its message names the paths. */
+        if (err instanceof DriverIntegrationHalt) {
+          return {
+            exitCode: EXIT_HUMAN_GATED,
+            summary: { schema_version: 1, exit: EXIT_HUMAN_GATED, pending: [], reason: err.message },
+          };
+        }
         if (err instanceof DriverDriftHalt) {
           const { reason } = await this.tool<{ reason: string }>("record", { kind: "drift_halt" });
           return {
@@ -208,9 +229,13 @@ export class Driver {
          * the generation closes as done, the branch and worktree survive for a
          * human, and the run stops with a summary naming the conflict instead
          * of an unclassified throw.
+         *
+         * PRDR-244: that last clause was the intent and not the behaviour until
+         * `DriverIntegrationHalt` existed — this threw `DriverRefusal`, and the
+         * outage route swallowed it into an exit 0.
          */
         await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
-        throw new DriverRefusal(err.message);
+        throw new DriverIntegrationHalt(err.message);
       }
       await this.tool("record", { kind: "close_generation", ticket_id: id, outcome: "done" });
     }
