@@ -18,6 +18,10 @@ import { recordOutOfBandSpend } from "../kernel/ledger.js";
  * authoritative over any quoted figure), the WebFetch rule forms, and — when
  * a key is present (R-10) — one live smoke session proving telemetry parses
  * end to end.
+ *
+ * The smoke is the only part of this command that spends, so it is the only
+ * part with a precondition: PRDR-253 gates it on the pin the other three
+ * spending entrypoints refuse on.
  */
 
 interface DoctorCheck {
@@ -97,6 +101,18 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
   }
 
   /** ---- SDK pin (S-5) ------------------------------------------------------- */
+  /**
+   * S-5 (PRDR-253): why a refusal and not a verdict on the pin row.
+   *
+   * The smoke session below spends and leaves a permanent ledger row, so it
+   * needs a pin that was VERIFIED — not one that merely failed to fail. Two
+   * states read alike from the `claude-code-pin` row and are not alike: a
+   * mismatch pushes `ok: false`, and an unloadable config pushes nothing at all
+   * because both pin checks sit inside `loaded !== null`. This starts refusing
+   * and is cleared only by a `checkVersion` that resolved.
+   */
+  let pinRefusal: string | null =
+    "the S-5 pin was never checked — no loadable config to read `pinned.claude_code` from";
   if (loaded !== null) {
     const installed = (deps.installedSdkVersion ?? installedSdk)();
     const pinned = loaded.config.pinned.agent_sdk;
@@ -113,8 +129,10 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
     if (deps.backend !== undefined) {
       try {
         await deps.backend.checkVersion(loaded.config.pinned.claude_code);
+        pinRefusal = null;
         checks.push({ name: "claude-code-pin", ok: true, detail: `backend reports the pinned ${loaded.config.pinned.claude_code}` });
       } catch (err) {
+        pinRefusal = (err as Error).message;
         checks.push({ name: "claude-code-pin", ok: false, detail: (err as Error).message });
       }
     } else {
@@ -166,6 +184,31 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
       name: "smoke-session",
       ok: true,
       detail: "skipped: no live backend (R-10) — the mock suite stays fully green without one",
+    });
+  } else if (pinRefusal !== null) {
+    /**
+     * S-5/X-1 (PRDR-253): the pin is ENFORCED on the path that spends.
+     *
+     * `doctor` checked the pin, pushed the row, and ran the session anyway —
+     * the only one of the four spending entrypoints that reported the mismatch
+     * instead of refusing it (`kernel/run.ts` PRDR-181, `cli/init.ts` and
+     * `cli/referee.ts` PRDR-251). A row recorded here counts against
+     * `run_spend_usd` on this root forever, so a drifted CLI billed the project
+     * permanently for a diagnostic.
+     *
+     * A failing row rather than an early return: this command's contract is
+     * `exitCode: 0 | 1` and its job is to report every check it can — PRDR-154
+     * exists because `doctor` once printed nothing at all on a broken state
+     * directory. And `ok: false` rather than a passing skip: the operator typed
+     * `--smoke` and got no smoke, which is exactly the shape PRDR-141 found
+     * here when both live checks pushed `ok: true` for work nobody did.
+     */
+    checks.push({
+      name: "smoke-session",
+      ok: false,
+      detail:
+        `not run: ${pinRefusal} — a smoke session spends real tokens and leaves a permanent ` +
+        "ledger row (X-1), so it is gated on the pin like every other path that spends (S-5)",
     });
   } else {
     try {

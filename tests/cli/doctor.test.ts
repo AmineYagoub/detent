@@ -279,3 +279,131 @@ describe("PRDR-143 doctor's own entry point", () => {
     }
   });
 });
+
+/**
+ * PRDR-253: the smoke session is a spending action, so the pin gates it.
+ *
+ * `doctor` did the S-5 work and discarded the answer — it pushed the
+ * `claude-code-pin` row and then ran `--smoke` on the same backend regardless,
+ * spending real tokens and writing a permanent `recordOutOfBandSpend` row that
+ * counts against `run_spend_usd` on this root forever. Every other entrypoint
+ * that can spend refuses on a mismatch first: `kernel/run.ts` (PRDR-181),
+ * `cli/init.ts` and `cli/referee.ts` (PRDR-251).
+ *
+ * Driven through `main([root, "--smoke"])` rather than `doctor(root, deps)`,
+ * because the operator path is the one that costs money and PRDR-141's defect
+ * lived in the gap between the two.
+ */
+describe("PRDR-253 the pin gates the spend, it is not merely reported beside it", () => {
+  const MISMATCH = "backend version mismatch (S-5): pinned=2.1.191 installed=9.9.9";
+
+  /** Records what it was asked and refuses; `run` is a tripwire, never an outcome. */
+  function refusingBackend(seen: string[], ran: { count: number }): SessionBackend {
+    return {
+      name: "refusing",
+      checkVersion: async (pinned: string) => {
+        seen.push(pinned);
+        throw new Error(MISMATCH);
+      },
+      run: async () => {
+        ran.count += 1;
+        return okResult({ telemetryParsed: true });
+      },
+    } as unknown as SessionBackend;
+  }
+
+  it("a mismatched pin stops the smoke session before it spends", async () => {
+    const root = await fixture();
+    const seen: string[] = [];
+    const ran = { count: 0 };
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    let printed: string;
+    let said: string;
+    let code: number;
+    try {
+      code = await main([root, "--smoke"], { hasAuth: () => true, buildBackend: () => refusingBackend(seen, ran) });
+    } finally {
+      printed = out.mock.calls.join("");
+      said = err.mock.calls.join("");
+      out.mockRestore();
+      err.mockRestore();
+    }
+
+    expect(seen, "the pin came from the config doctor just loaded").toEqual(["2.1.191"]);
+    expect(ran.count, "nothing may spend behind a failed pin (S-5)").toBe(0);
+    expect(existsSync(path.join(stateDir(root), "ledger.jsonl")), "and a session that never ran leaves no ledger row (X-1)").toBe(false);
+    expect(said, "nor claims it recorded one").not.toContain("smoke session recorded");
+    expect(printed, "the report says the smoke did not run").toContain("[FAIL] smoke-session");
+    expect(printed, "and names the pin as the reason, not a verdict on a session nobody ran").toContain("not run");
+    expect(printed, "every other check still prints — doctor reports, it does not abort (PRDR-154)").toContain("webfetch-rule-form");
+    expect(code, "a failing report is exit 1; doctor's contract is 0 | 1").toBe(1);
+  });
+
+  /**
+   * The second hole. With no loadable config `loaded` stays null, so NEITHER
+   * pin row is pushed — a gate phrased as "unless the pin check failed" would
+   * leave this open, because `ok: false` is never pushed here. The smoke is
+   * gated on a pin that was verified, not on one that did not fail.
+   */
+  it("a config that will not load means an unverified pin, and an unverified pin does not spend", async () => {
+    const root = await fixture();
+    rmSync(path.join(root, ".detent", "config.json"));
+    const ran = { count: 0 };
+    const backend = {
+      name: "fake",
+      checkVersion: async () => undefined,
+      run: async () => {
+        ran.count += 1;
+        return okResult({ telemetryParsed: true });
+      },
+    } as unknown as SessionBackend;
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    let printed: string;
+    try {
+      await main([root, "--smoke"], { hasAuth: () => true, buildBackend: () => backend });
+    } finally {
+      printed = out.mock.calls.join("");
+      out.mockRestore();
+    }
+
+    expect(ran.count, "a root too broken to say what it pins is not a root to spend on").toBe(0);
+    expect(existsSync(path.join(stateDir(root), "ledger.jsonl"))).toBe(false);
+    expect(printed, "and the report says why the smoke is missing").toContain("never checked");
+  });
+
+  /** The control: the pass arm still spends, records, and reports exactly as R-10 built it. */
+  it("a matching pin still runs the session, records the row, and reports smoke OK", async () => {
+    const root = await fixture();
+    const seen: string[] = [];
+    let ran = 0;
+    const backend = {
+      name: "fake",
+      checkVersion: async (pinned: string) => {
+        seen.push(pinned);
+      },
+      run: async () => {
+        ran += 1;
+        return okResult({ telemetryParsed: true });
+      },
+    } as unknown as SessionBackend;
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    let printed: string;
+    let said: string;
+    try {
+      await main([root, "--smoke"], { hasAuth: () => true, buildBackend: () => backend });
+    } finally {
+      printed = out.mock.calls.join("");
+      said = err.mock.calls.join("");
+      out.mockRestore();
+      err.mockRestore();
+    }
+
+    expect(seen, "the pin was checked, against the config's own value").toEqual(["2.1.191"]);
+    expect(ran, "and the smoke ran behind it").toBe(1);
+    expect(printed).toContain("smoke OK");
+    expect(said, "the X-1 line PRDR-179 added is untouched").toContain("smoke session recorded");
+    expect(existsSync(path.join(stateDir(root), "ledger.jsonl")), "a billed session still leaves a row").toBe(true);
+  });
+});
