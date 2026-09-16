@@ -23,7 +23,16 @@ import { makeRunRepo } from "../kernel/run-fixture.js";
  */
 
 const PINNED = "2.1.191";
-const MISMATCH = `backend version mismatch (S-5): pinned=${PINNED} installed=9.9.9`;
+/**
+ * PRDR-260: the real message, re-copied. A stub that drifts from the text it
+ * stands in for is a fixture asserting against itself, which is what let the
+ * production comparison go untested — see `tests/sessions/pin-check.test.ts`.
+ */
+const MISMATCH =
+  `backend version mismatch (S-5): this project pins claude_code ${PINNED}, the CLI on PATH reports 9.9.9. ` +
+  "The pin is the version this project was verified against, and `init` never rewrites it. Set " +
+  "`pinned.claude_code` to 9.9.9 in .detent/config.json once you have re-verified this project against it, " +
+  "or install the pinned CLI.";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -79,7 +88,7 @@ describe("S-5 `detent init` verifies the pinned backend version before it spends
     }
 
     expect(code, "a pin mismatch is a precondition failure (C-11 exit 2), not a crash").toBe(2);
-    expect(said, "and it names the mismatch").toContain("pinned=");
+    expect(said, "and it names the mismatch").toContain("pins claude_code");
     expect(seen, "the pin comes from the config init just loaded, not a constant").toEqual([PINNED]);
     expect(launched, "nothing may launch behind a failed precondition").toBe(0);
   }, 60_000);
@@ -129,7 +138,7 @@ describe("S-5 the plugin referee verifies the pin too (ARCH-2 driver parity)", (
     }
 
     expect(code, "the MCP driver refuses on the same terms as the headless one").toBe(2);
-    expect(said).toContain("pinned=");
+    expect(said).toContain("pins claude_code");
     expect(seen).toEqual([PINNED]);
 
     /**

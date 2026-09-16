@@ -50,6 +50,18 @@ export interface PlanResearchResult {
   readonly briefs: readonly PlanningBrief[];
   /** Questions with no valid brief — these join the AWAIT_INFO batch (C-3a). */
   readonly unanswered: readonly string[];
+  /**
+   * PRDR-260: the SUBSET of `unanswered` that never got a session — the pool
+   * was gone before their turn. `unanswered` minus this set is the other
+   * outcome, investigated and still unanswerable. Both ride to PRESENT in one
+   * batch (C-3′), and they are actionable in opposite directions: the first is
+   * a ceiling to raise or questions to trim, the second is a question only the
+   * human can settle. A subset rather than a partition, so no existing consumer
+   * has a new invariant to learn — and correct only while every other path into
+   * `unanswered` means a session ran, which is why the two push sites sit four
+   * lines apart in one loop.
+   */
+  readonly neverResearched: readonly string[];
   readonly toolCallsUsed: number;
   readonly cacheHits: number;
   readonly sessionsLaunched: number;
@@ -61,6 +73,7 @@ export async function planResearch(
 ): Promise<PlanResearchResult> {
   const briefs: PlanningBrief[] = [];
   const unanswered: string[] = [];
+  const neverResearched: string[] = [];
   let toolCallsUsed = 0;
   let cacheHits = 0;
   let sessionsLaunched = 0;
@@ -89,6 +102,7 @@ export async function planResearch(
       /* C-3a: no new interrupt class — the question joins the AWAIT_INFO batch. */
       deps.note?.(`planning_research_tool_calls exhausted (${deps.budget}); "${question}" joins the AWAIT_INFO batch`);
       unanswered.push(question);
+      neverResearched.push(question);
       continue;
     }
 
@@ -111,5 +125,5 @@ export async function planResearch(
     writeArtifact(deps.root, path.posix.join("research", "planning", `${hash}.json`), planningBriefSchema.parse(scrubJson(parsed.value)));
   }
 
-  return { briefs, unanswered, toolCallsUsed, cacheHits, sessionsLaunched };
+  return { briefs, unanswered, neverResearched, toolCallsUsed, cacheHits, sessionsLaunched };
 }

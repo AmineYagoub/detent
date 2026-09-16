@@ -531,6 +531,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     expect(file.startsWith(path.join(stateDir(root), "research", "planning"))).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ question });
   });
+
 });
 
 /**

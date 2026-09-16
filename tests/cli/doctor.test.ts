@@ -75,7 +75,10 @@ describe("T-050 pin checks (S-5)", () => {
       name: "mock",
       run: backend.run.bind(backend),
       checkVersion: async (pinned: string) => {
-        throw new Error(`backend version mismatch (S-5): pinned=${pinned} installed=9.9.9`);
+        throw new Error(
+          `backend version mismatch (S-5): this project pins claude_code ${pinned}, the CLI on PATH reports 9.9.9. ` +
+            "Set `pinned.claude_code` to 9.9.9 in .detent/config.json once you have re-verified this project against it.",
+        );
       },
     };
     const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.258" });
@@ -295,7 +298,9 @@ describe("PRDR-143 doctor's own entry point", () => {
  * lived in the gap between the two.
  */
 describe("PRDR-253 the pin gates the spend, it is not merely reported beside it", () => {
-  const MISMATCH = "backend version mismatch (S-5): pinned=2.1.191 installed=9.9.9";
+  const MISMATCH =
+    "backend version mismatch (S-5): this project pins claude_code 2.1.191, the CLI on PATH reports 9.9.9. " +
+    "Set `pinned.claude_code` to 9.9.9 in .detent/config.json once you have re-verified this project against it.";
 
   /** Records what it was asked and refuses; `run` is a tripwire, never an outcome. */
   function refusingBackend(seen: string[], ran: { count: number }): SessionBackend {

@@ -148,8 +148,25 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const unanswered = new Set(research === null ? asked : research.unanswered);
   const open = analysis.questions.filter((q) => unanswered.has(q.question));
   if (open.length > 0) {
+    /*
+     * PRDR-260: one batch (C-3a), but its members are not alike. A question
+     * research investigated and could not settle is one only the human can
+     * answer; one the pool never reached is a budget fact. As a bare count the
+     * two were indistinguishable — the run that found this carried three, of
+     * which the first had consumed the whole allowance and the other two were
+     * skipped unread. An init with no research configured is named as such
+     * rather than counted as never-researched, which would read as a ceiling
+     * that had been hit.
+     */
+    const untried = research === null ? null : new Set(research.neverResearched);
+    const untriedCount = untried === null ? 0 : open.filter((q) => untried.has(q.question)).length;
+    const breakdown =
+      untried === null
+        ? " — planning research did not run for this init"
+        : ` — ${String(open.length - untriedCount)} researched without a usable answer, ${String(untriedCount)} never researched`;
     deps.note?.(
-      `${open.length} question(s) carried to PRESENT with their assumptions (C-3′)${open.some((q) => q.blocking) ? " — one or more blocking" : ""}`,
+      `${String(open.length)} question(s) carried to PRESENT with their assumptions (C-3′)${breakdown}` +
+        `${open.some((q) => q.blocking) ? "; one or more blocking" : ""}`,
     );
   }
 

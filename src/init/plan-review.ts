@@ -38,9 +38,26 @@ export function planReviewSkeleton(): Record<string, unknown> {
  * (PRDR-203): one path shared by every draw is harmless in sequence and hands
  * every read the last draw's verdict once two are in flight. Suffix kept — the
  * fixtures dispatch on it; S-1″ scopes each session's surface to its own file.
+ *
+ * PRDR-260: the SLICE keys the directory, because the draw index alone did not
+ * make the path unique across a run. `reviewOnce` deletes the file before every
+ * launch, and `planSlices` reviews one slice after another, so slice 02's first
+ * draw deleted slice 01's before it launched — three files at the end of a
+ * ten-slice run, all holding the last slice's verdict. The un-drawn re-review
+ * is keyed the same way and for the same reason: it was clobbered one path over.
+ *
+ * This is the ACTUAL file only. The path a draw is TOLD stays slice-free and
+ * draw-free (PRDR-205): `src/init/session.ts:131` puts it in the prompt cache
+ * key, where a per-draw tail cost ~25k tokens and $0.45 a draw.
  */
-export function planReviewPath(root: string, draw?: number): string {
-  return path.join(stateDir(root), "state", ...(draw === undefined ? [] : ["draws", String(draw)]), "plan-review.json");
+export function planReviewPath(root: string, draw?: number, sliceId?: string): string {
+  return path.join(
+    stateDir(root),
+    "state",
+    ...(sliceId === undefined ? [] : ["slices", sliceId]),
+    ...(draw === undefined ? [] : ["draws", String(draw)]),
+    "plan-review.json",
+  );
 }
 
 /**
@@ -237,7 +254,7 @@ async function reviewOnce(
   readonly issue: string | null;
   readonly normalisedFrom: string | null;
 }> {
-  const file = planReviewPath(deps.root, draw?.index);
+  const file = planReviewPath(deps.root, draw?.index, scope?.kind === "slice" ? scope.slice.id : undefined);
   rmSync(file, { force: true });
   /**
    * PRDR-205: a draw is TOLD the one shared path, so every draw's first turn

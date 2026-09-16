@@ -23,6 +23,14 @@ export interface SdkBackendConfig {
   readonly gateCmd?: string | null;
   /** Test seam (PRDR-114): the SDK's `query`, injectable so the fallback can be exercised without a backend. */
   readonly queryFn?: (args: { prompt: string; options: Options }) => AsyncIterable<unknown>;
+  /**
+   * S-5 test seam (PRDR-260): what `claude --version` reports, raw. Defaults to
+   * the real probe. Injectable because the comparison it feeds was the one
+   * decision in this subsystem no test could reach — every caller test
+   * substitutes `checkVersion` itself and asserts against a string it wrote, so
+   * the gate could be deleted and the suite would stay green.
+   */
+  readonly versionProbe?: () => string;
 }
 
 /**
@@ -336,20 +344,50 @@ export function isModelUnavailable(result: SessionResult): boolean {
   );
 }
 
+/** S-5's default version probe: what the CLI on PATH reports, unparsed. */
+function probeClaudeVersion(): string {
+  return execFileSync("claude", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
 export class ClaudeCodeBackend implements SessionBackend {
   readonly name = "claude-code";
 
   constructor(private readonly config: SdkBackendConfig) {}
 
+  /**
+   * S-5: the CLI this project was verified against, compared for real.
+   *
+   * PRDR-260. `src/init/config.ts:41` writes the pin as the bare version token
+   * (`raw.trim().split(/\s+/)[0]`) while this compared against the UNSPLIT
+   * probe output — `2.1.269` against `2.1.269 (Claude Code)`. The two were
+   * never comparable, and `installed.includes(pinned)` was reached for to
+   * bridge a parse the checker declined to do. Containment fails OPEN: `2.1.2`,
+   * `1` and `Claude` are all substrings of that output and all passed, on all
+   * four spending paths, with no signal. Both halves now reduce the string the
+   * same way, which is the first time `backend.ts`'s `installed != pinned`
+   * describes what happens here.
+   *
+   * The refusal names the remediation. The pin is the version this project was
+   * verified against and `ensureConfig` never rewrites it (`config.ts:54-73`),
+   * so the fix is a deliberate one-line edit by a human — S-5's "upgrades are
+   * PRs gated on the fixture suite", scoped to a project. It also makes the
+   * `pinned: "unknown"` trap (PRDR-251:118-131) legible for the first time.
+   */
   async checkVersion(pinned: string): Promise<void> {
-    let installed: string;
+    let raw: string;
     try {
-      installed = execFileSync("claude", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      raw = (this.config.versionProbe ?? probeClaudeVersion)();
     } catch {
       throw new Error(`claude CLI not found on PATH; install the pinned version (${pinned}) — S-5`);
     }
-    if (!installed.includes(pinned)) {
-      throw new Error(`backend version mismatch (S-5): pinned=${pinned} installed=${installed}`);
+    const reported = raw.trim().split(/\s+/)[0] ?? raw.trim();
+    if (reported !== pinned) {
+      throw new Error(
+        `backend version mismatch (S-5): this project pins claude_code ${pinned}, the CLI on PATH reports ${reported}. ` +
+          "The pin is the version this project was verified against, and `init` never rewrites it. Set " +
+          `\`pinned.claude_code\` to ${reported} in .detent/config.json once you have re-verified this project ` +
+          "against it, or install the pinned CLI.",
+      );
     }
   }
 

@@ -7,6 +7,8 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { stateDir } from "../fs/layout.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { reviewPlan, sessionBudget } from "./plan-review.js";
+import { remainLine } from "./plan-notes.js";
+import { revisionOutcome } from "./plan-signal.js";
 import { normaliseDraft, tagSlice } from "./plan-slices.js";
 import type { DraftedTicket } from "./plan-write.js";
 
@@ -261,10 +263,25 @@ export async function wholePlanReview(
     };
   }
   const remaining = second.verdict === "changes" ? second.findings : [];
+  /**
+   * PRDR-260: the same stationary count the slice line had, and here there is
+   * no null to read it against — this path calls `reviewPlan` once and never
+   * `sampleReviewPlan`, so there is no `reads` array for `sampleChurn` to run
+   * over. Saying so is what keeps the fix from becoming the drift it removes:
+   * borrowing a slice's churn figure would measure a different reviewer over
+   * different input.
+   */
+  const outcome = revisionOutcome(first.findings, remaining);
   deps.note?.(
     remaining.length === 0
       ? "whole-plan review after revision: approve"
-      : `whole-plan review after revision: ${remaining.length} finding(s) remain — ${remaining.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; ")}`,
+      : remainLine(
+          "whole-plan review after revision",
+          remaining.length,
+          outcome,
+          "no null — the whole-plan review is a single draw, not a sample",
+          remaining.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; "),
+        ),
   );
   return { tickets: updated, questions: numbered, remaining };
 }

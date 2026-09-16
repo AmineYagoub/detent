@@ -9,6 +9,7 @@ import { sessionBudget } from "./plan-review.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
 import { sampleReviewPlan } from "./plan-sample.js";
+import { churnLine, nullNote, recurringLine, remainLine, revisionLine, sampleLine } from "./plan-notes.js";
 import { revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
@@ -378,19 +379,11 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     reviewed = review !== null;
     if (review !== null) {
       churn = sampleChurn(review.reads);
-      deps.note?.(
-        `${slice.id} review: sampled ${String(review.reads.length)} launched together, keeping what ${String(review.threshold)} of ` +
-          `${String(review.reads.length)} saw — ${String(review.findings.length)} recurring, ` +
-          `${String(review.seenOnce.length)} seen once (C-4⁗″)`,
-      );
-      deps.note?.(
-        `${slice.id} sample churn, nothing revised between the reads: ${String(churn.resolved)} resolved, ` +
-          `${String(churn.survived)} survived, ${String(churn.introduced)} introduced — the null the number ` +
-          `below is read against (PRDR-200)`,
-      );
+      deps.note?.(sampleLine(slice.id, review.reads.length, review.threshold, review.findings.length, review.seenOnce.length));
+      deps.note?.(churnLine(slice.id, churn, review.reads.length * (review.reads.length - 1)));
     }
     if (review !== null && review.verdict === "changes" && review.findings.length > 0) {
-      deps.note?.(`${slice.id} review: ${review.findings.length} recurring finding(s) — ${review.findings.map((f) => f.tag).join(", ")}`);
+      deps.note?.(recurringLine(slice.id, review.findings));
       for (let round = 0; round < PLAN_REVISIONS; round += 1) {
         drafted = await draftAndRead(deps, { slice, planIndex: index, findings: review.findings, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
@@ -408,14 +401,17 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
        * asked across runs rather than re-derived from a log each time.
        */
       revision = revisionOutcome(review.findings, leftover);
-      deps.note?.(
-        `${slice.id} revision: ${String(revision.resolved)} resolved, ${String(revision.survived)} survived, ` +
-          `${String(revision.introduced)} introduced (PRDR-196)`,
-      );
+      deps.note?.(revisionLine(slice.id, revision));
       deps.note?.(
         leftover.length === 0
           ? `${slice.id} review: revision accepted`
-          : `${slice.id} review after revision: ${leftover.length} finding(s) remain — ${leftover.map((f) => f.tag).join(", ")}`,
+          : remainLine(
+              `${slice.id} review after revision`,
+              leftover.length,
+              revision,
+              nullNote(churn, review.reads.length * (review.reads.length - 1)),
+              leftover.map((f) => f.tag).join(", "),
+            ),
       );
     } else if (review !== null) {
       deps.note?.(

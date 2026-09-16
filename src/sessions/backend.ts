@@ -160,7 +160,11 @@ export interface SessionResult {
 export interface SessionBackend {
   readonly name: string;
   run(spec: SessionSpec): Promise<SessionResult>;
-  /** S-5: bootstrap fails when installed != pinned. The mock is version-free. */
+  /**
+   * S-5: bootstrap fails when installed != pinned — an equality on the version
+   * TOKEN both halves parse the same way (PRDR-260), not on the CLI's whole
+   * banner. The mock is version-free.
+   */
   checkVersion(pinned: string): Promise<void>;
 }
 
