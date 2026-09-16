@@ -433,9 +433,12 @@ export function readRecordedSpend(root: string): number {
        * a ledger row is a shape the writer cannot produce. Only the second is
        * worth halting for, and it is the one X-1‴ was actually about.
        *
-       * The cost is an under-count of at most the row glued to the torn one —
-       * a lower bound, the safe direction, and bounded further by the `Math.max`
-       * against this process's own total.
+       * The cost is an under-count in the safe direction, bounded further by the
+       * `Math.max` against this process's own total — but NOT "at most the row
+       * glued to the torn one", which this block claimed. A tear at the record
+       * separator leaves two complete rows on one line, and `JSON.parse` rejects
+       * the pair for trailing content: both are lost. Probed 10/100/1 with the
+       * tear after the first row's closing brace and read back 1.
        */
       continue;
     }

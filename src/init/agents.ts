@@ -44,8 +44,11 @@ export function prepareAgents(deps: PrepareAgentsDeps): PhaseOutcome {
     const hash = deps.prompts.hashes[role];
     const ref = `${role}@${hash}`;
     /**
-     * Fail closed BEFORE writing: resolveAssignment throws on an unknown role
-     * or a hash that does not match the vendored set (S-7's AC).
+     * S-7's AC asks this to fail closed before writing. It cannot: `ref` is
+     * built one line above from the same `deps.prompts` passed as the second
+     * argument, with `role` drawn from `ROLE_IDS`, so `resolveAssignment` has
+     * no input here it can reject. The call is a tautology, and the assurance
+     * this block claimed is not one the site can give.
      */
     resolveAssignment(ref, deps.prompts);
     assignments[ticket.id] = ref;

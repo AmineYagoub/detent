@@ -22,8 +22,11 @@ import { loadConfig, type LoadedConfig } from "./worstcase.js";
  * `transitions.jsonl` inside the transition's evidence — an operator action
  * with the broken pid, without inventing an X-3 event to carry it.
  *
- * Legality is X-3's: `approve` only from NEEDS_HUMAN, `requeue` only from
- * NEEDS_HUMAN or BLOCKED. Approve re-enters APPROVED — the kernel re-verifies
+ * Legality is X-3's: `approve` only from NEEDS_HUMAN, `requeue` from any
+ * REQUEUEABLE state (X-8/PRDR-238 — the nine unfinished states, with APPROVED,
+ * DONE and READY excluded). This block said "NEEDS_HUMAN or BLOCKED" until
+ * PRDR-238 widened the table and updated the verb's own doc-block below without
+ * this one. Approve re-enters APPROVED — the kernel re-verifies
  * on the next run; a direct DONE does not exist. Requeue opens generation N+1
  * with zeroed counters while N stays frozen (D-17, the recorded divergence
  * from the oracle's in-place reset).

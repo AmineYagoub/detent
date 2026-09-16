@@ -137,7 +137,11 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const server = buildServer(core);
   const transport = new StdioServerTransport();
-  /* The lock outlives the connection: released when the transport closes, on every exit path. */
+  /* The lock is NOT released on a normal close: the journal-close handler below replaces this
+     `onclose` rather than chaining it, so `lock.release()` runs on no exit path. A stale lock is
+     broken on the next run by `runLockBreakable` (dead pid, same host), which is why this has read
+     as working. The claim this comment used to make — released on every exit path — was false from
+     the line that overwrote it. */
   transport.onclose = (): void => {
     lock.release();
   };

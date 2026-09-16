@@ -13,9 +13,12 @@ import { ledgerRowSchema, transitionLineSchema, type LedgerRow, type TransitionL
  * same root. Within-process, that discharges F-1's single-writer AC (R-8);
  * cross-process protection is NG4 ground, documented, not silently claimed.
  *
- * Every line is schema-validated before it is written: N-5 promises the run is
- * reconstructable from these files, which is only true if nothing malformed
- * ever lands in them.
+ * `appendTransition` and `appendLedger` schema-validate before they write:
+ * N-5 promises the run is reconstructable from these files, which is only true
+ * if nothing malformed ever lands in them. `appendTicketEvent` does NOT — it
+ * takes `Record<string, unknown>` and stringifies it, so a session-authored
+ * value reaches the file unvalidated and unscrubbed (SEC-4). A probe recorded a
+ * 363-character `effort_settled.active` carrying a credential.
  */
 
 const OPEN_ROOTS = new Set<string>();

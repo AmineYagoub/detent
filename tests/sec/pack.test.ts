@@ -138,8 +138,13 @@ describe("T-052 evasion pack: 0 protected writes (SEC-3)", () => {
   /**
    * SEC-3′ (PRDR-132) — asserted against the PRODUCT's floor.
    *
-   * The evasion row above named "tamper with the git hooks" and passed only
-   * because THIS FILE's own `POLICY` adds `.git/**` at the top. Nothing in
+   * The evasion row above named "tamper with the git hooks" and proved nothing
+   * about the product: it is written entirely against THIS FILE's own `POLICY`.
+   * The remediation plan recorded the cause as that policy's `.git/**` entry,
+   * and that is wrong — the denial is overdetermined, because the same `POLICY`
+   * declares `surface: ["src/**"]`, so the path is refused as out-of-surface
+   * whether or not the protected entry is there. Removing the entry would not
+   * have falsified the row. Nothing in
    * `src/` did: `.git` appeared in no protected set anywhere, so under a broad
    * surface — which the C-4 bootstrap ticket declares, and which the surface
    * lever used to grant on request — `.git/config` and `.gitattributes` were

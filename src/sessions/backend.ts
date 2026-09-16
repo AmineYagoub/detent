@@ -142,9 +142,12 @@ export interface SessionResult {
   readonly modelFallback?: { readonly requested: string; readonly reason: string };
   /**
    * PRDR-237: the effort the turns actually ran at, as the containment hook saw
-   * it — the SDK's level AFTER any silent downgrade. Absent means no tool call
-   * reported one (a model without effort support, or a session that called no
-   * tool), and absent is UNOBSERVED, never "it matched what was routed".
+   * it — the SDK's level AFTER any silent downgrade. Absent is UNOBSERVED,
+   * never "it matched what was routed", and has THREE causes, not the two this
+   * block used to name: a model without effort support, a session that called
+   * no tool, and a session that DID report a level and then died on the wire —
+   * the crash path composes its result before the observed level is attached,
+   * so S-4′'s shape and "no effort support" are indistinguishable here.
    */
   readonly effort?: string;
   /**

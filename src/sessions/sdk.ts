@@ -49,8 +49,14 @@ export interface SdkBackendConfig {
  * caller records that as unobserved, never as agreement — the failure this
  * exists to prevent is a missing signal read as a matching one.
  *
- * Observation only. It cannot reach `decision`, and the deny path above is
- * asserted unchanged with an observer attached.
+ * Observation only in the narrow sense that the callback's RETURN value is
+ * discarded — NOT in the sense that it cannot affect the decision. It runs
+ * before `guardToolUse` and is not caught, so a throwing observer rejects the
+ * call before the guard decides, and the guard's `policy` is in its lexical
+ * scope. The production observer is a field assignment (`runOnce`) and the test
+ * attaches a benign one; nothing fences a hostile one. `buildStopHook` and
+ * `carryArtifact` share the shape. Observer isolation is not a property this
+ * hook holds today, and no D-21 test supplies a hostile observer.
  */
 export function buildPreToolUseHook(
   policy: GuardPolicy,
@@ -218,6 +224,12 @@ export function parseResultMessage(message: unknown): SessionResult {
    * circuit breaker exists for exactly the shape that arrives half-formed, and
    * the tests only covered telemetry entirely ABSENT or a hand-injected
    * `telemetryParsed: false`, neither of which is this.
+   *
+   * The fix closed the `modelUsage` branch only. The `m.usage !== undefined`
+   * disjunct below admits the SAME shape on the flat field: `usage: {}`,
+   * `usage: null` and any object carrying no token key all parse as telemetry
+   * present with zero tokens. The first sentence of this block is therefore
+   * still false for `usage`, and no test covers it.
    */
   const usageEntries = Object.keys(m.modelUsage ?? {}).length;
   const hasTelemetry = m.total_cost_usd !== undefined && (usageEntries > 0 || m.usage !== undefined);

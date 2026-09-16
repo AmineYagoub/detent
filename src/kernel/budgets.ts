@@ -46,6 +46,13 @@ export const ENFORCEMENT_SITES = {
   spend_without_progress_sessions: "kernel/ledger",
   /** X-1″ (PRDR-106): advisory — read by the planner as `session_budget`, enforced nowhere. */
   turns_per_stage: "init/plan-review",
+  /**
+   * X-1 (PRDR-140): advisory. `kernel/referee-stage` READS this and hands it to
+   * the research prompt; `launch` returns `Promise<void>` and no observed count
+   * is checked against it. The map's contract above — every key names its
+   * enforcer — is not met by this row, and naming a module that only reads the
+   * number is what let it pass for one that bounds it.
+   */
   failure_research_tool_calls: "kernel/referee-stage",
   /**
    * PRDR-179: `init/pipeline`, not `init/plan-research`.

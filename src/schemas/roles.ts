@@ -30,8 +30,15 @@ export type RoleId = (typeof ROLE_IDS)[number];
  * rather than accepted and silently ignored.
  *
  * `xhigh` and `max` are not served by every model. The SDK downgrades silently
- * for a model that cannot serve one, which is why a configured effort is
- * recorded per session rather than assumed to have been honoured.
+ * for a model that cannot serve one, which is why a KERNEL-launched session
+ * records both the level it was routed to (`start.effort`, S-4‴) and the level
+ * it settled at (`effort_settled`, S-4⁗). Init sessions are routed a level and
+ * record neither — ARCH-2 parity is owed there and is not paid.
+ *
+ * This sentence claimed the recording for every session from PRDR-197, which
+ * shipped the routing alone; the routed half arrived at PRDR-235 and the
+ * settled half at PRDR-237. It described a mechanism that did not yet exist,
+ * and read as finished throughout.
  */
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 

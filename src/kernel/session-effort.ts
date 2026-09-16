@@ -27,7 +27,10 @@ export interface EffortJournal {
  *
  * The disagreement is also a note, and neither refuses nor retries the session
  * — PRDR-114's model fallback set that shape, and effort is the weaker signal
- * of the two.
+ * of the two. The note has a THIRD suppressor beside the unobserved case above:
+ * a role routed to `"default"` never produces one, however far the model
+ * settles below it. `detent init` writes `effort_routing: {}`, so on a default
+ * install this branch cannot execute at all.
  */
 export function recordEffort(
   journal: EffortJournal,
