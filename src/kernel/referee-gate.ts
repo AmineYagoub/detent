@@ -17,6 +17,7 @@ import { runsDir } from "./journal.js";
 import { Breach, KernelBoundaryError, type RefereeContext } from "./referee-context.js";
 import { scrub } from "./scrub.js";
 import { readTicket } from "./tickets/readers.js";
+import { assertTicketWallClock } from "./ticket-clock.js";
 import { appendNote } from "./tickets/mutations.js";
 
 /** Thrown to unwind to the driver when V-3 halts the run (SEC-5, D-23). */
@@ -56,6 +57,13 @@ export class GateArm {
   }
 
   async evaluate(id: string, opts: { closeCheck?: boolean; escalateReason?: string } = {}): Promise<KernelEvent> {
+    /**
+     * X-1 (PRDR-246): before the bound commands run, on both paths. Running a
+     * gate is starting work, and the headless loop already refuses to start a
+     * stage past the ceiling — this is where the model-driven driver, which has
+     * no loop of its own, inherits the same answer (ARCH-2).
+     */
+    assertTicketWallClock(this.ctx, id);
     const ticket = readTicket(this.ctx.root, id);
     const workDir = this.ctx.workDirFor(id);
 

@@ -39,7 +39,13 @@ export const ENFORCEMENT_SITES = {
   research_sessions: "kernel/resolver",
   hypotheses: "kernel/machine",
   sessions: "kernel/referee-session",
-  ticket_wall_clock_ms: "kernel/referee-session",
+  /**
+   * X-1 (PRDR-246): `kernel/ticket-clock`, not `kernel/referee-session`. The
+   * launch seam was the only caller until `evaluate` needed the same check, and
+   * naming the arm rather than the computation is what let the `gate` tool run
+   * past this ceiling while the map still read as satisfied.
+   */
+  ticket_wall_clock_ms: "kernel/ticket-clock",
   /** X-1⁵ (PRDR-191): both are read where the launch gate stands. */
   spend_without_progress_floor_usd: "kernel/ledger",
   spend_without_progress_multiple: "kernel/ledger",

@@ -11,7 +11,8 @@ import { currentCounters, currentGeneration, withCurrentCounters } from "./gener
 import { Breach, KernelBoundaryError, SessionRefusal, type RefereeContext } from "./referee-context.js";
 import type { FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
-import { appendNote, readClaim, writeTicket } from "./tickets/mutations.js";
+import { appendNote, writeTicket } from "./tickets/mutations.js";
+import { assertTicketWallClock } from "./ticket-clock.js";
 import { scrub } from "./scrub.js";
 import { recordEffort } from "./session-effort.js";
 import { attemptInputs } from "./session-inputs.js";
@@ -70,17 +71,12 @@ export class SessionArm {
      * The clock is the CLAIM's own timestamp: the generation's `started_at`
      * would date from a requeue that may be days old, and a ticket planned last
      * week must not breach the moment it is first claimed.
+     *
+     * PRDR-246: the computation moved to `ticket-clock.ts` when `evaluate`
+     * turned out to need the same one. A launch is not the only thing a driver
+     * asks the referee to start.
      */
-    const claimedAt = readClaim(ctx.root, id)?.at;
-    if (claimedAt !== undefined) {
-      const elapsed = Date.parse(ctx.iso()) - Date.parse(claimedAt);
-      if (Number.isFinite(elapsed) && elapsed > ctx.budgets.ticket_wall_clock_ms) {
-        throw new Breach(
-          `ticket wall clock ceiling (X-1): ${Math.round(elapsed / 1000)}s since the claim exceeds ` +
-            `${Math.round(ctx.budgets.ticket_wall_clock_ms / 1000)}s`,
-        );
-      }
-    }
+    assertTicketWallClock(ctx, id);
 
     let current = readTicket(ctx.root, id);
     const counters = currentCounters(current);
