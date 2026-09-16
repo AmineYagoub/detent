@@ -407,3 +407,54 @@ describe("PRDR-253 the pin gates the spend, it is not merely reported beside it"
     expect(existsSync(path.join(stateDir(root), "ledger.jsonl")), "a billed session still leaves a row").toBe(true);
   });
 });
+
+/**
+ * PRDR-254: the agent-sdk pin is REPORTED, and deliberately refuses nothing.
+ *
+ * `pinned.agent_sdk` cannot move unless Detent moves, and every SDK bump goes
+ * through the N-7 self-build before it ships (release-checklist item 5), so
+ * S-5's vetting has already happened upstream by the time a project sees a
+ * mismatch. Gating it would refuse every project initialised before a Detent
+ * upgrade, because `ensureConfig` writes the pin once and never again.
+ *
+ * Driven at `doctor()` rather than `main()`: the installed-SDK probe is a seam
+ * on `DoctorDeps`, and `DoctorMainDeps` carries only `hasAuth`/`buildBackend`.
+ */
+describe("PRDR-254 the agent-sdk pin reports, and reports to the right reader", () => {
+  it("a mismatch names the cause instead of instructing Detent's maintainers", async () => {
+    const root = await fixture();
+    const report = await doctor(root, { installedSdkVersion: () => "0.4.0" });
+    const check = named(report, "agent-sdk-pin");
+    expect(check?.ok, "a red row: worth seeing, even though nothing refuses on it").toBe(false);
+    expect(check?.detail, "both versions, as before").toContain("0.3.258");
+    expect(check?.detail).toContain("0.4.0");
+    expect(check?.detail, "the cause: the config was written by a different Detent").toContain("different Detent build");
+    expect(check?.detail, "and it says the row does not refuse, so the reader is not hunting a blocker").toContain("dvisory");
+    expect(
+      check?.detail,
+      "the old text told a project operator that upgrades are PRs gated on a fixture suite they do not have",
+    ).not.toContain("upgrades are PRs");
+  });
+
+  /**
+   * The guard, not a discovery: this passes on the tree before the fix too. It
+   * exists so that gating the SDK pin — the alternative PRDR-254 rejects —
+   * cannot happen quietly. A future gate fails here and its author has to go
+   * back to the claim in `AGENT_SDK_PIN_SITES` rather than contradict it.
+   */
+  it("and a mismatch does not stop the session, which is what advisory means", async () => {
+    const root = await fixture();
+    const backend = new MockBackend({ review: () => okResult({ telemetryParsed: true }) });
+    const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    let report: Awaited<ReturnType<typeof doctor>>;
+    try {
+      report = await doctor(root, { backend, installedSdkVersion: () => "0.4.0" });
+    } finally {
+      err.mockRestore();
+    }
+    expect(named(report, "agent-sdk-pin")?.ok, "the pin really does mismatch").toBe(false);
+    expect(backend.calls, "and the smoke ran anyway (PRDR-254)").toHaveLength(1);
+    expect(named(report, "smoke-session")?.ok).toBe(true);
+    expect(named(report, "smoke-session")?.detail).toContain("smoke OK");
+  });
+});

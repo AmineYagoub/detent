@@ -114,6 +114,21 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
   let pinRefusal: string | null =
     "the S-5 pin was never checked — no loadable config to read `pinned.claude_code` from";
   if (loaded !== null) {
+    /**
+     * S-5 (PRDR-254): reported, and deliberately not enforced — see
+     * `AGENT_SDK_PIN_SITES`, which names this module as the one reporter.
+     *
+     * The two values answer different questions. `ensureConfig` writes the pin
+     * once and never again, so config says which Detent initialised this
+     * project; `installedSdk()` resolves from Detent's own node_modules, so it
+     * says which SDK this Detent ships. They diverge on every Detent upgrade,
+     * which is an ordinary event and not one to refuse a run over.
+     *
+     * The text is therefore written for the person who will read it — an
+     * operator whose Detent moved. It used to end "upgrades are PRs gated on
+     * the fixture suite", which is instruction for whoever maintains Detent and
+     * names no action a project can take.
+     */
     const installed = (deps.installedSdkVersion ?? installedSdk)();
     const pinned = loaded.config.pinned.agent_sdk;
     checks.push({
@@ -122,7 +137,10 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
       detail:
         installed === pinned
           ? `pinned ${pinned} == installed ${installed}`
-          : `MISMATCH: pinned ${pinned}, installed ${installed} (S-5 — upgrades are PRs gated on the fixture suite)`,
+          : `MISMATCH: this project pins ${pinned}, this Detent ships ${installed} — the config was written by ` +
+            "a different Detent build and `init` never rewrites it. Advisory (S-5): the lockfile pins the SDK " +
+            `exactly and the release shipping ${installed} passed the N-7 gate, so nothing refuses on this; set ` +
+            `pinned.agent_sdk to ${installed} once you have re-verified this project against it`,
     });
 
     /** ---- CLI pin (S-5), via the backend's own check ------------------------ */

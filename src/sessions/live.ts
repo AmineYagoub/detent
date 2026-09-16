@@ -83,6 +83,41 @@ export const PIN_CHECK_SITES = {
   "cli/run": "kernel/run",
 } as const;
 
+/**
+ * S-5 (PRDR-254): the OTHER half of S-5's sentence — and why nothing refuses.
+ *
+ * S-5 pins two things. `PIN_CHECK_SITES` above answers for the CLI pin, which
+ * refuses on all four paths that can spend. The SDK pin refuses on none, and a
+ * reader who arrives here asking which pins are enforced where deserves that
+ * answer rather than silence — PRDR-253's sweep read the silence as the gap
+ * PRDR-251 had closed three fields over, and filed it.
+ *
+ * The two pins guard different threats and only one is the operator's to get
+ * wrong. `claude_code` names a binary on their PATH, upgraded whenever they
+ * like with nothing vetting it against Detent — the unvetted-backend case S-5's
+ * "upgrades are PRs gated on the cross-ecosystem fixture suite" exists to
+ * refuse. `agent_sdk` cannot move unless Detent moves, and Detent cannot ship
+ * without `docs/release-checklist.md` item 5 putting the new SDK through the
+ * N-7 self-build first. The vetting S-5 demands already happened, upstream, in
+ * the release that shipped it; a project config re-litigating it adds nothing.
+ *
+ * Gating it anyway was considered and rejected: `ensureConfig` never rewrites
+ * an existing config, so the first Detent upgrade would refuse every `run`,
+ * `init` and `referee` in every project initialised before it until a human
+ * edited each `.detent/config.json` — and the escape hatch, Detent updating the
+ * pin to match itself, is a pin in name only.
+ *
+ * So the map is roles, not checkers. `tests/oracle/pin-parity.test.ts` holds it
+ * total over the modules that mention the pin in code, so a new reader fails
+ * until it declares itself. That a reporter does not REFUSE is behaviour a role
+ * string cannot check; `tests/cli/doctor.test.ts` holds that half.
+ */
+export const AGENT_SDK_PIN_SITES = {
+  "cli/doctor": "reporter",
+  "init/config": "writer",
+  "kernel/worstcase": "schema",
+} as const;
+
 export function buildLiveBackend(root: string): ClaudeCodeBackend {
   const gateCmd = readBindings(root).bindings.find((b) => b.slot === "test")?.resolved ?? null;
   return new ClaudeCodeBackend({

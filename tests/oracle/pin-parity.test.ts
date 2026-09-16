@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { PIN_CHECK_SITES } from "../../src/sessions/live.js";
+import { AGENT_SDK_PIN_SITES, PIN_CHECK_SITES } from "../../src/sessions/live.js";
 import { codeOnly } from "../../scripts/check-rules.js";
 
 /**
@@ -67,5 +67,55 @@ describe("S-5 the pin check covers every spending entrypoint (ARCH-2)", () => {
     expect(PIN_CHECK_SITES["cli/run"]).toBe("kernel/run");
     expect(code("cli/run")).toContain("run(");
     expect(code("cli/run")).not.toContain("checkVersion");
+  });
+});
+
+/**
+ * S-5 (PRDR-254) — the OTHER half of S-5's sentence, and why it refuses nowhere.
+ *
+ * `pinned.claude_code` is gated on all four spending paths. `pinned.agent_sdk`
+ * is gated on none, and that is deliberate: it cannot move unless Detent moves,
+ * and `docs/release-checklist.md` item 5 puts every SDK bump through the N-7
+ * self-build before it ships, so S-5's vetting has already happened upstream by
+ * the time a project sees it. Gating it would refuse every project initialised
+ * before a Detent upgrade, since `ensureConfig` never rewrites an existing
+ * config.
+ *
+ * Nothing said so, so PRDR-253's sweep read it as the gap PRDR-251 had just
+ * closed three fields over. This is the claim, and this is its oracle.
+ *
+ * What this test proves: the map is TOTAL over the modules that mention the pin
+ * in code, so a new reader anywhere in `src/` — destructured, renamed, wherever
+ * — fails here until it declares its role. What it does NOT prove is that the
+ * reporter does not refuse: a role string cannot check behaviour. That is held
+ * by `tests/cli/doctor.test.ts`, which runs a mismatched SDK pin through
+ * `doctor` and asserts the smoke session still happens.
+ */
+describe("S-5 the agent-sdk pin is advisory, and the tree says which sites touch it", () => {
+  it("the map is total over the src modules that mention the pin in code", () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const full = path.join(dir, e.name);
+        return e.isDirectory() ? walk(full) : e.name.endsWith(".ts") ? [full] : [];
+      });
+    const mentions = walk(SRC)
+      .filter((f) => codeOnly(readFileSync(f, "utf8")).includes("agent_sdk"))
+      .map((f) => path.relative(SRC, f).split(path.sep).join("/").slice(0, -3))
+      .sort();
+    expect(mentions, "a module that touches the agent-sdk pin declares its role in AGENT_SDK_PIN_SITES").toEqual(
+      Object.keys(AGENT_SDK_PIN_SITES).sort(),
+    );
+  });
+
+  /**
+   * One reporter, and it is `doctor`. Asserted separately from totality because
+   * the counts are the claim: a second reporter is a second place an operator
+   * could be told the pin matters, and a gate is not a reporter at all.
+   */
+  it("exactly one site reports the pin, and no site is named as gating on it", () => {
+    const roles = Object.values(AGENT_SDK_PIN_SITES);
+    expect(roles.filter((r) => r === "reporter")).toHaveLength(1);
+    expect(AGENT_SDK_PIN_SITES["cli/doctor"]).toBe("reporter");
+    expect(roles, "a gating role would contradict the claim above; changing it means revisiting PRDR-254").not.toContain("gate");
   });
 });
