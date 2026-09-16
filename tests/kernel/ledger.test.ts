@@ -347,12 +347,12 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
    * newline and the NEXT append concatenates onto it — one `kill -9` then made
    * every later run refuse at startup, forever, with no repair instruction.
    *
-   * Unparseable TEXT is a crash artifact at any position and is skipped. The
-   * cost is an under-count of the row glued to the torn one: a lower bound,
-   * the safe direction, and the same shape S-4 already takes for a crashed
-   * session's telemetry.
+   * Unparseable TEXT is a crash artifact at any position and is skipped, which
+   * still holds. PRDR-249 narrowed the LOSS: the complete rows glued onto the
+   * fragment are recovered, and only the fragment — whose bytes stopped
+   * mid-flight and whose cost is genuinely unknown — is dropped.
    */
-  it("survives a torn line that a later append glued a real row onto", () => {
+  it("recovers the real rows a later append glued onto a torn line", () => {
     const root = tmpTree({});
     roots.push(root);
     mkdirSync(path.join(root, ".detent"), { recursive: true });
@@ -361,8 +361,43 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
     writeFileSync(f, `${row({ cost_estimate_usd: 10 })}\n{"at":"2026`);
     appendFileSync(f, `${row({ cost_estimate_usd: 7 })}\n`);
     appendFileSync(f, `${row({ cost_estimate_usd: 3 })}\n`);
-    /* 10 + 3; the 7 was swallowed by the torn line — a lower bound, not a halt. */
-    expect(readRecordedSpend(root)).toBe(13);
+    /* 10 + 7 + 3: the 7 rode the torn line and is complete, so it counts. */
+    expect(readRecordedSpend(root)).toBe(20);
+  });
+
+  /**
+   * PRDR-249: the worse shape, and the one PRDR-151's "at most the row glued to
+   * the torn one" did not cover. A tear landing exactly at the record separator
+   * — the row fully written, its newline not — leaves TWO complete rows on one
+   * line, and `JSON.parse` rejects the pair for trailing content, so both were
+   * lost. One crash dropped $110 of $111.
+   */
+  it("recovers both rows when the tear landed exactly at the record separator", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    mkdirSync(path.join(root, ".detent"), { recursive: true });
+    const f = path.join(root, ".detent", "ledger.jsonl");
+    writeFileSync(f, `${row({ cost_estimate_usd: 10 })}`);
+    appendFileSync(f, `${row({ cost_estimate_usd: 100 })}\n`);
+    appendFileSync(f, `${row({ cost_estimate_usd: 1 })}\n`);
+    expect(readRecordedSpend(root)).toBe(111);
+  });
+
+  /**
+   * PRDR-249: a recovered object that is not a ledger row is SKIPPED, not fatal.
+   * On an intact line a non-row still throws — that is X-1‴, the ceiling cannot
+   * trust a shape its writer could not produce — but an object dug out of a
+   * damaged line is itself a crash artifact, and PRDR-151's lesson is that a
+   * crash artifact must never brick a root.
+   */
+  it("skips a recovered object that is not a ledger row rather than refusing the file", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    mkdirSync(path.join(root, ".detent"), { recursive: true });
+    const f = path.join(root, ".detent", "ledger.jsonl");
+    writeFileSync(f, `${row({ cost_estimate_usd: 4 })}\n{"at":"2026`);
+    appendFileSync(f, `${JSON.stringify({ not: "a ledger row" })}\n`);
+    expect(readRecordedSpend(root)).toBe(4);
   });
 });
 

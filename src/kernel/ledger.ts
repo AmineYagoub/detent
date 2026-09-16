@@ -5,6 +5,7 @@ import { CEILINGS, type Budgets } from "../schemas/budgets.js";
 import { ledgerRowSchema, type LedgerRow } from "../schemas/records.js";
 import type { SessionResult } from "../sessions/backend.js";
 import type { RunJournal } from "./journal.js";
+import { recoverObjects } from "./jsonl-recover.js";
 
 /**
  * T-048 — the ledger and the cross-generation spend backstop (S-4, X-8, D-25).
@@ -433,13 +434,24 @@ export function readRecordedSpend(root: string): number {
        * a ledger row is a shape the writer cannot produce. Only the second is
        * worth halting for, and it is the one X-1‴ was actually about.
        *
-       * The cost is an under-count in the safe direction, bounded further by the
-       * `Math.max` against this process's own total — but NOT "at most the row
-       * glued to the torn one", which this block claimed. A tear at the record
-       * separator leaves two complete rows on one line, and `JSON.parse` rejects
-       * the pair for trailing content: both are lost. Probed 10/100/1 with the
-       * tear after the first row's closing brace and read back 1.
+       * PRDR-249: what is skipped is the FRAGMENT, not the line. This block
+       * claimed the loss was "at most the row glued to the torn one" and it was
+       * larger — a tear at the record separator leaves two COMPLETE rows on one
+       * line and `JSON.parse` rejects the pair for trailing content, so 10/100/1
+       * torn after the first row's closing brace read back 1. `recoverObjects`
+       * digs out every object that was fully written; only the fragment, whose
+       * bytes stopped mid-flight and whose cost is genuinely unknown, is lost.
+       *
+       * A recovered object that is not a ledger row is SKIPPED rather than
+       * throwing, unlike the intact-line case below. X-1‴ is that the ceiling
+       * cannot trust a shape its WRITER could not produce; an object dug out of
+       * a damaged line is a crash artifact, and PRDR-151's lesson is that a
+       * crash artifact must never brick a root.
        */
+      for (const recovered of recoverObjects(line)) {
+        const recoveredRow = ledgerRowSchema.safeParse(recovered);
+        if (recoveredRow.success) total += recoveredRow.data.cost_estimate_usd;
+      }
       continue;
     }
     const parsed = ledgerRowSchema.safeParse(raw);
