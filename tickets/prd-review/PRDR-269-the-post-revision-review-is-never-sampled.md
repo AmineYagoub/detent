@@ -94,7 +94,7 @@ produce a yield. Arm 4 takes three and shows the two diverge — 5.0 per read be
 ratio of 1.00. The claim this paragraph makes is right and its arithmetic was reading the yield of
 a document the count does not come from.
 
-## Expected effect — predicted, then measured, and the prediction was wrong
+## Expected effect — predicted, then measured, then given a null
 
 **Predicted, before the fix shipped.** The 2-of-3 filter kept 3 of 11, 4 of 14 and 6 of 14 of the
 first review's findings in these three arms — it discards 57–73%. Applying it to the 7–8
@@ -116,6 +116,15 @@ $0. Log `exp269-20260917-175117.log`. **The residue rose to 10 and HELD rose fro
       after-revision              7               7              8              1
       introduced                  -               -              -              9
       seen-once                   8              10              8             11
+
+**The `null %` row is not on the same scale as the `revision %` above it.** Both are correctly
+computed and neither is comparable to the other. `revision %` is `resolved/(resolved+survived)` over
+FILTERED sets; `null %` is the same ratio over RAW read pairs — for arm 4, 18/(18+12) = 60%.
+Filtering removes the unstable findings that drive churn, so a raw-pair null is much higher than the
+null that actually applies to a filtered figure. The filtered null, measured below, is **25%**.
+Read against the right baseline arm 4's 75% is not +15 points but +50, and sits outside the null's
+entire range. `nullNote`'s doc-block warns about a scale mismatch between these two numbers and
+fixes the pair-count half of it by rendering a rate; the filtered-versus-raw half is still here.
 
 **The prediction applied the filter to the wrong base.** The per-read yields are in the evidence
 files and they settle it:
@@ -148,10 +157,69 @@ volume on top of that.
 time across four arms, so revision % falls from 100% to 75%: the three-arm finding that the revision
 "resolves 100% of what it is handed, every time" rested on a post-revision read too noisy for its
 findings to match a handed `(ticket, tag)` pair, and one matched once the read was filtered. That is
-1 of 4 handed findings — not a trend. And the revised draft draws twice the complaints per read as
+1 of 4 handed findings, and the null below says to expect 3 of 4 — so the drop is the revision's
+doing, not the sample's. And the revised draft draws twice the complaints per read as
 the pre-revision draft at the same ticket count, 10.0 against 5.0, which no earlier arm could see
 because none took more than one post-revision read. Neither is actionable at n=1; both want the same
 A/B on a second slice. Both are recorded in the run tracker rather than filed.
+
+## The null for the fourth arm's own numbers
+
+Measured after the fact, against a COPY of the run root with arm 4's revised `s07.json` swapped in
+for the live one — same slice key `ad87931c4d2d`, so the corpus is unchanged:
+
+    npx tsx scripts/null-review.ts --root <copy> --slices s07 --together --runs 3
+
+Three reads of the frozen post-revision artifact, no redraft between them: 14, 7 and 9 findings,
+mean **10.00** against the live in-run mean of **10.00**, and per-pair churn 3.67/6.33/3.67 against
+the live 3.33/6.67/3.33. The replay reproduces the reads it is replaying, so the two sets pool: six
+reads of byte-identical text. Splitting them into two panels of three, filtering each at 2-of-3 and
+running `revisionOutcome` between the panels gives a null for this section's numbers over all ten
+complementary splits. 3 sessions, 3.9 min, $8.60.
+
+                        mean   median     range
+    resolved            2.80      2.5       0-6
+    survived            7.40      7.5       6-9
+    introduced          3.80      4.0       1-7
+    |filtered set|     10.20        —      7-14
+    resolution rate    0.251    0.250   0.000-0.500
+    retention rate     0.749    0.750   0.500-1.000
+
+**`introduced = 9` was forced.** `revisionOutcome` defines `introduced = |after| - survived`, and
+`survived <= |before|`, so `introduced >= |after| - |before|`. Filtering arm 4's archived reads
+reproduces production's recorded figure exactly — PRE `[5,6,4]` gives `|handed| = 4`, POST `[8,13,9]`
+gives `|leftover| = 10`, and `revisionOutcome` returns `3 resolved, 1 survived, 9 introduced`. With
+those sizes the floor is **6**: no revision, however good, could have scored below it. Only `9 - 6 =
+3` is above the floor, and the null's mean `introduced` on identical text is **3.80**. The excess is
+below the null. **Nothing in this arm is evidence that the revision introduced a defect.**
+
+**What the arm does show is that the revision worked.** Normalised against `|handed| = 4`, because
+`resolved` and `survived` are bounded by it:
+
+                        arm 4      null      
+    resolution        3/4 = 0.750   0.251    outside the null range (max 0.500)
+    retention         1/4 = 0.250   0.749
+
+Three of the four findings handed to the revision were gone afterwards, where no revision at all
+retains about three quarters. The resolution rate exceeds every one of the ten null splits.
+
+**What this does and does not change above.** The predicted residue of 2-3 is still wrong: the
+measured residue is 10, and the diagnosis above — that the prediction applied the filter to a single
+read rather than the three-read union — still stands and is unaffected. What changes is the reading
+of the outcome counts. `introduced` is dominated by the difference in filtered-set sizes, and that
+difference has an innocent cause: the revised draft draws twice the findings per read AND is more
+reproducible, read-to-read stability rising from 0.400 to 0.667, so more findings clear the 2-of-3
+bar. Both effects enlarge `|leftover|` and force `introduced` up. This section previously read that
+as the fix underperforming. It was the metric, and the understatement of the revision's effect came
+from comparing a filtered figure against a raw-pair null.
+
+**Caveats.** One slice, one document. The ten splits reuse the same six reads, so the ranges are a
+spread and not a confidence interval. The panels mix three in-run reads with three replay reads,
+justified by their matching means rather than proven. Recorded in full as D-30 in the run tracker.
+
+The reporting defect this exposes — that the line prints `resolved` and `introduced` without
+`|before|`, `|after|` or the floor, and offers a null for resolution but none for introduction — is
+not this ticket's to fix and is filed separately.
 
 ## Cost
 
