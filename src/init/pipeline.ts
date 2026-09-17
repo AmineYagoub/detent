@@ -186,13 +186,20 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
         research: {
           budget: deps.budgets.planning_research_tool_calls,
           ...(deps.note === undefined ? {} : { note: deps.note }),
-          researchOne: async (question, remaining) => {
+          /**
+           * D-16: `tool_call_budget` is this question's SHARE of
+           * `planning_research_tool_calls`, not the whole init's pool.
+           * `plan-research` divides the pool and hands each session its cut;
+           * the input key was always named for one session's budget and is only
+           * now true of the number behind it, so it is not renamed.
+           */
+          researchOne: async (question, share) => {
             const artifactOut = path.join(stateDir(deps.root), "state", "planning-brief.json");
             const result = await launchInitSession(
               sessionDeps(deps, journal),
               {
                 role: "research",
-                inputs: { question, tool_call_budget: remaining, hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web" },
+                inputs: { question, tool_call_budget: share, hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web" },
                 artifactOut,
                 withWeb: true,
               },

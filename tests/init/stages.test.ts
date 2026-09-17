@@ -454,17 +454,28 @@ describe("T-063 planning research (C-3a, D-11)", () => {
       note: (t) => notes.push(t),
       researchOne: async (question) => {
         launched += 1;
-        /* The first question burns the whole allowance. */
+        /* Every session tries to take the whole allowance; PRDR-262 is why none of them can. */
         return { brief: VALID_BRIEF(question), toolCalls: 16 };
       },
     });
 
-    expect(launched).toBe(1);
+    /**
+     * PRDR-262: this used to assert `launched === 1` with the comment "the
+     * first question burns the whole allowance" — the live defect written down
+     * as the specification, which is why nothing detected it. The per-init
+     * ceiling was never the defect and still holds exactly; what changed is
+     * that holding it no longer costs the other questions their session.
+     */
+    expect(launched, "a question that overruns is charged its share, and cannot spend another's").toBe(3);
     expect(result.toolCallsUsed).toBe(16);
     expect(result.toolCallsUsed).toBeLessThanOrEqual(BUDGETS.planning_research_tool_calls);
-    /** C-3a: no new interrupt class — the unanswered questions batch into AWAIT_INFO. */
-    expect(result.unanswered).toEqual(["q two?", "q three?"]);
-    expect(notes.join(" ")).toContain("exhausted");
+    expect(result.unanswered, "all three were researched, and all three parsed").toEqual([]);
+    /**
+     * C-3a's exhaustion arm still exists and is reachable only on a pool too
+     * small to fund one call per question — covered in `research-share.test.ts`,
+     * because reaching it here would no longer be this test's subject.
+     */
+    expect(notes.join(" "), "the division is reported so an operator can see why a share was small").toContain("is held for");
   });
 
   it("an over-reporting backend cannot push the counter past the ceiling", async () => {
