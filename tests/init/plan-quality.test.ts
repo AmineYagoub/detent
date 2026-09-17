@@ -379,7 +379,7 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
       .filter((c) => c.spec.artifactOut.endsWith(artifact))
       .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs);
 
-  /** The k sampled draws all report FIRST so it recurs; the in-loop reviews then answer in turn. */
+  /** The k sampled draws all report FIRST so it recurs; every read after them answers in turn, k to a round (PRDR-269). */
   const staged = (afterSample: readonly object[]): StageFn => {
     let reviews = 0;
     return (spec) => {
@@ -418,26 +418,111 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
 
     expect(inputsOf(backend, "plan-draft.json"), "the second round is not bought").toHaveLength(2);
-    expect(inputsOf(backend, "plan-review.json")).toHaveLength(PLAN_REVIEW_SAMPLES + 1);
+    expect(inputsOf(backend, "plan-review.json"), "both reviews sampled (PRDR-269)").toHaveLength(PLAN_REVIEW_SAMPLES * 2);
   });
 
   it("a review that never produced a usable verdict leaves the slice marked unreviewed", async () => {
     const root = repo(LONE_CANDIDATE);
-    /** `reach` is not a tag: the artifact and its one relaunch are both unusable, so `reviewPlan` yields null. */
+    /** `reach` is not a tag: every draw and its one relaunch are unusable, so each `reviewPlan` yields null and the sample has no reads. */
     const unusable = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
-    const backend = new MockBackend({ planner: staged([unusable, unusable]) });
+    const backend = new MockBackend({ planner: staged(Array.from({ length: PLAN_REVIEW_SAMPLES * 2 }, () => unusable)) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
 
     const cached = JSON.parse(readFileSync(path.join(stateDir(root), "state", "plan", "s01.json"), "utf8")) as { reviewed: boolean };
     expect(cached.reviewed, "no verdict is not a passed review").toBe(false);
   });
 
-  it("at the default of one round the sequence is what it always was: two drafts, one review after the sample", async () => {
+  it("at the default of one round the sequence is two drafts and two sampled reviews", async () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ planner: staged([changes(SECOND)]) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(inputsOf(backend, "plan-draft.json")).toHaveLength(2);
-    expect(inputsOf(backend, "plan-review.json")).toHaveLength(PLAN_REVIEW_SAMPLES + 1);
+    expect(inputsOf(backend, "plan-review.json"), "PRDR-269 sampled the second review too").toHaveLength(PLAN_REVIEW_SAMPLES * 2);
+  });
+});
+
+/**
+ * PRDR-269 — the post-revision review is the only unsampled one.
+ *
+ * `sampleReviewPlan` filters the findings a revision is PAID to chase; the
+ * in-loop `reviewPlan` hands the findings a HUMAN is asked to act on straight
+ * through, one unreplicated read, every element labelled `after-revision` — a
+ * label whose doc-block says "survived a revision that was paid to remove it".
+ * `revisionOutcome` reports survived = 0 on every slice measured live, so the
+ * population that reaches the human is its `introduced` bucket under a name
+ * that claims the opposite.
+ */
+describe("PRDR-269 what survived a revision is told apart from what the revision introduced", () => {
+  const HANDED = { tag: "sizing", finding: "t-100 spans three subsystems", ticket: "t-100" };
+  const NEW_A = { tag: "dependency", finding: "t-100 depends on nothing that exists", ticket: "t-100" };
+  const NEW_B = { tag: "coverage", finding: "t-100 leaves R2 unplanned", ticket: "t-100" };
+
+  /** The sampled draws all report HANDED so it recurs; the reads after them answer one per draw (PRDR-269). */
+  const afterRevision = (perDraw: readonly (readonly object[])[]): StageFn => {
+    let reviews = 0;
+    return (spec) => {
+      let artifact: object;
+      if (spec.artifactOut.endsWith("plan-review.json")) {
+        reviews += 1;
+        const nth = reviews - PLAN_REVIEW_SAMPLES;
+        artifact =
+          nth <= 0
+            ? { schema_version: 1, verdict: "changes", findings: [HANDED] }
+            : { schema_version: 1, verdict: "changes", findings: perDraw[nth - 1] ?? [] };
+      } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
+      else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
+      else artifact = ANALYSIS(null);
+      writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
+      return okResult();
+    };
+  };
+
+  const everyDraw = (findings: readonly object[]): readonly (readonly object[])[] =>
+    Array.from({ length: PLAN_REVIEW_SAMPLES }, () => findings);
+
+  const heldOf = (root: string): { readonly held?: string; readonly tag: string }[] =>
+    (JSON.parse(readFileSync(path.join(stateDir(root), "state", "plan", "s01.json"), "utf8")) as {
+      remaining: { readonly held?: string; readonly tag: string }[];
+    }).remaining;
+
+  const tags = (root: string, kind: string): string[] =>
+    heldOf(root)
+      .filter((f) => f.held === kind)
+      .map((f) => f.tag)
+      .sort();
+
+  it("a finding the revision was handed and did not remove is `after-revision`", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: afterRevision(everyDraw([HANDED, NEW_A, NEW_B])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(tags(root, "after-revision"), "only what was handed to the revision and came back").toEqual(["sizing"]);
+  });
+
+  it("a finding that did not exist when the revision was paid is `introduced`, not `after-revision`", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: afterRevision(everyDraw([HANDED, NEW_A, NEW_B])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(tags(root, "introduced"), "reproduced on the revised draft, but no revision failed to fix them").toEqual(["coverage", "dependency"]);
+  });
+
+  it("a post-revision finding one draw of three saw travels as `seen-once`, not as leftover", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: afterRevision([[HANDED, NEW_A], [HANDED], [HANDED]]) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(tags(root, "seen-once"), "below the threshold on the revised draft, and not discarded").toEqual(["dependency"]);
+    expect(tags(root, "after-revision"), "what all three draws saw still survived").toEqual(["sizing"]);
+  });
+
+  it("the post-revision review is drawn PLAN_REVIEW_SAMPLES times, like the one before the revision", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: afterRevision(everyDraw([HANDED])) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    const reviews = backend.calls.filter((c) => c.spec.artifactOut.endsWith("plan-review.json"));
+    expect(reviews, "both reviews sampled, not one of two").toHaveLength(PLAN_REVIEW_SAMPLES * 2);
   });
 });

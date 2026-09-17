@@ -170,10 +170,16 @@ describe("PRDR-260 a slice's review evidence survives the next slice", () => {
           `${slice} first read`,
         );
       }
-      /** The post-revision re-review is un-drawn and was clobbered the same way. */
-      const second = path.join(root, ".detent", "state", "slices", slice, "plan-review.json");
-      expect(existsSync(second), `${slice} kept its post-revision verdict`).toBe(true);
-      expect(readFileSync(second, "utf8")).toContain(`${slice} after revision`);
+      /**
+       * PRDR-269: the post-revision review is sampled too, so it draws k times
+       * as well. Its subtree is its own — sharing `draws/1..k` would overwrite
+       * the reads that BOUGHT the revision, which is PRDR-260's defect again.
+       */
+      for (const n of draws) {
+        const second = path.join(root, ".detent", "state", "slices", slice, "revised", "draws", String(n), "plan-review.json");
+        expect(existsSync(second), `${slice} kept post-revision draw ${String(n)}`).toBe(true);
+        expect(readFileSync(second, "utf8")).toContain(`${slice} after revision`);
+      }
     }
 
     /**

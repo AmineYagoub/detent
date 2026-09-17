@@ -1,5 +1,5 @@
 import { findingKey } from "./plan-review.js";
-import type { PlanReview } from "../schemas/init.js";
+import type { HeldFinding, PlanReview } from "../schemas/init.js";
 
 /**
  * What a revision round DID, and what the same arithmetic says when nothing
@@ -79,4 +79,37 @@ export function sampleChurn(reads: readonly PlanReview["findings"][]): RevisionO
     }
   }
   return { resolved, survived, introduced };
+}
+
+/**
+ * PRDR-269 (D-25): which of the two things a held finding is.
+ *
+ * `plan-slices.ts` labelled every finding of the post-revision review
+ * `after-revision`, whose doc-block claims it "survived a revision that was
+ * paid to remove it". Across three live arms on one slice — one round, two
+ * resampled rounds, two iterated rounds — `revisionOutcome` reported survived
+ * 0, 0, 0 against introduced 7, 7, 8. The population the human met was the
+ * `introduced` bucket under a name asserting the opposite, and PRDR-267 sorted
+ * it to the top for being the stronger signal.
+ *
+ * Identity is `revisionOutcome`'s: the `(ticket, tag)` pair, same `findingKey`,
+ * so the labels and the counts cannot disagree about one finding. A finding
+ * naming no ticket has no identity across reads and is never called a survivor
+ * — unmatched is honestly unknown, which is exactly the stance `revisionOutcome`
+ * takes when it declines to count it as survival.
+ */
+export function labelHeld(
+  handed: PlanReview["findings"],
+  leftover: PlanReview["findings"],
+  seenOnce: PlanReview["findings"],
+): HeldFinding[] {
+  const keys = new Set(handed.map(findingKey).filter((k): k is string => k !== null));
+  const survived = (f: PlanReview["findings"][number]): boolean => {
+    const key = findingKey(f);
+    return key !== null && keys.has(key);
+  };
+  return [
+    ...leftover.map((f) => ({ ...f, held: survived(f) ? ("after-revision" as const) : ("introduced" as const) })),
+    ...seenOnce.map((f) => ({ ...f, held: "seen-once" as const })),
+  ];
 }

@@ -63,7 +63,7 @@ describe("D-24′ held findings render as something a person can act on", () => 
     /* Before PRDR-209: thirty indented `tag (ticket): …` lines and nothing else. */
     expect(text).toMatch(/by tag: .*dependency 21/);
     expect(text).toMatch(/seen in one read[^\n]*\d+/);
-    expect(text).toMatch(/held after a paid revision[^\n]*\d+/);
+    expect(text).toMatch(/survived a paid revision[^\n]*\d+/);
     const top = text.split("\n").find((l) => l.includes("t-s14-013")) ?? "";
     expect(top, "the ticket that drew three tags leads").toContain("sizing ×3");
     const s10 = text.indexOf("t-s10-002");
@@ -73,11 +73,17 @@ describe("D-24′ held findings render as something a person can act on", () => 
   });
 
   it("at or below the inline size: every finding, with its kind", () => {
-    const findings = [f("t-s01-001", "sizing", "seen-once"), f("t-s01-002", "dependency", "after-revision"), f(undefined, "coherence")];
+    const findings = [
+      f("t-s01-001", "sizing", "seen-once"),
+      f("t-s01-002", "dependency", "after-revision"),
+      f("t-s01-003", "coverage", "introduced"),
+      f(undefined, "coherence"),
+    ];
     const text = renderPresentation({ ...base("/tmp/x"), findings });
     for (const x of findings) expect(text).toContain(x.finding);
     expect(text).toMatch(/sizing \(t-s01-001\)[^\n]*seen once/);
-    expect(text).toMatch(/dependency \(t-s01-002\)[^\n]*held after revision/);
+    expect(text).toMatch(/dependency \(t-s01-002\)[^\n]*survived the revision/);
+    expect(text).toMatch(/coverage \(t-s01-003\)[^\n]*introduced by the revision/);
     expect(text).not.toContain("full list:");
   });
 
@@ -167,5 +173,44 @@ describe("PRDR-267 the human meets the revision-surviving findings first", () =>
     const body = renderAdviceMarkdown(lopsided());
     expect(body).toMatch(/## Held after revision \(2\)/);
     expect(body).toMatch(/## Seen once \(13\)/);
+  });
+});
+
+/**
+ * PRDR-269 — three populations, ordered by the evidence behind each.
+ *
+ * `after-revision` meant "whatever one unreplicated read returned after the
+ * revision" until the post-revision review was sampled. Across three live arms
+ * of one slice `revisionOutcome` reported survived 0 against introduced 7, 7
+ * and 8, so PRDR-267's strongest slot held the weakest evidence. Told apart,
+ * the top section is what a revision was paid to remove and did not, and
+ * `introduced` falls in behind it: reproduced across reads of the revised
+ * draft, but not something any revision failed to fix.
+ */
+describe("PRDR-269 survivors outrank what the revision introduced, which outranks one-read noise", () => {
+  const three = (): HeldFinding[] => [
+    f("t-once-001", "sizing", "seen-once"),
+    f("t-new-001", "coverage", "introduced"),
+    f("t-real-001", "dependency", "after-revision"),
+  ];
+
+  it("advice.md renders the sections heaviest evidence first", () => {
+    const body = renderAdviceMarkdown(three());
+    const at = (heading: string): number => {
+      const i = body.indexOf(heading);
+      expect(i, `${heading} is rendered`).toBeGreaterThan(-1);
+      return i;
+    };
+    expect(at("## Held after revision"), "a paid revision could not remove these").toBeLessThan(at("## Introduced by the revision"));
+    expect(at("## Introduced by the revision"), "reproduced, but no revision failed to fix them").toBeLessThan(at("## Seen once"));
+  });
+
+  it("places every survivor above every introduced finding, and every introduced one above the noise", () => {
+    const findings = three();
+    const body = renderAdviceMarkdown(findings);
+    for (const x of findings) expect(body, "nothing is suppressed").toContain(x.finding);
+    const where = (kind: HeldFinding["held"]): number => body.indexOf(findings.find((x) => x.held === kind)?.finding ?? "");
+    expect(where("after-revision")).toBeLessThan(where("introduced"));
+    expect(where("introduced")).toBeLessThan(where("seen-once"));
   });
 });

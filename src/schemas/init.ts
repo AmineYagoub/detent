@@ -450,13 +450,24 @@ export type PlanDraft = z.infer<typeof planDraftSchema>;
 export type PlanDraftTicket = PlanDraft["tickets"][number];
 
 /**
- * D-24′ (PRDR-209): why a finding is still in front of the human. `seen-once`
- * is C-4⁗″'s `seenOnce` — one read of three, never reproduced, the kind the
- * null says is mostly noise. `after-revision` survived a revision that was
- * paid to remove it — the stronger signal. Absent means an older cache or a
- * finding the pipeline itself added (an unreviewed slice); it renders plain.
+ * D-24′ (PRDR-209), PRDR-269: why a finding is still in front of the human,
+ * named for the evidence behind it. `after-revision` was handed to a revision
+ * and came back — `revisionOutcome`'s `survived`, computed by the same
+ * `findingKey`, and the strongest thing a held finding can be. `introduced`
+ * recurred across reads of the REVISED draft but was not something a revision
+ * failed to fix; it did not exist when one was paid. `seen-once` is C-4⁗″'s
+ * `seenOnce` — one read of three, never reproduced, the kind the null says is
+ * mostly noise. Absent means an older cache or a finding the pipeline itself
+ * added (an unreviewed slice); it renders plain.
+ *
+ * PRDR-269: the first two were ONE population until the review that produces
+ * them was sampled. It was a single unreplicated read, so everything it
+ * returned was held as `after-revision` while `revisionOutcome` reported
+ * survived = 0 on every slice measured live — this doc-block named a bucket
+ * the code never computed for it. A value is never retired from this union:
+ * cached artifacts carry the old marking and must keep parsing.
  */
-export type HeldKind = "seen-once" | "after-revision";
+export type HeldKind = "seen-once" | "after-revision" | "introduced";
 export type HeldFinding = PlanReview["findings"][number] & { readonly held?: HeldKind };
 
 /*

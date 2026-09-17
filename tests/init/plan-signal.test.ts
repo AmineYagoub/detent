@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presentStage } from "../../src/init/present.js";
-import { revisionOutcome } from "../../src/init/plan-signal.js";
+import { labelHeld, revisionOutcome } from "../../src/init/plan-signal.js";
 
 /**
  * PRDR-196 — the plan's quality signal: what code PROVED, and what the revision
@@ -115,5 +115,51 @@ describe("PRDR-196 what code proved reaches PRESENT, labelled as proved", () => 
   it("says nothing about revisions when none ran", async () => {
     const outcome = await presentStage({ ...base });
     expect((outcome.kind === "interrupt" ? outcome.message : "")).not.toMatch(/resolved/i);
+  });
+});
+
+/**
+ * PRDR-269 (D-25) — the marking a held finding carries is read off the same
+ * arithmetic that counts it.
+ *
+ * `plan-slices.ts` marked every finding of the post-revision review
+ * `after-revision`, a label whose doc-block says it "survived a revision that
+ * was paid to remove it". Live, `revisionOutcome` reported survived 0 against
+ * introduced 7, 7 and 8 over three arms of one slice: the population the human
+ * met was the `introduced` bucket under a name claiming the opposite.
+ */
+describe("PRDR-269 a held finding is marked with the evidence behind it", () => {
+  const HANDED = { tag: "sizing" as const, ticket: "t-a", finding: "too big" };
+  const kindOf = (fs: readonly { readonly tag: string; readonly held?: string }[], tag: string): string | undefined =>
+    fs.find((f) => f.tag === tag)?.held;
+
+  it("a finding the revision was handed and did not remove is `after-revision`", () => {
+    const held = labelHeld([HANDED], [{ ...HANDED, finding: "still too big, differently worded" }], []);
+    expect(kindOf(held, "sizing"), "same (ticket, tag) before and after").toBe("after-revision");
+  });
+
+  it("a finding that did not exist when the revision was paid is `introduced`", () => {
+    const held = labelHeld([HANDED], [{ tag: "coherence" as const, ticket: "t-c", finding: "brand new" }], []);
+    expect(kindOf(held, "coherence")).toBe("introduced");
+  });
+
+  it("the two populations agree with `revisionOutcome` over the same pair of reads", () => {
+    const before = [HANDED, { tag: "dependency" as const, ticket: "t-b", finding: "missing edge" }];
+    const after = [{ ...HANDED, finding: "reworded" }, { tag: "coherence" as const, ticket: "t-c", finding: "new" }];
+    const counts = revisionOutcome(before, after);
+    const held = labelHeld(before, after, []);
+    expect(held.filter((f) => f.held === "after-revision")).toHaveLength(counts.survived);
+    expect(held.filter((f) => f.held === "introduced")).toHaveLength(counts.introduced);
+  });
+
+  it("a finding naming no ticket is never called a survivor, because it cannot be matched", () => {
+    const plainTag = { tag: "sizing" as const, finding: "the plan as a whole is too big" };
+    const held = labelHeld([HANDED], [plainTag], []);
+    expect(kindOf(held, "sizing"), "unmatched is honestly unknown, not silently survived").toBe("introduced");
+  });
+
+  it("what fell below the sample threshold travels as `seen-once`", () => {
+    const held = labelHeld([], [], [{ tag: "coverage" as const, ticket: "t-d", finding: "one read saw this" }]);
+    expect(kindOf(held, "coverage")).toBe("seen-once");
   });
 });

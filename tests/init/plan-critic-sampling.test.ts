@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
-import { planReviewPath, type ReviewDeps } from "../../src/init/plan-review.js";
+import { PLAN_REVIEW_SAMPLES, planReviewPath, type ReviewDeps } from "../../src/init/plan-review.js";
 import { FIRST_RESPONSE_WAIT_MS, sampleReviewPlan } from "../../src/init/plan-sample.js";
 import { launchInitSession, type InitSessionDeps } from "../../src/init/session.js";
 import { RunJournal } from "../../src/kernel/journal.js";
@@ -103,8 +103,8 @@ describe("C-4⁗″ the review is sampled and only what recurs buys the revision
   it("samples the review k times before revising, not once", async () => {
     const { stage } = scripted(READS);
     const { backend } = await init(stage);
-    /* three samples, then one re-review of the revised draft */
-    expect(reviews(backend)).toBe(4);
+    /* three samples, then three more over the revised draft (PRDR-269) */
+    expect(reviews(backend)).toBe(PLAN_REVIEW_SAMPLES * 2);
   });
 
   it("announces the k and the threshold that produced the findings (PRDR-197)", async () => {

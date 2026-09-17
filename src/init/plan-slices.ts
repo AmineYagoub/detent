@@ -7,10 +7,10 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { contentsDigest, sliceCacheDir } from "./machine.js";
 import { sessionBudget } from "./plan-review.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
-import { PLAN_REVISIONS, reviewPlan } from "./plan-review.js";
-import { sampleReviewPlan } from "./plan-sample.js";
+import { PLAN_REVISIONS } from "./plan-review.js";
+import { sampleReviewPlan, type SampledReview } from "./plan-sample.js";
 import { churnLine, nullNote, recurringLine, remainLine, revisionLine, sampleLine } from "./plan-notes.js";
-import { revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
+import { labelHeld, revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
@@ -375,6 +375,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     let reviewed = false;
     let revision: RevisionOutcome | null = null;
     let churn: RevisionOutcome | null = null;
+    let after: SampledReview | null = null;
     const review = await sampleReviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
     reviewed = review !== null;
     if (review !== null) {
@@ -404,7 +405,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
         drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
         for (const q of drafted.questions) if (!asked.some((a) => a.question.trim().toLowerCase() === q.question.trim().toLowerCase())) asked.push(q);
-        const after = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
+        after = await sampleReviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index, revised: true });
         reviewed = after !== null;
         leftover = after !== null && after.verdict === "changes" ? after.findings : [];
         if (leftover.length === 0) break;
@@ -442,10 +443,15 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     /*
      * C-4⁗″: what the filter held back is judgement, not noise to discard —
      * D-24 sends it to the human. D-24′ (PRDR-209): marked with WHY it is
-     * held — survived a paid revision, or seen in one read and never again —
-     * because the two are different signals and PRESENT says which.
+     * held, because the populations are not worth the same and PRESENT says
+     * which is which. PRDR-269 (D-25): `labelHeld` reads the marking off
+     * `revisionOutcome`'s own arithmetic, so "survived a paid revision" names
+     * the findings that did; BOTH reviews are sampled, so both contribute the
+     * reads that fell below the threshold. Only the last round's are carried:
+     * an earlier round's unreproduced findings are about a draft the round
+     * after it replaced.
      */
-    const held: HeldFinding[] = [...normalised.findings, ...leftover.map((f) => ({ ...f, held: "after-revision" as const })), ...(review?.seenOnce ?? []).map((f) => ({ ...f, held: "seen-once" as const }))];
+    const held: HeldFinding[] = [...normalised.findings, ...labelHeld(review?.findings ?? [], leftover, [...(review?.seenOnce ?? []), ...(after?.seenOnce ?? [])])];
     if (!reviewed) {
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);

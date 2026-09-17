@@ -20,8 +20,9 @@ import type { HeldFinding, HeldKind } from "../schemas/init.js";
 export const ADVICE_INLINE_MAX = 12;
 export const ADVICE_TOP_TICKETS = 10;
 
-const KIND_LABEL: Readonly<Record<HeldKind, string>> = { "seen-once": "seen once", "after-revision": "held after revision" };
-const kindOf = (f: HeldFinding): HeldKind | undefined => (f.held === "seen-once" || f.held === "after-revision" ? f.held : undefined);
+const KIND_LABEL: Readonly<Record<HeldKind, string>> = { "seen-once": "seen once", "after-revision": "survived the revision", introduced: "introduced by the revision" };
+const KINDS: readonly HeldKind[] = ["after-revision", "introduced", "seen-once"];
+const kindOf = (f: HeldFinding): HeldKind | undefined => KINDS.find((k) => k === f.held);
 const PLAN_WIDE = "the plan as a whole";
 
 function counted(items: readonly string[]): [string, number][] {
@@ -40,6 +41,13 @@ function counted(items: readonly string[]): [string, number][] {
  * survived a session paid to remove it. On run 6's corpus the old order gave a
  * top-ten slot to `t-s04-004`, whose two findings were both seen once, and
  * surfaced 12 of 43 revision survivors where this one surfaces 17.
+ *
+ * PRDR-269 (D-25): those figures were measured when `after-revision` meant
+ * "whatever one unreplicated read returned after the revision", which is the
+ * `introduced` population under a name claiming the opposite. The ordering
+ * principle is unchanged and the key now sorts what it always said it sorted;
+ * `introduced` falls in behind it, ahead of `seen-once`, because it reproduced
+ * across reads and `seen-once` did not.
  */
 function byTicket(findings: readonly HeldFinding[]): [string, HeldFinding[]][] {
   const groups = new Map<string, HeldFinding[]>();
@@ -48,9 +56,12 @@ function byTicket(findings: readonly HeldFinding[]): [string, HeldFinding[]][] {
     groups.set(key, [...(groups.get(key) ?? []), f]);
   }
   const distinct = (fs: HeldFinding[]): number => new Set(fs.map((f) => f.tag)).size;
-  const survived = (fs: HeldFinding[]): number => fs.filter((f) => f.held === "after-revision").length;
+  const of = (kind: HeldKind) => (fs: HeldFinding[]): number => fs.filter((f) => f.held === kind).length;
+  const survived = of("after-revision");
+  const introduced = of("introduced");
   return [...groups].sort(
-    ([a, fa], [b, fb]) => survived(fb) - survived(fa) || distinct(fb) - distinct(fa) || fb.length - fa.length || a.localeCompare(b),
+    ([a, fa], [b, fb]) =>
+      survived(fb) - survived(fa) || introduced(fb) - introduced(fa) || distinct(fb) - distinct(fa) || fb.length - fa.length || a.localeCompare(b),
   );
 }
 
@@ -65,11 +76,10 @@ export function renderHeldFindings(findings: readonly HeldFinding[], adviceFile:
   }
   lines.push(`  by tag: ${counted(findings.map((f) => f.tag)).map(([tag, n]) => `${tag} ${String(n)}`).join(" · ")}`);
   const kinds = findings.map(kindOf);
-  const once = kinds.filter((k) => k === "seen-once").length;
-  const after = kinds.filter((k) => k === "after-revision").length;
-  const unmarked = kinds.length - once - after;
+  const n = (kind: HeldKind): number => kinds.filter((k) => k === kind).length;
+  const unmarked = kinds.filter((k) => k === undefined).length;
   lines.push(
-    `  seen in one read and never again: ${String(once)} · held after a paid revision: ${String(after)}${unmarked === 0 ? "" : ` · unmarked: ${String(unmarked)}`}`,
+    `  survived a paid revision: ${String(n("after-revision"))} · introduced by it: ${String(n("introduced"))} · seen in one read and never again: ${String(n("seen-once"))}${unmarked === 0 ? "" : ` · unmarked: ${String(unmarked)}`}`,
   );
   const groups = byTicket(findings).filter(([id]) => id !== PLAN_WIDE);
   lines.push(`  tickets drawing the most, by distinct tags then count (top ${String(Math.min(ADVICE_TOP_TICKETS, groups.length))} of ${String(groups.length)}):`);
@@ -97,6 +107,12 @@ const SECTIONS: readonly { readonly kind: HeldKind | undefined; readonly title: 
     kind: "after-revision",
     title: "Held after revision",
     weight: "A revision was paid to remove each of these and did not. Read these first.",
+  },
+  {
+    kind: "introduced",
+    title: "Introduced by the revision",
+    weight:
+      "Two of three reads of the REVISED draft saw each of these, so they reproduce — but no revision was ever paid to remove them; they did not exist when one was. Measured live on one slice across three arms, the revision resolved 100% of what it was handed and this is what the read after it returned.",
   },
   {
     kind: "seen-once",

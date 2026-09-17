@@ -49,12 +49,20 @@ export function planReviewSkeleton(): Record<string, unknown> {
  * This is the ACTUAL file only. The path a draw is TOLD stays slice-free and
  * draw-free (PRDR-205): `src/init/session.ts:131` puts it in the prompt cache
  * key, where a per-draw tail cost ~25k tokens and $0.45 a draw.
+ *
+ * PRDR-269: `revised` is the third key, and it exists for PRDR-260's reason a
+ * second time. Both of a slice's reviews are sampled now, so both draw `k`
+ * times into `draws/1..k`; without a segment telling them apart the review of
+ * the revised draft overwrites the review that BOUGHT the revision, and a run
+ * ends holding only the second. The un-drawn slice path this replaced is no
+ * longer written: nothing reviews a slice un-drawn.
  */
-export function planReviewPath(root: string, draw?: number, sliceId?: string): string {
+export function planReviewPath(root: string, draw?: number, sliceId?: string, revised?: boolean): string {
   return path.join(
     stateDir(root),
     "state",
     ...(sliceId === undefined ? [] : ["slices", sliceId]),
+    ...(revised === true ? ["revised"] : []),
     ...(draw === undefined ? [] : ["draws", String(draw)]),
     "plan-review.json",
   );
@@ -188,6 +196,8 @@ export type ReviewScope =
         readonly title: string;
         readonly surface: readonly string[];
       }[];
+      /** PRDR-269: this is the review of a REVISED draft, so its draws get their own subtree. */
+      readonly revised?: boolean;
     }
   | {
       readonly kind: "whole";
@@ -254,7 +264,7 @@ async function reviewOnce(
   readonly issue: string | null;
   readonly normalisedFrom: string | null;
 }> {
-  const file = planReviewPath(deps.root, draw?.index, scope?.kind === "slice" ? scope.slice.id : undefined);
+  const file = planReviewPath(deps.root, draw?.index, scope?.kind === "slice" ? scope.slice.id : undefined, scope?.kind === "slice" && scope.revised === true);
   rmSync(file, { force: true });
   /**
    * PRDR-205: a draw is TOLD the one shared path, so every draw's first turn

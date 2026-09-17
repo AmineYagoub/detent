@@ -53,10 +53,11 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   it("ksar's case: `revise` with findings buys the revision it always meant to", async () => {
     /* C-4⁗″: one read saying `revise` no longer buys a revision — the finding has to recur. */
     const revise = { schema_version: 1, verdict: "revise", findings: [FINDING] };
-    const { stage, reviewInputs } = scriptedPlanner([revise, revise, revise, APPROVE_PLAN]);
+    /* PRDR-269: the review of the revised draft is sampled too, so it takes three approvals to pass. */
+    const { stage, reviewInputs } = scriptedPlanner([revise, revise, revise, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
     expect(drafts(backend)).toBe(2);
-    expect(reviews(backend)).toBe(4);
+    expect(reviews(backend)).toBe(6);
     expect(reviewInputs[0]?.["previous_attempt"]).toBeUndefined();
     expect(notes.some((n) => n.includes("`revise` read as `changes`"))).toBe(true);
   });
@@ -64,15 +65,16 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   it("an unusable artifact is relaunched once, carrying the validator's words; the second one counts", async () => {
     const bad = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
     const good = { schema_version: 1, verdict: "changes", findings: [FINDING] };
-    const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN]);
+    const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
     /**
      * sample 1 (bad) → samples 2 and 3 launch on its first answer (C-4⁗‴) →
-     * sample 1's relaunch (good) → revision → review (approve). The relaunch is
-     * found by what it carries, not by its position: since PRDR-204 the other
-     * draws are in flight before the first has been judged unusable.
+     * sample 1's relaunch (good) → revision → the revised draft's own three
+     * draws (PRDR-269, all approve). The relaunch is found by what it carries,
+     * not by its position: since PRDR-204 the other draws are in flight before
+     * the first has been judged unusable.
      */
-    expect(reviews(backend)).toBe(5);
+    expect(reviews(backend)).toBe(7);
     expect(drafts(backend)).toBe(2);
     const carried = reviewInputs.filter((i) => i["previous_attempt"] !== undefined);
     expect(carried, "exactly one launch carries the previous attempt").toHaveLength(1);
