@@ -140,9 +140,38 @@ export type Analysis = z.infer<typeof analysisSchema>;
 export const planningBriefSchema = z
   .strictObject({
     schema_version: z.literal(SCHEMA_VERSION),
+    /**
+     * PRDR-264: which arm this brief is.
+     *
+     * Defaults to `answered`, so a brief written before this ticket parses
+     * unchanged and the cache does not need a migration.
+     *
+     * The `undecidable` arm exists because research can SETTLE a question
+     * without answering it, and on the live run both questions were of that
+     * kind — a price ladder the founder has not decided, and a retention
+     * schedule only counsel can give. A schema with one arm made that outcome
+     * unrepresentable, so a correct negative result was indistinguishable from
+     * a broken session, and the operator was told to raise a ceiling.
+     */
+    outcome: z.enum(["answered", "undecidable"]).default("answered"),
     question: nonEmptyString,
     question_hash: sha256Hex,
-    answer: z.strictObject({ claim: nonEmptyString, confidence: z.enum(["low", "medium", "high"]) }),
+    answer: z
+      .strictObject({ claim: nonEmptyString, confidence: z.enum(["low", "medium", "high"]) })
+      .optional(),
+    /**
+     * PRDR-264: why the question cannot be researched, and who can settle it.
+     * `who_decides` is the actionable half — C-3′ carries the question to
+     * PRESENT on its assumption either way, and this names the human that
+     * assumption is waiting on.
+     */
+    undecidable: z
+      .strictObject({
+        reason: z.enum(["decision_not_made", "needs_specialist", "no_public_source"]),
+        detail: nonEmptyString,
+        who_decides: nonEmptyString,
+      })
+      .optional(),
     evidence: z.array(z.strictObject({ source: nonEmptyString, claim: nonEmptyString })).min(1),
     sources_consulted: z
       .array(z.strictObject({ tier: z.number().int().min(1).max(6), ref: nonEmptyString }))
@@ -153,7 +182,53 @@ export const planningBriefSchema = z
     }),
     what_would_falsify: z.string().default(""),
   })
-  .superRefine(requireLocalSearchBeforeWeb);
+  .superRefine(requireLocalSearchBeforeWeb)
+  .superRefine(requireOutcomeArm);
+
+/**
+ * PRDR-264: the two arms are exclusive and each carries its own evidence.
+ *
+ * `evidence.min(1)` stays common to both — an undecidable verdict is a claim
+ * about the world and needs the same support as an answer. What differs is
+ * WHICH block must be present, and that a brief may never carry both: "here is
+ * the answer, and also nobody has decided it" is not a state research can be in.
+ */
+export function requireOutcomeArm(
+  brief: {
+    readonly outcome: "answered" | "undecidable";
+    readonly answer?: unknown;
+    readonly undecidable?: unknown;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (brief.outcome === "answered") {
+    if (brief.answer === undefined) {
+      ctx.addIssue({ code: "custom", path: ["answer"], message: "PRDR-264: an `answered` brief carries an `answer`" });
+    }
+    if (brief.undecidable !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["undecidable"],
+        message: "PRDR-264: an `answered` brief carries no `undecidable` verdict — a question is settled or answered, never both",
+      });
+    }
+    return;
+  }
+  if (brief.undecidable === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["undecidable"],
+      message: "PRDR-264: an `undecidable` brief says why it cannot be answered and who decides it",
+    });
+  }
+  if (brief.answer !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["undecidable"],
+      message: "PRDR-264: an `undecidable` brief carries no `answer` — a question is settled or answered, never both",
+    });
+  }
+}
 export type PlanningBrief = z.infer<typeof planningBriefSchema>;
 
 /**

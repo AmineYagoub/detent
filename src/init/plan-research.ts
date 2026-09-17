@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir, writeArtifact } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
 import { planningBriefSchema, type PlanningBrief } from "../schemas/init.js";
 import { scrubJson } from "../kernel/scrub.js";
+import { withOneRelaunch } from "./retry.js";
 
 /**
  * T-063 — planning research (C-3a, D-11).
@@ -35,6 +36,76 @@ export function questionHash(question: string): string {
 /** C-3a: briefs cache at `.detent/research/planning/<question-hash>.json`. */
 export function planningBriefPath(root: string, hash: string): string {
   return path.join(stateDir(root), "research", "planning", `${hash}.json`);
+}
+
+/**
+ * PRDR-264 (D-19): where the SESSION writes, before anything has validated it.
+ *
+ * Keyed by question, and cleared before each launch. Every question used to
+ * write the one fixed `state/planning-brief.json`, which was never deleted
+ * between sessions — so a session that wrote nothing left its predecessor's
+ * file to be read as its own answer, and cached under its own hash. That was
+ * unreachable only while nothing parsed at all.
+ */
+export function planningArtifactPath(root: string, hash: string): string {
+  return path.join(stateDir(root), "state", `planning-brief-${hash.slice(0, 12)}.json`);
+}
+
+/**
+ * PRDR-264: the contract the session is handed — `expected_output`.
+ *
+ * This caller passed none, so the session followed the only shape
+ * `prompts/research.md` names, the A-4 failure brief, and `planningBriefSchema`
+ * refused it every time. Every other init stage passes a skeleton
+ * (`analyze.ts`, `slice.ts`, `plan.ts`, `plan-review.ts`) and so does the
+ * LOOP's own research call (`referee-stage.ts`); this was the one that did not.
+ *
+ * `question` and `question_hash` are filled in rather than left as
+ * placeholders: the session ECHOES them, and the hash is what binds the brief
+ * to the question it answers (D-19). Asking a model to derive a sha256 would
+ * be asking it to compute; asking it to copy one back is not.
+ */
+export function planningBriefSkeleton(question: string, hash: string): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    outcome: "answered",
+    question,
+    question_hash: hash,
+    answer: { claim: "<the answer — required when outcome is `answered`>", confidence: "medium" },
+    evidence: [{ source: "<doc/page consulted>", claim: "<what it establishes>" }],
+    sources_consulted: [{ tier: 1, ref: "<what was consulted>" }],
+    local_search: { docs_checked: ["<paths searched>"], code_checked: ["<paths searched>"] },
+    what_would_falsify: "<an observation that would falsify the answer — required>",
+  };
+}
+
+/**
+ * PRDR-264: the other arm, shown to the session so it knows the outcome exists.
+ *
+ * Research can SETTLE a question without answering it, and on the live run both
+ * questions were of that kind. A session with no shape for that result has only
+ * one way to report it — produce nothing — which is indistinguishable from a
+ * session that failed.
+ */
+export function undecidableBriefSkeleton(question: string, hash: string): Record<string, unknown> {
+  const base = planningBriefSkeleton(question, hash);
+  delete base["answer"];
+  return {
+    ...base,
+    outcome: "undecidable",
+    /*
+     * The same `evidence.min(1)` the answered arm carries, with placeholders
+     * that say what it is FOR here: the searches that came back empty. Without
+     * them this arm is a cheap exit — "undecidable" costs a session nothing to
+     * write and cannot be told apart from one that did not look.
+     */
+    evidence: [{ source: "<where you looked — required, even here>", claim: "<what it did NOT establish, e.g. `names no price ladder`>" }],
+    undecidable: {
+      reason: "<decision_not_made | needs_specialist | no_public_source>",
+      detail: "<why no source can answer this — required>",
+      who_decides: "<who can settle it: the founder, counsel, a named owner — required>",
+    },
+  };
 }
 
 /**
@@ -77,9 +148,15 @@ function pendingAfter(root: string, later: readonly string[]): number {
   return distinct.size;
 }
 
+/**
+ * PRDR-264: what a relaunched session is told about the attempt before it.
+ * Mirrors `init/retry`'s shape so `previousAttemptInput` consumes it directly.
+ */
+export interface PreviousAttempt {
+  readonly issue: string;
+}
+
 interface ResearchOneResult {
-  /** The brief the session produced, unvalidated. */
-  readonly brief: unknown;
   /**
    * Tool calls the session actually spent, as observed — charged against the
    * pool CLAMPED TO THIS QUESTION'S SHARE (D-16), and never refunded when the
@@ -118,8 +195,20 @@ export interface PlanResearchDeps {
    * indistinguishable from a transport death at the seam that classifies
    * crashes. A session that overruns its share is charged its share, and the
    * overrun is reported — see `ResearchOneResult.toolCalls`.
+   *
+   * PRDR-264: the session WRITES to `artifactOut` and this module reads it
+   * back. The launcher no longer returns a brief, because the file and the
+   * validation belong together: the path is keyed per question and cleared
+   * before every launch, so "the session produced nothing" cannot be answered
+   * with the previous question's artifact (D-19). `previous` is non-null on the
+   * single reshape relaunch, carrying what the validator refused.
    */
-  readonly researchOne: (question: string, share: number) => Promise<ResearchOneResult>;
+  readonly researchOne: (
+    question: string,
+    share: number,
+    artifactOut: string,
+    previous: PreviousAttempt | null,
+  ) => Promise<ResearchOneResult>;
   readonly note?: (text: string) => void;
 }
 
@@ -157,6 +246,20 @@ export interface PlanResearchResult {
    * a locality claim drifts every time this loop grows. A count does not.
    */
   readonly neverResearched: readonly string[];
+  /**
+   * PRDR-264: questions research SETTLED as unanswerable — a founder decision
+   * not yet made, a question only counsel can answer, a fact with no public
+   * source. Disjoint from `unanswered`: these produced a valid brief and are
+   * cached, so a re-run does not pay to rediscover them.
+   *
+   * They ride to PRESENT in the same batch (C-3′) and read the same way to the
+   * plan — the assumption carries — but they are the opposite operator signal.
+   * `unanswered` says the question is still open to research; this says it is
+   * not, and names the human it is waiting on. Reported as one number they were
+   * indistinguishable, and the advice attached to the pair ("raise the ceiling
+   * or ask fewer") was wrong for every member of this set.
+   */
+  readonly undecidable: readonly string[];
   readonly toolCallsUsed: number;
   readonly cacheHits: number;
   readonly sessionsLaunched: number;
@@ -169,6 +272,7 @@ export async function planResearch(
   const briefs: PlanningBrief[] = [];
   const unanswered: string[] = [];
   const neverResearched: string[] = [];
+  const undecidable: string[] = [];
   let toolCallsUsed = 0;
   let cacheHits = 0;
   let sessionsLaunched = 0;
@@ -185,7 +289,15 @@ export async function planResearch(
      */
     const cached = usableBrief(file);
     if (cached !== null) {
-      briefs.push(cached);
+      /*
+       * PRDR-264: the cache carries BOTH arms, so it must route by the same
+       * rule the fresh path does. Pushing every cached brief into `briefs`
+       * reported a settled question as an answered one on the second run and
+       * dropped it out of the batch a human sees — the verdict survived on
+       * disk and stopped being told to anyone.
+       */
+      if (cached.outcome === "undecidable") undecidable.push(question);
+      else briefs.push(cached);
       cacheHits += 1;
       deps.note?.(`planning research cache hit: ${hash.slice(0, 12)}…`);
       continue;
@@ -239,11 +351,31 @@ export async function planResearch(
       );
     }
 
-    const result = await deps.researchOne(question, share);
-    sessionsLaunched += 1;
-    const charged = Math.min(result.toolCalls, share);
+    const artifactOut = planningArtifactPath(deps.root, hash);
+    let spentHere = 0;
+    let observed = 0;
+    const attempt = await withOneRelaunch<PlanningBrief>(
+      { stage: "planning research", ...(deps.note === undefined ? {} : { note: deps.note }) },
+      async (previous) => {
+        /* D-19: the session's own file, cleared first, so only what THIS launch wrote can be read back. */
+        rmSync(artifactOut, { force: true });
+        const result = await deps.researchOne(question, share, artifactOut, previous);
+        sessionsLaunched += 1;
+        spentHere += result.toolCalls;
+        observed = Math.max(observed, result.toolCalls);
+        return readBrief(artifactOut, hash);
+      },
+    );
+
+    /**
+     * D-16, extended by PRDR-264's relaunch: both attempts are charged against
+     * the ONE question's share and the sum is clamped to it, so a reshape can
+     * never spend a later question's budget. The clamp is what keeps
+     * `toolCallsUsed <= budget` true with a retry in the loop.
+     */
+    const charged = Math.min(spentHere, share);
     toolCallsUsed += charged;
-    if (result.toolCalls > share) {
+    if (observed > share) {
       /*
        * D-16: the honest half of clamping to the share. Without this line
        * `toolCallsUsed` would quietly become "calls allocated" while reading
@@ -251,28 +383,71 @@ export async function planResearch(
        * not see, and `run_spend_usd` is what bounds it (X-1).
        */
       deps.note?.(
-        `planning research for "${question}" OVERRAN its share: ${result.toolCalls} calls against a budget of ${share}; charged ${share}, and the rest is real spend this ceiling does not see (X-1, D-16)`,
+        `planning research for "${question}" OVERRAN its share: ${observed} calls against a budget of ${share}; charged ${charged}, and the rest is real spend this ceiling does not see (X-1, D-16)`,
       );
     }
 
-    const parsed = parseArtifact(planningBriefSchema, result.brief);
-    if (!parsed.ok) {
+    if (attempt.value === null) {
       /*
        * D-16: the two ways a session comes back empty need opposite acts from
        * the operator, so the note says which one happened. One that used its
        * whole share may have been cut short — that is a ceiling to raise or a
        * question to drop. One that stopped early had room it did not want, and
        * more budget is not the lever.
+       *
+       * PRDR-264 adds the third: the note now carries what the VALIDATOR said,
+       * because "no valid brief" cited X-6a for a year while the real refusal
+       * was that the session had written a different artifact entirely.
        */
       const spent = charged >= share ? `it used all ${share} of its ${share}-call share` : `it stopped at ${charged} of its ${share}-call share`;
-      deps.note?.(`planning research produced no valid brief for "${question}" — ${spent} (X-6a)`);
+      deps.note?.(`planning research produced no valid brief for "${question}" — ${spent}: ${attempt.issue ?? "unusable"}`);
       unanswered.push(question);
       continue;
     }
-    briefs.push(parsed.value);
+
+    if (attempt.value.outcome === "undecidable") {
+      const verdict = attempt.value.undecidable;
+      deps.note?.(
+        `planning research SETTLED "${question}" as unanswerable (${verdict === undefined ? "no reason given" : verdict.reason}): ` +
+          `${verdict === undefined ? "" : verdict.detail} — ${verdict === undefined ? "a human" : verdict.who_decides} decides it. ` +
+          `The plan proceeds on its assumption (C-3′); no ceiling will change this (PRDR-264).`,
+      );
+      undecidable.push(question);
+    } else {
+      briefs.push(attempt.value);
+    }
     /** SEC-4 (PRDR-252): the F-1 seam, which scrubs — `research/planning` is a COMMITTED path carrying a model's own prose. */
-    writeArtifact(deps.root, path.posix.join("research", "planning", `${hash}.json`), planningBriefSchema.parse(scrubJson(parsed.value)));
+    writeArtifact(deps.root, path.posix.join("research", "planning", `${hash}.json`), planningBriefSchema.parse(scrubJson(attempt.value)));
   }
 
-  return { briefs, unanswered, neverResearched, toolCallsUsed, cacheHits, sessionsLaunched };
+  return { briefs, unanswered, neverResearched, undecidable, toolCallsUsed, cacheHits, sessionsLaunched };
+}
+
+/**
+ * PRDR-264: read back what the session wrote, and refuse anything that is not
+ * an answer to THIS question.
+ *
+ * Three ways to come back with nothing, and the caller needs them apart: the
+ * session wrote no file, it wrote something the validator refuses, or it wrote
+ * a brief about a different question (D-19). The last is the one HEAD could
+ * not see — it never compared — and it is the one that would have cached
+ * another question's research under this question's hash, answering it for
+ * free on every future run.
+ */
+function readBrief(artifactOut: string, hash: string): { value: PlanningBrief | null; issue: string | null } {
+  if (!existsSync(artifactOut)) return { value: null, issue: "the session wrote no artifact" };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(artifactOut, "utf8"));
+  } catch {
+    return { value: null, issue: "the artifact is not JSON" };
+  }
+  const parsed = parseArtifact(planningBriefSchema, raw);
+  if (!parsed.ok) {
+    return { value: null, issue: parsed.reason === "invalid" ? parsed.issues.join("; ") : parsed.reason };
+  }
+  if (parsed.value.question_hash !== hash) {
+    return { value: null, issue: "the brief does not answer the question it was asked — its question_hash is another question's" };
+  }
+  return { value: parsed.value, issue: null };
 }

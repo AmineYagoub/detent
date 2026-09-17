@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
@@ -399,6 +399,18 @@ const VALID_BRIEF = (question: string) => ({
   what_would_falsify: "the v3 changelog shows callbacks retained",
 });
 
+/**
+ * PRDR-264: `researchOne` no longer RETURNS a brief — the session writes
+ * `artifactOut` and `planResearch` reads it back, so the file and the
+ * validation stay together and a stale artifact cannot answer for a session
+ * that produced nothing (D-19). This builds the launcher each case needs.
+ */
+const writes = (brief: (q: string) => object, toolCalls: number) => (question: string, _share: number, artifactOut: string) => {
+  mkdirSync(path.dirname(artifactOut), { recursive: true });
+  writeFileSync(artifactOut, JSON.stringify(brief(question)), "utf8");
+  return Promise.resolve({ toolCalls });
+};
+
 describe("T-063 planning research (C-3a, D-11)", () => {
   it("an answered question yields a cited brief, cached by question hash", async () => {
     const root = repo();
@@ -406,7 +418,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     const result = await planResearch([question], {
       root,
       budget: 16,
-      researchOne: async () => ({ brief: VALID_BRIEF(question), toolCalls: 3 }),
+      researchOne: writes(VALID_BRIEF, 3),
     });
 
     expect(result.briefs).toHaveLength(1);
@@ -419,15 +431,15 @@ describe("T-063 planning research (C-3a, D-11)", () => {
   it("re-running hits the cache with ZERO sessions and zero tool calls (C-3a's AC)", async () => {
     const root = repo();
     const question = "Does the v3 API still accept callbacks?";
-    await planResearch([question], { root, budget: 16, researchOne: async () => ({ brief: VALID_BRIEF(question), toolCalls: 3 }) });
+    await planResearch([question], { root, budget: 16, researchOne: writes(VALID_BRIEF, 3) });
 
     let launched = 0;
     const second = await planResearch([question], {
       root,
       budget: 16,
-      researchOne: async () => {
+      researchOne: (q, share, artifactOut) => {
         launched += 1;
-        return { brief: VALID_BRIEF(question), toolCalls: 3 };
+        return writes(VALID_BRIEF, 3)(q, share, artifactOut);
       },
     });
     expect(launched).toBe(0);
@@ -452,10 +464,10 @@ describe("T-063 planning research (C-3a, D-11)", () => {
       root,
       budget: 16,
       note: (t) => notes.push(t),
-      researchOne: async (question) => {
+      researchOne: (question, share, artifactOut) => {
         launched += 1;
         /* Every session tries to take the whole allowance; PRDR-262 is why none of them can. */
-        return { brief: VALID_BRIEF(question), toolCalls: 16 };
+        return writes(VALID_BRIEF, 16)(question, share, artifactOut);
       },
     });
 
@@ -483,7 +495,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     const result = await planResearch(["q?"], {
       root,
       budget: 16,
-      researchOne: async (question) => ({ brief: VALID_BRIEF(question), toolCalls: 9999 }),
+      researchOne: writes(VALID_BRIEF, 9999),
     });
     expect(result.toolCallsUsed).toBe(16);
   });
@@ -494,10 +506,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     const result = await planResearch([question], {
       root,
       budget: 16,
-      researchOne: async () => ({
-        brief: { ...VALID_BRIEF(question), local_search: { docs_checked: [], code_checked: [] } },
-        toolCalls: 2,
-      }),
+      researchOne: writes((q) => ({ ...VALID_BRIEF(q), local_search: { docs_checked: [], code_checked: [] } }), 2),
     });
     expect(result.briefs).toEqual([]);
     expect(result.unanswered).toEqual([question]);
@@ -524,7 +533,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
           JSON.stringify({ ...ANALYSIS_BROWNFIELD, questions: [{ id: "q1", question, blocking: true }] }),
         );
       },
-      research: { budget: 16, researchOne: async () => ({ brief: VALID_BRIEF(question), toolCalls: 2 }) },
+      research: { budget: 16, researchOne: writes(VALID_BRIEF, 2) },
     });
 
     /** The question was researched, not asked: no interrupt at all. */
@@ -537,7 +546,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
   it("briefs live in the committed research/planning tree (F-1, P8)", async () => {
     const root = repo();
     const question = "shared knowledge?";
-    await planResearch([question], { root, budget: 16, researchOne: async () => ({ brief: VALID_BRIEF(question), toolCalls: 1 }) });
+    await planResearch([question], { root, budget: 16, researchOne: writes(VALID_BRIEF, 1) });
     const file = planningBriefPath(root, questionHash(question));
     expect(file.startsWith(path.join(stateDir(root), "research", "planning"))).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ question });

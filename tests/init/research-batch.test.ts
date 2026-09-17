@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout } from "../../src/fs/layout.js";
 import { analysisPath, analyzeStage } from "../../src/init/analyze.js";
@@ -79,6 +80,35 @@ const BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH = (question: string): object => ({
   local_search: { docs_checked: [], code_checked: [] },
 });
 
+/**
+ * PRDR-264: the session WRITES its brief and `planResearch` reads it back, so
+ * the fakes here must put the fixture on disk. Returning it was what let both
+ * tests below pass while the validator never saw it — X-6a was named in their
+ * fixtures and exercised by neither.
+ */
+function writeBrief(artifactOut: string, brief: object): void {
+  mkdirSync(path.dirname(artifactOut), { recursive: true });
+  writeFileSync(artifactOut, JSON.stringify(brief), "utf8");
+}
+
+/**
+ * PRDR-264: the fourth population. Research SETTLED this question — no source
+ * can answer it, and the named human decides — so it is neither answered nor
+ * still open to research.
+ */
+const SETTLED_BRIEF = (question: string): object => ({
+  schema_version: 1,
+  outcome: "undecidable",
+  question,
+  question_hash: questionHash(question),
+  /** X-6a still applies: a settled verdict shows the searches that came back empty. */
+  evidence: [{ source: "PRD.md §Pricing", claim: "names no price ladder" }],
+  sources_consulted: [{ tier: 1, ref: "PRD.md" }],
+  local_search: { docs_checked: ["PRD.md"], code_checked: [] },
+  what_would_falsify: "the founder writes the price ladder down",
+  undecidable: { reason: "decision_not_made", detail: "no ladder has been chosen yet", who_decides: "the founder" },
+});
+
 const X6A_LOCAL_SEARCH =
   "local_search: X-6a: a brief citing a URL must record a non-empty local_search (tiers 1-2 consulted first)";
 
@@ -143,16 +173,24 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
       },
       research: {
         budget: 2,
-        researchOne: async (question) => ({
-          brief: BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question),
-          toolCalls: 16,
-        }),
+        /** As `pipeline.ts` wires it: planning research's notes reach the same operator sink ANALYZE's do. */
+        note: (t) => notes.push(t),
+        researchOne: async (question, _share, artifactOut) => {
+          writeBrief(artifactOut, BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
+          return { toolCalls: 16 };
+        },
       },
     });
 
     expect(outcome.kind).toBe("complete");
     expect(notes.join(" ")).toContain("3 question(s) carried to PRESENT");
     expect(notes.join(" ")).toContain("2 researched without a usable answer, 1 never researched");
+    /**
+     * PRDR-264: the note used to say "no valid brief" and cite nothing. The
+     * refusal is the operator's only handle on WHY research came back empty,
+     * and this fixture's refusal is X-6a's — so the note must say so.
+     */
+    expect(notes.join(" "), "the note carries what the validator actually said").toContain(X6A_LOCAL_SEARCH);
   });
 
   /** The complement: researched and refused by X-6a is unanswered, but it is not untried. */
@@ -162,10 +200,10 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
     const result = await planResearch([question], {
       root,
       budget: 16,
-      researchOne: async () => ({
-        brief: BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question),
-        toolCalls: 2,
-      }),
+      researchOne: async (_question, _share, artifactOut) => {
+        writeBrief(artifactOut, BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
+        return { toolCalls: 2 };
+      },
     });
     expect(result.unanswered).toEqual([question]);
     expect(result.neverResearched).toEqual([]);
@@ -200,5 +238,55 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
     expect(said).toContain("1 question(s) carried to PRESENT");
     expect(said).toContain("planning research did not run for this init");
     expect(said).not.toContain("never researched");
+  });
+  /**
+   * PRDR-264: the breakdown's fourth population, and the one that changes the
+   * advice attached to it. A question research SETTLED still rides to PRESENT
+   * — the plan proceeds on its assumption exactly as before — but no ceiling
+   * will ever reach it, so counting it under "researched without a usable
+   * answer" argued for raising a budget that cannot help.
+   */
+  it("counts a settled question apart from one a bigger ceiling could still answer", async () => {
+    const root = repo({ "PRD.md": "# vague\n" });
+    const notes: string[] = [];
+    const settled = "what is the price ladder?";
+    const outcome = await analyzeStage({
+      root,
+      docs: ["PRD.md"],
+      stackMarkers: ["package.json"],
+      note: (t) => notes.push(t),
+      launch: async () => {
+        writeFileSync(
+          analysisPath(root),
+          JSON.stringify({
+            ...ANALYSIS_BROWNFIELD,
+            questions: [
+              { id: "q1", question: settled, blocking: false, assumption: "flat pricing" },
+              { id: "q2", question: "q two?", blocking: false, assumption: "b" },
+            ],
+          }),
+        );
+      },
+      research: {
+        budget: 16,
+        note: (t) => notes.push(t),
+        researchOne: async (question, _share, artifactOut) => {
+          writeBrief(artifactOut, question === settled ? SETTLED_BRIEF(question) : BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
+          return { toolCalls: 1 };
+        },
+      },
+    });
+
+    expect(outcome.kind).toBe("complete");
+    const said = notes.join(" ");
+    expect(said, "a settled question is still carried — the human has to answer it").toContain("2 question(s) carried to PRESENT");
+    expect(said, "and it is counted as settled, not as a ceiling to raise").toContain(
+      "1 settled as undecidable (only a human can answer), 1 researched without a usable answer, 0 never researched",
+    );
+    expect(said, "the note names who decides it, because that is the only way it gets answered").toContain("the founder");
+    expect(
+      outcome.kind === "complete" ? (outcome.outputs["open_questions"] as { question: string }[]).map((q) => q.question) : [],
+      "both questions reach PRESENT with their assumptions (C-3′)",
+    ).toEqual([settled, "q two?"]);
   });
 });

@@ -50,8 +50,14 @@ interface Spent {
 
 /**
  * Drives `planResearch` recording what each question was offered. `spend` says
- * how many calls each successive session actually reports, defaulting to the
- * whole share, and `brief` decides what it returns.
+ * how many calls each successive LAUNCH actually reports, defaulting to the
+ * whole share, and `brief` decides what that launch writes.
+ *
+ * PRDR-264 moved the brief from `researchOne`'s return value to the artifact
+ * the session writes, so the fake writes `artifactOut` here. It also added the
+ * single reshape relaunch, which is why `offered` is recorded on the FIRST
+ * attempt only: a relaunch is handed the same share, and what D-16 is about is
+ * the share each QUESTION was offered, not each launch.
  */
 async function drive(
   r: string,
@@ -65,13 +71,15 @@ async function drive(
     root: r,
     budget,
     note: (text) => seen.notes.push(text),
-    researchOne: (question, share) => {
+    researchOne: (question, share, artifactOut, previous) => {
       const n = i;
       i += 1;
-      seen.offered.push(share);
+      if (previous === null) seen.offered.push(share);
       const toolCalls = opts.spend?.[n] ?? share;
       const brief = opts.brief === undefined ? validBrief(question) : opts.brief(question, n);
-      return Promise.resolve({ brief, toolCalls });
+      mkdirSync(path.dirname(artifactOut), { recursive: true });
+      writeFileSync(artifactOut, JSON.stringify(brief), "utf8");
+      return Promise.resolve({ toolCalls });
     },
   });
   return { result, seen };
@@ -88,7 +96,7 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
   it("offers 5, 5 and 6 on the live shape, and launches a session for every question", async () => {
     const { result, seen } = await drive(root(), THREE, 16, { brief: () => ({ malformed: true }) });
     expect(seen.offered, "each question gets an even cut of what is left, not everything that is left").toEqual([5, 5, 6]);
-    expect(result.sessionsLaunched, "all three questions were researched").toBe(3);
+    expect(result.sessionsLaunched, "all three questions were researched — twice each, since PRDR-264 reshapes a refused brief once").toBe(6);
     expect(result.neverResearched, "no question may be starved by where ANALYZE listed it").toEqual([]);
     expect(result.toolCallsUsed, "the pool is spent to its ceiling and not past it").toBe(16);
   });
@@ -161,7 +169,7 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
     const exhausted = await drive(root(), ["q?"], 8, { brief: () => ({ malformed: true }) });
     expect(exhausted.seen.notes.join(" "), "used everything it was given — a ceiling to raise").toContain("used all");
 
-    const early = await drive(root(), ["q?"], 8, { spend: [2], brief: () => ({ malformed: true }) });
+    const early = await drive(root(), ["q?"], 8, { spend: [2, 2], brief: () => ({ malformed: true }) });
     expect(early.seen.notes.join(" "), "stopped early — more budget is not the lever").toContain("stopped at");
   });
 

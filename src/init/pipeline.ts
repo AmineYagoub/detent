@@ -18,6 +18,8 @@ import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
+import { planningBriefSkeleton, questionHash, undecidableBriefSkeleton } from "./plan-research.js";
+import { previousAttemptInput } from "./retry.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import type { LaunchOptions } from "./launch-batch.js";
@@ -193,25 +195,38 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
            * the input key was always named for one session's budget and is only
            * now true of the number behind it, so it is not renamed.
            */
-          researchOne: async (question, share) => {
-            const artifactOut = path.join(stateDir(deps.root), "state", "planning-brief.json");
-            const result = await launchInitSession(
-              sessionDeps(deps, journal),
-              {
-                role: "research",
-                inputs: { question, tool_call_budget: share, hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web" },
-                artifactOut,
-                withWeb: true,
+          researchOne: async (question, share, artifactOut, previous) => {
+            /*
+             * PRDR-264: the contract, which this caller never passed. Without an
+             * `expected_output` the session follows the only shape
+             * `prompts/research.md` names — the A-4 failure brief — and
+             * `planningBriefSchema` refuses it every time. Both skeletons go, so
+             * the session knows that settling a question is an outcome too.
+             */
+            const hash = questionHash(question);
+            const result = await launchInitSession(sessionDeps(deps, journal), {
+              role: "research",
+              inputs: {
+                question,
+                question_hash: hash,
+                tool_call_budget: share,
+                hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web",
+                expected_output: planningBriefSkeleton(question, hash),
+                expected_output_if_undecidable: undecidableBriefSkeleton(question, hash),
+                ...previousAttemptInput(previous, "planning brief"),
               },
-            );
-            const { readFileSync, existsSync } = await import("node:fs");
-            const brief = existsSync(artifactOut) ? JSON.parse(readFileSync(artifactOut, "utf8")) : null;
+              artifactOut,
+              withWeb: true,
+            });
             /*
              * Turns are the observable proxy for tool calls the backend reports;
              * S-4's telemetry has no per-call counter, so a turn is one call's
-             * worth of budget. The ceiling is enforced either way (C-3a).
+             * worth of budget. PRDR-264 (D-18): nothing here ENFORCES the share —
+             * the session is asked for it and spends what it spends, observed on
+             * the live run as 13 and 20 calls against a budget of 8. The pool is
+             * charged the share; `run_spend_usd` is what bounds the money.
              */
-            return { brief, toolCalls: Math.max(1, result.turns) };
+            return { toolCalls: Math.max(1, result.turns) };
           },
         },
       });

@@ -142,11 +142,20 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   if (deps.research !== undefined && asked.length > 0) {
     research = await planResearch(asked, { ...deps.research, root: deps.root });
     for (const brief of research.briefs) {
-      deps.note?.(`planning research answered: ${brief.question} — ${brief.answer.claim}`);
+      /* PRDR-264: `briefs` carries the `answered` arm only — the settled arm has no claim to print. */
+      const claim = brief.answer?.claim;
+      if (claim !== undefined) deps.note?.(`planning research answered: ${brief.question} — ${claim}`);
     }
   }
-  const unanswered = new Set(research === null ? asked : research.unanswered);
-  const open = analysis.questions.filter((q) => unanswered.has(q.question));
+  /**
+   * PRDR-264: a question research SETTLED as undecidable still rides to
+   * PRESENT. It is not answered — the plan proceeds on its assumption exactly
+   * as before — but it is no longer open to research, so it belongs in the
+   * batch a human sees while being counted apart from the ones a bigger
+   * ceiling could still reach.
+   */
+  const carried = new Set(research === null ? asked : [...research.unanswered, ...research.undecidable]);
+  const open = analysis.questions.filter((q) => carried.has(q.question));
   if (open.length > 0) {
     /*
      * PRDR-260: one batch (C-3a), but its members are not alike. A question
@@ -160,10 +169,20 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
      */
     const untried = research === null ? null : new Set(research.neverResearched);
     const untriedCount = untried === null ? 0 : open.filter((q) => untried.has(q.question)).length;
+    /**
+     * PRDR-264: the fourth population, and the one that changes the advice.
+     * A settled question needs no ceiling and no further research — it needs
+     * the named human. Counted inside "researched without a usable answer" it
+     * argued for exactly the act that cannot help it.
+     */
+    const settled = research === null ? null : new Set(research.undecidable);
+    const settledCount = settled === null ? 0 : open.filter((q) => settled.has(q.question)).length;
     const breakdown =
       untried === null
         ? " — planning research did not run for this init"
-        : ` — ${String(open.length - untriedCount)} researched without a usable answer, ${String(untriedCount)} never researched`;
+        : ` — ${String(settledCount)} settled as undecidable (only a human can answer), ` +
+          `${String(open.length - untriedCount - settledCount)} researched without a usable answer, ` +
+          `${String(untriedCount)} never researched`;
     deps.note?.(
       `${String(open.length)} question(s) carried to PRESENT with their assumptions (C-3′)${breakdown}` +
         `${open.some((q) => q.blocking) ? "; one or more blocking" : ""}`,
