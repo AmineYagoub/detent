@@ -50,6 +50,8 @@ export interface PipelineDeps {
   readonly symbols?: SymbolsConfig;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
+  /** PRDR-268: revision rounds a faulted slice buys; `PLAN_REVISIONS` by default. */
+  readonly revisionRounds?: number;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.
@@ -327,6 +329,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         budgets: deps.budgets,
         slices: slicesFromOutputs(ctx.outputs),
         baseline: deps.planBaseline ?? "production",
+        ...(deps.revisionRounds === undefined ? {} : { revisionRounds: deps.revisionRounds }),
         promptHash: deps.prompts.hashes.planner,
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */

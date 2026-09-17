@@ -384,14 +384,32 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     }
     if (review !== null && review.verdict === "changes" && review.findings.length > 0) {
       deps.note?.(recurringLine(slice.id, review.findings));
-      for (let round = 0; round < PLAN_REVISIONS; round += 1) {
-        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: review.findings, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
+      /**
+       * PRDR-268: a round is drafted against what the LAST round left.
+       *
+       * The review used to sit after the loop, so every iteration was handed
+       * `review.findings` — the one review taken before it — and `drafted = …`
+       * threw the previous round away. `draftPlan` deletes the prior artifact
+       * too ("a stale draft is an echo chamber"), so there was no implicit
+       * channel either: round two re-rolled the same inputs. That is why
+       * PRDR-084's "a second bite adds cost without adding information" held,
+       * and it held by construction rather than by measurement.
+       *
+       * Moving the review in also buys an exit a loop with no review cannot
+       * have: a plan the reviewer has just passed does not need another
+       * index-carrying session spent redrafting it.
+       */
+      let outstanding: PlanReview["findings"] = review.findings;
+      for (let round = 0; round < (deps.revisionRounds ?? PLAN_REVISIONS); round += 1) {
+        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
         for (const q of drafted.questions) if (!asked.some((a) => a.question.trim().toLowerCase() === q.question.trim().toLowerCase())) asked.push(q);
+        const after = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
+        reviewed = after !== null;
+        leftover = after !== null && after.verdict === "changes" ? after.findings : [];
+        if (leftover.length === 0) break;
+        outstanding = leftover;
       }
-      const second = await reviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index });
-      reviewed = second !== null;
-      leftover = second !== null && second.verdict === "changes" ? second.findings : [];
       /**
        * PRDR-196: say what the round DID, not how many findings came back.
        *

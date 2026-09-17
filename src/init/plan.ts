@@ -94,6 +94,16 @@ export interface PlanDeps {
   readonly launch: (inputs: Record<string, unknown>, artifactOut?: string, options?: LaunchOptions) => Promise<void>;
   /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * PRDR-268: how many revision rounds a faulted slice buys; `PLAN_REVISIONS`
+   * by default.
+   *
+   * A seam on PRDR-251's terms. The whole content of a second round is what it
+   * is drafted against, and while the count was a module constant no test could
+   * reach a value other than one — the same reason the S-5 refusal "could not be
+   * tested while this was an inline literal". Production passes nothing.
+   */
+  readonly revisionRounds?: number;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.

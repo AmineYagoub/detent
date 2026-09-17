@@ -7,8 +7,8 @@ import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
-import { MockBackend, okResult } from "../../src/sessions/mock.js";
-import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
+import { ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
  * Planning QUALITY, as distinct from the pipeline's mechanics: the planner
@@ -356,5 +356,88 @@ describe("PRDR-197 init routes effort to its own sessions", () => {
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(backend.calls[0]?.spec.effort).toBeUndefined();
+  });
+});
+
+/**
+ * PRDR-268 — a revision round is drafted against what the LAST round left.
+ *
+ * HEAD passes `review.findings` on every iteration of the loop, so round two
+ * receives byte-identical inputs to round one and `drafted = await …` throws
+ * round one away. `draftPlan` also deletes the prior artifact ("a stale draft
+ * is an echo chamber, not an input"), so there is no implicit channel either.
+ * PRDR-084's "a second bite adds cost without adding information" is therefore
+ * true by construction. Moving `reviewPlan` inside the loop is what makes a
+ * second round a revision rather than a re-roll.
+ */
+describe("PRDR-268 a revision round sees what the round before it left", () => {
+  const FIRST = [{ tag: "sizing", finding: "t-100 spans three subsystems", ticket: "t-100" }];
+  const SECOND = [{ tag: "dependency", finding: "t-100 depends on nothing that exists", ticket: "t-100" }];
+
+  const inputsOf = (backend: MockBackend, artifact: string): Record<string, unknown>[] =>
+    backend.calls
+      .filter((c) => c.spec.artifactOut.endsWith(artifact))
+      .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs);
+
+  /** The k sampled draws all report FIRST so it recurs; the in-loop reviews then answer in turn. */
+  const staged = (afterSample: readonly object[]): StageFn => {
+    let reviews = 0;
+    return (spec) => {
+      let artifact: object;
+      if (spec.artifactOut.endsWith("plan-review.json")) {
+        reviews += 1;
+        const nth = reviews - PLAN_REVIEW_SAMPLES;
+        artifact =
+          nth <= 0
+            ? { schema_version: 1, verdict: "changes", findings: FIRST }
+            : (afterSample[nth - 1] ?? APPROVE_PLAN);
+      } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
+      else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
+      else artifact = ANALYSIS(null);
+      writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
+      return okResult();
+    };
+  };
+
+  const changes = (findings: readonly object[]): object => ({ schema_version: 1, verdict: "changes", findings });
+
+  it("the third draft carries the SECOND review's findings, never the first's again", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: staged([changes(SECOND), changes(SECOND)]) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
+
+    const drafts = inputsOf(backend, "plan-draft.json");
+    expect(drafts, "original + two revisions").toHaveLength(3);
+    expect(drafts[1]?.["review_findings"], "round one answers the sampled review").toEqual(FIRST);
+    expect(drafts[2]?.["review_findings"], "round two answers what round one LEFT").toEqual(SECOND);
+  });
+
+  it("a round whose review comes back clean stops the loop instead of paying for another draft", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: staged([APPROVE_PLAN]) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
+
+    expect(inputsOf(backend, "plan-draft.json"), "the second round is not bought").toHaveLength(2);
+    expect(inputsOf(backend, "plan-review.json")).toHaveLength(PLAN_REVIEW_SAMPLES + 1);
+  });
+
+  it("a review that never produced a usable verdict leaves the slice marked unreviewed", async () => {
+    const root = repo(LONE_CANDIDATE);
+    /** `reach` is not a tag: the artifact and its one relaunch are both unusable, so `reviewPlan` yields null. */
+    const unusable = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
+    const backend = new MockBackend({ planner: staged([unusable, unusable]) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
+
+    const cached = JSON.parse(readFileSync(path.join(stateDir(root), "state", "plan", "s01.json"), "utf8")) as { reviewed: boolean };
+    expect(cached.reviewed, "no verdict is not a passed review").toBe(false);
+  });
+
+  it("at the default of one round the sequence is what it always was: two drafts, one review after the sample", async () => {
+    const root = repo(LONE_CANDIDATE);
+    const backend = new MockBackend({ planner: staged([changes(SECOND)]) });
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+
+    expect(inputsOf(backend, "plan-draft.json")).toHaveLength(2);
+    expect(inputsOf(backend, "plan-review.json")).toHaveLength(PLAN_REVIEW_SAMPLES + 1);
   });
 });
