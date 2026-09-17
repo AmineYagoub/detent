@@ -90,7 +90,15 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
      * the same 2 it started with, with nothing to distinguish a round that did
      * everything from one that did nothing.
      */
-    expect(said).toMatch(/s01 review after revision: 2 finding\(s\) remain \(2 resolved, 2 introduced;/);
+    expect(said).toMatch(/s01 review after revision: 2 finding\(s\) remain — 2 handed, 2 left \(2 resolved, 2 introduced;/);
+    /**
+     * PRDR-270 extends this line rather than replacing what PRDR-260 put on it.
+     * `|before| = resolved + survived` and `|after| = survived + introduced` were
+     * always inside the `RevisionOutcome`, and they decide whether `introduced`
+     * was forced: `introduced >= |after| - |before|`. Here the sets are the same
+     * size, so nothing is forced and no forced clause is printed.
+     */
+    expect(said).not.toMatch(/forced by the set growing/);
     /**
      * PRDR-200's null belongs on the same line, and as a RATE: `sampleChurn`
      * sums `revisionOutcome` over every ORDERED pair of reads — k*(k-1) = 6 at
@@ -140,7 +148,7 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
      * keeps the fix from becoming the drift it removes.
      */
     expect(notes.join("\n")).toMatch(
-      /whole-plan review after revision: 1 finding\(s\) remain \(1 resolved, 1 introduced; no null — the whole-plan review is a single draw/,
+      /whole-plan review after revision: 1 finding\(s\) remain — 1 handed, 1 left \(1 resolved, 1 introduced; no null — the whole-plan review is a single draw/,
     );
   });
 });

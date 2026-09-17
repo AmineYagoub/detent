@@ -18,13 +18,40 @@ import type { RevisionOutcome } from "./plan-signal.js";
  * `sampleChurn` accumulates `revisionOutcome` over every ORDERED pair of reads
  * — k*(k-1), six at `PLAN_REVIEW_SAMPLES` = 3 — while a revision figure is ONE
  * before/after pair. The raw churn counts are six pairs' worth and are not on
- * the same scale as the revision beside them; printing them as though they were
- * is the misreading `src/init/present.ts:277-284` exists to prevent.
+ * the same scale as the revision beside them, which is why this renders a rate:
+ * a rate is scale-free, so the pair count cancels out of it.
+ *
+ * PRDR-270: the rate still measures a different POPULATION. It is computed over
+ * UNFILTERED reads, while the revision figure printed beside it is computed over
+ * the sets that survived the ⌈k/2⌉ threshold. Filtering removes precisely the
+ * findings that churn, so this number is the higher of the two baselines and is
+ * not the one a filtered figure is read against. Measured on PRDR-269's s07:
+ * this clause printed 60% where the filtered null for the same slice was 25%,
+ * understating the revision it was there to qualify by 35 points. Saying which
+ * population it measured is the fix; buying the second one costs a second panel
+ * of k reads, which production does not pay for.
  */
 export function nullNote(churn: RevisionOutcome | null, pairs: number): string {
   const seen = churn === null ? 0 : churn.resolved + churn.survived;
   if (churn === null || seen === 0 || pairs <= 0) return "no null was sampled";
-  return `null ${String(Math.round((churn.resolved / seen) * 100))}% resolution over ${String(pairs)} unrevised read pairs`;
+  return (
+    `null ${String(Math.round((churn.resolved / seen) * 100))}% resolution over ${String(pairs)} unrevised read pairs ` +
+    `of UNFILTERED reads, so a filtered figure is not read against it (PRDR-270)`
+  );
+}
+
+/**
+ * PRDR-270: the introductions the set sizes forced, whatever the revision wrote.
+ *
+ * `revisionOutcome` defines `introduced = |after| - survived` with `survived <=
+ * |before|`, so `introduced >= |after| - |before|`, and that difference is
+ * `introduced - resolved`. A revision handed 4 findings whose review returned 10
+ * prints `9 introduced` at best: six of the nine are the set growing, not
+ * anything the revision did. PRDR-269's s07 is that case exactly, and the
+ * section that read its 9 as the fix underperforming had no way to see the 6.
+ */
+export function forcedIntroductions(revision: RevisionOutcome): number {
+  return Math.max(revision.introduced - revision.resolved, 0);
 }
 
 /**
@@ -60,9 +87,22 @@ export function remainLine(
   nullClause: string,
   tags: string,
 ): string {
+  /**
+   * PRDR-270: both sizes, and the floor they force, on the line itself.
+   *
+   * `|before| = resolved + survived` and `|after| = survived + introduced` were
+   * always inside the `RevisionOutcome` this is handed; the identity above says
+   * what they mean and the line printed neither, so a forced `introduced` and an
+   * earned one looked the same.
+   */
+  const handed = revision.resolved + revision.survived;
+  const left = revision.survived + revision.introduced;
+  const forced = forcedIntroductions(revision);
+  const forcedClause =
+    forced === 0 ? "" : `, ${String(forced)} of the ${String(revision.introduced)} forced by the set growing`;
   return (
-    `${subject}: ${String(remaining)} finding(s) remain (${String(revision.resolved)} resolved, ` +
-    `${String(revision.introduced)} introduced; ${nullClause}) — ${tags}`
+    `${subject}: ${String(remaining)} finding(s) remain — ${String(handed)} handed, ${String(left)} left ` +
+    `(${String(revision.resolved)} resolved, ${String(revision.introduced)} introduced${forcedClause}; ${nullClause}) — ${tags}`
   );
 }
 

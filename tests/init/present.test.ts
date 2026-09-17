@@ -214,3 +214,30 @@ describe("PRDR-269 survivors outrank what the revision introduced, which outrank
     expect(where("introduced")).toBeLessThan(where("seen-once"));
   });
 });
+
+/**
+ * PRDR-270 — the null beside a revision figure is a rate, and the two lines are
+ * named as the different measurements they are.
+ *
+ * `sampleChurn` sums over k*(k-1) = 6 ordered pairs at `PLAN_REVIEW_SAMPLES` =
+ * 3; a revision figure is one before/after pair. Printing the churn's raw counts
+ * beside it set six pairs' worth against one, under a comment claiming this file
+ * prevented that misreading. The numbers below are PRDR-269's own s07.
+ */
+describe("PRDR-270 — the churn line beside a revision figure", () => {
+  const revisions = { resolved: 3, survived: 1, introduced: 9 };
+  const churn = { resolved: 18, survived: 12, introduced: 18 };
+
+  it("renders a rate rather than six pairs' worth of raw counts", () => {
+    const text = renderPresentation({ ...base("/tmp/x"), revisions, churn });
+    expect(text).toContain("resolve 60% of what they saw");
+    expect(text).not.toContain("18 resolved, 12 survived, 18 introduced");
+  });
+
+  it("does not tell the reader to subtract and not to subtract in one sentence", () => {
+    const text = renderPresentation({ ...base("/tmp/x"), revisions, churn });
+    expect(text).not.toContain("not error to subtract");
+    expect(text).not.toContain("The difference between the two lines is what the revision did");
+    expect(text).toContain("not the revision's effect");
+  });
+});

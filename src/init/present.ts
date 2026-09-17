@@ -281,13 +281,28 @@ export function renderPresentation(input: PresentInput): string {
      * returns resolutions and introductions, because the reviewer does not
      * reproduce itself. Read without that line beside it, the figure above
      * says the revision did something it may not have done.
+     *
+     * PRDR-270: as a RATE, and with the two lines named as the different
+     * measurements they are. This printed the churn's raw counts, which at
+     * `PLAN_REVIEW_SAMPLES` = 3 are summed over k*(k-1) = 6 ordered pairs, beside
+     * a revision figure over ONE before/after pair — the scale mismatch
+     * `nullNote` renders a rate to avoid, committed directly under a comment
+     * that claimed this code prevented it. The old sentence also told the reader
+     * the difference between the lines was the revision's doing and, after the
+     * semicolon, not to subtract them. Both halves are gone: the rates are over
+     * different populations — unfiltered reads against the filtered set — so
+     * their difference is not an effect size in either direction.
      */
     const churn = input.churn;
     if (churn !== undefined) {
+      const seen = churn.resolved + churn.survived;
+      const rate = seen === 0 ? null : Math.round((churn.resolved / seen) * 100);
       lines.push(
-        `  ...and with NOTHING revised, the same count over repeated reads of the same draft: ` +
-          `${String(churn.resolved)} resolved, ${String(churn.survived)} survived, ${String(churn.introduced)} introduced. ` +
-          `The difference between the two lines is what the revision did; the second line is not error to subtract (C-4⁗″).`,
+        rate === null
+          ? `  ...and no null was sampled for this draft, so the figure above stands unqualified (C-4⁗″).`
+          : `  ...and with NOTHING revised, repeated reads of the same draft resolve ${String(rate)}% of what they saw. ` +
+            `That rate is over UNFILTERED reads and the figure above is over the filtered set, so the two are not the ` +
+            `same baseline and the gap between them is not the revision's effect (C-4⁗″, PRDR-270).`,
       );
     }
   }
