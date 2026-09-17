@@ -55,10 +55,11 @@ export class SessionArm {
     }
 
     /*
-     * D-25: the spend ceiling is a launch gate, evaluated here and never
-     * mid-flight — overshoot is bounded by the one session in flight.
+     * D-25 was "the spend ceiling is a launch gate, evaluated here and never
+     * mid-flight". PRDR-265: it is a launch RECORD. The figures are read and
+     * announced once; nothing here refuses.
      */
-    ctx.spend.assertLaunchAllowed();
+    ctx.spend.recordLaunch();
 
     /**
      * X-1⁗ (PRDR-140): the wall clock is enforced HERE, at the launch seam,
@@ -80,10 +81,15 @@ export class SessionArm {
     assertTicketWallClock(ctx, id);
 
     let current = readTicket(ctx.root, id);
+    /*
+     * PRDR-265: `ctx.budgets.sessions` is COUNTED here, not enforced. Its own
+     * message called it "a backstop against a kernel accounting defect", which
+     * is a budget and not a sequencer: it ordered nothing, and what bounds a
+     * generation is the escalation ladder plus `maxPossibleSessions`'s walk over
+     * the transition table. The increment below is untouched — it is the number
+     * the dossier, `cli/status` and `cli/report` all live on.
+     */
     const counters = currentCounters(current);
-    if (counters.sessions >= ctx.budgets.sessions) {
-      throw new Breach("net session ceiling (X-1) — backstop against a kernel accounting defect");
-    }
     const generation = currentGeneration(current);
     current = {
       ...current,

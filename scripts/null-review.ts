@@ -95,16 +95,16 @@ function budgetsFor(root: string): Budgets {
     ? loadConfig(JSON.parse(readFileSync(file, "utf8")) as unknown).config.budgets
     : (Object.fromEntries(Object.entries(CEILINGS).map(([k, s]) => [k, s.default])) as Budgets);
   return {
-    ...base,
     /**
-     * X-1⁵'s breaker counts spend that buys no PLAN progress, and this harness
-     * makes none by design — every session re-reviews an unchanged artifact. The
-     * production ceilings would trip partway and truncate the sample into a
-     * biased one. Raised here and nowhere else.
+     * PRDR-265: nothing to defeat here any more. This used to raise all three
+     * `spend_without_progress_*` keys to 1_000_000, because the breaker threw
+     * and this harness makes no PLAN progress by design — every session
+     * re-reviews an unchanged artifact, so the breaker tripped partway and
+     * truncated the sample into a biased one. The breaker announces now, so
+     * the sweep runs to its end at the production ceilings and the note it
+     * prints is true: this harness is spending money on no progress.
      */
-    spend_without_progress_floor_usd: 1_000_000,
-    spend_without_progress_multiple: 1_000_000,
-    spend_without_progress_sessions: 1_000_000,
+    ...base,
   };
 }
 

@@ -28,9 +28,18 @@ export const UNIT_SLOTS = [
 export type UnitSlot = (typeof UNIT_SLOTS)[number];
 
 /**
- * Which module enforces each ceiling. Every X-1 key must appear: a ceiling with
- * no enforcer is a budget that routes nowhere, which P6 forbids. T-012's
+ * Which module is ACCOUNTABLE for each ceiling: the one that reads the key and
+ * either sequences on it or reports it. Every X-1 key must appear, and T-012's
  * coverage test asserts this map is total over CEILING_KEYS.
+ *
+ * It used to say "enforces", and that every key must have an enforcer "because
+ * a ceiling with no enforcer is a budget that routes nowhere, which P6
+ * forbids". Seven keys break that rule deliberately — `turns_per_stage`
+ * (PRDR-106), `run_spend_usd` (PRDR-191) and the five PRDR-265 converted —
+ * and the P6 oracle names every one of them in an explicit skip list rather
+ * than leaving the exemption implied. What P6 is actually worth is unchanged:
+ * a key nothing reads is a ceiling an operator can tune with no effect, and
+ * the grep still catches that whether the read halts or only counts.
  */
 export const ENFORCEMENT_SITES = {
   blind_fix_attempts: "kernel/resolver",

@@ -158,17 +158,18 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const open = analysis.questions.filter((q) => carried.has(q.question));
   if (open.length > 0) {
     /*
-     * PRDR-260: one batch (C-3a), but its members are not alike. A question
-     * research investigated and could not settle is one only the human can
-     * answer; one the pool never reached is a budget fact. As a bare count the
-     * two were indistinguishable — the run that found this carried three, of
-     * which the first had consumed the whole allowance and the other two were
-     * skipped unread. An init with no research configured is named as such
-     * rather than counted as never-researched, which would read as a ceiling
-     * that had been hit.
+     * PRDR-260: one batch (C-3a), but its members are not alike. An init with
+     * no research configured is named as such rather than counted among the
+     * questions research failed to settle, which would read as a ceiling that
+     * had been hit.
+     *
+     * PRDR-265 removed the third population this used to report. "Never
+     * researched" meant the pool ran out before the question's turn, and that
+     * arm is gone: a budget no longer decides which question gets asked. The
+     * count was structurally zero from that commit on, and a zero the operator
+     * is shown every run is worse than one that is not there — it advertises a
+     * lever ("raise the ceiling") that stopped existing.
      */
-    const untried = research === null ? null : new Set(research.neverResearched);
-    const untriedCount = untried === null ? 0 : open.filter((q) => untried.has(q.question)).length;
     /**
      * PRDR-264: the fourth population, and the one that changes the advice.
      * A settled question needs no ceiling and no further research — it needs
@@ -178,11 +179,10 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     const settled = research === null ? null : new Set(research.undecidable);
     const settledCount = settled === null ? 0 : open.filter((q) => settled.has(q.question)).length;
     const breakdown =
-      untried === null
+      settled === null
         ? " — planning research did not run for this init"
         : ` — ${String(settledCount)} settled as undecidable (only a human can answer), ` +
-          `${String(open.length - untriedCount - settledCount)} researched without a usable answer, ` +
-          `${String(untriedCount)} never researched`;
+          `${String(open.length - settledCount)} researched without a usable answer`;
     deps.note?.(
       `${String(open.length)} question(s) carried to PRESENT with their assumptions (C-3′)${breakdown}` +
         `${open.some((q) => q.blocking) ? "; one or more blocking" : ""}`,

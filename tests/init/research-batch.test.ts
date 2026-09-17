@@ -133,24 +133,22 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
   });
 
   /**
-   * the AWAIT_INFO batch is one batch (C-3a), but its members
-   * are not alike. A question research investigated and could not settle is a
-   * question only the human can answer; one the pool never reached is a budget
-   * fact the operator acts on by raising the ceiling or trimming questions.
-   * Reported as a bare count the two were indistinguishable — and this is the
-   * run shape that produced it: three questions and a pool that cannot fund a
-   * call for each.
+   * PRDR-265 retired the distinction this test was written for, and the fixture
+   * is kept as the proof that it is gone.
    *
-   * PRDR-262 changed what this fixture has to be. It used to be a pool of 16
-   * with the first question consuming all of it, because that was enough to
-   * starve the other two — the test asserted the live defect as the expected
-   * outcome and passed. The pool is divided now, so starvation by document
-   * order is unreachable and the only remaining route into `neverResearched` is
-   * a pool genuinely too small: 2 calls, 3 questions, one call each until it
-   * runs out. The split under test is the same; the only way to reach it is
-   * not.
+   * PRDR-260 split the AWAIT_INFO batch in two: a question research could not
+   * settle, which only the human can answer, and one the pool never reached,
+   * which the operator acts on by raising the ceiling. PRDR-262 narrowed the
+   * second to a pool genuinely too small to fund one call apiece — the exact
+   * shape below, 2 calls against 3 questions. PRDR-265 removed it outright: a
+   * budget no longer decides which question goes unasked, so all three are
+   * researched and the ceiling advice has nothing left to attach to.
+   *
+   * What the fixture now pins is that the shape which USED to strand a question
+   * strands nobody, and that the operator is told what the three sessions cost
+   * rather than what the pool allowed.
    */
-  it("separates the questions research tried from the ones the pool never reached", async () => {
+  it("researches every question on a pool too small for them, and says what that cost", async () => {
     const root = repo({ "PRD.md": "# vague\n" });
     const notes: string[] = [];
     const outcome = await analyzeStage({
@@ -184,7 +182,14 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
 
     expect(outcome.kind).toBe("complete");
     expect(notes.join(" ")).toContain("3 question(s) carried to PRESENT");
-    expect(notes.join(" ")).toContain("2 researched without a usable answer, 1 never researched");
+    expect(notes.join(" "), "no question is reported as one a bigger ceiling would have reached").toContain(
+      "0 settled as undecidable (only a human can answer), 3 researched without a usable answer",
+    );
+    expect(notes.join(" "), "and the breakdown no longer offers a lever that does nothing").not.toContain("never researched");
+    expect(
+      outcome.kind === "complete" ? outcome.outputs["research_tool_calls"] : 0,
+      "three questions, two attempts each (PRDR-264), 16 calls a session: 96 against a stated pool of 2",
+    ).toBe(96);
     /**
      * PRDR-264: the note used to say "no valid brief" and cite nothing. The
      * refusal is the operator's only handle on WHY research came back empty,
@@ -193,20 +198,22 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
     expect(notes.join(" "), "the note carries what the validator actually said").toContain(X6A_LOCAL_SEARCH);
   });
 
-  /** The complement: researched and refused by X-6a is unanswered, but it is not untried. */
-  it("counts never-researched as the skip arm only, not everything unanswered", async () => {
+  /** The complement: researched and refused by X-6a is unanswered, and after PRDR-265 that is the only way in. */
+  it("puts a question in the batch only when a session ran and came back without an answer", async () => {
     const root = repo();
     const question = "unfamiliar API?";
+    let launched = 0;
     const result = await planResearch([question], {
       root,
       budget: 16,
       researchOne: async (_question, _share, artifactOut) => {
+        launched += 1;
         writeBrief(artifactOut, BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
         return { toolCalls: 2 };
       },
     });
     expect(result.unanswered).toEqual([question]);
-    expect(result.neverResearched).toEqual([]);
+    expect(launched, "PRDR-264 reshapes a refused brief once; both attempts were paid for and neither was skipped").toBe(2);
   });
 
   /**
@@ -281,7 +288,7 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
     const said = notes.join(" ");
     expect(said, "a settled question is still carried — the human has to answer it").toContain("2 question(s) carried to PRESENT");
     expect(said, "and it is counted as settled, not as a ceiling to raise").toContain(
-      "1 settled as undecidable (only a human can answer), 1 researched without a usable answer, 0 never researched",
+      "1 settled as undecidable (only a human can answer), 1 researched without a usable answer",
     );
     expect(said, "the note names who decides it, because that is the only way it gets answered").toContain("the founder");
     expect(

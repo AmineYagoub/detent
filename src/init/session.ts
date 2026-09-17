@@ -345,7 +345,7 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
    * gate lets through; `passed` is set only after the gate did not throw.
    */
   if (request.batch === undefined || !request.batch.passed) {
-    ledger.assertLaunchAllowed();
+    ledger.recordLaunch();
     if (request.batch !== undefined) request.batch.passed = true;
   }
   journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });

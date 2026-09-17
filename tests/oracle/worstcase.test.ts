@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ConfigRejectedError,
-  UnboundedWorstCaseError,
-  loadConfig,
-  maxPossibleSessions,
-} from "../../src/kernel/worstcase.js";
+import { UnboundedWorstCaseError, loadConfig, maxPossibleSessions } from "../../src/kernel/worstcase.js";
 import { tableWith } from "../../src/kernel/machine.js";
 import { DEFAULT_BUDGETS } from "../helpers.js";
 
@@ -96,17 +91,20 @@ describe("T-014 maxPossibleSessions (X-1)", () => {
     expect(config.budgets.sessions).toBeGreaterThan(computedWorstCase);
   });
 
-  it("rejects at load a config whose net is at or below the computed worst case, naming both numbers", () => {
+  /**
+   * PRDR-265: this used to assert the opposite — a config whose `sessions` sat
+   * at or below the computed worst case was refused at load, naming both
+   * numbers. `sessions` counts now, so it cannot cut a run short, and refusing
+   * to LOAD over it was enforcing a budget at the one moment nothing had been
+   * spent: the operator was told to raise a ceiling whose only remaining job is
+   * to be reported. The walk that produces `computedWorstCase` is untouched and
+   * still returns, which is what the next test pins.
+   */
+  it("loads a config whose net sessions are below the computed worst case, and still computes it", () => {
     const computed = maxPossibleSessions(DEFAULT_BUDGETS);
-    expect(() => loadConfig(validConfig({ budgets: { run_spend_usd: 25, sessions: computed } }))).toThrow(
-      ConfigRejectedError,
-    );
-    try {
-      loadConfig(validConfig({ budgets: { run_spend_usd: 25, sessions: computed } }));
-    } catch (err) {
-      expect(String(err)).toContain(String(computed));
-      expect(String(err)).toContain("worst path");
-    }
+    const loaded = loadConfig(validConfig({ budgets: { run_spend_usd: 25, sessions: 1 } }));
+    expect(loaded.config.budgets.sessions, "the operator's number is kept exactly as written").toBe(1);
+    expect(loaded.computedWorstCase, "and the termination proof still runs and still reports").toBe(computed);
   });
 
   it("a budgets object omitting run_spend_usd loads with the X-1′ default (PRDR-083)", () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { RunJournal } from "../../src/kernel/journal.js";
-import { NoProgressError, SpendLedger, readRecordedSpend, type ProgressBreaker } from "../../src/kernel/ledger.js";
+import { SpendLedger, readRecordedSpend, type ProgressBreaker } from "../../src/kernel/ledger.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
 import { okResult } from "../../src/sessions/mock.js";
 import { removeTree } from "../helpers.js";
@@ -40,21 +40,26 @@ async function root(): Promise<string> {
   return made.root;
 }
 
-/** Drive a fresh ledger through `sessions` launches at one price, then ask for the verdict. */
+/**
+ * Drive a fresh ledger through `sessions` launches at one price, then ask for
+ * the verdict.
+ *
+ * PRDR-265: the verdict used to be an exception and is now a sentence. Every
+ * assertion below reads the TEXT and is unchanged by that — what D-14 and D-15
+ * are about is which sessions the breaker counts and what evidence it carries,
+ * and neither depends on whether the number halts the run.
+ */
 async function verdict(cost: number, sessions: number, breaker: ProgressBreaker = PRODUCTION): Promise<string> {
   const r = await root();
   const journal = RunJournal.open(r);
+  const said: string[] = [];
   try {
-    const ledger = new SpendLedger(r, journal, 0, breaker);
+    const ledger = new SpendLedger(r, journal, 0, breaker, (t) => said.push(t));
     for (let i = 0; i < sessions; i += 1) {
       ledger.record(`t${String(i)}`, 0, "planner", okResult({ costEstimateUsd: cost }), AT);
     }
-    try {
-      ledger.assertLaunchAllowed();
-      return "allowed";
-    } catch (err) {
-      return (err as Error).message;
-    }
+    ledger.recordLaunch();
+    return said.find((t) => t.includes("no-progress breaker")) ?? "allowed";
   } finally {
     journal.close();
   }
@@ -115,15 +120,12 @@ describe("D-15 the halt carries evidence, not a contradiction", () => {
   const halt = async (breaker: ProgressBreaker, drive: (ledger: SpendLedger) => void): Promise<string> => {
     const r = await root();
     const journal = RunJournal.open(r);
+    const said: string[] = [];
     try {
-      const ledger = new SpendLedger(r, journal, 0, breaker);
+      const ledger = new SpendLedger(r, journal, 0, breaker, (t) => said.push(t));
       drive(ledger);
-      try {
-        ledger.assertLaunchAllowed();
-        return "allowed";
-      } catch (err) {
-        return (err as Error).message;
-      }
+      ledger.recordLaunch();
+      return said.find((t) => t.includes("no-progress breaker")) ?? "allowed";
     } finally {
       journal.close();
     }
@@ -169,22 +171,34 @@ describe("D-14 the mean's denominator counts sessions that transacted", () => {
   const KSAR_PAID = [3.2017305, 4.030335999999999, 3.79553];
   const KSAR_TOTAL = 11.0275965;
 
-  const ksar = async (): Promise<{ ledger: SpendLedger; journal: RunJournal }> => {
+  const ksar = async (): Promise<{ ledger: SpendLedger; journal: RunJournal; said: string[] }> => {
     const r = await root();
     const journal = RunJournal.open(r);
-    const ledger = new SpendLedger(r, journal, 0, PRODUCTION);
+    const said: string[] = [];
+    const ledger = new SpendLedger(r, journal, 0, PRODUCTION, (t) => said.push(t));
     for (const [i, cost] of KSAR_PAID.entries()) ledger.record(`p${String(i)}`, 0, "planner", okResult({ costEstimateUsd: cost, turns: 38 }), AT);
     for (let i = 0; i < 21; i += 1) {
       ledger.record(`c${String(i)}`, 0, "planner", okResult({ costEstimateUsd: 0, crashed: true, turns: 18 }), AT);
     }
-    return { ledger, journal };
+    return { ledger, journal, said };
   };
 
-  it("twenty-one crash rows at $0 do not halt a run three paid sessions in (the live shape)", async () => {
-    const { ledger, journal } = await ksar();
+  /**
+   * PRDR-265 kept this test's subject and changed its verb: "do not halt" is
+   * now "have nothing to say". D-14 is about the DENOMINATOR — twenty-one rows
+   * that transacted nothing must not drag the mean down until three paid
+   * sessions look like a runaway — and that arithmetic is what decides whether
+   * the breaker speaks, exactly as it used to decide whether it threw.
+   */
+  it("twenty-one crash rows at $0 say nothing about a run three paid sessions in (the live shape)", async () => {
+    const { ledger, journal, said } = await ksar();
     try {
       expect(ledger.progressThreshold(), "the three sessions that transacted are the denominator").toBeCloseTo((KSAR_TOTAL / 3) * 20, 6);
-      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      ledger.recordLaunch();
+      expect(
+        said.filter((t) => t.includes("no-progress breaker")),
+        "$11.03 against a threshold of $73.52 — the crash rows must not make this look like a runaway",
+      ).toEqual([]);
     } finally {
       journal.close();
     }
@@ -216,7 +230,10 @@ describe("D-14 the mean's denominator counts sessions that transacted", () => {
       expect(Number.isFinite(threshold), "0/0 is NaN, Math.max(5,0,NaN) is NaN, and x > NaN is always false").toBe(true);
       expect(threshold, "the floor is a MINIMUM, not a fallback").toBe(5);
       expect(readRecordedSpend(r), "their money is still money").toBeCloseTo(7.2, 6);
-      expect(() => ledger.assertLaunchAllowed()).toThrow(NoProgressError);
+      const said: string[] = [];
+      const speaking = new SpendLedger(r, journal, 0, PRODUCTION, (t) => said.push(t));
+      speaking.recordLaunch();
+      expect(said.join(" "), "$7.20 past a floor of $5 is worth saying").toContain("no-progress breaker");
     } finally {
       journal.close();
     }

@@ -5,8 +5,6 @@ import {
   DriftHaltSignal,
   EscrowError,
   SessionRefusal,
-  NoProgressError,
-  SpendExhaustedError,
   TransitionError,
   type RefereeCore,
 } from "../kernel/referee.js";
@@ -142,7 +140,14 @@ export async function callTool(core: RefereeCore, name: string, rawInput: unknow
     if (err instanceof DriftHaltSignal) {
       return { error: { code: "DRIFT_HALT", message: err.message } };
     }
-    if (err instanceof Breach || err instanceof SpendExhaustedError || err instanceof NoProgressError) {
+    /**
+     * PRDR-265: `Breach` alone. This arm also named `SpendExhaustedError` and
+     * `NoProgressError`, which had no throw site between them — PRDR-191
+     * converted `run_spend_usd` to an advisory total and left its exception
+     * wired in here, where it read as a live budget route for four releases.
+     * Both classes are gone with the ceilings that count instead of halting.
+     */
+    if (err instanceof Breach) {
       return { error: { code: "BREACH", message: err.message } };
     }
     /** PRDR-112: a backend refusal or outage is a structured route, so a driver can back off and retry. */

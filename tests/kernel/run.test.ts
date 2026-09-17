@@ -660,7 +660,22 @@ describe("T-041 X-1 enforcement fixtures", () => {
     expect(transitions(root).at(-1)).toMatchObject({ event: "BUDGET_BREACH", to: "NEEDS_HUMAN" });
   });
 
-  it("the net-sessions backstop trips at launch (unreachable via loadConfig — tested via runWithConfig)", async () => {
+  /**
+   * PRDR-265 turned this test into the demonstration its own ticket rests on.
+   *
+   * It used to assert that `sessions: 1` refused the blind fix at launch —
+   * "exactly one launch (implement)" — and the run ended on a ceiling. That
+   * backstop is gone: `sessions` counts. What ends the run instead is the
+   * escalation LADDER, which this ticket deliberately did not touch, and this
+   * is the whole-run evidence that the carve-out was the right call. The ticket
+   * still reaches NEEDS_HUMAN, and it gets there by running out of rungs rather
+   * than out of budget — one blind fix, one research session, one informed fix,
+   * then `machine.ts`'s direct edge to NEEDS_HUMAN.
+   *
+   * A regression that made any ladder key count-only shows up here as a run
+   * that does not stop.
+   */
+  it("a sessions ceiling of 1 stops nothing, and the ladder still terminates the ticket", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
@@ -704,11 +719,12 @@ describe("T-041 X-1 enforcement fixtures", () => {
     const outcome = await runWithConfig(opts(root, backend), loaded);
 
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
-    /** Exactly one launch (implement); the blind fix was refused at launch. */
-    expect(backend.calls.map((c) => c.role)).toEqual(["implement"]);
+    expect(
+      backend.calls.map((c) => c.role),
+      "four sessions against a ceiling of one: the number is counted, and it orders nothing",
+    ).toEqual(["implement", "blind_fix", "research", "informed_fix"]);
     const t1 = readTicket(root, "t1");
-    expect(t1.state).toBe("NEEDS_HUMAN");
-    expect(t1.notes.map((n) => n.text).join(" ")).toContain("net session ceiling");
+    expect(t1.state, "and the run still ends — on the ladder's own terminator, not on a budget").toBe("NEEDS_HUMAN");
   });
 });
 

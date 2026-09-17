@@ -454,7 +454,7 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     expect(questionHash("a")).not.toBe(questionHash("b"));
   });
 
-  it("the 16-call ceiling is enforced per init, and exhaustion joins the AWAIT_INFO batch", async () => {
+  it("the 16-call pool is DIVIDED per init, and every question gets its share", async () => {
     const root = repo();
     const questions = ["q one?", "q two?", "q three?"];
     const notes: string[] = [];
@@ -478,26 +478,42 @@ describe("T-063 planning research (C-3a, D-11)", () => {
      * ceiling was never the defect and still holds exactly; what changed is
      * that holding it no longer costs the other questions their session.
      */
-    expect(launched, "a question that overruns is charged its share, and cannot spend another's").toBe(3);
-    expect(result.toolCallsUsed).toBe(16);
-    expect(result.toolCallsUsed).toBeLessThanOrEqual(BUDGETS.planning_research_tool_calls);
-    expect(result.unanswered, "all three were researched, and all three parsed").toEqual([]);
+    expect(launched, "a question that overruns cannot take another question's share of the division").toBe(3);
     /**
-     * C-3a's exhaustion arm still exists and is reachable only on a pool too
-     * small to fund one call per question — covered in `research-share.test.ts`,
-     * because reaching it here would no longer be this test's subject.
+     * PRDR-265 (D-18): this asserted `toolCallsUsed === 16` and `<= BUDGETS
+     * .planning_research_tool_calls`, which was true only because the charge
+     * was clamped to each share. Three sessions each reporting 16 calls really
+     * made 48, and the pool cannot refuse any of them — so 48 is what the
+     * operator is shown. The DIVISION is what this test is about and is
+     * unchanged: each question was still asked for its own cut, which is what
+     * `launched === 3` and the "is held for" note below pin.
      */
+    expect(result.toolCallsUsed, "three sessions at 16 calls apiece is 48, whatever the pool said").toBe(48);
+    expect(result.toolCallsUsed).toBeGreaterThan(BUDGETS.planning_research_tool_calls);
+    expect(result.unanswered, "all three were researched, and all three parsed").toEqual([]);
     expect(notes.join(" "), "the division is reported so an operator can see why a share was small").toContain("is held for");
+    expect(notes.join(" "), "and so is the overrun, which is the half the clamp used to hide").toContain("OVERRAN");
   });
 
-  it("an over-reporting backend cannot push the counter past the ceiling", async () => {
+  /**
+   * PRDR-265 turned this one around too, and it is the clearest single case.
+   * The old title was "an over-reporting backend cannot push the counter past
+   * the ceiling" and it asserted 16 — a session that reported 9999 calls was
+   * recorded as having made 16. Whether the backend is over-reporting or the
+   * session really did run away, 16 is the one answer that is certainly wrong,
+   * and it is what run 4 showed the operator (D-18).
+   */
+  it("a session reporting far past its share is counted at what it reported", async () => {
     const root = repo();
+    const notes: string[] = [];
     const result = await planResearch(["q?"], {
       root,
       budget: 16,
+      note: (t) => notes.push(t),
       researchOne: writes(VALID_BRIEF, 9999),
     });
-    expect(result.toolCallsUsed).toBe(16);
+    expect(result.toolCallsUsed, "an implausible figure is an observation, not a number to round down").toBe(9999);
+    expect(notes.join(" "), "and it is flagged against the share it was asked for").toContain("OVERRAN");
   });
 
   it("a brief citing a URL with no local_search is refused — X-6a, the SHARED validator", async () => {

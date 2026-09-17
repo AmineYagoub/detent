@@ -93,27 +93,24 @@ export async function researchStage(deps: ResearchDeps): Promise<ResearchOutcome
   });
 
   /**
-   * X-1 (PRDR-250): the ceiling read back, before the brief is trusted.
+   * X-1 (PRDR-265): the ceiling read back and REPORTED, never enforced.
    *
-   * `tool_call_ceiling` reached the prompt and nothing ever compared anything to
-   * it, so a session that ignored it had its brief accepted AND written to the
-   * env-keyed cache on the same terms as one that stayed inside its budget —
-   * seeding every later run from an unbounded session. The tokens are already
-   * spent by here and this does not recover them; what it bounds is whether the
-   * result is trusted, which is what RESEARCH_DRY is for.
+   * PRDR-250 made an over-budget session's brief RESEARCH_DRY, on the reasoning
+   * that the tokens were already spent and the one thing still in reach was
+   * whether the result got trusted and cached. That traded a brief the repo had
+   * already paid for against a number that orders nothing, and it threw away
+   * the more useful half: a session that overran by one turn lost a sound brief,
+   * while a session that stayed inside its budget reported nothing at all.
    *
-   * It does NOT refuse the ninth call, which is what the implementation plan's
-   * AC asks. The only mechanism that could is a per-session turn ceiling, and
-   * PRDR-106 removed those so that an SDK throw is unambiguously a crash rather
-   * than a budget event; reintroducing one here would make an over-budget
-   * research session indistinguishable from a transport death at the seam that
-   * classifies crashes (S-4/PRDR-053).
+   * `failure_research_tool_calls` is a budget, not a sequencer — no transition
+   * depends on it — so it counts. `tool_call_ceiling` still reaches the prompt
+   * above, which is the only honest way the session learns the figure; the turn
+   * count is announced on EVERY session, so the operator sees the spend of the
+   * sessions that behaved as well as the ones that did not. What bounds the
+   * money is `run_spend_usd`'s advisory total (X-1⁵) and the breaker (T-048).
    */
-  if (turns > ceiling) {
-    const detail = `research exceeded its tool-call ceiling: ${String(turns)} turns against ${String(ceiling)} (X-1)`;
-    deps.note(detail);
-    return { event: researchDry(detail), cached: false };
-  }
+  const overran = turns > ceiling ? " — OVER, and the rest is real spend this ceiling does not see" : "";
+  deps.note(`research used ${String(turns)} turns against a stated ceiling of ${String(ceiling)}${overran} (X-1)`);
 
   const raw = deps.readArtifact();
   const parsed = raw === null ? null : parseArtifact(researchBriefSchema, raw);

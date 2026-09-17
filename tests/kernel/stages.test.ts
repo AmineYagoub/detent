@@ -329,15 +329,21 @@ describe("T-045 research cache (X-6, D-18)", () => {
   });
 
   /**
-   * X-1 (PRDR-250) — the ceiling is read back, not only interpolated.
+   * X-1 (PRDR-265) — the ceiling is read back and REPORTED, and the brief is
+   * judged on its own merits.
    *
-   * `tool_call_ceiling` reached the prompt and nothing compared anything to it,
-   * so a session could make any number of calls and have its brief accepted and
-   * CACHED on the same terms as one that stayed inside its budget. Turns are the
-   * proxy, on init's precedent: S-4's telemetry has no per-call counter, so a
-   * turn is one call's worth of budget (C-3a).
+   * PRDR-250 made an over-ceiling session RESEARCH_DRY and kept its brief out
+   * of the cache, on the reasoning that the tokens were spent regardless and
+   * what remained in reach was whether the result got trusted. This asserted
+   * that. It is inverted here because the trade was a bad one: a sound brief,
+   * already paid for, was thrown away over a number that orders nothing — and
+   * `failure_research_tool_calls` is a budget, not a sequencer.
+   *
+   * What replaces it is the note, asserted below. Turns are still the proxy for
+   * calls on init's precedent (S-4's telemetry has no per-call counter), and
+   * the figure still reaches the prompt as `tool_call_ceiling`.
    */
-  it("an over-ceiling research session is RESEARCH_DRY, and its brief is not cached", async () => {
+  it("an over-ceiling research session keeps its brief, and its overrun is reported", async () => {
     const root = await fixture();
     const signature = "a".repeat(64);
     const env: EnvFingerprint = {
@@ -358,22 +364,28 @@ describe("T-045 research cache (X-6, D-18)", () => {
       local_search: { docs_checked: ["a"], code_checked: [] },
     };
 
+    const said: string[] = [];
     const outcome = await researchStage({
       root,
       launch: async () => CEILINGS.failure_research_tool_calls.default + 1,
       readArtifact: () => brief,
       readFailureSignature: () => signature,
       budgets: { failure_research_tool_calls: CEILINGS.failure_research_tool_calls.default },
-      note: () => {},
+      note: (t) => said.push(t),
       env: async () => env,
       ticketInputs: {},
     });
 
-    expect(outcome.event.event, "a session past its ceiling is dry, however good its brief looks").toBe("RESEARCH_DRY");
+    expect(outcome.event.event, "the turn count is not a verdict on the brief").toBe("RESEARCH_VALID");
     expect(
       existsSync(briefCachePath(root, cacheKey(signature, env))),
-      "an over-budget brief must not seed the cache for every later run",
-    ).toBe(false);
+      "and a brief the validator accepted is worth caching, whatever it cost to get",
+    ).toBe(true);
+    const ceiling = CEILINGS.failure_research_tool_calls.default;
+    expect(said.join(" "), "the operator is told the turns and the figure they were measured against").toContain(
+      `${String(ceiling + 1)} turns against a stated ceiling of ${String(ceiling)}`,
+    );
+    expect(said.join(" "), "and that this one went past it").toContain("OVER");
   });
 
   it("a research session inside its ceiling is unaffected", async () => {

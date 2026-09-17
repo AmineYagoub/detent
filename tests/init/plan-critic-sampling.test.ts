@@ -136,10 +136,18 @@ describe("C-4⁗″ the review is sampled and only what recurs buys the revision
  * gate at the same figure, so the bound is the batch, k sessions — and it has to
  * be the batch whether the draws run together or one after another, or the
  * bound would depend on scheduling. The breaker here allows exactly one mean
- * session's worth of spend: gated per launch, the third draw is refused.
+ * session's worth of spend, so a per-launch bound would have stopped the third
+ * draw.
+ *
+ * PRDR-265: the breaker refuses nothing now, and D-28′'s property survives as
+ * the thing that replaced it. "Gated once per batch" becomes "said once per
+ * no-progress episode" — the same claim that the figure is evaluated against
+ * the unit of work rather than the individual launch, and the same failure it
+ * was written against: an operator told the same thing four times learns to
+ * scroll past it, exactly as a driver refused mid-batch learned nothing.
  */
-describe("D-28′ a batch of review draws is gated once", () => {
-  it("runs every draw past a breaker that would have refused the third, and refuses the launch after the batch", async () => {
+describe("D-28′ a batch of review draws is accounted once", () => {
+  it("runs every draw, says it once, and does not refuse the launch after the batch", async () => {
     const root = repo();
     const journal = RunJournal.open(root);
     const backend: SessionBackend = {
@@ -150,12 +158,14 @@ describe("D-28′ a batch of review draws is gated once", () => {
         return okResult({ costEstimateUsd: 1 });
       },
     };
+    const said: string[] = [];
     const init: InitSessionDeps = {
       root,
       backend,
       prompts: PROMPTS,
       spendCeiling: 0,
       journal,
+      note: (t) => said.push(t),
       /* One mean session: $1 once the first draw has been paid for. */
       progressBreaker: { spend_without_progress_floor_usd: 0, spend_without_progress_multiple: 1, spend_without_progress_sessions: 1 },
     };
@@ -175,11 +185,23 @@ describe("D-28′ a batch of review draws is gated once", () => {
     };
     try {
       const review = await sampleReviewPlan(deps, TICKETS);
-      expect(review?.reads, "all three draws ran — the batch passed one gate").toHaveLength(3);
-      await expect(
-        launchInitSession(init, { role: "planner", inputs: {}, artifactOut: path.join(stateDir(root), "state", "after.json") }),
-        "the launch AFTER the batch is refused: the bound is the batch, not the run",
-      ).rejects.toThrow(/no-progress breaker/);
+      expect(review?.reads, "all three draws ran").toHaveLength(3);
+      await launchInitSession(init, {
+        role: "planner",
+        inputs: {},
+        artifactOut: path.join(stateDir(root), "state", "after.json"),
+      });
+      /**
+       * Three draws and the launch after them produce ONE accounting, because
+       * the batch is gated once — gated per draw, draws two and three would
+       * each have spoken. The say-once flag is a separate mechanism, pinned in
+       * `tests/kernel/x1-counting.test.ts`; this line would pass with or
+       * without it, and it is the batch that D-28′ is about.
+       */
+      expect(
+        said.filter((t) => t.includes("no-progress breaker")),
+        "the batch is accounted as one unit, not once per draw",
+      ).toHaveLength(1);
     } finally {
       journal.close();
     }

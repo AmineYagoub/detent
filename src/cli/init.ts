@@ -100,7 +100,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
    * alone. `init` is the FIRST command an operator runs and the one whose
    * sessions cannot use the fixture backend, so its sessions are the first
    * genuinely billed ones in a project's life. Two of them raced a shared root
-   * to $16 against a $10 ceiling, neither ever seeing SpendExhaustedError.
+   * to $16 against a $10 ceiling, and neither one ever refused a launch.
    *
    * Taken ABOVE the live-auth probe deliberately. `hasLiveBackendAuth()` spawns
    * the `claude` CLI with a 10s timeout, so a second invocation should refuse

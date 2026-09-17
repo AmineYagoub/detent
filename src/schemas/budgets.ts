@@ -55,11 +55,18 @@ export const CEILINGS = {
   research_sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 1 },
   hypotheses: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 2 },
   /**
-   * Net session ceiling per generation: strictly above the computed worst case
-   * (T-014). Moved with X-1‴ (three review-fix rounds) and A-5′ (one review
-   * relaunch per IN_REVIEW entry), PRDR-108/109 — computed 24, net 28.
+   * Net session ceiling per generation: a COUNT since PRDR-265.
+   *
+   * It was "strictly above the computed worst case (T-014)", enforced twice —
+   * refused at `loadConfig` and thrown at the launch seam. Neither ordered
+   * anything: the ladder decides what happens next, and `maxPossibleSessions`'s
+   * walk over the transition table is the actual termination proof. That walk
+   * is KEPT and still refuses a transition table with a cycle in it; what goes
+   * is the arithmetic comparing a configured number against it.
+   * Moved with X-1‴ (three review-fix rounds) and A-5′ (one review relaunch per
+   * IN_REVIEW entry), PRDR-108/109 — computed 24, net 28.
    */
-  sessions: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 28 },
+  sessions: { scope: "ticket/generation", breachTarget: "NONE", default: 28 },
   ticket_wall_clock_ms: { scope: "ticket/generation", breachTarget: "BUDGET_BREACH", default: 3_600_000 },
   /**
    * X-1″ (PRDR-106): a sizing target, not a ceiling. It reaches PLAN and
@@ -72,8 +79,8 @@ export const CEILINGS = {
    * because that is still the size of one honest implement session.
    */
   turns_per_stage: { scope: "plan-sizing", breachTarget: "NONE", default: 80 },
-  failure_research_tool_calls: { scope: "research-session", breachTarget: "RESEARCH_DRY", default: 8 },
-  planning_research_tool_calls: { scope: "init", breachTarget: "AWAIT_INFO_BATCH", default: 16 },
+  failure_research_tool_calls: { scope: "research-session", breachTarget: "NONE", default: 8 },
+  planning_research_tool_calls: { scope: "init", breachTarget: "NONE", default: 16 },
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
   gate_timeout_ms: { scope: "gate-execution", breachTarget: "RED_GATE_NO_EXIT", default: 900_000 },
   binding_probe_timeout_ms: { scope: "binding-probe", breachTarget: "REJECTED_CANDIDATE", default: 120_000 },
@@ -89,7 +96,7 @@ export const CEILINGS = {
    * finished slices for $0 (C-8), so a purely derived threshold would collapse
    * toward zero and halt on the first dollar of real work.
    */
-  spend_without_progress_floor_usd: { scope: "run", breachTarget: "BUDGET_BREACH", default: 5 },
+  spend_without_progress_floor_usd: { scope: "run", breachTarget: "NONE", default: 5 },
   /**
    * X-1⁵: how many sessions' worth of OBSERVED spend may pass with nothing
    * completing. The scale-free term, and the one that carries the threshold
@@ -98,9 +105,9 @@ export const CEILINGS = {
    * total: it read ~3x this project's slice cost and would have read 0.3x on a
    * project whose sessions cost ten times as much.
    */
-  spend_without_progress_sessions: { scope: "run", breachTarget: "BUDGET_BREACH", default: 20 },
+  spend_without_progress_sessions: { scope: "run", breachTarget: "NONE", default: 20 },
   /** X-1⁵: multiplied by the observed cost of the units this run has completed. */
-  spend_without_progress_multiple: { scope: "run", breachTarget: "BUDGET_BREACH", default: 3 },
+  spend_without_progress_multiple: { scope: "run", breachTarget: "NONE", default: 3 },
 } as const satisfies Record<string, CeilingSpec>;
 
 export type CeilingKey = keyof typeof CEILINGS;

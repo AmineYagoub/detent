@@ -8,18 +8,24 @@ import type { RunJournal } from "./journal.js";
 import { recoverObjects } from "./jsonl-recover.js";
 
 /**
- * T-048 — the ledger and the cross-generation spend backstop (S-4, X-8, D-25).
+ * T-048 — the ledger, and what it counts (S-4, X-8, D-25).
  *
- * `run_spend_usd` is a LAUNCH GATE: the kernel refuses to launch any session
- * once cumulative recorded spend has reached the ceiling. Because telemetry
- * arrives only when a session ends, the guarantee is a bounded overshoot —
- * at most the one session in flight when the ceiling was crossed — and that
- * bound is deliberate: a never-overshoot policy is unachievable against a
- * backend that prices work after doing it.
+ * PRDR-265: nothing in this file refuses a launch any more. This block said
+ * "`run_spend_usd` is a LAUNCH GATE: the kernel refuses to launch any session
+ * once cumulative recorded spend has reached the ceiling" — untrue since
+ * PRDR-191 (X-1⁵) demoted that total to advisory, and left standing for the
+ * whole of the intervening time. It is this repo's defining defect class, and
+ * it sat at the top of the module it misdescribes.
  *
- * Spend is summed from `ledger.jsonl` itself at open, so the backstop is
- * cumulative across generations AND across resumed invocations (X-8) — a
- * requeue never resets the money.
+ * What this file does is MEASURE: cumulative spend, the mean session cost, the
+ * cost of the last completed unit, and the no-progress threshold those imply.
+ * Crossing a threshold is announced once, never thrown. Both figures still bound
+ * nothing on their own — what bounds a run is the ladder, the wall clock and the
+ * load-time worst-case walk (X-1, PRDR-265).
+ *
+ * Spend is summed from `ledger.jsonl` itself at open, so the count is cumulative
+ * across generations AND across resumed invocations (X-8) — a requeue never
+ * resets the money.
  */
 
 /**
@@ -60,6 +66,16 @@ interface ProgressMark {
    * `spent`, one line above, left in place when that one was fixed.
    */
   readonly advisoryAnnounced: boolean;
+  /**
+   * PRDR-265: the same say-once discipline for the no-progress breaker, which
+   * announces now instead of throwing. Persisted for the same reason
+   * `advisoryAnnounced` is — `init` builds a `SpendLedger` per launch, so an
+   * instance field would reset each time and announce on every session.
+   *
+   * Unlike the advisory flag this one is CLEARED by progress: finishing a unit
+   * ends the episode, and the next one is news again.
+   */
+  readonly breakerAnnounced: boolean;
 }
 
 export function readProgressMark(root: string): ProgressMark {
@@ -69,10 +85,11 @@ export function readProgressMark(root: string): ProgressMark {
       spent: typeof raw.spent === "number" ? raw.spent : null,
       unitCost: typeof raw.unitCost === "number" ? raw.unitCost : null,
       advisoryAnnounced: raw.advisoryAnnounced === true,
+      breakerAnnounced: raw.breakerAnnounced === true,
     };
   } catch {
     /* Absent or unreadable: nothing has completed that we can prove, so the floor governs. */
-    return { spent: null, unitCost: null, advisoryAnnounced: false };
+    return { spent: null, unitCost: null, advisoryAnnounced: false, breakerAnnounced: false };
   }
 }
 
@@ -135,6 +152,13 @@ function breakerBound(e: BreakerEvidence): string {
 /**
  * D-15 (PRDR-261): how close to the threshold counts as AT it.
  *
+ * PRDR-265 kept this. The comparison it guards survives the conversion to
+ * counting — it decides whether to ANNOUNCE rather than whether to refuse, on
+ * the precedent `overAdvisoryTotal` set for `run_spend_usd`. A boundary that
+ * decides what an operator is told is still a boundary worth getting right, and
+ * deleting the tolerance while keeping the `>` would have restored exactly the
+ * coin flip described below, one rung quieter.
+ *
  * At rows === spend_without_progress_sessions the two sides of the comparison
  * are one number and the design's own `>` says ALLOWED. IEEE-754 decided it
  * instead: (11.0275965 / 20) * 20 is 11.027596499999997803, one ulp low, and a
@@ -154,29 +178,22 @@ function breakerBound(e: BreakerEvidence): string {
  */
 const TIE_TOLERANCE = 1e-9;
 
-export class NoProgressError extends Error {
-  constructor(readonly evidence: BreakerEvidence) {
-    super(
-      `no-progress breaker (X-1⁵): $${evidence.sinceProgress.toFixed(4)} spent without completing a unit of work, ` +
-        `past ${breakerBound(evidence)}. Nothing has finished in that time, which is what a runaway looks like ` +
-        "and what working never does. Everything completed so far is checkpointed.",
-    );
-    this.name = "NoProgressError";
-  }
-}
-
-/** @deprecated X-1⁵ (PRDR-191): the total no longer halts a run. Retained so older rows and callers still type-check. */
-export class SpendExhaustedError extends Error {
-  constructor(
-    readonly spent: number,
-    readonly ceiling: number,
-  ) {
-    super(
-      `run-spend exhaustion (D-25): recorded spend $${spent.toFixed(4)} has reached the ceiling $${ceiling.toFixed(4)} — ` +
-        `no further session launches; the ceiling is enforced against the backend's cost estimate (S-4)`,
-    );
-    this.name = "SpendExhaustedError";
-  }
+/**
+ * PRDR-265: the sentence the breaker used to throw, now the sentence it says.
+ *
+ * `NoProgressError` and `SpendExhaustedError` are both gone. The first had one
+ * throw site and this text was its whole value; the second had ZERO throw sites
+ * anywhere in src or tests — PRDR-191 converted `run_spend_usd` and left the
+ * class behind, still wired to a BREACH route in `referee/registry`, which read
+ * as a live budget path to anyone tracing how a breach happens.
+ */
+export function noProgressReport(evidence: BreakerEvidence): string {
+  return (
+    `no-progress breaker (X-1⁵): $${evidence.sinceProgress.toFixed(4)} spent without completing a unit of work, ` +
+    `past ${breakerBound(evidence)}. Nothing has finished in that time, which is what a runaway looks like ` +
+    "and what working never does. X-1 (PRDR-265): this is a figure, not a gate — the run continues, and what " +
+    "bounds it is the escalation ladder, the ticket wall clock and the load-time worst-case walk."
+  );
 }
 
 /**
@@ -275,7 +292,7 @@ export class SpendLedger {
      * anything to fire on. Found by the breaker staying silent in three tests
      * that should have tripped it.
      */
-    if (mark.spent === null) writeProgressMark(root, { spent: this.accumulated, unitCost: 0, advisoryAnnounced: false });
+    if (mark.spent === null) writeProgressMark(root, { spent: this.accumulated, unitCost: 0, advisoryAnnounced: false, breakerAnnounced: false });
     this.progressMark = mark.spent ?? this.accumulated;
     this.lastUnitCost = mark.unitCost ?? 0;
   }
@@ -291,8 +308,18 @@ export class SpendLedger {
     this.lastUnitCost = Math.max(0, spent - this.progressMark);
     this.progressMark = spent;
     this.accumulated = spent;
-    /* PRDR-195: carry the announcement flag; progress is not a reason to warn twice. */
-    writeProgressMark(this.root, { spent, unitCost: this.lastUnitCost, advisoryAnnounced: readProgressMark(this.root).advisoryAnnounced });
+    /*
+     * PRDR-195: carry the advisory flag; progress is not a reason to warn twice
+     * about a total that only ever grows. PRDR-265: CLEAR the breaker flag —
+     * finishing a unit is exactly the thing that ends a no-progress episode, so
+     * the next one is a new fact and not a repeat.
+     */
+    writeProgressMark(this.root, {
+      spent,
+      unitCost: this.lastUnitCost,
+      advisoryAnnounced: readProgressMark(this.root).advisoryAnnounced,
+      breakerAnnounced: false,
+    });
   }
 
   /** X-1⁵: `run_spend_usd` is advisory now — counted and reported, never fatal. */
@@ -311,7 +338,7 @@ export class SpendLedger {
     if (!this.overAdvisoryTotal()) return;
     const mark = readProgressMark(this.root);
     if (mark.advisoryAnnounced) return;
-    writeProgressMark(this.root, { spent: mark.spent, unitCost: mark.unitCost, advisoryAnnounced: true });
+    writeProgressMark(this.root, { spent: mark.spent, unitCost: mark.unitCost, advisoryAnnounced: true, breakerAnnounced: mark.breakerAnnounced });
     this.announce?.(
       `spend has passed the advisory run_spend_usd of $${this.ceiling.toFixed(2)} ` +
         `(now $${this.accumulated.toFixed(2)}). X-1⁵: this is a figure, not a gate — the run continues, ` +
@@ -378,12 +405,16 @@ export class SpendLedger {
    * jointly spend past it. The file is the shared truth and reading it is not
    * the expensive part of a session.
    *
-   * X-1⁵ (PRDR-191): the TOTAL no longer refuses. It fired on success — a large
+   * X-1⁵ (PRDR-191): the TOTAL stopped refusing. It fired on success — a large
    * legitimate job reaches it by doing what it was asked — and late on failure,
-   * since a runaway burns for hours before any total is reached. What refuses
-   * is spend with nothing completing.
+   * since a runaway burns for hours before any total is reached.
+   *
+   * PRDR-265: and now neither does the breaker. Both are announced once and the
+   * run continues. This method is named for what it does: it records the launch
+   * and reports what it saw. It was `assertLaunchAllowed`, a name that promised
+   * a refusal it no longer performs.
    */
-  assertLaunchAllowed(): void {
+  recordLaunch(): void {
     const spent = Math.max(this.accumulated, readRecordedSpend(this.root));
     this.accumulated = spent;
     this.announceAdvisoryTotal();
@@ -402,7 +433,28 @@ export class SpendLedger {
     }
     const sinceProgress = spent - this.progressMark;
     const evidence: BreakerEvidence = { ...this.breakerTerms(), sinceProgress };
-    if (sinceProgress - evidence.threshold > evidence.threshold * TIE_TOLERANCE) throw new NoProgressError(evidence);
+    if (sinceProgress - evidence.threshold > evidence.threshold * TIE_TOLERANCE) this.announceBreaker(evidence);
+  }
+
+  /**
+   * PRDR-265: say it once per no-progress episode.
+   *
+   * `announceAdvisoryTotal` above is the finished template and this deliberately
+   * matches it — one flag in the progress mark, read before speaking, written
+   * after. The difference is when the flag clears: the advisory total only ever
+   * grows, so it is said once for the run, while a no-progress episode ENDS when
+   * something finishes, and the next one is news again (`noteProgress`).
+   */
+  private announceBreaker(evidence: BreakerEvidence): void {
+    const mark = readProgressMark(this.root);
+    if (mark.breakerAnnounced) return;
+    writeProgressMark(this.root, {
+      spent: mark.spent,
+      unitCost: mark.unitCost,
+      advisoryAnnounced: mark.advisoryAnnounced,
+      breakerAnnounced: true,
+    });
+    this.announce?.(noProgressReport(evidence));
   }
 
   /**
@@ -452,6 +504,15 @@ export function noteUnitComplete(root: string): void {
     spent,
     unitCost: Math.max(0, spent - (mark.spent ?? spent)),
     advisoryAnnounced: mark.advisoryAnnounced,
+    /**
+     * PRDR-265: the breaker's say-once RE-ARMS on progress, where the advisory
+     * total's does not. They are announcements about different quantities —
+     * the advisory is a one-time-ever statement about cumulative run spend,
+     * while the breaker is about spend since the LAST unit finished. A fresh
+     * stall after real progress is a new event, and an operator who fixed the
+     * first one is owed the second.
+     */
+    breakerAnnounced: false,
   });
 }
 

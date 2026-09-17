@@ -204,16 +204,28 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
     expect(backend.calls.length, "a run resuming against history has completed nothing to be judged on").toBeGreaterThan(0);
   });
 
-  it("spend with no slice completing does gate init (X-1⁵)", async () => {
+  /**
+   * PRDR-265: the pair above and below used to be "the old control no longer
+   * gates, the new one does". Both halves now say the same thing about the
+   * route and differ in what they measure, which is the point — the advisory
+   * total and the breaker are two figures about the same money, and neither
+   * decides whether init continues. The breaker still has to FIRE, because a
+   * count nobody is told is not a count.
+   */
+  it("spend with no slice completing is announced, and init runs on (X-1⁵)", async () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
     /* A floor below one mock session's own $0.001 estimate. */
     const budgets = { ...BUDGETS, spend_without_progress_floor_usd: 0.0001, spend_without_progress_sessions: 0.001 };
+    const notes: string[] = [];
 
-    await expect(runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets }))).rejects.toThrow(
-      /no-progress breaker/,
-    );
-    expect(backend.calls.length, "the first launch is allowed; the one after it is refused").toBeGreaterThan(0);
+    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets, note: (t) => notes.push(t) }));
+    expect(notes.join(" "), "money leaving with no slice finishing is still worth saying").toMatch(/no-progress breaker/);
+    expect(
+      notes.filter((t) => t.includes("no-progress breaker")),
+      "and said ONCE for the episode, not on every launch after the first",
+    ).toHaveLength(1);
+    expect(backend.calls.length, "every launch proceeds — the figure orders nothing").toBeGreaterThan(1);
   });
 });
 

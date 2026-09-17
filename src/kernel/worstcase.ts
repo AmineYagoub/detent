@@ -269,33 +269,25 @@ const configSchema = z.strictObject({
 });
 type Config = z.infer<typeof configSchema>;
 
-export class ConfigRejectedError extends Error {
-  constructor(
-    readonly net: number,
-    readonly computed: number,
-  ) {
-    super(
-      `config rejected: budgets.sessions is ${net}, but the worst path through the transition table needs ${computed}. ` +
-        `The net session budget must exceed the computed worst case (X-1); raise sessions above ${computed}.`,
-    );
-    this.name = "ConfigRejectedError";
-  }
-}
-
 export interface LoadedConfig {
   readonly config: Config;
   readonly computedWorstCase: number;
 }
 
 /**
- * R-9: parse, compute, assert, return. The CLI never sees an invalid config
- * object, so no caller can start a run against budgets that cannot complete.
+ * R-9: parse, compute, return. The CLI never sees a config whose transition
+ * table cannot terminate, because `maxPossibleSessions` still throws
+ * `UnboundedWorstCaseError` on a cycle — that walk IS the termination proof and
+ * PRDR-265 keeps it precisely because the ladder guards it depends on were
+ * carved out of the counting conversion.
+ *
+ * What PRDR-265 removes is the comparison against `budgets.sessions`. That
+ * ceiling counts now, so a config setting it below the computed figure is no
+ * longer wrong — it cannot refuse anything, and refusing to LOAD over it was
+ * enforcing a budget at the one moment nothing had been spent.
  */
 export function loadConfig(raw: unknown): LoadedConfig {
   const config = configSchema.parse(raw);
   const computed = maxPossibleSessions(config.budgets);
-  if (config.budgets.sessions <= computed) {
-    throw new ConfigRejectedError(config.budgets.sessions, computed);
-  }
   return { config, computedWorstCase: computed };
 }

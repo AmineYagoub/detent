@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RunJournal } from "../../src/kernel/journal.js";
-import { NoProgressError, SpendLedger, noteUnitComplete, readRecordedSpend } from "../../src/kernel/ledger.js";
+import { SpendLedger, noteUnitComplete, readRecordedSpend } from "../../src/kernel/ledger.js";
 import { EXIT_HUMAN_GATED, EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { ledgerRowSchema } from "../../src/schemas/records.js";
@@ -110,13 +110,13 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
       );
       ledger.record("t1", 0, "implement", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
       expect(ledger.spent()).toBeGreaterThan(0.01);
-      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      expect(() => ledger.recordLaunch()).not.toThrow();
       expect(ledger.overAdvisoryTotal()).toBe(true);
       /* Counting without reporting is not counting — but a warning on every launch is noise. */
       expect(said).toHaveLength(1);
       expect(said[0]).toContain("advisory");
-      ledger.assertLaunchAllowed();
-      ledger.assertLaunchAllowed();
+      ledger.recordLaunch();
+      ledger.recordLaunch();
       expect(said).toHaveLength(1);
 
       /**
@@ -134,22 +134,38 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
         { spend_without_progress_floor_usd: 100, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 },
         (t) => said.push(t),
       );
-      second.assertLaunchAllowed();
+      second.recordLaunch();
       expect(said).toHaveLength(1);
     } finally {
       journal.close();
     }
   });
 
-  it("halts when money goes out and nothing completes", async () => {
+  /**
+   * PRDR-265 inverted this test's verb. It asserted `toThrow(NoProgressError)`
+   * — the breaker HALTED the run — and what it measures is unchanged: money
+   * leaving with nothing finishing. The number is now announced to the operator
+   * instead of enforced against them, so the assertion moves from the exception
+   * to the sentence, which is the only place the figure was ever useful.
+   */
+  it("announces when money goes out and nothing completes", async () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
+    const said: string[] = [];
     try {
-      const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
+      const ledger = new SpendLedger(
+        root,
+        journal,
+        0,
+        { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 },
+        (t) => said.push(t),
+      );
       for (let i = 0; i < 3; i += 1) {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
       }
-      expect(() => ledger.assertLaunchAllowed()).toThrow(NoProgressError);
+      expect(() => ledger.recordLaunch(), "the launch proceeds — a budget does not decide this").not.toThrow();
+      expect(said.join(" "), "and the operator is told the figure").toContain("no-progress breaker");
+      expect(said.join(" "), "with the spend that produced it").toContain("12.0000");
     } finally {
       journal.close();
     }
@@ -163,7 +179,7 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
       for (let i = 0; i < 20; i += 1) {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 8 }), "2026-08-18T10:00:00.000Z");
         ledger.noteProgress();
-        expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+        expect(() => ledger.recordLaunch()).not.toThrow();
       }
       expect(ledger.spent()).toBeCloseTo(160, 6);
     } finally {
@@ -184,24 +200,29 @@ describe("X-1⁵ the run ceiling counts and does not block", () => {
       const ledger = new SpendLedger(root, journal, 0, { spend_without_progress_floor_usd: 10, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 });
       for (let i = 0; i < 8; i += 1) ledger.noteProgress();
       ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 5 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      expect(() => ledger.recordLaunch()).not.toThrow();
     } finally {
       journal.close();
     }
   });
 
-  it("carries the spend since the last unit in what it throws", async () => {
+  /** PRDR-265: the evidence is the point, and it survives the exception it used to travel in. */
+  it("carries the spend since the last unit in what it says", async () => {
     const root = await fixture();
     const journal = RunJournal.open(root);
+    const said: string[] = [];
     try {
-      const ledger = new SpendLedger(root, journal, 0, {
-        spend_without_progress_floor_usd: 1,
-        spend_without_progress_multiple: 3,
-        spend_without_progress_sessions: 1,
-      });
+      const ledger = new SpendLedger(
+        root,
+        journal,
+        0,
+        { spend_without_progress_floor_usd: 1, spend_without_progress_multiple: 3, spend_without_progress_sessions: 1 },
+        (t) => said.push(t),
+      );
       ledger.record("t1", 0, "planner", okResult({ costEstimateUsd: 9 }), "2026-08-18T10:00:00.000Z");
       ledger.record("t2", 0, "planner", okResult({ costEstimateUsd: 9 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed()).toThrow(/18\.00.*without completing/s);
+      ledger.recordLaunch();
+      expect(said.join(" ")).toMatch(/18\.00.*without completing/s);
     } finally {
       journal.close();
     }
@@ -418,18 +439,22 @@ describe("PRDR-219 the breaker measures from the mark on disk, not the one it wa
     const root = await fixture();
     const journal = RunJournal.open(root);
     try {
-      const ledger = new SpendLedger(root, journal, 0, BREAKER);
+      const said: string[] = [];
+      const ledger = new SpendLedger(root, journal, 0, BREAKER, (t) => said.push(t));
       for (let i = 0; i < 3; i += 1) {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
       }
       /* The run's DONE path: the file moves; the instance was never told. */
       noteUnitComplete(root);
-      expect(() => ledger.assertLaunchAllowed()).not.toThrow();
+      ledger.recordLaunch();
       /* And the unit's cost on disk is what the threshold derives from now. */
       ledger.record("t3", 0, "implement", okResult({ costEstimateUsd: 30 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed(), "12 × 3 = 36 allowed since the unit").not.toThrow();
+      ledger.recordLaunch();
+      const breakerSaid = (): string[] => said.filter((t) => t.includes("no-progress breaker"));
+      expect(breakerSaid(), "12 × 3 = 36 allowed since the unit — nothing to say yet").toEqual([]);
       ledger.record("t4", 0, "implement", okResult({ costEstimateUsd: 10 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed()).toThrow(NoProgressError);
+      ledger.recordLaunch();
+      expect(breakerSaid(), "past the threshold derived from the unit's own cost").toHaveLength(1);
     } finally {
       journal.close();
     }
@@ -467,11 +492,14 @@ describe("audit of PRDR-219: memory never falls behind the file", () => {
         ledger.record(`t${String(i)}`, 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
       }
       noteUnitComplete(root);
-      ledger.assertLaunchAllowed();
+      ledger.recordLaunch();
       /* A stale write: an older mark lands on disk after the instance adopted the newer one. */
-      writeFileSync(path.join(root, ".detent/state/progress.json"), JSON.stringify({ spent: 0, unitCost: 0, advisoryAnnounced: false }));
+      writeFileSync(
+        path.join(root, ".detent/state/progress.json"),
+        JSON.stringify({ spent: 0, unitCost: 0, advisoryAnnounced: false, breakerAnnounced: false }),
+      );
       ledger.record("t3", 0, "implement", okResult({ costEstimateUsd: 4 }), "2026-08-18T10:00:00.000Z");
-      expect(() => ledger.assertLaunchAllowed(), "$4 since the $12 unit, not $16 since nothing").not.toThrow();
+      expect(() => ledger.recordLaunch(), "$4 since the $12 unit, not $16 since nothing").not.toThrow();
     } finally {
       journal.close();
     }

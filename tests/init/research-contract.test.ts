@@ -216,7 +216,6 @@ describe("PRDR-264 a settled question is not a failed one", () => {
     const { result, seen } = await drive(root(), [Q], 8, (q) => undecidable(q));
     expect(result.undecidable, "the question is settled: research established there is nothing to find").toEqual([Q]);
     expect(result.unanswered, "and it is NOT in the batch that needs more research").toEqual([]);
-    expect(result.neverResearched).toEqual([]);
     expect(seen.notes.join(" "), "the operator is told who has to decide it").toContain("the founder");
   });
 
@@ -291,9 +290,17 @@ describe("PRDR-264 a refused brief buys one reshape relaunch", () => {
     expect(result.briefs.map((b) => b.question), "and the reshaped brief is accepted").toEqual([Q]);
   });
 
+  /**
+   * PRDR-265 moved this claim from the TOTAL to the division. `toolCallsUsed`
+   * no longer bounds anything — it reports what the sessions did — so the
+   * property worth pinning is the one that survives: a question that needs two
+   * attempts is still offered the same share as one that needs a single
+   * attempt, because the reshape is charged against its own question's cut.
+   */
   it("charges both attempts against the one question's share, never another's", async () => {
-    const { result } = await drive(root(), [Q, OTHER], 16, (q, n) => (n === 0 ? { malformed: true } : answered(q)));
-    expect(result.toolCallsUsed, "two attempts at one question cannot overrun the pool").toBeLessThanOrEqual(16);
+    const { result, seen } = await drive(root(), [Q, OTHER], 16, (q, n) => (n === 0 ? { malformed: true } : answered(q)));
+    expect(seen.artifactOuts.length, "two attempts at the first question, one at the second").toBe(3);
+    expect(result.briefs, "and a relaunch never costs the other question its session").toHaveLength(2);
   });
 
   it("stops after the second refusal rather than relaunching forever", async () => {

@@ -48,7 +48,6 @@ import { noteUnitComplete } from "./ledger.js";
  */
 
 export { TransitionError } from "./machine.js";
-export { NoProgressError, SpendExhaustedError } from "./ledger.js";
 export {
   ATTEMPT_STATES,
   Breach,

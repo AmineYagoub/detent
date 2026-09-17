@@ -28,13 +28,18 @@ afterEach(() => {
   for (const r of roots.splice(0)) removeTree(r);
 });
 
-async function openCore(root: string, backend = new MockBackend()): Promise<RefereeCore> {
+async function openCore(root: string, backend = new MockBackend(), announce?: (text: string) => void): Promise<RefereeCore> {
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(root), "config.json"), "utf8")));
   const journal = RunJournal.open(root);
   journals.push(journal);
   const runBranch = ensureRunBranch(root, "referee-test");
   installTrailerHook(root);
-  return new RefereeCore({ root, backend, prompts: loadPromptSet() }, loaded, journal, runBranch);
+  return new RefereeCore(
+    { root, backend, prompts: loadPromptSet(), ...(announce === undefined ? {} : { announce }) },
+    loaded,
+    journal,
+    runBranch,
+  );
 }
 
 function transitions(root: string): { event: string; from: string; to: string }[] {
@@ -217,7 +222,15 @@ describe("T-103 the gate tool reuses the v2 gate path", () => {
 });
 
 describe("T-104 R-4: attempt is metered", () => {
-  it("spend with nothing completed refuses the launch as a structured BREACH (X-1⁵)", async () => {
+  /**
+   * PRDR-265: R-4 still meters the attempt; what it no longer does is refuse
+   * it. The fixture below is unchanged — $1000 recorded against a progress mark
+   * saying nothing has finished — because what it produces is exactly the
+   * evidence the breaker is for. Only the route changed: it reached the driver
+   * as a structured BREACH error, and now it reaches the operator as a sentence
+   * while the launch proceeds.
+   */
+  it("spend with nothing completed is announced, and the launch still proceeds (X-1⁵)", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     addTicket(root, { id: "t-1" });
@@ -247,7 +260,10 @@ describe("T-104 R-4: attempt is metered", () => {
      * run and the wrong one for this case.
      */
     mkdirSync(path.join(stateDir(root), "state"), { recursive: true });
-    writeFileSync(path.join(stateDir(root), "state", "progress.json"), `${JSON.stringify({ spent: 0, unitCost: 0 })}\n`);
+    writeFileSync(
+      path.join(stateDir(root), "state", "progress.json"),
+      `${JSON.stringify({ spent: 0, unitCost: 0, advisoryAnnounced: true, breakerAnnounced: false })}\n`,
+    );
     appendFileSync(
       path.join(stateDir(root), "ledger.jsonl"),
       `${JSON.stringify(
@@ -263,13 +279,18 @@ describe("T-104 R-4: attempt is metered", () => {
         }),
       )}\n`,
     );
-    const core = await openCore(root);
+    const said: string[] = [];
+    const core = await openCore(root, new MockBackend(), (t) => said.push(t));
 
     const acquired = (await callTool(core, "claim", { op: "acquire", ticket_id: "t-1" })) as { claimed_ref: string };
     await callTool(core, "transition", { ticket_id: "t-1", ref: acquired.claimed_ref });
 
-    const refused = await callTool(core, "attempt", { ticket_id: "t-1", state: "IN_PROGRESS" });
-    expect((refused as { error: { code: string } }).error.code).toBe("BREACH");
+    const result = await callTool(core, "attempt", { ticket_id: "t-1", state: "IN_PROGRESS" });
+    expect((result as { error?: { code: string } }).error, "no ceiling refuses a launch any more").toBeUndefined();
+    expect(said.join(" "), "and the thousand dollars against nothing finished is said out loud").toContain(
+      "no-progress breaker",
+    );
+    expect(said.join(" "), "with the figure that produced it").toContain("1000.0000");
   });
 
   it("the ledger sums every session the attempt tool launched", async () => {

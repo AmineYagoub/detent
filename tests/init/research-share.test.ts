@@ -97,8 +97,16 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
     const { result, seen } = await drive(root(), THREE, 16, { brief: () => ({ malformed: true }) });
     expect(seen.offered, "each question gets an even cut of what is left, not everything that is left").toEqual([5, 5, 6]);
     expect(result.sessionsLaunched, "all three questions were researched — twice each, since PRDR-264 reshapes a refused brief once").toBe(6);
-    expect(result.neverResearched, "no question may be starved by where ANALYZE listed it").toEqual([]);
-    expect(result.toolCallsUsed, "the pool is spent to its ceiling and not past it").toBe(16);
+    expect(result.unanswered, "no question may be starved by where ANALYZE listed it: all three were asked and all three refused").toEqual(THREE);
+    /**
+     * PRDR-265 (D-18): this asserted 16 — "the pool is spent to its ceiling and
+     * not past it" — because the charge was clamped to each question's share.
+     * Six sessions really made 32 calls, and that is now the figure. The DIVISION
+     * is unchanged, which is what `offered` above still pins: the pool's own
+     * arithmetic runs on the clamped charge, so one overrunning question cannot
+     * shrink a later question's share.
+     */
+    expect(result.toolCallsUsed, "what the six sessions actually spent, not what they were allowed").toBe(32);
   });
 
   it("flows an under-spending question's leftover forward instead of stranding it", async () => {
@@ -136,17 +144,30 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
    * genuine shortage, which is what makes its advice ("raise the ceiling or ask
    * fewer") correct rather than a guess about document order.
    */
-  it("buys a session each until a pool too small for one call apiece runs out", async () => {
+  /**
+   * PRDR-265 turned this test around. It asserted that a pool too small to fund
+   * one call apiece stopped buying sessions — the skip arm, and the only thing
+   * this ceiling ever did to behaviour. Under counting the pool is advice: the
+   * third question is asked for one call like the other two, and the total says
+   * what all three really cost. The share arithmetic is unchanged, which is why
+   * the first two are still offered 1 rather than the whole remainder.
+   */
+  it("asks every question even when the pool cannot fund one call apiece", async () => {
     const { result, seen } = await drive(root(), THREE, 2);
-    expect(seen.offered, "a share never divides to zero — that would spend money and debit nothing").toEqual([1, 1]);
-    expect(result.neverResearched, "only the question the pool genuinely could not fund").toEqual([THREE[2]]);
-    expect(result.toolCallsUsed, "and the ceiling still holds").toBe(2);
+    expect(seen.offered, "a share never divides to zero — that would ask a session to make no calls").toEqual([1, 1, 1]);
+    expect(result.sessionsLaunched, "the third question is asked too, and its answer is worth what it cost").toBe(3);
+    expect(result.toolCallsUsed, "three sessions, one call each, against a stated pool of 2").toBe(3);
   });
 
-  it("never overruns the ceiling, including a fractional one", async () => {
-    const { result, seen } = await drive(root(), THREE, 2.5);
-    expect(result.toolCallsUsed, "X-1's .positive() carries no .int(), so a fractional pool loads").toBeLessThanOrEqual(2.5);
-    for (const offered of seen.offered) expect(offered, "no share may exceed what is left").toBeLessThanOrEqual(2.5);
+  /**
+   * X-1's `.positive()` carries no `.int()`, so a fractional pool loads. It used
+   * to have to be un-overrunnable; now it only has to divide into whole shares
+   * nobody can mistake for a refusal, which is what the floor at 1 guarantees.
+   */
+  it("divides a fractional pool into whole shares", async () => {
+    const { seen } = await drive(root(), THREE, 2.5);
+    for (const offered of seen.offered) expect(Number.isInteger(offered), "a session is asked for a whole number of calls").toBe(true);
+    expect(seen.offered, "0.83 floors to 0, and a share of zero asks for nothing at all").toEqual([1, 1, 1]);
   });
 
   /**
@@ -154,10 +175,17 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
    * SILENTLY is not: `toolCallsUsed` would read as "calls spent" while meaning
    * "calls allocated", and the excess is real money this ceiling cannot see.
    */
-  it("charges an overrunning session its share, and says the rest is spend it cannot see", async () => {
+  /**
+   * PRDR-265 (D-18) split the two numbers this test used to conflate. The share
+   * arithmetic still charges the clamped figure — which is what keeps the
+   * second question's offer at 5 — but `toolCallsUsed` now carries the whole
+   * observation, because 99 calls were really made and an operator who is shown
+   * 16 has been told something false.
+   */
+  it("counts an overrunning session's real calls, and still protects the next question's share", async () => {
     const { result, seen } = await drive(root(), THREE, 16, { spend: [99] });
-    expect(result.toolCallsUsed, "a session that ignores its budget cannot consume another question's share").toBeLessThanOrEqual(16);
     expect(seen.offered[1], "the second question's share is unharmed by the first's overrun").toBe(5);
+    expect(result.toolCallsUsed, "99 + 5 + 6: the money that was really spent").toBe(110);
     expect(seen.notes.join(" "), "the overrun is reported, not dropped on the floor").toContain("OVERRAN");
   });
 

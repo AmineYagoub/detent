@@ -20,6 +20,11 @@ import { withOneRelaunch } from "./retry.js";
  * unanswered question joins the single AWAIT_INFO batch C-3 already raises
  * (C-5 stays closed at five).
  *
+ * PRDR-265: and exhausting it is no longer a reason to skip a question. The
+ * pool COUNTS. Every question gets a session whatever the running total says,
+ * `toolCallsUsed` reports what was observed rather than what was allowed, and
+ * the division below survives as the number each session is ASKED for.
+ *
  * D-16: the budget is still one whole-init POOL, but this module DIVIDES it
  * rather than handing it out first-come. Observed 2026-09-17 on a live init —
  * three open questions, a pool of 16; the first was handed all 16, spent them,
@@ -158,18 +163,20 @@ export interface PreviousAttempt {
 
 interface ResearchOneResult {
   /**
-   * Tool calls the session actually spent, as observed — charged against the
-   * pool CLAMPED TO THIS QUESTION'S SHARE (D-16), and never refunded when the
-   * brief is refused, because the calls were really made.
+   * Tool calls the session actually spent, as observed. Since PRDR-265 this is
+   * what `toolCallsUsed` totals: the number reaches the operator unclamped,
+   * and it is never refunded when the brief is refused, because the calls were
+   * really made.
    *
-   * Clamping is not new and has never made this figure spend telemetry: it was
-   * already clamped to the whole remaining pool, so an over-reporting backend's
-   * excess has always fallen on the floor here. What changes is the bound, and
-   * with it the guarantee — no session can consume another question's share, so
-   * a session that ignores the budget it was handed can no longer reproduce
-   * D-16 by itself. The discarded excess is reported in a note rather than
-   * silently dropped, and the money it really cost is bounded by `run_spend_usd`
-   * and the no-progress breaker, not by this ceiling.
+   * D-18 is why. Under the old cap this figure was charged CLAMPED to the
+   * question's share, which made `toolCallsUsed` report what had been allocated
+   * while reading as what had been spent — this doc-block used to concede that
+   * an over-reporting backend's excess "has always fallen on the floor here".
+   * Run 4 spent 33 calls against a pool of 16 and the counter said 16. With
+   * nothing left to enforce there is no reason to discard the observation; the
+   * share arithmetic keeps its own running total. What the session was ASKED
+   * for is still named in the note when it overruns, and the money it really
+   * costs is bounded by `run_spend_usd`'s advisory total, not by this ceiling.
    */
   readonly toolCalls: number;
 }
@@ -189,7 +196,10 @@ export interface PlanResearchDeps {
    * remainder, so a lone question still sees the entire pool and a fully spent
    * pool still totals exactly the ceiling.
    *
-   * The share is what the session is ASKED for, not a refusal it will hit.
+   * The share is what the session is ASKED for, not a refusal it will hit —
+   * literally so since PRDR-265, which removed the one arm that made the pool
+   * bind: a question whose turn came after the pool was gone used to get no
+   * session at all.
    * `kernel/stages/research` is the precedent (PRDR-106): no per-session turn
    * ceiling exists there, because a hard stop makes an over-budget session
    * indistinguishable from a transport death at the seam that classifies
@@ -217,35 +227,24 @@ export interface PlanResearchResult {
   /** Questions with no valid brief — these join the AWAIT_INFO batch (C-3a). */
   readonly unanswered: readonly string[];
   /**
-   * PRDR-260, narrowed by D-16: the SUBSET of `unanswered` that never got a
-   * session — the pool was gone before their turn. `unanswered` minus this set
-   * is the other outcome, investigated and still unanswerable. Both ride to
-   * PRESENT in one batch (C-3′), and they are actionable in opposite
-   * directions: the first is a ceiling to raise or questions to trim, the
-   * second is a question only the human can settle.
+   * PRDR-265 retired PRDR-260's `neverResearched`. It named the questions the
+   * pool was gone before reaching, and the skip arm that produced it was this
+   * ceiling's only effect on behaviour. Under counting no question goes unasked
+   * for want of budget, so the set was empty on every path — a population the
+   * operator was still being given a count of. The advice attached to it
+   * ("raise the ceiling or ask fewer") named the one lever that no longer does
+   * anything.
    *
-   * D-16 sharpens what the first of those means. Membership used to be
-   * reachable by accident — one greedy question earlier in ANALYZE's list could
-   * empty the pool — so the set recorded document order as much as budget, and
-   * the ceiling advice attached to it was a guess. Every question is now
-   * offered an even cut of what is left, and no session can spend another
-   * question's share, so this set is non-empty only when the pool could not
-   * fund one call for each question that needed one. That is a pure budget
-   * fact, and the advice is now the correct advice.
+   * What it guarded is kept as behaviour rather than as a field: every question
+   * gets a session, which `tests/kernel/x1-counting.test.ts` asserts directly.
    *
-   * A subset rather than a partition, so no existing consumer has a new
-   * invariant to learn — `analyze.ts` derives "researched without a usable
-   * answer" by subtracting this count from the open questions and would go
-   * negative otherwise. It is correct while every other path into `unanswered`
-   * means a session ran, and what guarantees that is not locality but the
-   * count: this file has exactly TWO `unanswered.push` sites, one in the skip
-   * arm which pushes here too, and one after an awaited `researchOne` in the
-   * same iteration. PRDR-260 argued it from the two sites sitting "four lines
-   * apart", which was already false when it was written — they were sixteen
-   * lines apart, with the launch, the charge and the parse between them — and
-   * a locality claim drifts every time this loop grows. A count does not.
+   * The historical note, because the division it justifies is still here: the
+   * set used to be reachable by accident — one greedy question earlier in
+   * ANALYZE's list could empty the pool — so it recorded document order as much
+   * as budget. D-16 made every question's share an even cut of what is left.
+   * That division survives as advice; what it no longer does is decide that
+   * some question gets nothing.
    */
-  readonly neverResearched: readonly string[];
   /**
    * PRDR-264: questions research SETTLED as unanswerable — a founder decision
    * not yet made, a question only counsel can answer, a fact with no public
@@ -271,9 +270,17 @@ export async function planResearch(
 ): Promise<PlanResearchResult> {
   const briefs: PlanningBrief[] = [];
   const unanswered: string[] = [];
-  const neverResearched: string[] = [];
   const undecidable: string[] = [];
   let toolCallsUsed = 0;
+  /**
+   * PRDR-265: the two numbers this loop used to conflate. `allocated` is the
+   * share arithmetic — what the pool has been divided into so far, which is
+   * what the NEXT question's even cut is computed from (D-16). `toolCallsUsed`
+   * is what the sessions actually did. Under a cap they had to be the same
+   * number and the observation lost; nothing is enforced now, so the division
+   * keeps its own tidy arithmetic and the operator gets the honest total.
+   */
+  let allocated = 0;
   let cacheHits = 0;
   let sessionsLaunched = 0;
 
@@ -304,17 +311,7 @@ export async function planResearch(
     }
     if (existsSync(file)) deps.note?.(`planning brief at ${hash.slice(0, 12)}… is unusable; re-researching`);
 
-    const remaining = deps.budget - toolCallsUsed;
-    if (remaining <= 0) {
-      /* C-3a: no new interrupt class — the question joins the AWAIT_INFO batch. */
-      deps.note?.(
-        `planning_research_tool_calls exhausted (${deps.budget}) before "${question}" had a turn: never researched, no session — the pool could not fund one call for every question that needed one, so raise the ceiling or ask fewer (C-3a, D-16)`,
-      );
-      unanswered.push(question);
-      neverResearched.push(question);
-      continue;
-    }
-
+    const remaining = Math.max(0, deps.budget - allocated);
     /**
      * D-16: an even cut of what is LEFT, over the questions that still need a
      * session — recomputed each turn, so an under-spending question's leftover
@@ -331,20 +328,17 @@ export async function planResearch(
      * share is the worse failure: the charge below is `min(toolCalls, share)`,
      * so a session handed zero would spend real money and debit the pool
      * nothing — the refund this design is otherwise careful never to grant.
-     * `min(remaining, …)` because X-1's `.positive()` carries no `.int()`, so a
-     * fractional ceiling loads and must not be overrun by that floor. The two
-     * together give the invariant with no case split: `share <= remaining`,
-     * therefore `toolCallsUsed <= budget`.
-     *
-     * They also bound the skip arm above, which is what lets its note name a
-     * cause. Whenever `r >= p + 1`, `r - floor(r / (p + 1)) >= p`, and the
-     * charge is at most the share, so every turn leaves at least one call for
-     * every question still pending. `remaining <= 0` is therefore reachable
-     * only when the POOL could not fund one call apiece — never because of who
-     * came first, which is the whole of D-16.
+     * PRDR-265: the floor at 1 is now the whole of it. `min(remaining, …)` is
+     * gone with the cap it served — it existed so that `share <= remaining`
+     * held for a fractional ceiling, and therefore `toolCallsUsed <= budget`.
+     * Nothing is bounded by that any more, and keeping the clamp would have
+     * reintroduced the deleted skip arm by the back door: an exhausted pool
+     * gives `remaining === 0`, and a share of zero is a session asked to make
+     * no calls. A question the pool cannot fund is asked for one call and told
+     * so, which is the honest version of the advice the skip arm used to print.
      */
     const pending = pendingAfter(deps.root, questions.slice(index + 1));
-    const share = Math.min(remaining, Math.max(1, Math.floor(remaining / (pending + 1))));
+    const share = Math.max(1, Math.floor(remaining / (pending + 1)));
     if (share < remaining) {
       deps.note?.(
         `planning research: "${question}" may spend ${share} of the ${remaining} left — the other ${remaining - share} is held for ${pending} later question(s) (D-16)`,
@@ -368,22 +362,19 @@ export async function planResearch(
     );
 
     /**
-     * D-16, extended by PRDR-264's relaunch: both attempts are charged against
-     * the ONE question's share and the sum is clamped to it, so a reshape can
-     * never spend a later question's budget. The clamp is what keeps
-     * `toolCallsUsed <= budget` true with a retry in the loop.
+     * PRDR-265 / D-18: the split. `toolCallsUsed` takes the observation whole —
+     * both attempts of PRDR-264's relaunch, and any overrun — because that is
+     * the figure an operator acts on. `allocated` takes the clamped charge,
+     * because it is the pool's own arithmetic: it is what the NEXT question's
+     * even cut is divided from, and letting one overrunning session shrink
+     * every later share would reproduce D-16 with extra steps.
      */
     const charged = Math.min(spentHere, share);
-    toolCallsUsed += charged;
+    toolCallsUsed += spentHere;
+    allocated += charged;
     if (observed > share) {
-      /*
-       * D-16: the honest half of clamping to the share. Without this line
-       * `toolCallsUsed` would quietly become "calls allocated" while reading
-       * like "calls spent"; the excess was real money that this ceiling does
-       * not see, and `run_spend_usd` is what bounds it (X-1).
-       */
       deps.note?.(
-        `planning research for "${question}" OVERRAN its share: ${observed} calls against a budget of ${share}; charged ${charged}, and the rest is real spend this ceiling does not see (X-1, D-16)`,
+        `planning research for "${question}" OVERRAN its share: ${observed} calls against a stated budget of ${share}; the whole ${spentHere} is counted and the pool's own division is unaffected (X-1, D-16, D-18)`,
       );
     }
 
@@ -420,7 +411,7 @@ export async function planResearch(
     writeArtifact(deps.root, path.posix.join("research", "planning", `${hash}.json`), planningBriefSchema.parse(scrubJson(attempt.value)));
   }
 
-  return { briefs, unanswered, neverResearched, undecidable, toolCallsUsed, cacheHits, sessionsLaunched };
+  return { briefs, unanswered, undecidable, toolCallsUsed, cacheHits, sessionsLaunched };
 }
 
 /**

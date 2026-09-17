@@ -85,24 +85,64 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     expect(Object.keys(ENFORCEMENT_SITES).sort()).toEqual([...ALL_CEILING_KEYS].sort());
   });
 
-  it("each ceiling declares its own breach target — seven are not BUDGET_BREACH", () => {
-    expect(breachTargetFor("failure_research_tool_calls")).toBe("RESEARCH_DRY");
-    expect(breachTargetFor("planning_research_tool_calls")).toBe("AWAIT_INFO_BATCH");
+  /**
+   * PRDR-265: the exemption is ENUMERATED, not counted.
+   *
+   * This asserted `nonBreach` had a LENGTH, which is the weakest form the
+   * statement can take — any conversion, in either direction, could keep the
+   * number right while changing which keys it described. The list below says
+   * which keys route nowhere and is the ticket's own scope written as an
+   * assertion: adding a key to it is a deliberate act with a ticket attached,
+   * and removing one from it is a claim that something now halts.
+   *
+   * The P6 grep above is deliberately NOT given a matching skip list. Every key
+   * here still READS its ceiling in its named module — the read is what the
+   * operator's configured number reaches — and a `continue` for each would have
+   * stopped checking the one thing P6 is still worth: a ceiling nothing reads
+   * is a dial wired to nothing, whether it halts or only reports.
+   */
+  it("each ceiling declares its own breach target — eleven route nowhere at all", () => {
     expect(breachTargetFor("flake_reruns")).toBe("LADDER_ENTRY");
     expect(breachTargetFor("gate_timeout_ms")).toBe("RED_GATE_NO_EXIT");
     expect(breachTargetFor("binding_probe_timeout_ms")).toBe("REJECTED_CANDIDATE");
     /* X-1″ (PRDR-106): the planner's sizing target has nothing to breach. */
-    expect(breachTargetFor("turns_per_stage")).toBe("NONE");
     expect(CEILINGS.turns_per_stage.scope).toBe("plan-sizing");
+    const nonBreach = ALL_CEILING_KEYS.filter((k) => breachTargetFor(k) === "NONE");
+    expect(
+      [...nonBreach].sort(),
+      "PRDR-106 and PRDR-191 converted the first two; PRDR-265 converted the rest",
+    ).toEqual([
+      /* PRDR-265: a question the pool could not fund still gets a session; the turns are reported. */
+      "failure_research_tool_calls",
+      "planning_research_tool_calls",
+      /* X-1⁵ (PRDR-191): the run total fired on success and late on failure, so it counts and reports. */
+      "run_spend_usd",
+      /* PRDR-265: its own message called it a backstop; the increment beside it is what the dossier lives on. */
+      "sessions",
+      /* PRDR-265: one throw served all three, and it announced nothing the operator could act on. */
+      "spend_without_progress_floor_usd",
+      "spend_without_progress_multiple",
+      "spend_without_progress_sessions",
+      /* X-1″ (PRDR-106). */
+      "turns_per_stage",
+    ]);
     /**
-     * X-1⁵ (PRDR-191): the run total is ADVISORY. It fired on success and fired
-     * late on failure, so it counts and reports and halts nothing; the breaker
-     * that does halt bounds spend with no unit completing.
+     * The complement, and the sharper half: after PRDR-265 the keys that still
+     * halt are EXACTLY the six the ticket carved out, and every one of them is
+     * a sequencer or a clock rather than a budget. Four are the escalation
+     * ladder, `hypotheses` closes `DIAGNOSED → REPRO_WRONG → DIAGNOSED`, and
+     * `ticket_wall_clock_ms` is the only wall-clock bound on the run loop. A
+     * later ticket that converts one of these has to edit this line, which is
+     * where it would be asked for the non-budget exit that replaces it.
      */
-    expect(breachTargetFor("run_spend_usd")).toBe("NONE");
-    expect(breachTargetFor("spend_without_progress_floor_usd")).toBe("BUDGET_BREACH");
-    const nonBreach = ALL_CEILING_KEYS.filter((k) => breachTargetFor(k) !== "BUDGET_BREACH");
-    expect(nonBreach).toHaveLength(7);
+    expect(ALL_CEILING_KEYS.filter((k) => breachTargetFor(k) === "BUDGET_BREACH")).toEqual([
+      "blind_fix_attempts",
+      "informed_fix_attempts",
+      "review_fix_attempts",
+      "research_sessions",
+      "hypotheses",
+      "ticket_wall_clock_ms",
+    ]);
   });
 
   it("the X-1 table has exactly seventeen keys, and the adapter timeouts derive from it (PRDR-061)", () => {

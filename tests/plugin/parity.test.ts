@@ -202,11 +202,20 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
   }, 120_000);
 
   /**
-   * A spend BREACH, which is the historical PRDR-140 shape exactly: a ceiling
-   * one driver enforced. `SpendExhaustedError` surfaces to a driver as
-   * `RouteError` code BREACH, so this drives the branch the mutation touched.
+   * PRDR-265: the same fixture, and the parity claim moves with the mechanism.
+   *
+   * This was the historical PRDR-140 shape — a ceiling one driver enforced and
+   * the other did not — and it drove `SpendExhaustedError` through the BREACH
+   * route. That class and that route are both deleted; the breaker announces
+   * and the run continues. What ARCH-2 is actually for is untouched and is what
+   * is asserted below: the two drivers must reach the SAME state and write
+   * byte-identical journals, whether the ceiling halts them or only counts.
+   *
+   * A regime change is exactly when the two drivers drift, because it is when
+   * one of them keeps a branch the other lost — which is how the dead BREACH
+   * route survived four releases.
    */
-  it("a spend breach is recorded the same way by both drivers", async () => {
+  it("a breaker episode is recorded the same way by both drivers", async () => {
     const model = await makeRunRepo();
     const headless = await makeRunRepo();
     cleanups.push(() => removeTree(model.root));
@@ -214,10 +223,10 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
     for (const root of [model.root, headless.root]) {
       addTicket(root, { id: "t-1" });
       /**
-       * X-1⁵ (PRDR-191): the no-progress breaker, not the total. The total no
-       * longer halts anything, so parity over it would assert nothing; what
-       * both drivers must still refuse identically is money out with nothing
-       * completed. A floor the first session's own cost estimate exceeds.
+       * X-1⁵ (PRDR-191), X-1 (PRDR-265): the no-progress breaker, not the
+       * total. Neither halts anything now, so what both drivers must do
+       * identically is COUNT money out with nothing completed. A floor the
+       * first session's own cost estimate exceeds.
        */
       const file = path.join(stateDir(root), "config.json");
       const config = JSON.parse(readFileSync(file, "utf8")) as { budgets: Record<string, number> };
@@ -241,12 +250,19 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
       loaded,
     );
 
-    /* The ceiling really bit: neither driver may report the ticket finished. */
-    expect(readTicket(model.root, "t-1").state, "a ticket cannot reach DONE past the no-progress breaker").not.toBe("DONE");
-    expect(readTicket(headless.root, "t-1").state).toBe(readTicket(model.root, "t-1").state);
+    /**
+     * PRDR-265 inverted this line. It read "a ticket cannot reach DONE past the
+     * no-progress breaker" — the ceiling really bit. The breaker is a figure
+     * now, so the work it was reporting on finishes, which is the whole of the
+     * change and is asserted rather than left implied.
+     */
+    expect(readTicket(model.root, "t-1").state, "a figure does not stop a ticket that its gates approved").toBe("DONE");
+    expect(readTicket(headless.root, "t-1").state, "and both drivers agree on where it ended up").toBe(
+      readTicket(model.root, "t-1").state,
+    );
 
     const modelJournal = journalBytes(model.root);
     expect(modelJournal.length).toBeGreaterThan(0);
-    expect(modelJournal, "and both drivers must record the breach identically").toBe(journalBytes(headless.root));
+    expect(modelJournal, "and both drivers must record the episode identically").toBe(journalBytes(headless.root));
   }, 120_000);
 });
