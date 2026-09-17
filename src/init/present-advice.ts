@@ -30,7 +30,17 @@ function counted(items: readonly string[]): [string, number][] {
   return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-/** Tickets ordered by how many distinct tags they drew, then by count, then by id. */
+/**
+ * PRDR-267: tickets ordered by what a REVISION could not remove, first.
+ *
+ * Distinct tags then count was population-blind, and the two populations are
+ * not worth the same. Over byte-identical tickets with nothing revised between
+ * the reads, 50-85% of findings appear in one read and never again (mean 61%,
+ * n=7) — so `seen-once` carries a majority-noise prior while `after-revision`
+ * survived a session paid to remove it. On run 6's corpus the old order gave a
+ * top-ten slot to `t-s04-004`, whose two findings were both seen once, and
+ * surfaced 12 of 43 revision survivors where this one surfaces 17.
+ */
 function byTicket(findings: readonly HeldFinding[]): [string, HeldFinding[]][] {
   const groups = new Map<string, HeldFinding[]>();
   for (const f of findings) {
@@ -38,7 +48,10 @@ function byTicket(findings: readonly HeldFinding[]): [string, HeldFinding[]][] {
     groups.set(key, [...(groups.get(key) ?? []), f]);
   }
   const distinct = (fs: HeldFinding[]): number => new Set(fs.map((f) => f.tag)).size;
-  return [...groups].sort(([a, fa], [b, fb]) => distinct(fb) - distinct(fa) || fb.length - fa.length || a.localeCompare(b));
+  const survived = (fs: HeldFinding[]): number => fs.filter((f) => f.held === "after-revision").length;
+  return [...groups].sort(
+    ([a, fa], [b, fb]) => survived(fb) - survived(fa) || distinct(fb) - distinct(fa) || fb.length - fa.length || a.localeCompare(b),
+  );
 }
 
 export function renderHeldFindings(findings: readonly HeldFinding[], adviceFile: string | undefined): string[] {
@@ -71,21 +84,49 @@ export function renderHeldFindings(findings: readonly HeldFinding[], adviceFile:
 }
 
 /** The whole list, grouped as the screen groups it, every finding in full. */
+/**
+ * PRDR-267: the sections, heaviest evidence first.
+ *
+ * Marking each entry tells a reader what a finding is once they have reached
+ * it; it does not get them to the survivors first. Burial is a property of
+ * order, so the order carries it — and each section says what its population
+ * is worth where the reader meets it, not once in a preamble 70 sections up.
+ */
+const SECTIONS: readonly { readonly kind: HeldKind | undefined; readonly title: string; readonly weight: string }[] = [
+  {
+    kind: "after-revision",
+    title: "Held after revision",
+    weight: "A revision was paid to remove each of these and did not. Read these first.",
+  },
+  {
+    kind: "seen-once",
+    title: "Seen once",
+    weight:
+      "One read of three; the other two did not reproduce it. Over byte-identical tickets with nothing revised between the reads, 50-85% of findings never recur — so most of this section is noise, and some of it is not.",
+  },
+  { kind: undefined, title: "Unmarked", weight: "Neither population: no kind was recorded when these were held." },
+];
+
+function renderSection(title: string, weight: string, fs: readonly HeldFinding[]): string[] {
+  const lines = [`## ${title} (${String(fs.length)})`, "", weight, ""];
+  for (const [id, group] of byTicket(fs)) {
+    lines.push(`### ${id} (${String(group.length)})`, "");
+    for (const f of group) lines.push(`- **${f.tag}**: ${f.finding}`);
+    lines.push("");
+  }
+  return lines;
+}
+
 export function renderAdviceMarkdown(findings: readonly HeldFinding[]): string {
   const lines = [
     `# Review findings held after revision (${String(findings.length)})`,
     "",
     "Judgement calls for the human at approval, not defects the machine kept grinding on (D-24).",
-    "`seen once` is one read of three that no other read reproduced; `held after revision` survived a revision paid to remove it.",
     "",
   ];
-  for (const [id, fs] of byTicket(findings)) {
-    lines.push(`## ${id} (${String(fs.length)})`, "");
-    for (const f of fs) {
-      const kind = kindOf(f);
-      lines.push(`- **${f.tag}**${kind === undefined ? "" : ` — ${KIND_LABEL[kind]}`}: ${f.finding}`);
-    }
-    lines.push("");
+  for (const section of SECTIONS) {
+    const fs = findings.filter((f) => kindOf(f) === section.kind);
+    if (fs.length > 0) lines.push(...renderSection(section.title, section.weight, fs));
   }
   return lines.join("\n");
 }

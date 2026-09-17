@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { presentStage, renderPresentation, type PresentInput } from "../../src/init/present.js";
-import { ADVICE_INLINE_MAX } from "../../src/init/present-advice.js";
+import { ADVICE_INLINE_MAX, renderAdviceMarkdown } from "../../src/init/present-advice.js";
 import type { HeldFinding } from "../../src/schemas/init.js";
 import { removeTree } from "../helpers.js";
 
@@ -99,5 +99,73 @@ describe("D-24′ held findings render as something a person can act on", () => 
     const outcome = await presentStage({ ...base(dir), findings: [f("t-s01-001", "sizing")] });
     expect(outcome.kind).toBe("interrupt");
     expect(existsSync(path.join(dir, ".detent", "state", "advice.md"))).toBe(false);
+  });
+});
+
+/**
+ * PRDR-267 — the two populations are labelled, and never ordered by.
+ *
+ * Run 6 held 95 findings over 70 tickets: 43 `after-revision`, 52 `seen-once`.
+ * D-24′ named the distinction and rendered it as a label on a list whose order
+ * ignores it, so HEAD gave a top-10 slot to `t-s04-004`, whose two findings were
+ * both seen once. The null is why the weights differ: over byte-identical
+ * tickets with nothing revised between reads, 50-85% of findings never recur.
+ */
+describe("PRDR-267 the human meets the revision-surviving findings first", () => {
+  /** The falsifying shape: noise wins on both of HEAD's sort keys. */
+  function lopsided(): HeldFinding[] {
+    const out: HeldFinding[] = [
+      f("t-noise-001", "sizing", "seen-once"),
+      f("t-noise-001", "dependency", "seen-once"),
+      f("t-noise-001", "coherence", "seen-once"),
+      f("t-real-001", "sizing", "after-revision"),
+      f("t-real-001", "dependency", "after-revision"),
+    ];
+    for (let i = 0; i < 10; i += 1) out.push(f(`t-pad-00${String(i)}`, "coverage", "seen-once"));
+    return out;
+  }
+
+  it("ranks a ticket whose findings survived a revision above one that merely drew more one-read noise", () => {
+    const findings = lopsided();
+    expect(findings.length).toBeGreaterThan(ADVICE_INLINE_MAX);
+    const text = renderPresentation({ ...base("/tmp/x"), findings, adviceFile: "/tmp/x/.detent/state/advice.md" });
+    const real = text.indexOf("t-real-001");
+    const noise = text.indexOf("t-noise-001");
+    expect(real, "the after-revision ticket appears in the top list").toBeGreaterThan(-1);
+    expect(real, "two findings a revision could not remove outrank three no second read reproduced").toBeLessThan(noise);
+  });
+
+  it("a ticket with no revision-surviving finding never displaces one that has them", () => {
+    const findings: HeldFinding[] = [
+      f("t-zero-001", "sizing", "seen-once"),
+      f("t-zero-001", "dependency", "seen-once"),
+      f("t-one-001", "coverage", "after-revision"),
+    ];
+    for (let i = 0; i < 12; i += 1) findings.push(f(`t-pad-01${String(i)}`, "coverage", "seen-once"));
+    const text = renderPresentation({ ...base("/tmp/x"), findings, adviceFile: "/tmp/x/.detent/state/advice.md" });
+    expect(text.indexOf("t-one-001")).toBeLessThan(text.indexOf("t-zero-001"));
+  });
+
+  it("advice.md places every after-revision finding above every seen-once one, and drops none", () => {
+    const findings = lopsided();
+    const body = renderAdviceMarkdown(findings);
+    for (const x of findings) expect(body, "nothing is suppressed").toContain(x.finding);
+    const after = findings.filter((x) => x.held === "after-revision").map((x) => body.indexOf(x.finding));
+    const once = findings.filter((x) => x.held === "seen-once").map((x) => body.indexOf(x.finding));
+    expect(Math.max(...after), "the paid-revision survivors come first").toBeLessThan(Math.min(...once));
+  });
+
+  it("renders no section for a population with nothing in it", () => {
+    const body = renderAdviceMarkdown(lopsided());
+    expect(body, "lopsided() marks every finding, so there is no unmarked population").not.toContain("## Unmarked");
+    const onlyOnce = renderAdviceMarkdown([f("t-a-001", "sizing", "seen-once"), f("t-a-002", "coverage", "seen-once")]);
+    expect(onlyOnce).not.toContain("## Held after revision (0)");
+    expect(onlyOnce).toContain("## Seen once (2)");
+  });
+
+  it("names what each population is worth where the reader meets it", () => {
+    const body = renderAdviceMarkdown(lopsided());
+    expect(body).toMatch(/## Held after revision \(2\)/);
+    expect(body).toMatch(/## Seen once \(13\)/);
   });
 });
