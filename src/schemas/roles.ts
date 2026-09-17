@@ -63,6 +63,32 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
 };
 
 /**
+ * PRDR-263: the effort routing `init` writes, and the companion to the table
+ * above — a level means nothing without the model that must serve it. The
+ * planner drafts a whole product plan in one session and every later role is
+ * measured against its output, so it runs at `max`; the rest run one step down.
+ *
+ * Typed over ROLE_IDS for the same reason as the models: a ninth role is a
+ * compile error here, not a role that silently keeps the runtime default.
+ *
+ * Every pair these two tables produce is servable, per the SDK's own
+ * declaration — `xhigh` is Fable 5 / Opus 4.7+ / Sonnet 5, `max` is Fable 5 /
+ * Opus 4.6+ / Sonnet 4.6+ — so nothing here relies on a downgrade. Where a
+ * routed model cannot serve its level the SDK downgrades SILENTLY, which is
+ * why PRDR-237 records what the turns settled at rather than assuming.
+ */
+export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
+  planner: "max",
+  review: "xhigh",
+  diagnose: "xhigh",
+  informed_fix: "xhigh",
+  implement: "xhigh",
+  blind_fix: "xhigh",
+  review_fix: "xhigh",
+  research: "xhigh",
+};
+
+/**
  * S-1's read-only set. Since S-1′ (PRDR-067) these roles run DEFAULT mode
  * with the read-only tool surface plus one scoped write rule for their own
  * artifact — plan mode blocks the write the A-contract demands and survives

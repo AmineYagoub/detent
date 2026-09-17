@@ -5,7 +5,7 @@ import { probeSymbols, type SymbolsConfig, type SymbolsStatus } from "../adapter
 import { stateDir, writeArtifact } from "../fs/layout.js";
 import { loadConfig } from "../kernel/worstcase.js";
 import { CEILINGS } from "../schemas/budgets.js";
-import { DEFAULT_MODEL_ROUTING } from "../schemas/roles.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING } from "../schemas/roles.js";
 
 /**
  * T-140 — `init` writes the project config (R-9, X-1, S-5).
@@ -62,10 +62,14 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
     risk: [],
     model_routing: { ...DEFAULT_MODEL_ROUTING },
     /**
-     * PRDR-197: empty, and PRESENT. The default must change nothing, but a knob
-     * an operator cannot see in the file they edit is one they do not have.
+     * PRDR-263: populated, and PRESENT. PRDR-197 shipped this knob visible and
+     * inert — "the default must change nothing, but a knob an operator cannot
+     * see in the file they edit is one they do not have" — and the second half
+     * of that argument outlived the first. An unrouted role takes the SDK's own
+     * default, `high`, with nothing written down anywhere; a routed one is a
+     * decision the operator can read in the file and change.
      */
-    effort_routing: {},
+    effort_routing: { ...DEFAULT_EFFORT_ROUTING },
     plan_baseline: "production",
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });

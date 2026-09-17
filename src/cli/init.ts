@@ -165,6 +165,11 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
           "implement, blind_fix, review_fix, research → claude-sonnet-5. A routed model this runtime cannot serve falls back " +
           "to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n",
       );
+      process.stdout.write(
+        "effort routing defaulted (PRDR-263): planner → max; review, diagnose, informed_fix, implement, blind_fix, " +
+          "review_fix, research → xhigh. A level the routed model cannot serve is downgraded silently by the SDK and " +
+          "noted per session. Edit effort_routing in .detent/config.json to change it.\n",
+      );
     }
     if (ensured === "exists" && cap !== undefined) {
       process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");

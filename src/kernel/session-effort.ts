@@ -29,8 +29,13 @@ export interface EffortJournal {
  * — PRDR-114's model fallback set that shape, and effort is the weaker signal
  * of the two. The note has a THIRD suppressor beside the unobserved case above:
  * a role routed to `"default"` never produces one, however far the model
- * settles below it. `detent init` writes `effort_routing: {}`, so on a default
- * install this branch cannot execute at all.
+ * settles below it.
+ *
+ * PRDR-263: that suppressor no longer covers a default install. `detent init`
+ * wrote `effort_routing: {}` until then, so this branch could not execute at
+ * all and the detector was documentation rather than a control; it now writes a
+ * level for all eight roles and the note is reachable. A role still routes to
+ * `"default"` on a config predating that ticket, or one that deletes the key.
  */
 export function recordEffort(
   journal: EffortJournal,

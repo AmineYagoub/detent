@@ -130,3 +130,19 @@ describe("PRDR-197 the CLI forwards both routings", () => {
     expect(source).toContain("effortRouting: config?.effort_routing");
   });
 });
+
+/**
+ * PRDR-263 — the effort default is announced like the model default.
+ *
+ * Same weak-but-real evidence as the case above, and for the same reason:
+ * `main` builds its own live backend and cannot be driven to a session here.
+ * PRDR-142 recorded what an unannounced default costs — a role routed to the
+ * runtime default forever, with nothing printed.
+ */
+describe("PRDR-263 the CLI announces the effort routing", () => {
+  it("names the levels on a first init", () => {
+    const source = readFileSync("src/cli/init.ts", "utf8");
+    expect(source, "a default an operator cannot see is one they do not have").toContain("effort routing defaulted");
+    expect(source, "the planner's level is the one worth naming outright").toContain("planner → max");
+  });
+});
