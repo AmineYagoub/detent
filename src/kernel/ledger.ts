@@ -85,15 +85,81 @@ function writeProgressMark(root: string, mark: ProgressMark): void {
   }
 }
 
+/** D-15 (PRDR-261): which term of `progressThreshold`'s max() governs. A union, not an enum. */
+export type BreakerTerm = "floor" | "unit" | "sessions";
+
+/**
+ * D-15 (PRDR-261): the evidence the halt is MADE of, as fields.
+ *
+ * Before any unit completes the threshold is DERIVED FROM the spend it bounds —
+ * `sessionCostEvidence` divides that same total by the session count and
+ * `spend_without_progress_sessions` multiplies it back — so whenever the
+ * sessions term governs, the two sides are one number and the old message
+ * printed it twice: "$11.03 spent without completing a unit of work, past the
+ * $11.03 this run allows". A halt that contradicts itself tells an operator
+ * nothing, and it was not only the float that reached it: $12.001 spent since a
+ * $4 unit at a multiple of 3 renders "$12.00 past the $12.00" with no rounding
+ * subtlety at all, and on the sub-cent ceilings this repository configures it
+ * rendered "$0.00 past the $0.00".
+ *
+ * So the bound is never a pre-computed dollar total. It is printed as its
+ * DEFINITION — the ceiling key, its configured value, and the observation it
+ * multiplies — and observed money renders at four decimals, which is the
+ * resolution the ledger actually carries. No two figures in the sentence can
+ * then be two renderings of the same quantity.
+ */
+export interface BreakerEvidence {
+  readonly sinceProgress: number;
+  readonly threshold: number;
+  readonly term: BreakerTerm;
+  /** D-14 (PRDR-261): the mean's denominator — rows on this root that transacted. */
+  readonly transactingSessions: number;
+  readonly meanSessionCost: number;
+  readonly lastUnitCost: number;
+  readonly breaker: ProgressBreaker;
+}
+
+function breakerBound(e: BreakerEvidence): string {
+  if (e.term === "floor") {
+    return `spend_without_progress_floor_usd = ${String(e.breaker.spend_without_progress_floor_usd)}, the minimum this run allows with nothing finishing`;
+  }
+  if (e.term === "unit") {
+    return `spend_without_progress_multiple = ${String(e.breaker.spend_without_progress_multiple)} x the $${e.lastUnitCost.toFixed(4)} the last completed unit cost`;
+  }
+  return (
+    `spend_without_progress_sessions = ${String(e.breaker.spend_without_progress_sessions)} x the ` +
+    `$${e.meanSessionCost.toFixed(4)} mean of this root's ${String(e.transactingSessions)} transacting session(s)`
+  );
+}
+
+/**
+ * D-15 (PRDR-261): how close to the threshold counts as AT it.
+ *
+ * At rows === spend_without_progress_sessions the two sides of the comparison
+ * are one number and the design's own `>` says ALLOWED. IEEE-754 decided it
+ * instead: (11.0275965 / 20) * 20 is 11.027596499999997803, one ulp low, and a
+ * live init was refused its twentieth session with "$11.03 ... past the $11.03
+ * this run allows" while the identical twenty sessions at a thousand times the
+ * price were allowed. The boundary was a coin flip on the low bits of the money.
+ *
+ * RELATIVE, because this repository configures ceilings from $0.0001 to
+ * thousands and no absolute epsilon is right at both ends. Rounding both sides
+ * to cents was the first proposal and is an absolute epsilon in disguise: at
+ * those ceilings it makes the breaker inert while its tests stay green. The
+ * nearest REAL decision is one session's share of the mean — 5e-2 relative at
+ * the default of 20 sessions, 1e-2 at 100 — so this is seven orders of
+ * magnitude below what it must never forgive and seven above the ulp noise it
+ * must. The relative-versus-absolute choice is argued, not mutation-covered:
+ * inside the range this repository configures the two are indistinguishable.
+ */
+const TIE_TOLERANCE = 1e-9;
+
 export class NoProgressError extends Error {
-  constructor(
-    readonly sinceProgress: number,
-    readonly threshold: number,
-  ) {
+  constructor(readonly evidence: BreakerEvidence) {
     super(
-      `no-progress breaker (X-1⁵): $${sinceProgress.toFixed(2)} spent without completing a unit of work, ` +
-        `past the $${threshold.toFixed(2)} this run allows. Nothing has finished in that time, which is what a ` +
-        "runaway looks like and what working never does. Everything completed so far is checkpointed.",
+      `no-progress breaker (X-1⁵): $${evidence.sinceProgress.toFixed(4)} spent without completing a unit of work, ` +
+        `past ${breakerBound(evidence)}. Nothing has finished in that time, which is what a runaway looks like ` +
+        "and what working never does. Everything completed so far is checkpointed.",
     );
     this.name = "NoProgressError";
   }
@@ -261,18 +327,43 @@ export class SpendLedger {
    * and a purely derived threshold would halt on the first dollar spent —
    * punishing precisely the checkpoint reuse that makes a restart cheap.
    */
-  progressThreshold(): number {
+  /**
+   * The three terms, and which one governs.
+   *
+   * The scale-free term is the only one available before a unit completes. A
+   * fixed dollar floor was the first design; this file's own audit found it
+   * wrong for the reason X-1⁵ rejects a fixed total — it read ~3x this
+   * project's slice cost and would read a fraction of that on a project whose
+   * sessions cost ten times as much. The mean session cost is observable after
+   * ONE session, which is far sooner than any unit completes.
+   *
+   * D-15 (PRDR-261): "scale-free" is literally true and it is why, before any
+   * unit completes, this is a COUNT. `sinceProgress` is then the same sum
+   * `sessionCostEvidence` averages, so `sinceProgress > (sinceProgress/rows)*n`
+   * reduces to `rows > n` and the dollars survive only through the floor. That
+   * is the intended control and it is not changed here; what is changed is that
+   * its boundary was decided by arithmetic (see `TIE_TOLERANCE`) and that the
+   * governing term is now NAMED, so a refusal can be read without this file.
+   */
+  private breakerTerms(): Omit<BreakerEvidence, "sinceProgress"> {
+    const { mean, sessions } = sessionCostEvidence(this.root);
+    const floor = this.breaker.spend_without_progress_floor_usd;
     const perUnit = this.lastUnitCost * this.breaker.spend_without_progress_multiple;
+    const perSession = mean * this.breaker.spend_without_progress_sessions;
+    const threshold = Math.max(floor, perUnit, perSession);
     /**
-     * The scale-free term, and the only one available before a unit completes.
-     * A fixed dollar floor was the first design; this file's own audit found it
-     * wrong for the reason X-1⁵ rejects a fixed total — it read ~3x this
-     * project's slice cost and would read a fraction of that on a project whose
-     * sessions cost ten times as much. The mean session cost is observable
-     * after ONE session, which is far sooner than any unit completes.
+     * Which term to NAME when two tie. The floor is the claim that needs no
+     * observation behind it, so it wins, and an operator is never told a mean
+     * stopped them when the configured minimum would have on its own.
      */
-    const perSession = meanSessionCost(this.root) * this.breaker.spend_without_progress_sessions;
-    return Math.max(this.breaker.spend_without_progress_floor_usd, perUnit, perSession);
+    let term: BreakerTerm = "floor";
+    if (threshold > floor && threshold === perUnit) term = "unit";
+    else if (threshold > floor) term = "sessions";
+    return { threshold, term, transactingSessions: sessions, meanSessionCost: mean, lastUnitCost: this.lastUnitCost, breaker: this.breaker };
+  }
+
+  progressThreshold(): number {
+    return this.breakerTerms().threshold;
   }
 
   spent(): number {
@@ -310,8 +401,8 @@ export class SpendLedger {
       this.lastUnitCost = mark.unitCost ?? this.lastUnitCost;
     }
     const sinceProgress = spent - this.progressMark;
-    const threshold = this.progressThreshold();
-    if (sinceProgress > threshold) throw new NoProgressError(sinceProgress, threshold);
+    const evidence: BreakerEvidence = { ...this.breakerTerms(), sinceProgress };
+    if (sinceProgress - evidence.threshold > evidence.threshold * TIE_TOLERANCE) throw new NoProgressError(evidence);
   }
 
   /**
@@ -378,24 +469,58 @@ export function noteUnitComplete(root: string): void {
  * The torn-LAST-line tolerance stays: that is the one shape a crash actually
  * produces, and the justification for it was always sound.
  */
+/** D-14/D-15 (PRDR-261): the mean, and the denominator it was taken over — one loop, one predicate. */
+export interface SessionCostEvidence {
+  readonly mean: number;
+  readonly sessions: number;
+}
+
 /**
- * X-1⁵: what a session has cost on this root so far, on average.
+ * X-1⁵: what a SESSION has cost on this root so far, on average.
  *
- * The scale signal the no-progress threshold derives from. Zero rows means zero,
- * and the absolute minimum governs until the first session lands.
+ * The scale signal the no-progress threshold derives from, so the denominator
+ * counts sessions that TRANSACTED, not rows.
+ *
+ * D-14 (PRDR-261): this counted every parseable row. A `partial` row is a
+ * crashed session's zeroed telemetry recorded as a flagged lower bound
+ * (PRDR-053, `src/schemas/records.ts`) — money of record in `readRecordedSpend`
+ * and no evidence at all of what a session costs. Counting it left the
+ * numerator alone and grew the denominator, so twenty-one crash rows from one
+ * mis-parsed usage limit dragged a live run's threshold from $73.52 to $9.19
+ * and halted it three real sessions in. The row is still in the file, still in
+ * the total, and still in spend-since-progress; what it stops doing is setting
+ * the scale, which it never had standing to do. `src/init/sizing-evidence.ts`
+ * already excludes the same rows from turn evidence — this makes the two
+ * readers agree rather than inventing a second rule.
+ *
+ * Keyed on the FLAG, not on a zero cost. `partial` is set from `result.crashed`
+ * alone, so a producer that reports a crash with a non-zero cost mints a
+ * non-zero partial row this must still exclude — and a genuinely free C-8 reuse
+ * session must still count, or the mean reads high on exactly the runs that are
+ * cheapest, which is the fail-open direction. It deliberately does NOT catch an
+ * UNFLAGGED $0 row: the two drivers do not agree on how a crash is recognised,
+ * and that is a write-side question recorded in this ticket's non-goals rather
+ * than papered over here.
+ *
+ * No qualifying row means zero, never NaN. `Math.max(floor, 0, NaN)` is NaN and
+ * `x > NaN` is always false, so an unguarded division would make the breaker
+ * permanently inert on a root whose every row is `partial` — reachable, which
+ * is a total backend outage. Zero lets the floor — a MINIMUM, not a fallback —
+ * govern until the first session lands.
  */
-export function meanSessionCost(root: string): number {
+export function sessionCostEvidence(root: string): SessionCostEvidence {
   const file = path.join(stateDir(root), "ledger.jsonl");
-  if (!existsSync(file)) return 0;
+  if (!existsSync(file)) return { mean: 0, sessions: 0 };
   let total = 0;
-  let rows = 0;
+  let sessions = 0;
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (line.trim() === "") continue;
     try {
       const parsed = ledgerRowSchema.safeParse(JSON.parse(line));
       if (!parsed.success) continue;
+      if (parsed.data.partial !== undefined) continue;
       total += parsed.data.cost_estimate_usd;
-      rows += 1;
+      sessions += 1;
     } catch {
       /**
        * PRDR-151's rule: a torn line is a crash artifact and is skipped. Unlike
@@ -406,7 +531,7 @@ export function meanSessionCost(root: string): number {
       continue;
     }
   }
-  return rows === 0 ? 0 : total / rows;
+  return { mean: sessions === 0 ? 0 : total / sessions, sessions };
 }
 
 export function readRecordedSpend(root: string): number {

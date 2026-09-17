@@ -237,11 +237,27 @@ export function isOutage(text: string): boolean {
  * time would wait an hour early and fail again — a retry that looks like it
  * honoured the reset and did not. The current time is taken IN the named zone
  * and the delta computed there, which needs no date arithmetic.
+ *
+ * D-13 (PRDR-261): the MINUTES are optional, because the backend does not
+ * always send them. PRDR-189 read one of the two formats it emits and this
+ * doc-block claimed both. The live message that killed an init was
+ * "You've hit your session limit · resets 5pm (Africa/Algiers)" — no ":MM", no
+ * match, `null`, and the 1/5/15 ladder ran against a window that reset four
+ * hours later. Every test that reached here used 10:30pm or 5:20pm, so the
+ * whole no-minutes family was untested and the gap read as intent.
+ *
+ * A TIME is still required, and that is what the second guard is for. With the
+ * colon optional the pattern would otherwise accept any bare integer after the
+ * word: "resets 5 minutes from now" reads as 05:00 — a sixteen-hour sleep —
+ * and "resets 2026-09-17T17:00:00Z" reads the "20" of the year as 20:00. A
+ * real reset states minutes or a meridiem. Neither means this is not a clock,
+ * and the function says nothing, which sends the caller back to the ladder.
  */
 export function msUntilReset(message: string, now: Date = new Date()): number | null {
-  const m = /resets\s+(\d{1,2}):(\d{2})\s*(am|pm)?(?:\s*\(([A-Za-z]+\/[A-Za-z_]+)\))?/i.exec(message);
+  const m = /resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([A-Za-z]+\/[A-Za-z_]+)\))?/i.exec(message);
   if (m === null) return null;
-  const minute = Number(m[2]);
+  if (m[2] === undefined && m[3] === undefined) return null;
+  const minute = m[2] === undefined ? 0 : Number(m[2]);
   const meridiem = m[3]?.toLowerCase();
   let hour = Number(m[1]);
   if (meridiem === "pm" && hour !== 12) hour += 12;
