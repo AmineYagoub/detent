@@ -86,17 +86,82 @@ single read of a slice returns on UNCHANGED text:
 Each arm's post-revision count lands at or just above the per-read yield (ratios 1.4, 1.1, 1.04).
 The residue is what a reviewer finds when it reads anything, and today all of it is held.
 
-## Expected effect
+**Corrected by the fourth arm: those ratios use the wrong yield.** The column above is the
+PRE-revision churn yield, taken on the unrevised draft, because a single post-revision read cannot
+produce a yield. Arm 4 takes three and shows the two diverge — 5.0 per read before the revision,
+10.0 after it, on a draft of the same ticket count. Against the pre-revision yield arm 4's ratio is
+2.0 and the pattern breaks; against the post-revision yield it is 10 held over 10.0 per read, a
+ratio of 1.00. The claim this paragraph makes is right and its arithmetic was reading the yield of
+a document the count does not come from.
 
-The 2-of-3 filter kept 3 of 11, 4 of 14 and 6 of 14 of the first review's findings in these three
-arms — it discards 57–73%. Applying it to the 7–8 post-revision findings should leave roughly 2–3
-per slice that reproduce, against ~13 held per slice today and a ~310 projection at PRESENT.
+## Expected effect — predicted, then measured, and the prediction was wrong
+
+**Predicted, before the fix shipped.** The 2-of-3 filter kept 3 of 11, 4 of 14 and 6 of 14 of the
+first review's findings in these three arms — it discards 57–73%. Applying it to the 7–8
+post-revision findings should leave roughly 2–3 per slice that reproduce, against ~13 held per
+slice today and a ~310 projection at PRESENT.
+
+**Measured.** Fourth arm on s07 against this ticket's own binary (`f0c2c6a`), `PLAN_REVISIONS = 1`
+— the same round count as the arm-1 baseline — same slice key `ad87931c4d2d`, s01-s06 reused for
+$0. Log `exp269-20260917-175117.log`. **The residue rose to 10 and HELD rose from 15 to 21.**
+
+                            1 round      2 resample      2 ITERATE    1 + SAMPLED
+    tickets                      17              16             20             17
+    revision resolved             3               4              6              3
+    revision survived             0               0              0              1
+    revision introduced           7               7              8              9
+    revision %                 100%            100%           100%            75%
+    null %                      67%             68%            48%            60%
+    HELD total                   15              17             16             21
+      after-revision              7               7              8              1
+      introduced                  -               -              -              9
+      seen-once                   8              10              8             11
+
+**The prediction applied the filter to the wrong base.** The per-read yields are in the evidence
+files and they settle it:
+
+                              read 1   read 2   read 3   UNION   at or above 2 of 3
+    pre-revision                   5        6        4      10                    4
+    post-revision (revised)        8       13        9      15                   10
+    arm 1 post-revision            7  — one unfiltered read: no union, no filter
+
+The filter does exactly what this ticket claims for it: it cuts the three-read union by 60% before
+the revision and by 33% after it. The count rose against arm 1 because arm 1's 7 was ONE draw and
+not a union, and 7 sits inside the arm-4 per-read range of 8, 13, 9. Sampling a review both ADDS
+reads and filters them, and against a single-read baseline the adding dominates. The 2–3 figure came
+from applying a 2-of-3 threshold to one read's 7 findings — a quantity the mechanism never produces.
+
+**No acceptance criterion asserted a volume.** The four that the artifact can witness — the
+post-revision review is sampled, `after-revision` means survived, a non-handed leftover is
+`introduced`, and `revision` keeps its meaning — all hold in it: the review ran as three reads into
+`slices/s07/revised/draws/1..3/`, and of the 10 findings put in front of the human `revisionOutcome`
+labels 1 `after-revision` and 9 `introduced`. The other two are not artifact-observable — PRESENT's
+ordering is applied at render time and the stored `remaining` carries `labelHeld` order, and the
+sixth is a test — so both rest on the suite, where they pass.
+
+**What the fix bought is the labelling, not a shorter list.** Under the old label all 10 findings
+would have read "survived a paid revision" and PRDR-267 would have sorted all 10 to the top of
+PRESENT — nine false claims put in the strongest slot. This section should not have promised a
+volume on top of that.
+
+**Two things the fourth arm saw that no earlier arm could.** `survived` is non-zero for the first
+time across four arms, so revision % falls from 100% to 75%: the three-arm finding that the revision
+"resolves 100% of what it is handed, every time" rested on a post-revision read too noisy for its
+findings to match a handed `(ticket, tag)` pair, and one matched once the read was filtered. That is
+1 of 4 handed findings — not a trend. And the revised draft draws twice the complaints per read as
+the pre-revision draft at the same ticket count, 10.0 against 5.0, which no earlier arm could see
+because none took more than one post-revision read. Neither is actionable at n=1; both want the same
+A/B on a second slice. Both are recorded in the run tracker rather than filed.
 
 ## Cost
 
 Two extra reads per slice at the post-revision step. Reads in this run cost $3.04–$4.19, so about
 $6–8 per slice. For comparison, the second revision round measured above cost $15.59 and moved the
 held count by +1.
+
+**Measured: +$10.52 per slice.** The arm-4 s07 cost $35.81 against the arm-1 baseline's $25.29 for
+the same slice at the same round count. The estimate was low — it priced two extra reads and not the
+larger revised draft those reads are taken against.
 
 This reverses PRDR-268's non-goal "Does NOT re-sample the review inside the loop", which was
 written before the three-arm result existed. That non-goal was a scope boundary on a mechanism
