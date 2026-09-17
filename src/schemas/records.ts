@@ -104,6 +104,13 @@ export const dossierSchema = z.strictObject({
   generations: z.array(z.strictObject({ index: z.number().int().nonnegative(), counters: countersSchema })),
   last_signatures: z.array(nonEmptyString).default([]),
   artifact_index: z.array(nonEmptyString).default([]),
+  /**
+   * PRDR-271: what PLAN's review said about this ticket, strongest first.
+   * Defaulted rather than required, so a dossier written before this field
+   * existed still parses — the ladder reaching a human is not the moment to
+   * fail on a schema. Empty means PLAN named nothing, not that it was unread.
+   */
+  plan_findings: z.array(nonEmptyString).default([]),
   suggested_resolutions: z.array(nonEmptyString).default([]),
 });
 export type Dossier = z.infer<typeof dossierSchema>;

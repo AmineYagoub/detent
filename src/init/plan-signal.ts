@@ -1,5 +1,6 @@
 import { findingKey } from "./plan-review.js";
 import type { HeldFinding, PlanReview } from "../schemas/init.js";
+import type { SampledReview } from "./plan-sample.js";
 
 /**
  * What a revision round DID, and what the same arithmetic says when nothing
@@ -102,14 +103,51 @@ export function labelHeld(
   handed: PlanReview["findings"],
   leftover: PlanReview["findings"],
   seenOnce: PlanReview["findings"],
+  seen?: ReadonlyMap<string, number>,
 ): HeldFinding[] {
   const keys = new Set(handed.map(findingKey).filter((k): k is string => k !== null));
   const survived = (f: PlanReview["findings"][number]): boolean => {
     const key = findingKey(f);
     return key !== null && keys.has(key);
   };
+  /**
+   * PRDR-271: the read count travels with the label.
+   *
+   * `sampleReviewPlan` counts how many of the k reads returned each key and, on
+   * HEAD, spent that integer on one `>= threshold` comparison. A finding every
+   * read agreed on and one that scraped past ⌈k/2⌉ reached the human — and would
+   * reach the run phase — indistinguishable. A finding naming no ticket has no
+   * key, so it has no count and the field stays absent rather than guessing 1.
+   */
+  const count = (f: PlanReview["findings"][number]): { readonly seen?: number } => {
+    const key = findingKey(f);
+    const n = key === null ? undefined : seen?.get(key);
+    return n === undefined ? {} : { seen: n };
+  };
   return [
-    ...leftover.map((f) => ({ ...f, held: survived(f) ? ("after-revision" as const) : ("introduced" as const) })),
-    ...seenOnce.map((f) => ({ ...f, held: "seen-once" as const })),
+    ...leftover.map((f) => ({ ...f, ...count(f), held: survived(f) ? ("after-revision" as const) : ("introduced" as const) })),
+    ...seenOnce.map((f) => ({ ...f, ...count(f), held: "seen-once" as const })),
   ];
+}
+
+/**
+ * PRDR-271: the held list for one round, from that round's samples.
+ *
+ * BOTH reviews are sampled, so both contribute the reads that fell below the
+ * ⌈k/2⌉ threshold and both counted their keys. Flattening that is this module's
+ * business rather than the caller's — `plan-slices` reached into four fields
+ * across two sample objects to do it by hand, which is how the count came to be
+ * assembled in one place and read in another.
+ *
+ * Later samples win on a shared key, so a finding both reviews saw carries the
+ * POST-revision count — the draft `leftover` was itself read from. A `seen-once`
+ * finding only the pre-revision sample saw keeps its own.
+ */
+export function heldFindings(
+  handed: PlanReview["findings"],
+  leftover: PlanReview["findings"],
+  ...samples: readonly (SampledReview | null | undefined)[]
+): HeldFinding[] {
+  const seenOnce = samples.flatMap((s) => [...(s?.seenOnce ?? [])]);
+  return labelHeld(handed, leftover, seenOnce, new Map(samples.flatMap((s) => [...(s?.seen ?? [])])));
 }

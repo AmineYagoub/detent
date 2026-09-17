@@ -4,6 +4,7 @@ import { dossierSchema, type Dossier } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { cumulativeCounters } from "./generations.js";
 import { runsDir } from "./journal.js";
+import { findingLine, readPlanFindings } from "./plan-findings.js";
 
 /**
  * T-049 — the dossier (A-8, C-10, X-8).
@@ -26,6 +27,13 @@ export function buildDossier(root: string, ticket: Ticket, reason: string): Doss
     generations: ticket.generations.map((g) => ({ index: g.index, counters: g.counters })),
     last_signatures: failure === null ? [] : [failure],
     artifact_index: artifacts,
+    /**
+     * PRDR-271: the ladder's last rung hands the ticket to a human, and what
+     * PLAN's review already said about it is the one piece of evidence that
+     * predates every session on the trail. Without it a human reads four
+     * failed attempts and no account of what was suspect before the first one.
+     */
+    plan_findings: (readPlanFindings(root, ticket.id) ?? []).map(findingLine),
     suggested_resolutions: [
       "review the dossier and the last failure record",
       "requeue with guidance (`detent requeue <id>`) to open a fresh generation (X-8)",
@@ -53,8 +61,24 @@ export function dossierSummary(ticket: Ticket, dossier: Dossier): string {
       `${totals.research_sessions} research, ${totals.hypotheses} hypotheses)`,
     ...(dossier.last_signatures.length > 0 ? [`last failure signature: ${dossier.last_signatures[0]}`] : []),
     `artifacts: ${dossier.artifact_index.join(", ") || "(none)"}`,
+    ...planLines(dossier.plan_findings),
   ];
   return lines.join("\n");
+}
+
+/**
+ * PRDR-271: C-10 asks for a decision on one screen, so the summary shows the
+ * three best-reproduced findings and says how many more the file holds; the
+ * dossier itself carries all of them. Truncating in the summary while the
+ * artifact stays complete is the same split `artifact_index` already makes.
+ */
+const SUMMARY_FINDINGS = 3;
+
+function planLines(findings: readonly string[]): readonly string[] {
+  if (findings.length === 0) return [];
+  const shown = findings.slice(0, SUMMARY_FINDINGS).map((f) => `  - ${f}`);
+  const rest = findings.length - shown.length;
+  return [`plan review said (${findings.length}):`, ...shown, ...(rest > 0 ? [`  - ...${rest} more in dossier.json`] : [])];
 }
 
 function readSignature(dir: string): string | null {

@@ -28,6 +28,17 @@ export interface SampledReview {
   /** Every usable read, in LAUNCH order, so the caller can measure what the reads agreed on. */
   readonly reads: readonly PlanReview["findings"][];
   readonly threshold: number;
+  /**
+   * PRDR-271: how many reads saw each key, by `findingKey` identity.
+   *
+   * This was built to apply the threshold and then discarded one line later, so
+   * a finding every read agreed on and one that scraped past ⌈k/2⌉ left here
+   * indistinguishable. Over six reads of one slice the distinction is real:
+   * 14 of 16 distinct findings reproduced 3+ times, about half of what survives
+   * the filter reproduced 5-6 times, and nothing sat at 2 of 6. It is the
+   * evidence-strength signal the run phase orders its work by.
+   */
+  readonly seen: ReadonlyMap<string, number>;
 }
 
 /** Real time, unref'd: a wait the race has already won must not hold the process open. */
@@ -101,5 +112,5 @@ export async function sampleReviewPlan(
       ((seen.get(key) ?? 0) >= threshold ? findings : seenOnce).push(f);
     }
   }
-  return { verdict: findings.length > 0 ? "changes" : "approve", findings, seenOnce, reads, threshold };
+  return { verdict: findings.length > 0 ? "changes" : "approve", findings, seenOnce, reads, threshold, seen };
 }

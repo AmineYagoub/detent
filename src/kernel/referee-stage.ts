@@ -6,6 +6,7 @@ import { parseArtifact } from "../schemas/common.js";
 import { hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { Breach, publicTicket, type RefereeContext } from "./referee-context.js";
+import { planFindingsInput } from "./session-inputs.js";
 import type { SessionArm } from "./referee-session.js";
 import type { KernelEvent } from "./events.js";
 import { runsDir } from "./journal.js";
@@ -167,6 +168,7 @@ async function research(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
       ticket: publicTicket(ticket, ctx.root),
       failure: ctx.maybeArtifact(id, "last_failure.json"),
       expected_output: researchBriefSkeleton(),
+      ...planFindingsInput(ctx, id),
     },
   });
   if (outcome.upstream !== undefined) {

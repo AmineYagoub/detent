@@ -10,7 +10,7 @@ import { draftAndRead, type PlanDeps } from "./plan.js";
 import { PLAN_REVISIONS } from "./plan-review.js";
 import { sampleReviewPlan, type SampledReview } from "./plan-sample.js";
 import { churnLine, nullNote, recurringLine, remainLine, revisionLine, sampleLine } from "./plan-notes.js";
-import { labelHeld, revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
+import { heldFindings, revisionOutcome, sampleChurn, type RevisionOutcome } from "./plan-signal.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
@@ -451,7 +451,8 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
      * an earlier round's unreproduced findings are about a draft the round
      * after it replaced.
      */
-    const held: HeldFinding[] = [...normalised.findings, ...labelHeld(review?.findings ?? [], leftover, [...(review?.seenOnce ?? []), ...(after?.seenOnce ?? [])])];
+    /** PRDR-271: `heldFindings` merges the two samples' seen-once reads and their counts; the post-revision count wins a shared key. */
+    const held: HeldFinding[] = [...normalised.findings, ...heldFindings(review?.findings ?? [], leftover, review, after)];
     if (!reviewed) {
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);

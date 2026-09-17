@@ -2,6 +2,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import type { SessionState } from "../schemas/roles.js";
 import { publicTicket } from "./referee-context.js";
 import { operatorRecord } from "./stages/review.js";
+import { readPlanFindings } from "./plan-findings.js";
 
 /**
  * T-104's input assembly, lifted out of the session arm — what a driver-launched
@@ -39,7 +40,32 @@ export function attemptInputs(
   state: SessionState,
   workDir: string,
 ): Record<string, unknown> {
-  return { ...attemptBody(ctx, ticket, state, workDir), operator_record: operatorRecord(ticket) };
+  /**
+   * PRDR-271: `plan_findings` is added around the switch, like `operator_record`
+   * and for the same reason — every state the driver launches an attempt in
+   * writes code, so every rung of the ladder inherits it instead of having to
+   * remember it. That is what lets a finding confirmed by a red gate in
+   * `IN_PROGRESS` still be readable in `BLIND_FIX`, `RESEARCH` and
+   * `INFORMED_FIX` rather than being rediscovered three times.
+   */
+  return {
+    ...attemptBody(ctx, ticket, state, workDir),
+    operator_record: operatorRecord(ticket),
+    ...planFindingsInput(ctx, ticket.id),
+  };
+}
+
+/**
+ * PRDR-271: the key, or nothing at all when PLAN named no finding for this
+ * ticket — an absent key rather than an empty array, so a session is never
+ * handed a channel that says "reviewed, nothing found" when what happened is
+ * that PLAN did not run. `research()` in `referee-stage.ts` assembles its own
+ * inputs and calls this too: the RESEARCH rung is the one the ladder spends on
+ * finding out WHY, and it is the rung that most needs what PLAN already wrote.
+ */
+export function planFindingsInput(ctx: Pick<InputContext, "root">, ticketId: string): Record<string, unknown> {
+  const findings = readPlanFindings(ctx.root, ticketId);
+  return findings === null ? {} : { plan_findings: findings };
 }
 
 function attemptBody(ctx: InputContext, ticket: Ticket, state: SessionState, workDir: string): Record<string, unknown> {

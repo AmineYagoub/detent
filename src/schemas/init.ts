@@ -468,7 +468,17 @@ export type PlanDraftTicket = PlanDraft["tickets"][number];
  * cached artifacts carry the old marking and must keep parsing.
  */
 export type HeldKind = "seen-once" | "after-revision" | "introduced";
-export type HeldFinding = PlanReview["findings"][number] & { readonly held?: HeldKind };
+/**
+ * PRDR-271: `seen` is how many of the k reads returned this finding.
+ *
+ * Not part of `planReviewSchema`, which is strict and describes what the MODEL
+ * returns; a reviewer does not report its own reproducibility. `sampleReviewPlan`
+ * computes it across the draws and it is attached here, beside `held`, for the
+ * same reason `held` is: it is what the pipeline concluded about a finding
+ * rather than what the finding says. Optional, because a cached artifact
+ * written before this and an unsampled single-draw review both lack it.
+ */
+export type HeldFinding = PlanReview["findings"][number] & { readonly held?: HeldKind; readonly seen?: number };
 
 /*
  * ---------------------------------------------------------------------------
