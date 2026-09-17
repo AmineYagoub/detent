@@ -391,3 +391,99 @@ describe("PRDR-264 the pipeline hands planning research its contract (D-17)", ()
     expect(carried?.issue, "the relaunch is told why, in the validator's own words").toBe("the session wrote no artifact");
   });
 });
+
+/**
+ * PRDR-266 — the ascent half of X-6a.
+ *
+ * Run 4 and run 5 answered the SAME question from the same three documents.
+ * Run 4 escalated and found Law 25-11 of 2025 amending the statute every
+ * project document names bare. Run 5 wrote `needs_specialist` from tiers 1-2
+ * and never called WebSearch, arguing a priori that looking was pointless.
+ *
+ * PRDR-264 foresaw this arm becoming a cheap exit and guarded it with
+ * `evidence.min(1)`. Run 5's brief carried SEVEN evidence items and still
+ * never left tier 1, because tier-1 citations are free. `sources_consulted`
+ * carries the tier and is the field that can tell the two apart.
+ */
+describe("PRDR-266 a verdict about the outside world requires consulting it", () => {
+  /** Run 5's live legal brief, reduced to the shape the rule reads. */
+  function needsSpecialist(tiers: readonly { tier: number; ref: string }[]): Record<string, unknown> {
+    return {
+      schema_version: 1,
+      outcome: "undecidable",
+      question: OTHER,
+      question_hash: questionHash(OTHER),
+      undecidable: {
+        reason: "needs_specialist",
+        detail: "three documents route retention, breach-notification and DSR duties to counsel",
+        who_decides: "ANPDP-qualified Algerian data-protection counsel",
+      },
+      evidence: Array.from({ length: 7 }, (unused, i) => ({
+        source: `docs/design/doc-${String(i)}.md`,
+        claim: "routes the duty to counsel and names no figure",
+      })),
+      sources_consulted: [...tiers],
+      local_search: { docs_checked: ["docs/design/data-model.md"], code_checked: ["repo-wide grep"] },
+      what_would_falsify: "counsel guidance recorded with an actual retention period",
+    };
+  }
+
+  const INTERNAL = [
+    { tier: 1, ref: "docs/design/data-model.md" },
+    { tier: 2, ref: "repo-wide grep for retention/ANPDP" },
+  ] as const;
+
+  it("refuses `needs_specialist` supported only by this project's own docs and code", () => {
+    const external = needsSpecialist([...INTERNAL, { tier: 5, ref: "DLA Piper, Algeria" }]);
+    expect(
+      parseArtifact(planningBriefSchema, external).ok,
+      "control: the same verdict WITH an external tier is a valid brief, so the refusal below is about the tiers",
+    ).toBe(true);
+
+    const parsed = parseArtifact(planningBriefSchema, needsSpecialist(INTERNAL));
+    expect(parsed.ok, "a claim that only a specialist knows is a claim about the world outside tiers 1-2").toBe(false);
+    expect(
+      parsed.ok === false && parsed.reason === "invalid" ? parsed.issues.join("; ") : "",
+      "and it is the missing escalation that refuses it",
+    ).toContain("sources_consulted");
+  });
+
+  it("refuses `no_public_source` on the same grounds, which its own words assert", () => {
+    const brief = needsSpecialist(INTERNAL);
+    (brief["undecidable"] as { reason: string }).reason = "no_public_source";
+    expect(
+      parseArtifact(planningBriefSchema, brief).ok,
+      "`no public source carries it` is self-contradictory from a brief that consulted no public source",
+    ).toBe(false);
+  });
+
+  it("exempts `decision_not_made`, which tier 1 settles dispositively", () => {
+    const parsed = parseArtifact(planningBriefSchema, undecidable(Q));
+    expect(
+      parsed.ok,
+      "the live pricing brief cited tiers 1 only and was RIGHT — the founder has not decided, so no tier carries it",
+    ).toBe(true);
+  });
+
+  /**
+   * The boundary itself. Tier 3 is pinned upstream documentation — already the
+   * outside world — so a brief that escalates exactly that far has escalated.
+   * Without this case `>= EXTERNAL_TIER` and `> EXTERNAL_TIER` are the same
+   * rule to every other test here, which each reach tier 5.
+   */
+  it("accepts escalation that stops exactly at tier 3", () => {
+    const parsed = parseArtifact(planningBriefSchema, needsSpecialist([...INTERNAL, { tier: 3, ref: "Law 18-07, as amended" }]));
+    expect(
+      parsed.ok,
+      parsed.ok === false && parsed.reason === "invalid" ? parsed.issues.join("; ") : "",
+    ).toBe(true);
+  });
+
+  it("counts seven tier-1 citations as no escalation at all", () => {
+    const brief = needsSpecialist(Array.from({ length: 7 }, (unused, i) => ({ tier: 1, ref: `docs/d-${String(i)}.md` })));
+    expect(
+      parseArtifact(planningBriefSchema, brief).ok,
+      "PRDR-264's evidence.min(1) guard is cleared sevenfold here while the question stays unresearched",
+    ).toBe(false);
+  });
+});

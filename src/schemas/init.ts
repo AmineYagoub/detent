@@ -183,7 +183,8 @@ export const planningBriefSchema = z
     what_would_falsify: z.string().default(""),
   })
   .superRefine(requireLocalSearchBeforeWeb)
-  .superRefine(requireOutcomeArm);
+  .superRefine(requireOutcomeArm)
+  .superRefine(requireEscalationBeforeUndecidable);
 
 /**
  * PRDR-264: the two arms are exclusive and each carries its own evidence.
@@ -252,6 +253,59 @@ export function requireLocalSearchBeforeWeb(
       message: "X-6a: a brief citing a URL must record a non-empty local_search (tiers 1-2 consulted first)",
     });
   }
+}
+
+/**
+ * PRDR-266: the first tier that is not this project talking about itself.
+ *
+ * X-6a's tiers 1-2 are this project's documentation and its codebase. Tier 3
+ * and up — pinned library docs, upstream issues, technical sources, the open
+ * web — are the outside world, and they are what a verdict about the outside
+ * world has to have touched.
+ */
+const EXTERNAL_TIER = 3;
+
+/**
+ * PRDR-266: X-6a's ascent, the mirror of `requireLocalSearchBeforeWeb`.
+ *
+ * That rule stops a session skipping the project and going straight to the web.
+ * Nothing stopped the opposite: declaring that the outside world holds no answer
+ * without consulting it. `needs_specialist` and `no_public_source` are both
+ * claims about what exists outside this project, and tiers 1-2 cannot establish
+ * either, so a brief asserting one from tiers 1-2 alone asserts something its
+ * own evidence cannot reach.
+ *
+ * `decision_not_made` is exempt, and the exemption is the rule's point rather
+ * than a hole in it: that reason is a claim about THIS project's state, which
+ * tier 1 settles dispositively. When the decision log lists an item as open, no
+ * external tier carries an answer that does not exist anywhere yet.
+ *
+ * The count that cannot do this job is `evidence.min(1)` — PRDR-264's own guard
+ * against this arm becoming a cheap exit. The live brief that forced this ticket
+ * cleared it sevenfold and still never left tier 1, because tier-1 citations are
+ * free. `sources_consulted` carries the tier and is the field that can tell a
+ * session that looked from one that did not.
+ */
+export function requireEscalationBeforeUndecidable(
+  brief: {
+    readonly outcome: "answered" | "undecidable";
+    readonly undecidable?: { readonly reason: string } | undefined;
+    readonly sources_consulted: readonly { readonly tier: number }[];
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (brief.outcome !== "undecidable") return;
+  const reason = brief.undecidable?.reason;
+  if (reason !== "needs_specialist" && reason !== "no_public_source") return;
+  if (brief.sources_consulted.some((s) => s.tier >= EXTERNAL_TIER)) return;
+  ctx.addIssue({
+    code: "custom",
+    path: ["sources_consulted"],
+    message:
+      `X-6a: \`${reason}\` is a claim about sources outside this project, and tiers 1-2 are this ` +
+      `project's own docs and code — escalate and record a tier ${String(EXTERNAL_TIER)}+ consultation, ` +
+      `or settle it as \`decision_not_made\` if what is missing is a decision rather than a source`,
+  });
 }
 
 /*
