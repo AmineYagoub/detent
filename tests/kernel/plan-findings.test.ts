@@ -7,7 +7,7 @@ import { removeTree } from "../helpers.js";
 import { codeOnly } from "../../scripts/check-rules.js";
 import { newTicket } from "../../src/kernel/tickets/mutations.js";
 import { planFindingsInput } from "../../src/kernel/session-inputs.js";
-import { readPlanFindings } from "../../src/kernel/plan-findings.js";
+import { findingLine, readPlanFindings } from "../../src/kernel/plan-findings.js";
 import { buildDossier, dossierSummary } from "../../src/kernel/dossier.js";
 import { heldFindings } from "../../src/init/plan-signal.js";
 import type { SampledReview } from "../../src/init/plan-sample.js";
@@ -176,5 +176,61 @@ describe("PRDR-271 an attempt session receives the plan findings naming its tick
       expect(dossier.plan_findings).toStrictEqual([]);
       expect(dossierSummary(t, dossier)).not.toContain("plan review said");
     });
+  });
+});
+
+/**
+ * PRDR-272 (D-32) — the reader side: ranking survives the shape change, and a
+ * count says which draft it counted.
+ *
+ * `seen` was shipped by PRDR-271 one day before this ticket, so the only
+ * artifacts carrying it are run 6's — and that run's PLAN.json is exactly what
+ * the run phase reads. A finding backfilled to the panel fields, and a finding
+ * still holding only the legacy `seen`, have to rank by one rule or the feature
+ * silently stops ordering a corpus that cost four figures to produce.
+ */
+describe("PRDR-272 held findings rank and read the same whichever shape they carry", () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const r of roots.splice(0)) removeTree(r);
+  });
+
+  function rootWith(findings: readonly unknown[]): string {
+    const root = mkdtempSync(path.join(tmpdir(), "prdr272-"));
+    roots.push(root);
+    const dir = path.join(root, ".detent", "state");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "PLAN.json"), JSON.stringify({ schema_version: 1, phase: "PLAN", outputs: { review_findings: findings } }));
+    return root;
+  }
+
+  const weak = { ticket: "t-1", tag: "sizing", finding: "weak", held: "seen-once", seen_after: 1 };
+  const strong = { ticket: "t-1", tag: "dependency", finding: "strong", held: "introduced", seen_after: 3 };
+
+  it("ranks a finding carrying only the panel counts, not just the legacy `seen`", () => {
+    const got = readPlanFindings(rootWith([weak, strong]), "t-1");
+    expect(got?.map((f) => f.finding), "weakest first on disk, so a no-op sort would leave it there").toStrictEqual(["strong", "weak"]);
+  });
+
+  it("falls back to the post-revision panel, the one that read the draft on disk", () => {
+    const older = { ticket: "t-1", tag: "sizing", finding: "strong-before", seen_before: 3, seen_after: 1 };
+    const newer = { ticket: "t-1", tag: "dependency", finding: "strong-after", seen_before: 1, seen_after: 2 };
+    const got = readPlanFindings(rootWith([older, newer]), "t-1");
+    expect(got?.map((f) => f.finding), "the revision is the draft that still exists — `own = a ?? b` in the writer, same rule here").toStrictEqual(["strong-after", "strong-before"]);
+  });
+
+  it("still ranks run 6's artifacts, which carry only `seen`", () => {
+    const legacy = readPlanFindings(rootWith([{ ticket: "t-1", tag: "sizing", finding: "one", seen: 1 }, { ticket: "t-1", tag: "dependency", finding: "three", seen: 3 }]), "t-1");
+    expect(legacy?.map((f) => f.finding)).toStrictEqual(["three", "one"]);
+  });
+
+  it("names both drafts when a finding crossed the threshold between them", () => {
+    const line = findingLine({ ticket: "t-1", tag: "dependency", finding: "crossed", held: "introduced", seen: 2, seen_before: 1, seen_after: 2 });
+    expect(line, "an unqualified count cannot say which draft was read").toContain("first draft");
+    expect(line).toContain("revision");
+  });
+
+  it("keeps the unqualified form for a finding that carries only `seen`", () => {
+    expect(findingLine({ ticket: "t-1", tag: "sizing", finding: "legacy", seen: 3 })).toContain("3 of the plan's reads");
   });
 });

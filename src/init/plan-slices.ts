@@ -451,7 +451,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
      * an earlier round's unreproduced findings are about a draft the round
      * after it replaced.
      */
-    /** PRDR-271: `heldFindings` merges the two samples' seen-once reads and their counts; the post-revision count wins a shared key. */
+    /** PRDR-271: `heldFindings` carries each sample's read count. PRDR-272 (D-32): from the panel the label came from, both panels named, and a key this panel held is not also reported as sub-threshold. */
     const held: HeldFinding[] = [...normalised.findings, ...heldFindings(review?.findings ?? [], leftover, review, after)];
     if (!reviewed) {
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });

@@ -83,6 +83,26 @@ export function sampleChurn(reads: readonly PlanReview["findings"][]): RevisionO
 }
 
 /**
+ * PRDR-272 (D-32): the two review panels, kept apart.
+ *
+ * The pre-revision panel read the draft the revision replaced; the
+ * post-revision panel read what is on disk. Their `seen` maps count different
+ * populations, so they are carried as two fields rather than merged into one —
+ * which is PRDR-270's finding about the revision's own numbers, one layer down.
+ */
+export interface PanelCounts {
+  readonly before?: ReadonlyMap<string, number>;
+  readonly after?: ReadonlyMap<string, number>;
+}
+
+/** What `labelHeld` attaches to one finding: the label's own count, and both panels'. */
+interface Counts {
+  readonly seen?: number;
+  readonly seen_before?: number;
+  readonly seen_after?: number;
+}
+
+/**
  * PRDR-269 (D-25): which of the two things a held finding is.
  *
  * `plan-slices.ts` labelled every finding of the post-revision review
@@ -103,7 +123,7 @@ export function labelHeld(
   handed: PlanReview["findings"],
   leftover: PlanReview["findings"],
   seenOnce: PlanReview["findings"],
-  seen?: ReadonlyMap<string, number>,
+  counts?: PanelCounts,
 ): HeldFinding[] {
   const keys = new Set(handed.map(findingKey).filter((k): k is string => k !== null));
   const survived = (f: PlanReview["findings"][number]): boolean => {
@@ -111,22 +131,61 @@ export function labelHeld(
     return key !== null && keys.has(key);
   };
   /**
-   * PRDR-271: the read count travels with the label.
+   * PRDR-271: the read count travels with the label. PRDR-272 (D-32): from the
+   * panel that label describes.
    *
    * `sampleReviewPlan` counts how many of the k reads returned each key and, on
    * HEAD, spent that integer on one `>= threshold` comparison. A finding every
    * read agreed on and one that scraped past ⌈k/2⌉ reached the human — and would
-   * reach the run phase — indistinguishable. A finding naming no ticket has no
-   * key, so it has no count and the field stays absent rather than guessing 1.
+   * reach the run phase — indistinguishable.
+   *
+   * The panels read DIFFERENT drafts, so `seen` is whichever panel the label
+   * came from — the post-revision one where it counted the finding, the
+   * pre-revision one otherwise. That single rule covers both populations
+   * because `plan-slices` takes `leftover` from the post panel's own
+   * at-or-above-threshold partition (`after.findings`), so a `leftover` finding
+   * always has a post count and never reaches the fallback; a `seen-once`
+   * finding reaches it exactly when only the pre panel saw it, which is the
+   * panel it fell below the threshold in. `seen_before` and `seen_after` carry
+   * both, so the crossing that made this ambiguous is visible instead of merged
+   * away. A finding naming no ticket has no key, so it has no count and every
+   * field stays absent rather than guessing 1.
    */
-  const count = (f: PlanReview["findings"][number]): { readonly seen?: number } => {
+  const counted = (f: PlanReview["findings"][number]): Counts => {
     const key = findingKey(f);
-    const n = key === null ? undefined : seen?.get(key);
-    return n === undefined ? {} : { seen: n };
+    if (key === null) return {};
+    const b = counts?.before?.get(key);
+    const a = counts?.after?.get(key);
+    const own = a ?? b;
+    return {
+      ...(own === undefined ? {} : { seen: own }),
+      ...(b === undefined ? {} : { seen_before: b }),
+      ...(a === undefined ? {} : { seen_after: a }),
+    };
+  };
+  /**
+   * PRDR-272 (D-32): a finding the revision's own panel holds is not ALSO
+   * reported as having fallen below the filter.
+   *
+   * `heldFindings` unions the two panels' sub-threshold lists, so a finding
+   * seen once before the revision and twice after appeared in `seenOnce` AND in
+   * `leftover` — emitted twice, under labels asserting opposite things about
+   * the same `(ticket, tag)`. Live in run 6's s08, `t-s08-005 dependency` was
+   * both `introduced` and `seen-once`. The draft on disk decides: if the
+   * post-revision panel held it, the pre panel's weaker read of a draft that no
+   * longer exists is not a second finding.
+   */
+  const held = new Set(leftover.map(findingKey).filter((k): k is string => k !== null));
+  const fresh = (f: PlanReview["findings"][number]): boolean => {
+    const key = findingKey(f);
+    if (key === null) return true;
+    if (held.has(key)) return false;
+    held.add(key);
+    return true;
   };
   return [
-    ...leftover.map((f) => ({ ...f, ...count(f), held: survived(f) ? ("after-revision" as const) : ("introduced" as const) })),
-    ...seenOnce.map((f) => ({ ...f, ...count(f), held: "seen-once" as const })),
+    ...leftover.map((f) => ({ ...f, ...counted(f), held: survived(f) ? ("after-revision" as const) : ("introduced" as const) })),
+    ...seenOnce.filter(fresh).map((f) => ({ ...f, ...counted(f), held: "seen-once" as const })),
   ];
 }
 
@@ -139,15 +198,21 @@ export function labelHeld(
  * across two sample objects to do it by hand, which is how the count came to be
  * assembled in one place and read in another.
  *
- * Later samples win on a shared key, so a finding both reviews saw carries the
- * POST-revision count — the draft `leftover` was itself read from. A `seen-once`
- * finding only the pre-revision sample saw keeps its own.
+ * PRDR-272 (D-32) took the merge out. The panels stay named: `labelHeld` asks
+ * each finding's own panel for its count and reports both, so no finding again
+ * takes its label from one draft and its integer from the other. The two
+ * sub-threshold lists are still concatenated, because a finding only the pre
+ * panel saw is real judgement about a ticket that still exists — but a key the
+ * post panel HELD is dropped from them, since the draft on disk settles it.
  */
 export function heldFindings(
   handed: PlanReview["findings"],
   leftover: PlanReview["findings"],
-  ...samples: readonly (SampledReview | null | undefined)[]
+  before?: SampledReview | null,
+  after?: SampledReview | null,
 ): HeldFinding[] {
-  const seenOnce = samples.flatMap((s) => [...(s?.seenOnce ?? [])]);
-  return labelHeld(handed, leftover, seenOnce, new Map(samples.flatMap((s) => [...(s?.seen ?? [])])));
+  return labelHeld(handed, leftover, [...(before?.seenOnce ?? []), ...(after?.seenOnce ?? [])], {
+    ...(before?.seen === undefined ? {} : { before: before.seen }),
+    ...(after?.seen === undefined ? {} : { after: after.seen }),
+  });
 }

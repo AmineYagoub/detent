@@ -478,7 +478,23 @@ export type HeldKind = "seen-once" | "after-revision" | "introduced";
  * rather than what the finding says. Optional, because a cached artifact
  * written before this and an unsampled single-draw review both lack it.
  */
-export type HeldFinding = PlanReview["findings"][number] & { readonly held?: HeldKind; readonly seen?: number };
+/**
+ * PRDR-272 (D-32): `seen` is the count from the panel `held` describes, and the
+ * two panels are also carried separately.
+ *
+ * On PRDR-271 `seen` came from a merge of both panels in which the
+ * post-revision one won every shared key, while `held` came from the union of
+ * their sub-threshold reads — so the integer could describe the revision while
+ * the label described the draft it replaced. `seen_before` and `seen_after` are
+ * absent, not zero, when a panel never saw the finding: absent-from-the-panel
+ * and seen-by-no-read-of-it are different facts and only the first occurs.
+ */
+export type HeldFinding = PlanReview["findings"][number] & {
+  readonly held?: HeldKind;
+  readonly seen?: number;
+  readonly seen_before?: number;
+  readonly seen_after?: number;
+};
 
 /*
  * ---------------------------------------------------------------------------

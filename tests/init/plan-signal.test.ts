@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { presentStage } from "../../src/init/present.js";
-import { labelHeld, revisionOutcome } from "../../src/init/plan-signal.js";
+import { heldFindings, labelHeld, revisionOutcome } from "../../src/init/plan-signal.js";
+import type { PlanReview } from "../../src/schemas/init.js";
+import type { SampledReview } from "../../src/init/plan-sample.js";
 
 /**
  * PRDR-196 — the plan's quality signal: what code PROVED, and what the revision
@@ -161,5 +163,59 @@ describe("PRDR-269 a held finding is marked with the evidence behind it", () => 
   it("what fell below the sample threshold travels as `seen-once`", () => {
     const held = labelHeld([], [], [{ tag: "coverage" as const, ticket: "t-d", finding: "one read saw this" }]);
     expect(kindOf(held, "coverage")).toBe("seen-once");
+  });
+});
+
+/**
+ * PRDR-272 (D-32) — a held finding's count describes the draft its label
+ * describes.
+ *
+ * `heldFindings` took the label from `samples.flatMap(s => s.seenOnce)`, the
+ * union of both panels' sub-threshold reads, and the count from
+ * `new Map(samples.flatMap(s => s.seen))`, a merge where the post-revision
+ * panel overwrites the pre-revision one on a shared key. The two expressions
+ * were independent, so a finding that fell below the threshold before the
+ * revision and reached it after took its label from one draft and its integer
+ * from the other — and, being in both `leftover` and the `seenOnce` union,
+ * was emitted TWICE under contradictory labels.
+ *
+ * The numbers here are `t-s08-005 dependency` from run 6's s08 under `e309de3`,
+ * recomputed from the six persisted draws: seen by 1 of 3 reads of the first
+ * draft, 2 of 3 of the revision, against a ⌈k/2⌉ threshold of 2.
+ */
+describe("PRDR-272 a held finding's count and label describe the same draft", () => {
+  const DEP = { tag: "dependency" as const, ticket: "t-s08-005", finding: "depends on a contract no ticket provides" };
+  const KEY = "t-s08-005 dependency";
+  const sample = (findings: PlanReview["findings"], seenOnce: PlanReview["findings"], seen: ReadonlyMap<string, number>): SampledReview =>
+    ({ verdict: "changes", findings, seenOnce, reads: [], threshold: 2, seen }) as SampledReview;
+  const before = sample([], [DEP], new Map([[KEY, 1]]));
+  const after = sample([DEP], [], new Map([[KEY, 2]]));
+
+  it("emits a finding that crossed the threshold between drafts exactly once", () => {
+    const held = heldFindings([], [DEP], before, after);
+    expect(held.filter((f) => f.ticket === "t-s08-005" && f.tag === "dependency")).toHaveLength(1);
+  });
+
+  it("labels it by the draft on disk, not by the draft the revision replaced", () => {
+    const held = heldFindings([], [DEP], before, after);
+    expect(held[0]?.held, "2 of 3 reads of the revision held it, so it did not fall below the filter").toBe("introduced");
+  });
+
+  it("gives it the count from the panel its label came from", () => {
+    const held = heldFindings([], [DEP], before, after);
+    expect(held[0]?.seen, "labelled by the post-revision panel, so counted by it").toBe(2);
+  });
+
+  it("carries both panels' counts, so the crossing is visible rather than merged away", () => {
+    const held = heldFindings([], [DEP], before, after);
+    expect(held[0]?.seen_before, "1 of 3 reads of the first draft").toBe(1);
+    expect(held[0]?.seen_after, "2 of 3 reads of the revision").toBe(2);
+  });
+
+  it("omits the panel it never reached rather than recording a zero", () => {
+    const onlyPre = heldFindings([], [], sample([], [DEP], new Map([[KEY, 1]])), sample([], [], new Map()));
+    expect(onlyPre[0]?.seen_before).toBe(1);
+    expect(onlyPre[0]?.seen_after, "absent from the panel is not seen-by-no-read-of-it").toBeUndefined();
+    expect(onlyPre[0]?.seen, "labelled `seen-once` by the pre panel, so counted by it").toBe(1);
   });
 });
