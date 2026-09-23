@@ -8,6 +8,8 @@ import { buildLiveBackend, hasLiveBackendAuth } from "../sessions/live.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import { researchTools } from "../sessions/guard.js";
 import { recordOutOfBandSpend } from "../kernel/ledger.js";
+import { readBindings } from "../adapter/drift.js";
+import { currentPlatform, missingToolchains } from "../adapter/toolchain.js";
 
 /**
  * T-050 — `detent doctor` (S-5, C-12, X-1, S-3).
@@ -157,6 +159,33 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
       checks.push({ name: "claude-code-pin", ok: true, detail: "no live backend supplied; checked at run time" });
     }
   }
+
+  /**
+   * ---- bound gates are runnable (PRDR-273) ---------------------------------
+   * This file's own contract is "the checks a run would otherwise discover
+   * mid-flight". On 2026-09-23 it reported five green rows against a machine
+   * with no Go toolchain, and the run then spent $2.74 and 50 turns learning
+   * what resolving one executable answers for nothing.
+   */
+  let bound: { slot: string; resolved: string }[] = [];
+  try {
+    bound = readBindings(root).bindings.map((b) => ({ slot: b.slot, resolved: b.resolved }));
+  } catch {
+    /* PRDR-143: an unreadable bindings.json is its own row's business, not this one's — doctor still prints. */
+  }
+  const absent = bound.length === 0 ? [] : missingToolchains(bound);
+  checks.push({
+    name: "toolchain",
+    ok: absent.length === 0,
+    detail:
+      bound.length === 0
+        ? "no bindings yet — nothing to resolve"
+        : absent.length === 0
+          ? `every executable behind ${String(bound.length)} bound slot(s) resolves and runs`
+          : absent
+              .map((m) => `\`${m.exe}\` (${m.slots.join(", ")}) does not run — ${m.toolchain?.install[currentPlatform()] ?? "no install command known"}`)
+              .join("; "),
+  });
 
   /**
    * ---- WebFetch rule forms (S-3/PRDR-050) ---------------------------------

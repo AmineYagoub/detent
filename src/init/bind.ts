@@ -1,5 +1,6 @@
 import { discover } from "../adapter/discover/index.js";
 import { probeSymbols, symbolsSetupMessage, type SymbolsConfig } from "../adapter/symbols.js";
+import { currentPlatform, missingToolchains, probeExecutable, toolchainSetupMessage, type Platform } from "../adapter/toolchain.js";
 import { bindAll, acknowledgeSkip, type BindReport, type Skip } from "../adapter/bind.js";
 import { writeBindings } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
@@ -49,6 +50,15 @@ export interface DetermineDeps {
   readonly now?: () => string;
   /** V-1‴ (PRDR-155): where a bound gate that may verify nothing is said. */
   readonly note?: (text: string) => void;
+  /**
+   * PRDR-273: resolves a gate command's executable. Injectable for the same
+   * reason `probeSymbols` takes its runner — the decision it feeds is the one
+   * no fixture could otherwise reach, since the suite's own host has whatever
+   * it has.
+   */
+  readonly probe?: (exe: string) => boolean;
+  /** PRDR-273: which package manager's command to name. Defaults to this host. */
+  readonly platform?: Platform;
 }
 
 /**
@@ -59,12 +69,16 @@ export interface DetermineDeps {
  * Stack strings belong at this layer, not in the kernel: `init` is where a
  * stack is chosen, exactly as V-4 puts invocation knowledge in the adapter.
  */
-const GREENFIELD_COMMANDS: Readonly<Record<string, Partial<Record<GateSlot, string>>>> = {
+export const GREENFIELD_COMMANDS: Readonly<Record<string, Partial<Record<GateSlot, string>>>> = {
   typescript: { test: "npm run test", lint: "npm run lint", typecheck: "npm run typecheck", build: "npm run build" },
   javascript: { test: "npm run test", lint: "npm run lint", build: "npm run build" },
   python: { test: "pytest", lint: "ruff check .", typecheck: "mypy ." },
   go: { test: "go test ./...", lint: "go vet ./...", build: "go build ./..." },
   rust: { test: "cargo test", typecheck: "cargo check", build: "cargo build" },
+  java: { test: "mvn -q test", build: "mvn -q -DskipTests package" },
+  ruby: { test: "bundle exec rake test" },
+  dotnet: { test: "dotnet test", lint: "dotnet format --verify-no-changes", build: "dotnet build" },
+  php: { test: "composer test" },
 };
 
 /**
@@ -88,6 +102,10 @@ const LANGUAGE_WORDS: readonly (readonly [string, RegExp])[] = [
   ["python", /\bpython\b/i],
   ["go", /\bgo(?:lang)?\b/i],
   ["rust", /\brust\b|\bcargo\b/i],
+  ["java", /\bjava\b|\bkotlin\b|\bmaven\b|\bjvm\b/i],
+  ["ruby", /\bruby\b|\brails\b/i],
+  ["dotnet", /\b(?:dotnet|\.net|c#|csharp)\b/i],
+  ["php", /\bphp\b|\blaravel\b|\bsymfony\b/i],
 ];
 
 export function languageKey(raw: string): string | null {
@@ -161,6 +179,22 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
           "Name the stack's test command in the planning documents and re-run `detent init`.",
         ].join("\n"),
         items: ["test"],
+      };
+    }
+    /**
+     * PRDR-273: C-4 binds greenfield provisional because the PROJECT's tooling
+     * does not exist yet and bootstrap #1 creates it. A missing toolchain wears
+     * the same shape and is not the same absence — no ticket can install a
+     * compiler — so it is resolved here, where saying so is free.
+     */
+    const platform = deps.platform ?? currentPlatform();
+    const missing = missingToolchains(bindings, deps.probe ?? ((exe) => probeExecutable(exe)));
+    if (missing.length > 0) {
+      return {
+        kind: "interrupt",
+        interrupt: "AWAIT_SETUP_CONSENT",
+        message: toolchainSetupMessage(missing, platform),
+        items: missing.map((m) => m.exe),
       };
     }
     writeBindings(deps.root, { bindings, skips: [] });

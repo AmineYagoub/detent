@@ -29,6 +29,8 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
         rationale: "D44",
         verification: { test: "go test ./...", lint: "go vet ./...", build: "go build ./..." },
       }) as never,
+      /** PRDR-273: this asserts WHICH commands bind, not whether the host has Go. */
+      probe: () => true,
     });
     if (outcome.kind !== "complete") throw new Error(`expected completion, got ${outcome.kind}: ${outcome.message}`);
     const bindings = readBindings(root).bindings;
@@ -67,6 +69,8 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
       root: bound,
       greenfield: true,
       analysis: ANALYSIS({ language: "Zig", runtime: "", test_framework: "", rationale: "", verification: { test: "zig build test" } }) as never,
+      /** PRDR-273: an unknown language still binds — the toolchain question is separate. */
+      probe: () => true,
     });
     expect(ok.kind).toBe("complete");
     expect(readBindings(bound).bindings.find((b) => b.slot === "test")?.adapter).toBe("greenfield:documented");
