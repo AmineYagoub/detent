@@ -188,15 +188,31 @@ language toolchain it **inverts completely**.
 
 | | Serena | A language toolchain (`go`, `cargo`, `dotnet`) |
 |---|---|---|
-| Global tool, so installing it modifies the machine (D-4, F-2) | yes | yes — which is why a flag, not a default |
+| Global tool, so installing it modifies the machine (D-4, F-2) | yes | yes — which is why an explicit answer, never a default |
 | Third-party server with read access to a private codebase | yes | no — a compiler reads nothing and reports nowhere |
 | **Nothing depends on it** | yes — the gate is skipped with a note | **no — every ticket in the plan is unimplementable** |
 
 So the rule is not wrong; it was scoped to an absence that costs a note. An absence that costs
 the entire run is a different case, and the only surviving objection — Detent mutating the
-machine — is what an explicit, per-invocation operator flag is for. `detent init
---install-toolchain` runs what the `AWAIT_SETUP_CONSENT` message named; without the flag the
-message is printed and nothing is run, exactly as PRDR-273 shipped it.
+machine — is what the operator's explicit answer is for.
+
+**Where the question is asked (PRDR-276): at `detent run`, not at `init`.** Before its first
+session — after the S-5 pin check, before the run lock — `run` probes the executable behind every
+bound gate that the table knows. When one is missing, it names each executable, the slots it
+blocks and the exact command, then:
+
+- on a terminal, asks `Install now? [y/N]` — anything but yes installs nothing;
+- off a terminal, takes `detent run --install-toolchain` as the answer, relayed in advance;
+- with neither, refuses with exit 2, naming the commands and the flag. Nothing is synthesized
+  from the environment (C-5).
+
+PRDR-273 raised this at `init`'s binding phase and PRDR-274 installed from there, and neither
+could reach the project they were written for: an approved plan's `init` runs no phase at all
+(C-8), so an init-time install never meets a project that has already planned. It is also the
+wrong moment. Planning reads documents and needs no compiler; the first thing that needs `go` is
+the first gate a run executes. `init` now binds greenfield commands `provisional` without
+probing anything, as C-4 describes, and `detent doctor` reports the same check `run` makes,
+pointing at `run` for the install.
 
 Three constraints make that safe, and they are the design:
 
@@ -204,20 +220,22 @@ Three constraints make that safe, and they are the design:
    from Detent's own source — never a string from `.detent/config.json`, which is repository
    content, never one from a planning document. This is PRDR-123's constraint applied to a
    second execution path, and it binds harder here: a toolchain installer is expected to run
-   with elevated privilege and to fetch from the network. An executable with no row is **named
-   but never run**.
+   with elevated privilege and to fetch from the network. An executable with no row is **never
+   probed and never run**: a bound command's head may be the project's own script, which the plan
+   itself may create (C-4), and `./scripts/test.sh --version` would execute it.
 2. **No shell.** Each row is a plain space-separated command line, split to argv and run
    through `execFileSync`, so no metacharacter in any future row can become an injection.
 3. **The exit code is not the check.** `brew install` exits 0 on a formula already installed
    but unlinked; `sudo apt-get` fails differently with no sudo than with no package. Each
    install is followed by the same probe that found the absence, and only a resolving
-   executable clears the slot. Every attempt — command, outcome, re-probe — is recorded
-   (PRDR-211's precedent for an adapter-run command).
+   executable lets the run continue. Every attempt is recorded, on PRDR-211's precedent for an
+   adapter-run command: a run that proceeds journals each as a `toolchain_install` event, and a
+   refusal names each command it ran and what stayed unresolved.
 
 Project **dependencies** are a separate mechanism and unchanged: `ECOSYSTEMS` (PRDR-211)
 installs what a manifest declares before a gate runs, unprompted, because that install is
 scoped to the work directory and recoverable by deleting it. A toolchain install is global,
-and that is precisely why this one is behind a flag.
+and that is precisely why this one waits for the operator's answer.
 
 ```json
 "symbols": { "enabled": true, "command": "serena-agent" }

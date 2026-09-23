@@ -12,6 +12,7 @@ import { makeRunRepo } from "../kernel/run-fixture.js";
 import { existsSync, readFileSync } from "node:fs";
 import { stateDir } from "../../src/fs/layout.js";
 import { writeBindings } from "../../src/adapter/drift.js";
+import type { Binding } from "../../src/schemas/records.js";
 
 /** T-050 — `detent doctor` (S-5, X-1 reporting, S-3 rule forms, R-10 smoke). */
 
@@ -469,40 +470,62 @@ describe("PRDR-254 the agent-sdk pin reports, and reports to the right reader", 
  * PRDR-273 — doctor's contract is "the checks a run would otherwise discover
  * mid-flight", and it reported five green rows against a machine with no Go
  * toolchain. The run then spent $2.74 and 50 turns finding out.
+ *
+ * PRDR-276 — the row applies `run`'s rule and points at `run`. Every probe is
+ * injected: a row that probes the host asserts whatever the host has, and this
+ * one's first version passed only on a machine without Go.
  */
-describe("PRDR-273 doctor resolves the executables behind the bound gates", () => {
-  it("reports the missing executable, the slots it blocks, and how to install it", async () => {
-    const root = await fixture();
-    writeBindings(root, {
-      bindings: [
-        { schema_version: 1, slot: "test", adapter: "greenfield:go", ref: "go test", resolved: "go test ./...", config_hash: "563e4f152751f5042262b498877657b77e73df9ace3e13cfd224751a06dffb39", executed_at: "2026-09-23T00:00:00.000Z", approved_by: "auto", status: "provisional" },
-      ],
-      skips: [],
-    });
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
-    const row = named(report, "toolchain");
-    expect(row?.ok, "an unrunnable executable is not an ok row").toBe(false);
-    expect(row?.detail).toContain("go");
-    expect(row?.detail, "the slots the absence blocks").toContain("test");
-    /** PRDR-273: naming the absence without naming the remedy is half a check. */
-    expect(row?.detail, "the command that fixes it").toContain("brew install go");
+describe("PRDR-276 doctor checks the toolchains a run would install", () => {
+  const binding = (slot: Binding["slot"], resolved: string): Binding => ({
+    schema_version: 1,
+    slot,
+    adapter: "greenfield:go",
+    ref: resolved,
+    resolved,
+    config_hash: "563e4f152751f5042262b498877657b77e73df9ace3e13cfd224751a06dffb39",
+    executed_at: "2026-09-23T00:00:00.000Z",
+    approved_by: "auto",
+    status: "provisional",
   });
 
-  it("is ok when every bound executable runs, and says so when there is nothing to resolve", async () => {
+  it("names the missing executable, the slots it blocks, and that `detent run` installs it", async () => {
     const root = await fixture();
-    writeBindings(root, {
-      bindings: [
-        { schema_version: 1, slot: "test", adapter: "greenfield:node", ref: "node", resolved: "node --version", config_hash: "563e4f152751f5042262b498877657b77e73df9ace3e13cfd224751a06dffb39", executed_at: "2026-09-23T00:00:00.000Z", approved_by: "auto", status: "approved" },
-      ],
-      skips: [],
-    });
-    const ran = await doctor(root, { installedSdkVersion: () => "0.3.280" });
-    expect(named(ran, "toolchain")?.ok, "node runs the suite, so it resolves").toBe(true);
+    writeBindings(root, { bindings: [binding("test", "go test ./..."), binding("lint", "go vet ./...")], skips: [] });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280", toolchainProbe: () => false });
+    const row = named(report, "toolchain");
+    expect(row?.ok, "an unrunnable executable is not an ok row").toBe(false);
+    expect(row?.detail).toContain("`go` (test, lint)");
+    expect(row?.detail, "the operator is sent to run, not to a terminal").toContain("`detent run` installs it");
+    expect(row?.detail, "and told exactly what a yes would run").toContain(
+      process.platform === "darwin" ? "brew install go" : "sudo apt-get install -y golang-go",
+    );
+  });
+
+  it("is ok when every table executable runs, and says so when there is nothing to resolve", async () => {
+    const root = await fixture();
+    writeBindings(root, { bindings: [binding("test", "go test ./...")], skips: [] });
+    const ran = await doctor(root, { installedSdkVersion: () => "0.3.280", toolchainProbe: () => true });
+    expect(named(ran, "toolchain")?.ok).toBe(true);
 
     const bare = await fixture();
     writeBindings(bare, { bindings: [], skips: [] });
-    const none = await doctor(bare, { installedSdkVersion: () => "0.3.280" });
+    const none = await doctor(bare, { installedSdkVersion: () => "0.3.280", toolchainProbe: () => false });
     expect(named(none, "toolchain")?.ok).toBe(true);
     expect(named(none, "toolchain")?.detail).toContain("nothing to resolve");
+  });
+
+  it("never probes a head the table does not know — it may be the project's own script", async () => {
+    const root = await fixture();
+    writeBindings(root, { bindings: [binding("test", "./scripts/test.sh --all")], skips: [] });
+    const probed: string[] = [];
+    const report = await doctor(root, {
+      installedSdkVersion: () => "0.3.280",
+      toolchainProbe: (exe) => {
+        probed.push(exe);
+        return false;
+      },
+    });
+    expect(probed).toEqual([]);
+    expect(named(report, "toolchain")?.ok, "nothing Detent could install is missing").toBe(true);
   });
 });

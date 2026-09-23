@@ -48,17 +48,6 @@ export interface PipelineDeps {
   readonly planBaseline?: "production" | "none";
   /** S-3′ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
   readonly symbols?: SymbolsConfig;
-  /** PRDR-274: `--install-toolchain` — explicit approval to install a missing REQUIRED toolchain. */
-  readonly installToolchain?: boolean;
-  /**
-   * PRDR-274: the toolchain probe and installer, injectable like `sleep` and
-   * `now`. Real ones by default. A fixture needs them because this path is the
-   * one that shells out to the host: without a seam, a greenfield Go test
-   * passes on a CI box that happens to have Go and runs `brew install` on one
-   * that does not.
-   */
-  readonly probe?: (exe: string) => boolean;
-  readonly runInstall?: (exe: string, args: readonly string[]) => void;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
   /** PRDR-268: revision rounds a faulted slice buys; `PLAN_REVISIONS` by default. */
@@ -265,9 +254,6 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         analysis: analysisFromOutputs(ctx.outputs),
-        ...(deps.installToolchain === true ? { installToolchain: true } : {}),
-        ...(deps.probe === undefined ? {} : { probe: deps.probe }),
-        ...(deps.runInstall === undefined ? {} : { runInstall: deps.runInstall }),
         /**
          * PRDR-156: this was the one handler in this file that did not forward
          * `note`, so V-1‴'s vacuous-gate notice was emitted into an undefined

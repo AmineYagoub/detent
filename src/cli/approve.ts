@@ -48,3 +48,21 @@ export function makeTtyApproval(user: string): (presentation: string) => Promise
     }
   };
 }
+
+/**
+ * PRDR-276: the toolchain question, asked inline by `run` on a terminal after
+ * it has printed what a yes would run. Only an explicit yes installs; anything
+ * else — including an empty line — runs nothing, because the default for
+ * changing someone's machine is not changing it.
+ */
+export function makeTtyToolchainApproval(): (message: string) => Promise<boolean> {
+  return async () => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const answer = (await rl.question("\nInstall now? [y/N] ")).trim().toLowerCase();
+      return answer === "y" || answer === "yes";
+    } finally {
+      rl.close();
+    }
+  };
+}

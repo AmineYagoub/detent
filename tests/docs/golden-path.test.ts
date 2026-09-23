@@ -91,12 +91,14 @@ describe("T-069 C-5: the interrupt set is frozen at five", () => {
  * from modules it had never heard of, and PRDR-255 made that worse by wiring
  * the approval asker into `run` — where nothing was looking.
  *
- * Exactly one of these five decisions is a C-5 interrupt: `makeTtyApproval`
- * answers AWAIT_APPROVAL. The escalation in `cli/escalate.ts` is C-10/X-8's and
- * the re-baseline consent in `cli/verify.ts` is V-1's, and neither is a member
- * of `INTERRUPTS`. So this is an inventory of the places that can block on a
- * human; it is not a proof that the interrupt set is five. That proof is the
- * `INTERRUPTS` tuple and the skill assertion below.
+ * Exactly one of the questions these five modules raise is a C-5 interrupt:
+ * `makeTtyApproval` answers AWAIT_APPROVAL. The escalation in `cli/escalate.ts`
+ * is C-10/X-8's, the re-baseline consent in `cli/verify.ts` is V-1's, and the
+ * toolchain question `makeTtyToolchainApproval` puts before `run`'s first
+ * session is PRDR-276's; none of them is a member of `INTERRUPTS`. So this is
+ * an inventory of the places that can block on a human; it is not a proof that
+ * the interrupt set is five. That proof is the `INTERRUPTS` tuple and the skill
+ * assertion below.
  *
  * Matched against the RAW body, with no mask, and that is measured rather than
  * assumed: raw and `codeOnly` return the identical file set for every pattern
@@ -141,7 +143,9 @@ const ASKER_CALL = /(?<!\bfunction\s)\b(makeTty[A-Z][A-Za-z]*)\s*\(/g;
 const OPENS: Record<string, PromptSite> = {
   "cli/approve.ts": {
     constructs: ["node:readline", "createInterface(", ".question("],
-    reason: "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents",
+    reason:
+      "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents — and PRDR-276's " +
+      "toolchain question, which is not one",
   },
   "cli/escalate.ts": {
     constructs: ["node:readline", "createInterface(", ".question("],
@@ -160,8 +164,10 @@ const WIRES: Record<string, PromptSite> = {
     reason: "C-7's first exit — the approval asker passed to the init pipeline behind this file's TTY gate",
   },
   "cli/run.ts": {
-    constructs: ["makeTtyEscalation", "makeTtyApproval"],
-    reason: "C-10's escalation and C-7's second exit (PRDR-255), both behind the one TTY gate the file computes once",
+    constructs: ["makeTtyEscalation", "makeTtyApproval", "makeTtyToolchainApproval"],
+    reason:
+      "C-10's escalation, C-7's second exit (PRDR-255) and the toolchain question (PRDR-276), all behind the one " +
+      "TTY gate the file computes once",
   },
 };
 
@@ -189,10 +195,10 @@ describe("PRDR-256: every module that can block on a human is declared", () => {
     expect(/readline/.test(run), "the premise: `cli/run.ts` contains no `readline`").toBe(false);
     expect(
       wiresIn(run),
-      "`cli/run.ts` hands makeTtyEscalation and makeTtyApproval to the kernel and contains no `readline`, " +
-        "so the predicate this replaces returned false for it — the check reported no offenders while two of " +
-        "the three live TTY prompts were raised from a module it had never heard of",
-    ).toEqual(["makeTtyEscalation", "makeTtyApproval"]);
+      "`cli/run.ts` hands its TTY askers to the kernel and contains no `readline`, so the predicate this " +
+        "replaces returned false for it — the check reported no offenders while two of the three live TTY " +
+        "prompts were raised from a module it had never heard of",
+    ).toEqual(["makeTtyEscalation", "makeTtyApproval", "makeTtyToolchainApproval"]);
   });
 
   it("every declared site exists, and still does what it is exempt for", () => {

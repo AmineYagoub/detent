@@ -1,6 +1,5 @@
 import { discover } from "../adapter/discover/index.js";
 import { probeSymbols, symbolsSetupMessage, type SymbolsConfig } from "../adapter/symbols.js";
-import { currentPlatform, installReport, installToolchains, missingToolchains, probeExecutable, runInstallCommand, toolchainSetupMessage, type Platform } from "../adapter/toolchain.js";
 import { bindAll, acknowledgeSkip, type BindReport, type Skip } from "../adapter/bind.js";
 import { writeBindings } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
@@ -50,23 +49,6 @@ export interface DetermineDeps {
   readonly now?: () => string;
   /** V-1‴ (PRDR-155): where a bound gate that may verify nothing is said. */
   readonly note?: (text: string) => void;
-  /**
-   * PRDR-273: resolves a gate command's executable. Injectable for the same
-   * reason `probeSymbols` takes its runner — the decision it feeds is the one
-   * no fixture could otherwise reach, since the suite's own host has whatever
-   * it has.
-   */
-  readonly probe?: (exe: string) => boolean;
-  /** PRDR-273: which package manager's command to name. Defaults to this host. */
-  readonly platform?: Platform;
-  /**
-   * PRDR-274: the operator's explicit approval to install a missing REQUIRED
-   * toolchain, carried by `detent init --install-toolchain`. Absent or false,
-   * the phase names the command and stops — D-4/F-2's behaviour unchanged.
-   */
-  readonly installToolchain?: boolean;
-  /** PRDR-274: the install runner; argv, never a shell. Injectable for fixtures. */
-  readonly runInstall?: (exe: string, args: readonly string[]) => void;
 }
 
 /**
@@ -190,39 +172,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
       };
     }
     /**
-     * PRDR-273: C-4 binds greenfield provisional because the PROJECT's tooling
-     * does not exist yet and bootstrap #1 creates it. A missing toolchain wears
-     * the same shape and is not the same absence — no ticket can install a
-     * compiler — so it is resolved here, where saying so is free.
+     * PRDR-276: the toolchain behind these commands is NOT checked here.
+     * PRDR-273 checked it and PRDR-274 installed it from this phase, but an
+     * approved plan's `init` runs no phase (C-8), so neither could reach a
+     * project that had already planned. `run` checks before its first session
+     * and installs on the operator's answer. A stop here would now strand a
+     * fresh project: `init` would wait for a compiler that only `run` installs.
      */
-    const platform = deps.platform ?? currentPlatform();
-    const probe = deps.probe ?? ((exe: string) => probeExecutable(exe));
-    const missing = missingToolchains(bindings, probe);
-    if (missing.length > 0) {
-      /**
-       * PRDR-274: D-4/F-2 refuse to change the operator's machine, and that
-       * rule was reasoned for an OPTIONAL tool whose absence costs a skipped
-       * note. A REQUIRED toolchain's absence makes every ticket in the plan
-       * unimplementable, so it is installable — never by default, only under a
-       * flag this invocation carried, and only from the table.
-       */
-      const attempts = deps.installToolchain === true
-        ? installToolchains(missing, platform, deps.runInstall ?? runInstallCommand, probe)
-        : [];
-      for (const a of attempts) deps.note?.(`toolchain (PRDR-274): ${a.exe} — ${a.command ?? "not run"} — ${a.detail}`);
-      const unresolved = missing.filter((m) => !attempts.some((a) => a.exe === m.exe && a.resolved));
-      if (unresolved.length > 0) {
-        return {
-          kind: "interrupt",
-          interrupt: "AWAIT_SETUP_CONSENT",
-          message:
-            attempts.length === 0
-              ? toolchainSetupMessage(unresolved, platform)
-              : `An approved toolchain install did not resolve everything:\n${installReport(attempts)}`,
-          items: unresolved.map((m) => m.exe),
-        };
-      }
-    }
     writeBindings(deps.root, { bindings, skips: [] });
     return {
       kind: "complete",

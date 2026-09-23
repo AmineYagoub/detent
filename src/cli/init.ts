@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
-import { buildPipeline, pendingPhases, type PipelineDeps } from "../init/pipeline.js";
-import { checkRoot, runInit, type PhaseHandler } from "../init/machine.js";
+import { buildPipeline, pendingPhases } from "../init/pipeline.js";
+import { checkRoot, runInit } from "../init/machine.js";
 import { setInFlight } from "./exit-record.js";
 import { loadConfig } from "../kernel/worstcase.js";
 import { existsSync, readFileSync } from "node:fs";
@@ -32,16 +32,6 @@ const EXIT_NOT_READY = 2;
 
 export interface InitMainDeps {
   readonly buildBackend?: (root: string) => SessionBackend;
-  /**
-   * PRDR-274: the pipeline factory, injectable like `buildBackend`.
-   *
-   * This file translates argv into `PipelineDeps`, and PRDR-156 is what an
-   * untested translation costs: `note` was complete, tested at the adapter
-   * layer, and never forwarded by one handler, so the feature was unreachable
-   * and no test could tell. A flag whose whole security property is "only when
-   * the operator passed it" needs that translation observable.
-   */
-  readonly buildPipeline?: (deps: PipelineDeps) => PhaseHandler[];
 }
 
 export async function main(argv: readonly string[], mainDeps: InitMainDeps = {}): Promise<number> {
@@ -56,8 +46,6 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       by: { type: "string" },
       "spend-cap-usd": { type: "string" },
       /** S-3⁗ (PRDR-208): the symbol-intelligence decision, as a flag. */
-      /** PRDR-274: explicit approval to install a missing REQUIRED toolchain. */
-      "install-toolchain": { type: "boolean", default: false },
       symbols: { type: "boolean", default: false },
       "no-symbols": { type: "boolean", default: false },
     },
@@ -240,7 +228,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
         return EXIT_NOT_READY;
       }
     }
-    const handlers = (mainDeps.buildPipeline ?? buildPipeline)({
+    const handlers = buildPipeline({
       root,
       backend,
       prompts: loadPromptSet(),
@@ -251,7 +239,6 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       planBaseline: config?.plan_baseline ?? "production",
       ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
       ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
-      ...(values["install-toolchain"] === true ? { installToolchain: true } : {}),
       planDocs: config?.plan_docs ?? [],
       note: (text) => process.stdout.write(`  ${text}\n`),
       /**

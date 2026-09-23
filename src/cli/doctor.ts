@@ -42,6 +42,13 @@ export interface DoctorDeps {
   readonly backend?: SessionBackend;
   /** The installed SDK version; defaults to reading the package manifest. */
   readonly installedSdkVersion?: () => string;
+  /**
+   * PRDR-276: the toolchain probe; the real one by default. A row that probes
+   * the host asserts whatever the host has, so its test passed only on a
+   * machine without Go — and would have failed on this one the moment the run
+   * it exists for installed Go.
+   */
+  readonly toolchainProbe?: (exe: string) => boolean;
 }
 
 /**
@@ -166,6 +173,11 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
    * mid-flight". On 2026-09-23 it reported five green rows against a machine
    * with no Go toolchain, and the run then spent $2.74 and 50 turns learning
    * what resolving one executable answers for nothing.
+   *
+   * PRDR-276: under `run`'s rule — only an executable the table knows is
+   * probed, so no project script is executed to answer this — and pointing at
+   * `run`, which installs on the operator's approval, rather than at a command
+   * for them to type.
    */
   let bound: { slot: string; resolved: string }[] = [];
   try {
@@ -173,7 +185,7 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
   } catch {
     /* PRDR-143: an unreadable bindings.json is its own row's business, not this one's — doctor still prints. */
   }
-  const absent = bound.length === 0 ? [] : missingToolchains(bound);
+  const absent = bound.length === 0 ? [] : missingToolchains(bound, deps.toolchainProbe);
   checks.push({
     name: "toolchain",
     ok: absent.length === 0,
@@ -181,9 +193,12 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
       bound.length === 0
         ? "no bindings yet — nothing to resolve"
         : absent.length === 0
-          ? `every executable behind ${String(bound.length)} bound slot(s) resolves and runs`
+          ? `every toolchain Detent can install behind ${String(bound.length)} bound slot(s) runs`
           : absent
-              .map((m) => `\`${m.exe}\` (${m.slots.join(", ")}) does not run — ${m.toolchain?.install[currentPlatform()] ?? "no install command known"}`)
+              .map(
+                (m) =>
+                  `\`${m.exe}\` (${m.slots.join(", ")}) does not run — \`detent run\` installs it on your approval: ${m.toolchain.install[currentPlatform()]}`,
+              )
               .join("; "),
   });
 

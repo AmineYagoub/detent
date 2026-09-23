@@ -12,6 +12,10 @@ import { platform as osPlatform } from "node:process";
  * `package.json` ticket #1 writes and wrong for a compiler no ticket can
  * install, and the two absences are indistinguishable at that layer.
  *
+ * PRDR-276: so the check is not made at that layer. `run` makes it, before its
+ * first session — where the plan exists, where a gate first needs the compiler,
+ * and where the operator is present to answer. `init` binds without looking.
+ *
  * Keyed by EXECUTABLE rather than by language, because the command actually
  * bound is not always the table's. PRDR-115 gives the documents' own
  * `stack.verification` priority, so a TypeScript project that names
@@ -155,15 +159,20 @@ export function currentPlatform(host: string = osPlatform): Platform {
 }
 
 /**
- * Whether the executable resolves AND runs. Resolving alone is not enough —
+ * Whether a table executable resolves AND runs. Resolving alone is not enough —
  * a shim on PATH pointing at a removed toolchain is exactly the state this
  * machine was in, with `task` left in `~/go/bin` after the Go that installed
  * it was gone.
+ *
+ * PRDR-276: proven with the row's own proof, or not at all. An executable with
+ * no row is never executed — it may be the project's own script — so it is
+ * never proven, and the answer is false rather than a run of unknown code.
  */
 export function probeExecutable(exe: string, run: (exe: string, args: readonly string[]) => void = defaultRun): boolean {
   const row = toolchainFor(exe);
+  if (row === null) return false;
   try {
-    run(exe, row?.proof ?? ["--version"]);
+    run(exe, row.proof);
     return true;
   } catch {
     return false;
@@ -174,35 +183,44 @@ function defaultRun(exe: string, args: readonly string[]): void {
   execFileSync(exe, [...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
 }
 
-/** One missing executable, with whatever the table can say about installing it. */
+/** One missing executable, and the table row that installs it. */
 export interface MissingToolchain {
   readonly exe: string;
   readonly slots: readonly string[];
-  readonly toolchain: Toolchain | null;
+  readonly toolchain: Toolchain;
 }
 
 /**
- * PRDR-273: the missing executables behind a set of proposed bindings, each
- * carrying the slots that need it.
+ * PRDR-273: the missing executables behind a set of bindings, each carrying
+ * the slots that need it.
  *
  * Grouped by executable rather than listed per slot: an operator missing Go is
  * missing it for `test`, `lint` and `build` at once, and three stops for one
  * absence is the same fact three times.
+ *
+ * PRDR-276: only an executable the table knows is probed at all. A binding's
+ * head is whatever the planning documents or an operator wrote (PRDR-115), and
+ * `./scripts/test.sh --version` runs the project's own script — which is also
+ * a thing the plan itself may create (C-4). A row is a machine toolchain no
+ * ticket installs, whose proof is known to be harmless, and the only kind of
+ * absence Detent could act on anyway.
  */
 export function missingToolchains(
   bound: readonly { readonly slot: string; readonly resolved: string }[],
   probe: (exe: string) => boolean = probeExecutable,
 ): MissingToolchain[] {
-  const bySlot = new Map<string, string[]>();
+  const byExe = new Map<string, { readonly toolchain: Toolchain; readonly slots: string[] }>();
   for (const b of bound) {
     const exe = headExecutable(b.resolved);
-    if (exe === "") continue;
-    bySlot.set(exe, [...(bySlot.get(exe) ?? []), b.slot]);
+    const toolchain = toolchainFor(exe);
+    if (toolchain === null) continue;
+    const entry = byExe.get(exe) ?? { toolchain, slots: [] };
+    entry.slots.push(b.slot);
+    byExe.set(exe, entry);
   }
   const missing: MissingToolchain[] = [];
-  for (const [exe, slots] of bySlot) {
-    if (probe(exe)) continue;
-    missing.push({ exe, slots, toolchain: toolchainFor(exe) });
+  for (const [exe, { toolchain, slots }] of byExe) {
+    if (!probe(exe)) missing.push({ exe, slots, toolchain });
   }
   return missing;
 }
@@ -210,14 +228,16 @@ export function missingToolchains(
 /** PRDR-274: one attempted install, and whether the executable resolves afterwards. */
 export interface InstallAttempt {
   readonly exe: string;
-  /** The table's command, or null for an executable the table does not know. */
-  readonly command: string | null;
+  /** The table's command — the only kind this module runs. */
+  readonly command: string;
   readonly resolved: boolean;
   readonly detail: string;
 }
 
 /**
- * PRDR-274 — install a REQUIRED toolchain, under an operator's explicit flag.
+ * PRDR-274 — install a REQUIRED toolchain, on the operator's explicit answer.
+ * PRDR-276 moved where that answer is given: `run`'s `[y/N]` on a terminal, or
+ * `run --install-toolchain` relayed.
  *
  * The command run is `TOOLCHAINS[n].install[platform]` and nothing else. Never
  * a string from `.detent/config.json`, which is repository content; never one
@@ -225,8 +245,8 @@ export interface InstallAttempt {
  * applies with more force here, because a toolchain installer is expected to
  * run with elevated privilege and to fetch from the network: an unrestricted
  * string would let a repository point the orchestrator at an executable it
- * shipped. The table is the allowlist, and a row-less executable is named but
- * never run.
+ * shipped. The table is the allowlist, and `missingToolchains` reports nothing
+ * outside it, so no other command can reach this function.
  *
  * Split to argv rather than handed to a shell. Every row is a plain
  * space-separated command line, so no shell is needed — and not having one
@@ -245,10 +265,6 @@ export function installToolchains(
 ): InstallAttempt[] {
   const attempts: InstallAttempt[] = [];
   for (const m of missing) {
-    if (m.toolchain === null) {
-      attempts.push({ exe: m.exe, command: null, resolved: false, detail: "no install command is known; not run" });
-      continue;
-    }
     const command = m.toolchain.install[platform];
     const [head, ...args] = command.split(/\s+/);
     if (head === undefined) {
@@ -279,43 +295,29 @@ export function runInstallCommand(exe: string, args: readonly string[]): void {
 
 /** PRDR-274: what an operator is told after an approved install did not finish the job. */
 export function installReport(attempts: readonly InstallAttempt[]): string {
-  return attempts.map((a) => `  ${a.exe}: ${a.command ?? "(no command)"} — ${a.detail}`).join("\n");
+  return attempts.map((a) => `  ${a.exe}: ${a.command} — ${a.detail}`).join("\n");
 }
 
 /**
  * PRDR-273: what the operator is shown. Names the platform it resolved, every
  * missing executable with the slots it blocks, and the command that installs
- * it — or says plainly that none is known, which is the honest answer for a
- * language outside the table and better than a guess an operator might paste.
+ * it.
  *
- * PRDR-274: offers the flag that runs them, but only when the table actually
- * has a command to run — telling an operator missing `zig` to pass
- * `--install-toolchain` would be an offer Detent cannot keep, which is the
- * doc-claim drift this repository exists to catch, in a message instead of a
- * doc-block.
+ * PRDR-276: `run` shows it before its first session and then asks, so it says
+ * what a yes would run and why a yes is needed — nothing about where else to
+ * go. Every entry carries a command, because `missingToolchains` reports only
+ * executables the table knows.
  */
 export function toolchainSetupMessage(missing: readonly MissingToolchain[], platform: Platform): string {
   const host = platform === "darwin" ? "macOS (Homebrew)" : "Linux (Debian/apt)";
   const lines = [
-    `The verification commands for this stack need tooling this machine does not have (${host}):`,
+    `The verification commands for this plan need tooling this machine does not have (${host}):`,
     "",
   ];
   for (const m of missing) {
     lines.push(`  ${m.exe} — needed by ${m.slots.join(", ")}`);
-    lines.push(
-      m.toolchain === null
-        ? `    no install command is known for \`${m.exe}\`; install it and re-run \`detent init\``
-        : `    ${m.toolchain.install[platform]}      (${m.toolchain.provides})`,
-    );
+    lines.push(`    ${m.toolchain.install[platform]}      (${m.toolchain.provides})`);
   }
-  const installable = missing.some((m) => m.toolchain !== null);
-  lines.push("", "Detent binds to what the machine has rather than changing it (D-4/F-2), so it has run nothing.");
-  if (installable) {
-    lines.push(
-      "Re-run `detent init --install-toolchain` to have Detent run the commands above, or run them yourself and re-run `detent init`.",
-    );
-  } else {
-    lines.push("Install what is listed above and re-run `detent init`.");
-  }
+  lines.push("", "Installing a toolchain changes this machine, so Detent runs these only with your approval (D-4/F-2).");
   return lines.join("\n");
 }

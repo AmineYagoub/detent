@@ -4,7 +4,7 @@ import { buildLiveBackend } from "../sessions/live.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { makeTtyEscalation } from "./escalate.js";
-import { makeTtyApproval } from "./approve.js";
+import { makeTtyApproval, makeTtyToolchainApproval } from "./approve.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import type { ApprovalDecision } from "../init/present.js";
 import { noteRunPhase } from "../kernel/run-lock.js";
@@ -43,6 +43,14 @@ export interface RunMainDeps {
    * test and both are supplied at composition instead.
    */
   readonly approve?: (presentation: string) => Promise<ApprovalDecision>;
+  /**
+   * PRDR-276: the toolchain asker, and the probe and installer behind it,
+   * overridable for the same reason as `approve` — the real ones read stdin,
+   * probe the host and install onto it. Overrides, never defaults.
+   */
+  readonly approveToolchain?: (message: string) => Promise<boolean>;
+  readonly toolchainProbe?: (exe: string) => boolean;
+  readonly toolchainInstall?: (exe: string, args: readonly string[]) => void;
 }
 
 export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}): Promise<number> {
@@ -73,6 +81,11 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
        */
       worktree: { type: "boolean", default: true },
       "no-worktree": { type: "boolean", default: false },
+      /**
+       * PRDR-276: the operator's answer to installing a missing toolchain,
+       * given in advance — the transport for a run with no terminal to ask on.
+       */
+      "install-toolchain": { type: "boolean", default: false },
     },
   });
 
@@ -157,6 +170,18 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
     ...(interactive || mainDeps.approve !== undefined
       ? { approve: mainDeps.approve ?? makeTtyApproval(process.env["USER"] ?? "operator") }
       : {}),
+    /**
+     * PRDR-276: the toolchain question, answered as C-7's is. The flag is the
+     * relayed answer and wins; otherwise a terminal asks; otherwise it is
+     * absent, and a missing toolchain refuses the run before it spends.
+     */
+    ...(values["install-toolchain"] === true
+      ? { approveToolchain: async (): Promise<boolean> => true }
+      : interactive || mainDeps.approveToolchain !== undefined
+        ? { approveToolchain: mainDeps.approveToolchain ?? makeTtyToolchainApproval() }
+        : {}),
+    ...(mainDeps.toolchainProbe === undefined ? {} : { toolchainProbe: mainDeps.toolchainProbe }),
+    ...(mainDeps.toolchainInstall === undefined ? {} : { toolchainInstall: mainDeps.toolchainInstall }),
     ...(maxTickets === undefined ? {} : { maxTickets }),
   });
 

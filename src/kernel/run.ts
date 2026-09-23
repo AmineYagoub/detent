@@ -16,6 +16,7 @@ import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
 import { RefereeCore, type PendingEntry } from "./referee.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
+import { ensureToolchains } from "./run-toolchain.js";
 
 /**
  * T-106 — the HEADLESS DRIVER (C-9, C-10, C-11, D-26/D-27).
@@ -87,6 +88,16 @@ export interface RunOptions {
   readonly phase?: (text: string) => void;
   /** PRDR-112: injectable wait for the outage backoff; real time by default. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * PRDR-276: the operator's answer to installing a missing toolchain, on the
+   * terms C-7 and C-10 are answered — a terminal's `[y/N]`, or
+   * `--install-toolchain` relayed. Absent, a missing toolchain refuses the run
+   * before it spends, naming the commands and the flag.
+   */
+  readonly approveToolchain?: (message: string) => Promise<boolean>;
+  /** PRDR-276: the probe and the installer, injectable like `sleep`; real ones by default. */
+  readonly toolchainProbe?: (exe: string) => boolean;
+  readonly toolchainInstall?: (exe: string, args: readonly string[]) => void;
 }
 
 export interface EscalationInput {
@@ -186,9 +197,9 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
    * beside the config and approval preconditions, so it refuses before
    * spending rather than at the first gate — where it used to mint a GREEN.
    */
-  let bound: boolean;
+  let bindings: readonly { readonly slot: string; readonly resolved: string }[];
   try {
-    bound = readBindings(root).bindings.some((b) => b.slot === "test");
+    bindings = readBindings(root).bindings;
   } catch (err) {
     /**
      * PRDR-151: `readBindings` throws on an invalid or newer-schema file, and
@@ -198,7 +209,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
      */
     return notReady((err as Error).message);
   }
-  if (!bound) {
+  if (!bindings.some((b) => b.slot === "test")) {
     return notReady(
       "no `test` gate is bound in .detent/bindings.json — a run would verify nothing. " +
         "Run `detent init` to bind the project's verification commands (V-1).",
@@ -220,6 +231,21 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   } catch (err) {
     return notReady((err as Error).message);
   }
+
+  /**
+   * PRDR-276: the toolchain behind every bound gate, checked where the need
+   * first arises and before anything spends. After S-5, so a run refused on
+   * its pin installs nothing; before the lock, so a refusal touches nothing.
+   * `init` does not check — an approved plan's `init` runs no phase (C-8), so a
+   * check there could never reach a project that has already planned.
+   */
+  const toolchain = await ensureToolchains(bindings, {
+    ...(opts.approveToolchain === undefined ? {} : { approve: opts.approveToolchain }),
+    ...(opts.toolchainProbe === undefined ? {} : { probe: opts.toolchainProbe }),
+    ...(opts.toolchainInstall === undefined ? {} : { install: opts.toolchainInstall }),
+    ...(opts.announce === undefined ? {} : { announce: opts.announce }),
+  });
+  if (!toolchain.ready) return notReady(toolchain.reason);
 
   /**
    * X-1‴ (PRDR-147): one run per root. Taken before the journal, so a refused
@@ -276,6 +302,21 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       protected: loaded.config.protected,
       risk: loaded.config.risk,
     });
+    /**
+     * PRDR-276: an install Detent ran on the operator's machine leaves a record,
+     * on PRDR-211's precedent for an adapter-run command — here, beside the
+     * configuration this run loaded, because both describe what it ran under.
+     */
+    for (const a of toolchain.attempts) {
+      journal.appendTicketEvent("run", {
+        event: "toolchain_install",
+        at: new Date().toISOString(),
+        exe: a.exe,
+        command: a.command,
+        resolved: a.resolved,
+        detail: a.detail,
+      });
+    }
 
     const core = new RefereeCore(
       {
