@@ -16,7 +16,8 @@ import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
 import { RefereeCore, type PendingEntry } from "./referee.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
-import { ensureToolchains } from "./run-toolchain.js";
+import { ensureToolchains, type ToolchainOutcome } from "./run-toolchain.js";
+import { strandedByPremise } from "./referee-sweeps.js";
 
 /**
  * T-106 — the HEADLESS DRIVER (C-9, C-10, C-11, D-26/D-27).
@@ -92,7 +93,8 @@ export interface RunOptions {
    * PRDR-276: the operator's answer to installing a missing toolchain, on the
    * terms C-7 and C-10 are answered — a terminal's `[y/N]`, or
    * `--install-toolchain` relayed. Absent, a missing toolchain refuses the run
-   * before it spends, naming the commands and the flag.
+   * before it spends, naming the commands and the flag. PRDR-277: a yes also
+   * returns the tickets the message names — those a false premise stranded.
    */
   readonly approveToolchain?: (message: string) => Promise<boolean>;
   /** PRDR-276: the probe and the installer, injectable like `sleep`; real ones by default. */
@@ -238,13 +240,26 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
    * its pin installs nothing; before the lock, so a refusal touches nothing.
    * `init` does not check — an approved plan's `init` runs no phase (C-8), so a
    * check there could never reach a project that has already planned.
+   *
+   * PRDR-277: the same question names the tickets a false premise stranded,
+   * and the same yes returns them — the pool's first draw requeues them below.
    */
-  const toolchain = await ensureToolchains(bindings, {
-    ...(opts.approveToolchain === undefined ? {} : { approve: opts.approveToolchain }),
-    ...(opts.toolchainProbe === undefined ? {} : { probe: opts.toolchainProbe }),
-    ...(opts.toolchainInstall === undefined ? {} : { install: opts.toolchainInstall }),
-    ...(opts.announce === undefined ? {} : { announce: opts.announce }),
-  });
+  let toolchain: ToolchainOutcome;
+  try {
+    toolchain = await ensureToolchains(
+      bindings,
+      {
+        ...(opts.approveToolchain === undefined ? {} : { approve: opts.approveToolchain }),
+        ...(opts.toolchainProbe === undefined ? {} : { probe: opts.toolchainProbe }),
+        ...(opts.toolchainInstall === undefined ? {} : { install: opts.toolchainInstall }),
+        ...(opts.announce === undefined ? {} : { announce: opts.announce }),
+      },
+      () => strandedByPremise(root),
+    );
+  } catch (err) {
+    /** An unreadable ticket, met while naming the stranded ones, is the kernel error the loop would have met (C-11). */
+    return { exitCode: EXIT_ERROR, summary: { schema_version: 1, exit: EXIT_ERROR, pending: [], reason: (err as Error).message } };
+  }
   if (!toolchain.ready) return notReady(toolchain.reason);
 
   /**
@@ -332,6 +347,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
         hookFiles: false,
         /* X-1⁵ (audit finding 1): the advisory total speaks on BOTH drivers. */
         ...(opts.announce === undefined ? {} : { announce: opts.announce }),
+        ...(toolchain.resume === null ? {} : { resumeOnInstall: toolchain.resume }),
       },
       loaded,
       journal,

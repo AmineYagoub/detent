@@ -84,6 +84,8 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
       /**
        * PRDR-276: the operator's answer to installing a missing toolchain,
        * given in advance — the transport for a run with no terminal to ask on.
+       * PRDR-277: the same answer returns the tickets the question names —
+       * those a false premise stranded — to the queue.
        */
       "install-toolchain": { type: "boolean", default: false },
     },

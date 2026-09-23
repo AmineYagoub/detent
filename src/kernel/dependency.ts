@@ -15,6 +15,14 @@ import { appendNote, writeTicket } from "./tickets/mutations.js";
  * a glob match, and the pool already knows how to wait.
  */
 
+/**
+ * X-4: the note the kernel writes when it admits a falsification, before the
+ * session's own words. PRDR-277 selects on it — a ticket whose last note still
+ * starts with this is one no person has touched since its premise failed — so
+ * it has one definition, beside the signal it records.
+ */
+export const FALSIFIED_NOTE = "falsified mid-implementation: ";
+
 /** What a session wrote to `falsified.json`. `missing` is X-4′'s addition. */
 export interface FalsifiedSignal {
   readonly note: string;

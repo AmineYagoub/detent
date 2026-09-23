@@ -1287,6 +1287,21 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `sizing-evidence` reads for a later PLAN of the same documents (X-4″), and its own stale-consume
   re-lands a requeued oversized ticket at NEEDS_HUMAN rather than passing silently.
 
+- **X-4⁶ (3.1.1, PRDR-277).** A premise that failed for want of a toolchain is re-tested once the
+  toolchain is installed. PRDR-274 and PRDR-276 bounded D-4/F-2 for a REQUIRED toolchain: `run`
+  probes the executable behind every bound gate before its first session, and installs a missing
+  one from Detent's own table only on the operator's answer — a terminal's `[y/N]`, or
+  `--install-toolchain` relayed (`docs/plan-contracts-and-symbols.md` §3.3). ksar-cloud's first
+  ticket had already falsified for want of Go, and every other ticket waited on it, so the
+  install alone left a run that installed Go and exited 10. Now the same question names each
+  ticket in NEEDS_HUMAN whose last word is still the kernel's X-4 note — no person has touched it
+  since — with its premise in the session's words, and a yes returns each through
+  `HUMAN_REQUEUE`, the install as its consent, in a fresh generation, at the pool's first draw.
+  The run moves on to it. The requeue is a human act because the human was shown it, as V-3's
+  sweep records `verify sync`. Nothing parses the premise: a premise still false is falsified
+  again, and with the toolchain present the next run installs and returns nothing. No install,
+  no return; a leftover escalation with nothing installed is still `detent requeue`'s.
+
 - **V-3‴ (3.1.1, PRDR-226).** Drift is judged against the baseline a ticket's tree BRANCHED FROM,
   and a verification change is accepted per ticket. Under B-2″'s worktrees a granted change to a
   gate's config region lives on the ticket's branch until the merge, and the run branch's

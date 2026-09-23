@@ -206,6 +206,14 @@ blocks and the exact command, then:
 - with neither, refuses with exit 2, naming the commands and the flag. Nothing is synthesized
   from the environment (C-5).
 
+The same question names every ticket a yes also returns to the queue (PRDR-277): a ticket whose
+session stopped on a premise it found false (X-4), and which nobody has touched since. Each is
+listed with its premise in the session's words, so the one answer covers both, and a fresh
+attempt re-tests the premise with the toolchain installed. This is how a project whose first
+ticket stopped for want of a compiler — ksar-cloud's t-001, before PRDR-276 — moves on. With
+the toolchain already present, nothing is asked and nothing is returned; a leftover escalation
+is then `detent requeue`'s, as before.
+
 PRDR-273 raised this at `init`'s binding phase and PRDR-274 installed from there, and neither
 could reach the project they were written for: an approved plan's `init` runs no phase at all
 (C-8), so an init-time install never meets a project that has already planned. It is also the

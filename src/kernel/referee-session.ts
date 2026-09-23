@@ -9,7 +9,7 @@ import { enforceBaseGuard } from "./git.js";
 import { runsDir } from "./journal.js";
 import { currentCounters, currentGeneration, withCurrentCounters } from "./generations.js";
 import { Breach, KernelBoundaryError, SessionRefusal, type RefereeContext } from "./referee-context.js";
-import type { FalsifiedSignal } from "./dependency.js";
+import { FALSIFIED_NOTE, type FalsifiedSignal } from "./dependency.js";
 import { readTicket } from "./tickets/readers.js";
 import { appendNote, writeTicket } from "./tickets/mutations.js";
 import { assertTicketWallClock } from "./ticket-clock.js";
@@ -516,7 +516,7 @@ export class SessionArm {
       return null;
     }
     const detail = missing.length === 0 ? note : `${note} — missing: ${missing.join(", ")}`;
-    appendNote(ctx.root, ticketId, { author: "kernel", text: `falsified mid-implementation: ${detail}` });
+    appendNote(ctx.root, ticketId, { author: "kernel", text: `${FALSIFIED_NOTE}${detail}` });
     return { note, missing };
   }
 

@@ -17,7 +17,7 @@ import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCur
 import { rebaselineAccepted } from "./drift-base.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
-import { bootstrapFinalizeDeps, finalizeStranded, promoteBootstrapBindings, requeueDriftBlocked, requeueOutageVictims } from "./referee-sweeps.js";
+import { bootstrapFinalizeDeps, finalizeStranded, promoteBootstrapBindings, requeueDriftBlocked, requeueOutageVictims, resumeOnce, type Commit, type ResumeOptions } from "./referee-sweeps.js";
 import type { RunJournal } from "./journal.js";
 import { apply, type GuardContext } from "./machine.js";
 import type { RunBranch } from "./git.js";
@@ -83,11 +83,14 @@ export class RefereeCore {
   private readonly escrow = new Map<string, { ticketId: string; state: State; event: KernelEvent }>();
   private escrowSeq = 0;
   private driftSwept = false;
+  /** PRDR-277: the install's yes, spent at the pool's first draw and never again. */
+  private readonly resumeOnInstall: (commit: Commit, at: string) => void;
 
-  constructor(opts: CoreOptions, loaded: LoadedConfig, journal: RunJournal, runBranch: RunBranch) {
+  constructor(opts: CoreOptions & ResumeOptions, loaded: LoadedConfig, journal: RunJournal, runBranch: RunBranch) {
     this.ctx = new RefereeContext(opts, loaded, journal, runBranch);
     this.sessions = new SessionArm(this.ctx);
     this.gates = new GateArm(this.ctx);
+    this.resumeOnInstall = resumeOnce(opts.root, opts.resumeOnInstall, opts.announce);
   }
 
   private get root(): string {
@@ -132,6 +135,8 @@ export class RefereeCore {
       this.driftSwept = true;
       requeueDriftBlocked(this.root, (t, e) => this.commit(t, e), this.ctx.iso());
     }
+    /* PRDR-277: before the ready set is read, like the drift sweep, so this draw hands the ticket out. */
+    this.resumeOnInstall((t, e) => this.commit(t, e), this.ctx.iso());
     const readyPool = ready(this.root);
     /**
      * PRDR-079 (C-9): a crashed run's claim on an in-flight ticket used to

@@ -7,6 +7,7 @@ import type { Binding } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { KernelEvent } from "./events.js";
 import { humanRequeue, outageRequeue } from "./events.js";
+import { FALSIFIED_NOTE } from "./dependency.js";
 import { currentGeneration, openGeneration } from "./generations.js";
 import { worktreePath } from "./git.js";
 import { lastNote, type RefereeContext } from "./referee-context.js";
@@ -62,6 +63,91 @@ export function requeueOutageVictims(root: string, commit: Commit, at: string): 
     writeTicket(root, { ...requeued, generations });
     appendNote(root, ticket.id, { author: "kernel", text: "requeued after outage (PRDR-112): not a finding against the ticket" });
   }
+}
+
+/** PRDR-277: the tickets a yes to a toolchain install returns, and what it installed. */
+export interface ToolchainResume {
+  readonly ids: readonly string[];
+  /** `go (brew install go)` — the consent the requeue records, and the reason its generation opens with. */
+  readonly installed: string;
+}
+
+/**
+ * PRDR-277: what `run` hands the referee beyond `CoreOptions` — set only once
+ * an approved install resolved, and absent on the plugin path, which asks no
+ * such question.
+ */
+export interface ResumeOptions {
+  readonly resumeOnInstall?: ToolchainResume;
+}
+
+/**
+ * PRDR-277: stopped on a premise its session found false (X-4), and nobody
+ * has touched it since — the kernel's falsification note is still its last
+ * word. PRDR-112's selection, for X-4's own signal: a ticket a person has
+ * noted since is that person's. X-4′'s unresolved dependency is not this: its
+ * last word is the dependency note, and an install builds no missing code.
+ */
+function strandedOnPremise(ticket: Ticket): boolean {
+  return ticket.state === "NEEDS_HUMAN" && lastNote(ticket).startsWith(FALSIFIED_NOTE);
+}
+
+/** PRDR-277: what `run` names before it asks — each ticket, and the premise in its session's words. */
+export function strandedByPremise(root: string): { readonly id: string; readonly reason: string }[] {
+  return allTickets(root)
+    .filter(strandedOnPremise)
+    .map((t) => ({ id: t.id, reason: lastNote(t).slice(FALSIFIED_NOTE.length) }));
+}
+
+/**
+ * PRDR-277: the tickets the operator's yes to a toolchain install returned.
+ *
+ * X-4 sends a false premise to a human because only a human can change what
+ * the ticket was written against. Installing a missing toolchain changes the
+ * machine it runs on, on a human's answer — and the question that answer
+ * replied to named each of these tickets. So the requeue is that human act,
+ * recorded as its consent, as V-3's sweep records `verify sync`. Only the
+ * tickets the question named, and only while they are still stranded: one a
+ * person touched after the question was shown is left alone.
+ */
+export function requeueOnInstall(root: string, commit: Commit, at: string, resume: ToolchainResume): string[] {
+  const returned: string[] = [];
+  for (const ticket of allTickets(root)) {
+    if (!resume.ids.includes(ticket.id) || !strandedOnPremise(ticket)) continue;
+    const note = lastNote(ticket);
+    const requeued = commit(ticket, humanRequeue(`toolchain install approved at run start: ${resume.installed}`));
+    const generations = openGeneration(requeued, { at, reason: `${resume.installed} installed on the operator's approval; ${note}` });
+    writeTicket(root, { ...requeued, generations });
+    appendNote(root, ticket.id, {
+      author: "kernel",
+      text: `requeued: ${resume.installed} installed on the operator's approval, so a fresh attempt re-tests the premise the last one found false (PRDR-277)`,
+    });
+    returned.push(ticket.id);
+  }
+  return returned;
+}
+
+/**
+ * PRDR-277: the install's yes, spent once. The pool calls the result at every
+ * draw; the first call requeues, before the ready set is read, so that same
+ * draw hands the ticket out — read after it, the pool is empty when the
+ * returned ticket is all there is (ksar's case), and the run finishes clean
+ * with its work READY and unclaimed. Each returned ticket is said out loud.
+ */
+export function resumeOnce(
+  root: string,
+  resume: ToolchainResume | undefined,
+  announce?: (text: string) => void,
+): (commit: Commit, at: string) => void {
+  let pending = resume;
+  return (commit, at) => {
+    if (pending === undefined) return;
+    const spent = pending;
+    pending = undefined;
+    for (const id of requeueOnInstall(root, commit, at, spent)) {
+      announce?.(`${id} is back in the queue: ${spent.installed} is installed (PRDR-277)`);
+    }
+  };
 }
 
 /**
