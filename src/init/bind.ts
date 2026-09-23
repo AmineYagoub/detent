@@ -1,6 +1,6 @@
 import { discover } from "../adapter/discover/index.js";
 import { probeSymbols, symbolsSetupMessage, type SymbolsConfig } from "../adapter/symbols.js";
-import { currentPlatform, missingToolchains, probeExecutable, toolchainSetupMessage, type Platform } from "../adapter/toolchain.js";
+import { currentPlatform, installReport, installToolchains, missingToolchains, probeExecutable, runInstallCommand, toolchainSetupMessage, type Platform } from "../adapter/toolchain.js";
 import { bindAll, acknowledgeSkip, type BindReport, type Skip } from "../adapter/bind.js";
 import { writeBindings } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
@@ -59,6 +59,14 @@ export interface DetermineDeps {
   readonly probe?: (exe: string) => boolean;
   /** PRDR-273: which package manager's command to name. Defaults to this host. */
   readonly platform?: Platform;
+  /**
+   * PRDR-274: the operator's explicit approval to install a missing REQUIRED
+   * toolchain, carried by `detent init --install-toolchain`. Absent or false,
+   * the phase names the command and stops — D-4/F-2's behaviour unchanged.
+   */
+  readonly installToolchain?: boolean;
+  /** PRDR-274: the install runner; argv, never a shell. Injectable for fixtures. */
+  readonly runInstall?: (exe: string, args: readonly string[]) => void;
 }
 
 /**
@@ -188,14 +196,32 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
      * compiler — so it is resolved here, where saying so is free.
      */
     const platform = deps.platform ?? currentPlatform();
-    const missing = missingToolchains(bindings, deps.probe ?? ((exe) => probeExecutable(exe)));
+    const probe = deps.probe ?? ((exe: string) => probeExecutable(exe));
+    const missing = missingToolchains(bindings, probe);
     if (missing.length > 0) {
-      return {
-        kind: "interrupt",
-        interrupt: "AWAIT_SETUP_CONSENT",
-        message: toolchainSetupMessage(missing, platform),
-        items: missing.map((m) => m.exe),
-      };
+      /**
+       * PRDR-274: D-4/F-2 refuse to change the operator's machine, and that
+       * rule was reasoned for an OPTIONAL tool whose absence costs a skipped
+       * note. A REQUIRED toolchain's absence makes every ticket in the plan
+       * unimplementable, so it is installable — never by default, only under a
+       * flag this invocation carried, and only from the table.
+       */
+      const attempts = deps.installToolchain === true
+        ? installToolchains(missing, platform, deps.runInstall ?? runInstallCommand, probe)
+        : [];
+      for (const a of attempts) deps.note?.(`toolchain (PRDR-274): ${a.exe} — ${a.command ?? "not run"} — ${a.detail}`);
+      const unresolved = missing.filter((m) => !attempts.some((a) => a.exe === m.exe && a.resolved));
+      if (unresolved.length > 0) {
+        return {
+          kind: "interrupt",
+          interrupt: "AWAIT_SETUP_CONSENT",
+          message:
+            attempts.length === 0
+              ? toolchainSetupMessage(unresolved, platform)
+              : `An approved toolchain install did not resolve everything:\n${installReport(attempts)}`,
+          items: unresolved.map((m) => m.exe),
+        };
+      }
     }
     writeBindings(deps.root, { bindings, skips: [] });
     return {

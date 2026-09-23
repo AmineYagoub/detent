@@ -207,15 +207,92 @@ export function missingToolchains(
   return missing;
 }
 
+/** PRDR-274: one attempted install, and whether the executable resolves afterwards. */
+export interface InstallAttempt {
+  readonly exe: string;
+  /** The table's command, or null for an executable the table does not know. */
+  readonly command: string | null;
+  readonly resolved: boolean;
+  readonly detail: string;
+}
+
+/**
+ * PRDR-274 — install a REQUIRED toolchain, under an operator's explicit flag.
+ *
+ * The command run is `TOOLCHAINS[n].install[platform]` and nothing else. Never
+ * a string from `.detent/config.json`, which is repository content; never one
+ * from a planning document. PRDR-123 settled this for the symbol server and it
+ * applies with more force here, because a toolchain installer is expected to
+ * run with elevated privilege and to fetch from the network: an unrestricted
+ * string would let a repository point the orchestrator at an executable it
+ * shipped. The table is the allowlist, and a row-less executable is named but
+ * never run.
+ *
+ * Split to argv rather than handed to a shell. Every row is a plain
+ * space-separated command line, so no shell is needed — and not having one
+ * means no metacharacter in any future row can become an injection.
+ *
+ * The exit code is not the check. `brew install` exits 0 on a formula that is
+ * already installed but not linked, and `sudo apt-get` fails differently on a
+ * host with no sudo than on one with no package, so each attempt is followed
+ * by the same probe that found the absence.
+ */
+export function installToolchains(
+  missing: readonly MissingToolchain[],
+  platform: Platform,
+  run: (exe: string, args: readonly string[]) => void,
+  probe: (exe: string) => boolean = probeExecutable,
+): InstallAttempt[] {
+  const attempts: InstallAttempt[] = [];
+  for (const m of missing) {
+    if (m.toolchain === null) {
+      attempts.push({ exe: m.exe, command: null, resolved: false, detail: "no install command is known; not run" });
+      continue;
+    }
+    const command = m.toolchain.install[platform];
+    const [head, ...args] = command.split(/\s+/);
+    if (head === undefined) {
+      attempts.push({ exe: m.exe, command, resolved: false, detail: "empty install command" });
+      continue;
+    }
+    try {
+      run(head, args);
+    } catch (err) {
+      attempts.push({ exe: m.exe, command, resolved: false, detail: `install failed: ${(err as Error).message.split("\n")[0] ?? "unknown"}` });
+      continue;
+    }
+    const resolved = probe(m.exe);
+    attempts.push({
+      exe: m.exe,
+      command,
+      resolved,
+      detail: resolved ? "installed and resolves" : "install reported success but the executable still does not run",
+    });
+  }
+  return attempts;
+}
+
+/** PRDR-274: the default runner — argv, no shell. */
+export function runInstallCommand(exe: string, args: readonly string[]): void {
+  execFileSync(exe, [...args], { stdio: ["ignore", "pipe", "pipe"], timeout: 600_000 });
+}
+
+/** PRDR-274: what an operator is told after an approved install did not finish the job. */
+export function installReport(attempts: readonly InstallAttempt[]): string {
+  return attempts.map((a) => `  ${a.exe}: ${a.command ?? "(no command)"} — ${a.detail}`).join("\n");
+}
+
 /**
  * PRDR-273: what the operator is shown. Names the platform it resolved, every
  * missing executable with the slots it blocks, and the command that installs
  * it — or says plainly that none is known, which is the honest answer for a
  * language outside the table and better than a guess an operator might paste.
  *
- * States that Detent will not run these itself (D-4/F-2). PRDR-274 revisits
- * that for a REQUIRED toolchain under explicit approval; until it lands, this
- * sentence is true.
+ * PRDR-274: offers the flag that runs them, but only when the table actually
+ * has a command to run — telling an operator missing `zig` to pass
+ * `--install-toolchain` would be an offer Detent cannot keep, which is the
+ * doc-claim drift this repository exists to catch, in a message instead of a
+ * doc-block.
  */
 export function toolchainSetupMessage(missing: readonly MissingToolchain[], platform: Platform): string {
   const host = platform === "darwin" ? "macOS (Homebrew)" : "Linux (Debian/apt)";
@@ -231,7 +308,14 @@ export function toolchainSetupMessage(missing: readonly MissingToolchain[], plat
         : `    ${m.toolchain.install[platform]}      (${m.toolchain.provides})`,
     );
   }
-  lines.push("", "Detent does not install tooling — it binds to what the machine has (D-4/F-2).");
-  lines.push("Install what is listed above and re-run `detent init`.");
+  const installable = missing.some((m) => m.toolchain !== null);
+  lines.push("", "Detent binds to what the machine has rather than changing it (D-4/F-2), so it has run nothing.");
+  if (installable) {
+    lines.push(
+      "Re-run `detent init --install-toolchain` to have Detent run the commands above, or run them yourself and re-run `detent init`.",
+    );
+  } else {
+    lines.push("Install what is listed above and re-run `detent init`.");
+  }
   return lines.join("\n");
 }

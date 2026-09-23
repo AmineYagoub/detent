@@ -167,19 +167,57 @@ slot: absent, every stage still works and says so once.
 4. **Brownfield planning.** On an existing repo, seed `provides` from the real symbol table
    instead of inventing it. (Worth nothing on greenfield — ksar-cloud has no code yet.)
 
-### 3.3 Installation and discovery — Detent never installs it
+### 3.3 Installation and discovery — Detent never installs *this*
 
-**Detent installs nothing, and this changes that for nothing.** `AWAIT_SETUP_CONSENT` today
-only ever prints a message and exits; there is no install path anywhere in the codebase, and
-Serena does not earn one:
+**Serena is discovered, never installed.** Three reasons, and all three still hold:
 
 - It is a **global** tool (`uv tool install`), not a project dependency. Installing it would be
   Detent modifying the user's machine rather than binding to the project (D-4, F-2).
 - It is a third-party MCP server that gets **read access to a private codebase**. That is a
   decision its owner makes deliberately, not a side effect of `detent init`.
-- Nothing depends on it. Phase 1 works without it; Phase 2's gate is skipped with a note.
+- **Nothing depends on it.** Phase 1 works without it; Phase 2's gate is skipped with a note.
 
 So: **discovered, never installed**, and probed exactly the way a verification command is.
+
+#### The boundary (PRDR-274)
+
+This section used to say *"Detent installs nothing, and this changes that for nothing; there is
+no install path anywhere in the codebase."* That is no longer true, and the reason is the third
+bullet: it is the only one that distinguishes an OPTIONAL tool from a REQUIRED one, and for a
+language toolchain it **inverts completely**.
+
+| | Serena | A language toolchain (`go`, `cargo`, `dotnet`) |
+|---|---|---|
+| Global tool, so installing it modifies the machine (D-4, F-2) | yes | yes — which is why a flag, not a default |
+| Third-party server with read access to a private codebase | yes | no — a compiler reads nothing and reports nowhere |
+| **Nothing depends on it** | yes — the gate is skipped with a note | **no — every ticket in the plan is unimplementable** |
+
+So the rule is not wrong; it was scoped to an absence that costs a note. An absence that costs
+the entire run is a different case, and the only surviving objection — Detent mutating the
+machine — is what an explicit, per-invocation operator flag is for. `detent init
+--install-toolchain` runs what the `AWAIT_SETUP_CONSENT` message named; without the flag the
+message is printed and nothing is run, exactly as PRDR-273 shipped it.
+
+Three constraints make that safe, and they are the design:
+
+1. **The table is the allowlist.** The command executed is `TOOLCHAINS[n].install[platform]`
+   from Detent's own source — never a string from `.detent/config.json`, which is repository
+   content, never one from a planning document. This is PRDR-123's constraint applied to a
+   second execution path, and it binds harder here: a toolchain installer is expected to run
+   with elevated privilege and to fetch from the network. An executable with no row is **named
+   but never run**.
+2. **No shell.** Each row is a plain space-separated command line, split to argv and run
+   through `execFileSync`, so no metacharacter in any future row can become an injection.
+3. **The exit code is not the check.** `brew install` exits 0 on a formula already installed
+   but unlinked; `sudo apt-get` fails differently with no sudo than with no package. Each
+   install is followed by the same probe that found the absence, and only a resolving
+   executable clears the slot. Every attempt — command, outcome, re-probe — is recorded
+   (PRDR-211's precedent for an adapter-run command).
+
+Project **dependencies** are a separate mechanism and unchanged: `ECOSYSTEMS` (PRDR-211)
+installs what a manifest declares before a gate runs, unprompted, because that install is
+scoped to the work directory and recoverable by deleting it. A toolchain install is global,
+and that is precisely why this one is behind a flag.
 
 ```json
 "symbols": { "enabled": true, "command": "serena-agent" }
