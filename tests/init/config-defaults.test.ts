@@ -48,7 +48,7 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
     const base = {
       schema_version: 1,
       budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])),
-      pinned: { agent_sdk: "0.3.258", claude_code: "2.1.258" },
+      pinned: { agent_sdk: "0.3.280", claude_code: "2.1.258" },
     };
     expect(loadConfig(base).config.slice_size).toEqual({ min: 12, max: 18 });
     /** A band the operator narrows is honoured; an inverted one is refused at load. */

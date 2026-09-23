@@ -27,7 +27,7 @@ import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING } from "../schemas/roles.
 const DEFAULT_PROTECTED = ["tickets/**", ".detent/tickets/**", "AGENTS.md", "CLAUDE.md"] as const;
 
 /** S-5: the agent-sdk pin mirrors package.json's exact dependency. */
-const PINNED_AGENT_SDK = "0.3.258";
+const PINNED_AGENT_SDK = "0.3.280";
 
 /**
  * S-5's backend pin is "the version this project initialized against":

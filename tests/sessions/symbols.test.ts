@@ -24,7 +24,7 @@ import { CEILINGS } from "../../src/schemas/budgets.js";
 const BASE_CONFIG = {
   schema_version: 1,
   budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])),
-  pinned: { agent_sdk: "0.3.258", claude_code: "2.1.258" },
+  pinned: { agent_sdk: "0.3.280", claude_code: "2.1.258" },
 };
 
 /** Drive the backend over a scripted message stream and report what it concluded about MCP. */

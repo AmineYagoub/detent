@@ -382,6 +382,12 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   session. Review, diagnose and the informed attempt were already on Opus; implement, the three
   fixes and research stay on Sonnet.
 
+- **S-5‴ (3.1.1, PRDR-275).** The agent-sdk pin moves to 0.3.280, whose bundled runtime,
+  2.1.280, is the first to serve `claude-opus-5-5`. S-5′'s reasoning holds unchanged: the SDK's
+  bundled runtime is what serves a session, so model support moves with this pin and not with
+  the `claude` an operator installs. The default routing is untouched — both models it names are
+  served by 2.1.280 — so the pin decides only what a project MAY route to, not what it does.
+
 - **S-1″ (3.1.1, PRDR-124).** An init session carries its OWN containment policy, whose surface
   is exactly the artifact it was asked to write. S-1′ has always said such a session gets the
   read-only surface plus one write rule; the rule was granted on the allowlist while the hook

@@ -43,23 +43,23 @@ describe("PRDR-096 doctor reads the real installed SDK version", () => {
     const check = named(report, "agent-sdk-pin");
     expect(check).toBeDefined();
     expect(check?.detail).not.toContain("is not defined by");
-    /* The fixture pins 0.3.258; the repo installs exactly that. */
-    expect(check?.detail).toContain("0.3.258");
+    /* The fixture pins 0.3.280; the repo installs exactly that. */
+    expect(check?.detail).toContain("0.3.280");
     expect(check?.ok).toBe(true);
   });
 });
 
 describe("T-050 pin checks (S-5)", () => {
   it("a matching SDK pin passes; a mismatch fails naming BOTH versions", async () => {
-    /** fixture pins agent_sdk 0.3.258 == installed */
+    /** fixture pins agent_sdk 0.3.280 == installed */
     const root = await fixture();
-    const ok = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const ok = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     expect(named(ok, "agent-sdk-pin")?.ok).toBe(true);
 
     const bad = await doctor(root, { installedSdkVersion: () => "0.4.0" });
     const check = named(bad, "agent-sdk-pin");
     expect(check?.ok).toBe(false);
-    expect(check?.detail).toContain("0.3.258");
+    expect(check?.detail).toContain("0.3.280");
     expect(check?.detail).toContain("0.4.0");
     expect(bad.exitCode).toBe(1);
   });
@@ -68,7 +68,7 @@ describe("T-050 pin checks (S-5)", () => {
     const root = await fixture();
     const backend = new MockBackend();
     /** The mock accepts any pin (version-free) — passes. */
-    const ok = await doctor(root, { backend, installedSdkVersion: () => "0.3.258" });
+    const ok = await doctor(root, { backend, installedSdkVersion: () => "0.3.280" });
     expect(named(ok, "claude-code-pin")?.ok).toBe(true);
 
     const failing = {
@@ -82,7 +82,7 @@ describe("T-050 pin checks (S-5)", () => {
         );
       },
     };
-    const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.258" });
+    const bad = await doctor(root, { backend: failing, installedSdkVersion: () => "0.3.280" });
     const check = named(bad, "claude-code-pin");
     expect(check?.ok).toBe(false);
     /** the pin from config */
@@ -94,7 +94,7 @@ describe("T-050 pin checks (S-5)", () => {
 describe("T-050 config reporting (X-1: the computation is authoritative)", () => {
   it("reports the computed worst case beside the configured net", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     const check = named(report, "config");
     expect(check?.ok).toBe(true);
     /** Moved with PRDR-108/109 (three review-fix rounds, one review relaunch per entry). */
@@ -105,7 +105,7 @@ describe("T-050 config reporting (X-1: the computation is authoritative)", () =>
   it("a missing config is a failing check, not a crash", async () => {
     const root = await fixture();
     rmSync(`${root}/.detent/config.json`);
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     expect(named(report, "config")?.ok).toBe(false);
     expect(report.exitCode).toBe(1);
   });
@@ -114,7 +114,7 @@ describe("T-050 config reporting (X-1: the computation is authoritative)", () =>
 describe("T-050 WebFetch rule form (S-3/PRDR-050)", () => {
   it("the composed domain-scoped form matches the pinned syntax", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     expect(named(report, "webfetch-rule-form")?.ok).toBe(true);
   });
 });
@@ -128,7 +128,7 @@ describe("T-050 smoke session (R-10)", () => {
    */
   it("without a live backend the smoke SKIPS with the reason — the mock suite stays green", async () => {
     const root = await fixture();
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     const check = named(report, "smoke-session");
     expect(check?.ok).toBe(true);
     expect(check?.detail).toContain("R-10");
@@ -139,7 +139,7 @@ describe("T-050 smoke session (R-10)", () => {
     const backend = new MockBackend({ review: () => okResult({ costEstimateUsd: 0.0003, turns: 1 }) });
     const report = await doctor(root, {
       backend,
-      installedSdkVersion: () => "0.3.258"
+      installedSdkVersion: () => "0.3.280"
     });
     const check = named(report, "smoke-session");
     expect(check?.ok).toBe(true);
@@ -151,7 +151,7 @@ describe("T-050 smoke session (R-10)", () => {
     const failing = new MockBackend({ review: () => okResult({ telemetryParsed: false }) });
     const bad = await doctor(root, {
       backend: failing,
-      installedSdkVersion: () => "0.3.258"
+      installedSdkVersion: () => "0.3.280"
     });
     expect(named(bad, "smoke-session")?.ok).toBe(false);
     expect(bad.exitCode).toBe(1);
@@ -432,7 +432,7 @@ describe("PRDR-254 the agent-sdk pin reports, and reports to the right reader", 
     const report = await doctor(root, { installedSdkVersion: () => "0.4.0" });
     const check = named(report, "agent-sdk-pin");
     expect(check?.ok, "a red row: worth seeing, even though nothing refuses on it").toBe(false);
-    expect(check?.detail, "both versions, as before").toContain("0.3.258");
+    expect(check?.detail, "both versions, as before").toContain("0.3.280");
     expect(check?.detail).toContain("0.4.0");
     expect(check?.detail, "the cause: the config was written by a different Detent").toContain("different Detent build");
     expect(check?.detail, "and it says the row does not refuse, so the reader is not hunting a blocker").toContain("dvisory");
@@ -479,7 +479,7 @@ describe("PRDR-273 doctor resolves the executables behind the bound gates", () =
       ],
       skips: [],
     });
-    const report = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     const row = named(report, "toolchain");
     expect(row?.ok, "an unrunnable executable is not an ok row").toBe(false);
     expect(row?.detail).toContain("go");
@@ -496,12 +496,12 @@ describe("PRDR-273 doctor resolves the executables behind the bound gates", () =
       ],
       skips: [],
     });
-    const ran = await doctor(root, { installedSdkVersion: () => "0.3.258" });
+    const ran = await doctor(root, { installedSdkVersion: () => "0.3.280" });
     expect(named(ran, "toolchain")?.ok, "node runs the suite, so it resolves").toBe(true);
 
     const bare = await fixture();
     writeBindings(bare, { bindings: [], skips: [] });
-    const none = await doctor(bare, { installedSdkVersion: () => "0.3.258" });
+    const none = await doctor(bare, { installedSdkVersion: () => "0.3.280" });
     expect(named(none, "toolchain")?.ok).toBe(true);
     expect(named(none, "toolchain")?.detail).toContain("nothing to resolve");
   });

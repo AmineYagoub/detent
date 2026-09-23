@@ -66,7 +66,7 @@ export async function makeRunRepo(): Promise<RunRepo> {
     protected: ["tickets/**", "AGENTS.md"],
     risk: [],
     model_routing: {},
-    pinned: { agent_sdk: "0.3.258", claude_code: "2.1.191" },
+    pinned: { agent_sdk: "0.3.280", claude_code: "2.1.191" },
   });
 
   const report = await bindAll(discover(root), { root, timeoutMs: 30_000 , redact: (t) => t });
