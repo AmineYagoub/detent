@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir, writeArtifact } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import {
   approvalSchema,
   presentationSchema,
@@ -376,7 +376,7 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
    * prose for as long as `run` had nothing to render from.
    */
   writeArtifact(deps.root, path.posix.join("plan", "presentation.json"), {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     presentation,
     plan_hash: planHash(deps.root),
     blocking: (deps.questions ?? []).filter((q) => q.blocking).length,
@@ -438,7 +438,7 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
  */
 export function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
   const approval = approvalSchema.parse({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     approved_by: approvedBy,
     at: new Date(nowMs).toISOString(),
     plan_hash: planHash(root),

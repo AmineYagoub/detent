@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { main as initMain } from "../src/cli/init.js";
 import { probeSymbols, type SymbolsStatus } from "../src/adapter/symbols.js";
 import { stateDir } from "../src/fs/layout.js";
+import { migrateState, migrationNote } from "../src/kernel/migrate.js";
 import { run } from "../src/kernel/run.js";
 import { LIVE_AUTH_HINT, buildLiveBackend, hasLiveBackendAuth } from "../src/sessions/live.js";
 import { loadPromptSet } from "../src/sessions/prompts.js";
@@ -122,10 +123,21 @@ export async function selfBuild(opts: {
     }
   }
 
+  /**
+   * F-3″ (PRDR-300): a resumed build may hold a state an older Detent wrote,
+   * so it is carried before the live backend reads its bindings, as
+   * `cli/run.ts` does.
+   */
+  const prompts = loadPromptSet();
+  const migrated = migrateState(dir, { promptHashes: prompts.hashes });
+  if (migrated.kind === "refused") return { ok: false, phase: "run", detail: migrated.message, dir };
+  const note = migrationNote(migrated);
+  if (note !== null) process.stdout.write(`${note}\n`);
+
   const outcome = await run({
     root: dir,
     backend: buildLiveBackend(dir),
-    prompts: loadPromptSet(),
+    prompts,
     worker: "n7",
     announce: (message) => process.stdout.write(`${message}\n`),
   });

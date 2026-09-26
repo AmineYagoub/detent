@@ -8,6 +8,7 @@ import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { ANALYSIS, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-2‴ at the size it was built for.
@@ -44,13 +45,13 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
     seen.push({ stage: stage === "REVIEW_PLAN" ? `REVIEW:${String(inputs["scope"])}` : stage, kb: spec.promptVariable.length / 1024 });
 
     let artifact: object;
-    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: 1, slices: SLICES, questions: [] };
+    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: SLICES, questions: [] };
     else if (spec.artifactOut.endsWith("plan-draft.json")) {
       const id = (inputs["slice"] as { id: string }).id;
       const index = (inputs["plan_index"] as { id: string }[] | undefined) ?? [];
       const previous = index.length > 0 ? [index[index.length - 1]!.id] : [];
       artifact = {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         tickets: Array.from({ length: PER_SLICE }, (_, j) => ({
           id: `t-${id}-${String(j + 1).padStart(3, "0")}`,
           type: "feature",
@@ -83,7 +84,7 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
         })),
         questions: [],
       };
-    } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: 1, verdict: "approve", findings: [] };
+    } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
     else artifact = ANALYSIS(null);
 
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
@@ -109,17 +110,17 @@ function fragilePlanner(drafted: string[], dieOn: string | null) {
   return (spec: SessionSpec) => {
     const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
     let artifact: object;
-    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: 1, slices: TEN, questions: [] };
+    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: TEN, questions: [] };
     else if (spec.artifactOut.endsWith("plan-draft.json")) {
       const id = (inputs["slice"] as { id: string }).id;
       drafted.push(id);
       if (id === dieOn) throw new Error("simulated session failure");
       artifact = {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         tickets: [{ id: `t-${id}-001`, type: "feature", title: id, description: "", acceptance_criteria: ["x"], non_goals: [], surface: ["src/**"], depends_on: [], risk_label: false }],
         questions: [],
       };
-    } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: 1, verdict: "approve", findings: [] };
+    } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
     else artifact = ANALYSIS(null);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();

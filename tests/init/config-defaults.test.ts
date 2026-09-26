@@ -5,6 +5,7 @@ import { ensureConfig } from "../../src/init/config.js";
 import { DEFAULT_MODEL_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** PRDR-114 — `init` has an opinion about models, and every role is covered. */
 const roots: string[] = [];
@@ -46,7 +47,7 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
     const { loadConfig } = await import("../../src/kernel/worstcase.js");
     const { CEILINGS } = await import("../../src/schemas/budgets.js");
     const base = {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])),
       pinned: { agent_sdk: "0.3.280", claude_code: "2.1.258" },
     };
@@ -79,7 +80,7 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
         writeFileSync(
           slicesPath(root),
           JSON.stringify({
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             slices: [{ id: "s01", title: "t", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 10, rationale: "" }],
             questions: [],
           }),

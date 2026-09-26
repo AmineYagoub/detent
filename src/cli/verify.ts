@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { acceptDrift, bindingsForTree } from "../kernel/drift-base.js";
 import { git, worktreePath } from "../kernel/git.js";
 import { requeueTicket } from "../kernel/plumbing.js";
+import { stateVersionRefusal } from "../kernel/migrate.js";
 
 /**
  * T-027 — `detent verify sync` (C-12 plumbing, V-3).
@@ -305,6 +306,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
   const root = maybeRoot ?? process.cwd();
+  /** F-3″ (PRDR-300): `verify` does not migrate, so an older or newer state is refused before anything runs. */
+  const refused = stateVersionRefusal(root);
+  if (refused !== null) {
+    process.stderr.write(`${refused}\n`);
+    return 2;
+  }
   const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
 
   /**

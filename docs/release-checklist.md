@@ -43,8 +43,13 @@ this file exists to make unskippable.
    (`tests/plugin/hostile.test.ts`) and the sec suite pass; the SEC-6
    platform-merge behavior re-verified live on the current CLI.
 8. **Schema discipline (F-3).** Any persisted-shape change this release
-   bumped `schema_version` with a migration — never silently.
-   The 3.1.1 line adds these shapes, each at `schema_version` 1 (C-2⁷,
+   bumped `schema_version` with a migration — never silently. A migration
+   is an entry in `MIGRATIONS` (`src/kernel/migrate.ts`), tested by
+   migrating a state written at the version before (F-3″).
+   The 3.1.1 line is one event, `schema_version` 1 to 2 (F-3″, PRDR-300):
+   each persisted shape it changes adds its step to that one migration
+   before the release (S-1‴), and none gets a version of its own.
+   The line also adds these shapes, each first written at 2 (C-2⁷,
    PRDR-279). A later change to any of them is an F-3 event:
    - the conformance record, `docs/conformance.json`, which a project
      commits beside its pack;

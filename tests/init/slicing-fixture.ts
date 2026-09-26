@@ -3,6 +3,7 @@ import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { ANALYSIS, LONE_CANDIDATE } from "./plan-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * The two-slice world every slicing and cache suite plans against.
@@ -17,7 +18,7 @@ import { ANALYSIS, LONE_CANDIDATE } from "./plan-fixture.js";
 export { MockBackend };
 
 export const TWO_SLICES = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slices: [
     { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], expected_tickets: 2, rationale: "" },
     { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], expected_tickets: 2, rationale: "" },
@@ -80,11 +81,11 @@ export function scriptedPlanner(script: Script, log: string[], seen: Record<stri
 export const twoSliceDraft = (inputs: Record<string, unknown>): object =>
   sliceOf(inputs) === "s01"
     ? {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
         questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
       }
-    : { schema_version: 1, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
+    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
 
 export const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 

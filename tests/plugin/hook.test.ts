@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { renderHookBundle } from "../../scripts/build-plugin.js";
 import { removeTree, tmpTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-113 — the D-21 containment hook as a plugin hook (S-2′, SEC-6, D-29).
@@ -142,7 +143,7 @@ describe("T-113 PreToolUse over the bundle (T-046 oracle ports)", () => {
 
 /** The referee-written driver policy (T-120/T-121) as the hook sees it. */
 const DRIVER_POLICY = JSON.stringify({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   ticket_id: "t-1",
   driver: true,
   surface: [],
@@ -287,7 +288,7 @@ describe("T-113 Stop gate over the bundle (D-27″: the re-feed, and nothing exe
 
   it("T-120 re-feed: a standing run blocks the stop ONCE and names the loop", () => {
     const stageDoc = JSON.stringify({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       stage: "driver",
       gate_cmd: null,
       run_refeed: "Detent run in flight: call the referee's `next` tool and continue.",

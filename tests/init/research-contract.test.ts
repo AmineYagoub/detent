@@ -11,7 +11,7 @@ import {
 } from "../../src/init/plan-research.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { runInit } from "../../src/init/machine.js";
-import { parseArtifact } from "../../src/schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../../src/schemas/common.js";
 import { planningBriefSchema } from "../../src/schemas/init.js";
 import { MockBackend, type RecordedCall } from "../../src/sessions/mock.js";
 import { removeTree, tmpTree } from "../helpers.js";
@@ -49,7 +49,7 @@ const OTHER = "what retention applies?";
 /** The `answered` arm: a claim, and evidence that is local so X-6a is satisfied. */
 function answered(question: string): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     outcome: "answered",
     question,
     question_hash: questionHash(question),
@@ -68,7 +68,7 @@ function answered(question: string): Record<string, unknown> {
  */
 function undecidable(question: string): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     outcome: "undecidable",
     question,
     question_hash: questionHash(question),
@@ -331,7 +331,7 @@ describe("PRDR-264 the pipeline hands planning research its contract (D-17)", ()
   async function researchCalls(): Promise<{ readonly calls: readonly RecordedCall[]; readonly root: string }> {
     const root = fixtureRepo(LONE_CANDIDATE);
     const analysis = {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       summary: "s",
       stack: null,
       questions: [{ id: "q1", question: ASKED, blocking: false, assumption: "callbacks still work" }],
@@ -409,7 +409,7 @@ describe("PRDR-266 a verdict about the outside world requires consulting it", ()
   /** Run 5's live legal brief, reduced to the shape the rule reads. */
   function needsSpecialist(tiers: readonly { tier: number; ref: string }[]): Record<string, unknown> {
     return {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       outcome: "undecidable",
       question: OTHER,
       question_hash: questionHash(OTHER),

@@ -11,6 +11,7 @@ import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
 import type { Budgets } from "../../src/schemas/budgets.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * V-1‴ (PRDR-156) — the notice, where the operator actually stands.
@@ -156,7 +157,7 @@ const CAND: Candidate = {
 };
 
 const BINDING: Binding = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slot: "test",
   adapter: "node-scripts",
   ref: "test",

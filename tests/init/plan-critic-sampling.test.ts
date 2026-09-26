@@ -13,6 +13,7 @@ import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js"
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-4⁗″ (PRDR-200) — the review is sampled, and only what recurs buys the revision.
@@ -41,7 +42,7 @@ const READS: readonly (readonly object[])[] = [
 
 const RECUR = ["t-100 dependency", "t-102 sizing"];
 
-const TICKETS = planDraftSchema.parse({ schema_version: 1, tickets: IDS.map((id) => ticket(id)), questions: [] }).tickets;
+const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: IDS.map((id) => ticket(id)), questions: [] }).tickets;
 
 const keyOf = (x: unknown): string => {
   const r = x as { ticket?: string; tag?: string };
@@ -65,7 +66,7 @@ function scripted(reads: readonly (readonly object[])[]): {
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
       const read = n < reads.length ? reads[n] : undefined;
       n += 1;
-      artifact = read === undefined ? APPROVE_PLAN : { schema_version: 1, verdict: "changes", findings: read };
+      artifact = read === undefined ? APPROVE_PLAN : { schema_version: SCHEMA_VERSION, verdict: "changes", findings: read };
     } else if (spec.artifactOut.endsWith("slices.json")) {
       artifact = ONE_SLICE;
     } else {
@@ -242,7 +243,7 @@ function drivenReviewer(): {
       await released;
       writeFileSync(
         spec.artifactOut,
-        `${JSON.stringify({ schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", finding: `draw ${String(n)}`, ticket: `t-${String(n)}` }] })}\n`,
+        `${JSON.stringify({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", finding: `draw ${String(n)}`, ticket: `t-${String(n)}` }] })}\n`,
       );
       return okResult();
     },

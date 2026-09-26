@@ -16,6 +16,7 @@ import type { SessionBackend } from "../../src/sessions/backend.js";
 import { PROMPTS, repo } from "../init/plan-fixture.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import type { GateResult } from "../../src/adapter/run.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * SEC-4 (PRDR-252) — the scrub seam is the WRITE, not the caller who remembers.
@@ -255,7 +256,7 @@ describe("SEC-4 a secret never reaches the research brief cache", () => {
       note: () => {},
       ticketInputs: {},
       readArtifact: () => ({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         failure_signature: signature,
         cache_key: key,
         root_cause: { claim: `the .env checked into the repo sets ANTHROPIC_API_KEY=${KEY}`, confidence: "high" },

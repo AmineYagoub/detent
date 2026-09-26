@@ -4,7 +4,7 @@ import { sizingEvidence } from "./sizing-evidence.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import type { Budgets } from "../schemas/budgets.js";
 import {
   planReviewSchema,
@@ -25,7 +25,7 @@ import {
 /** The exact artifact the REVIEW_PLAN stage writes (PRDR-084). */
 export function planReviewSkeleton(): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     verdict: "approve",
     findings: [
       { tag: "sizing", finding: "<what is wrong — required>", ticket: "t-100" },

@@ -1,6 +1,7 @@
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
+import { stateVersionRefusal } from "../kernel/migrate.js";
 
 /**
  * T-053 — `detent status` and the C-13 vocabulary.
@@ -75,6 +76,12 @@ export function renderStatus(root: string): string {
 
 export function main(argv: readonly string[]): number {
   const root = argv[0] ?? process.cwd();
+  /** F-3″ (PRDR-300): this verb does not migrate, so an older or newer state is refused before anything reads it. */
+  const refused = stateVersionRefusal(root);
+  if (refused !== null) {
+    process.stderr.write(`${refused}\n`);
+    return 2;
+  }
   process.stdout.write(renderStatus(root));
   return 0;
 }

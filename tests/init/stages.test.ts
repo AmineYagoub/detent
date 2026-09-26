@@ -17,6 +17,7 @@ import type { Budgets } from "../../src/schemas/budgets.js";
 import { MockBackend, okResult, outageResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-061 (doc discovery), T-062 (ANALYZE), T-063 (planning research). */
 
@@ -125,7 +126,7 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
  */
 
 const ANALYSIS_BROWNFIELD = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   summary: "An existing TypeScript service with vitest already wired.",
   stack: null,
   questions: [],
@@ -135,7 +136,7 @@ const ANALYSIS_BROWNFIELD = {
 
 /** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
 const ONE_SLICE = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" }],
   questions: [],
 };
@@ -154,7 +155,7 @@ const plannerStage =
   };
 
 const DRAFT = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   tickets: [
     {
       id: "t-100",
@@ -271,7 +272,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
         docs: ["PRD.md"],
         stackMarkers: ["package.json"],
         launch: async () => {
-          writeFileSync(analysisPath(root), JSON.stringify({ schema_version: 1, summary: "" }));
+          writeFileSync(analysisPath(root), JSON.stringify({ schema_version: SCHEMA_VERSION, summary: "" }));
         },
       }),
     ).rejects.toThrow(/invalid analysis|no analysis artifact/);
@@ -386,7 +387,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
  */
 
 const VALID_BRIEF = (question: string) => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   question,
   question_hash: questionHash(question),
   answer: { claim: "The v3 API replaced the callback form with promises.", confidence: "high" },

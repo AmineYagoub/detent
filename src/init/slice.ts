@@ -2,7 +2,7 @@ import { openQuestionsInput, openQuestionsInstruction } from "./questions.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { slicesSchema, type Analysis, type Slices } from "../schemas/init.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { PhaseOutcome } from "./machine.js";
@@ -38,7 +38,7 @@ export interface SliceDeps {
 /** The EXACT artifact SLICE writes; a test parses it through `slicesSchema`. */
 export function slicesSkeleton(): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     slices: [
       {
         id: "s01",
@@ -162,7 +162,7 @@ function groundSlices(slices: Slices, deps: SliceDeps): Slices["slices"] {
 export function slicesFromOutputs(outputs: Readonly<Record<string, Record<string, unknown>>>): Slices["slices"] {
   const raw = outputs["SLICE"]?.["slices"];
   if (raw === undefined) return [];
-  const parsed = slicesSchema.safeParse({ schema_version: 1, slices: raw });
+  const parsed = slicesSchema.safeParse({ schema_version: SCHEMA_VERSION, slices: raw });
   if (!parsed.success) {
     throw new Error(
       `the SLICE checkpoint is unreadable (${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}) — ` +

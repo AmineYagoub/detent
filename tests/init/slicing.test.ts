@@ -15,6 +15,7 @@ import { normaliseDraft } from "../../src/init/plan-slices.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-2‴ / C-2⁗ / C-3′ (PRDR-117) — the slicing layer.
@@ -26,7 +27,7 @@ import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "
  */
 
 const TWO_SLICES = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slices: [
     { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], expected_tickets: 2, rationale: "" },
     { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], expected_tickets: 2, rationale: "" },
@@ -89,11 +90,11 @@ function scriptedPlanner(script: Script, log: string[], seen: Record<string, unk
 const twoSliceDraft = (inputs: Record<string, unknown>): object =>
   sliceOf(inputs) === "s01"
     ? {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
         questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
       }
-    : { schema_version: 1, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
+    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
 
 const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
@@ -122,7 +123,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
             if (inputs["scope"] !== "whole") return APPROVE_PLAN;
             wholeReviews += 1;
             return wholeReviews === 1
-              ? { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
+              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
               : APPROVE_PLAN;
           },
         },
@@ -283,9 +284,9 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const backend = new MockBackend({
       planner: scriptedPlanner(
         {
-          slices: { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [] },
-          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] }),
-          review: () => ({ schema_version: 1, verdict: "changes", findings: [held] }),
+          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] }),
+          review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [held] }),
         },
         [],
       ),
@@ -316,7 +317,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
             whole += 1;
             /* The first whole review faults a ticket, which forces the redraft. */
             if (whole === 1) {
-              return { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] };
+              return { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] };
             }
             /* The re-review and its one relaunch both come back unusable. */
             return { not: "a review at all" };
@@ -338,8 +339,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const backend = new MockBackend({
       planner: scriptedPlanner(
         {
-          slices: { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [] },
-          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001", ["t-s99-001"])], questions: [] }),
+          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", ["t-s99-001"])], questions: [] }),
           review: () => APPROVE_PLAN,
         },
         [],
@@ -360,11 +361,11 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
       planner: scriptedPlanner(
         {
           slices: {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             slices: [{ ...TWO_SLICES.slices[0]!, docs: ["docs/imagined.md"], baseline_items: ["PB-001", "PB-404"] }],
             questions: [],
           },
-          draft: () => ({ schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }),
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }),
           review: () => APPROVE_PLAN,
         },
         [],
@@ -398,13 +399,13 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
       planner: (spec) => {
         let artifact: object;
         if (spec.artifactOut.endsWith("slices.json")) {
-          artifact = { schema_version: 1, slices: [TWO_SLICES.slices[0]!], questions: [{ id: "s01-q1", question: "Which Cloudflare zone?", blocking: false, assumption: "ksarapp.dev" }] };
+          artifact = { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [{ id: "s01-q1", question: "Which Cloudflare zone?", blocking: false, assumption: "ksarapp.dev" }] };
         } else if (spec.artifactOut.endsWith("plan-draft.json")) {
           drafts += 1;
-          artifact = { schema_version: 1, tickets: [ticket(`t-s01-00${drafts}`)], questions: [drafts === 1 ? first : second] };
+          artifact = { schema_version: SCHEMA_VERSION, tickets: [ticket(`t-s01-00${drafts}`)], questions: [drafts === 1 ? first : second] };
         } else if (spec.artifactOut.endsWith("plan-review.json")) {
           /** The first review asks for a revision, so the slice drafts twice. */
-          artifact = drafts === 1 ? { schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] } : APPROVE_PLAN;
+          artifact = drafts === 1 ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] } : APPROVE_PLAN;
         } else {
           artifact = { ...ANALYSIS(null), questions: [{ id: "s01-q1", question: "What is the apps domain?", blocking: false, assumption: "ksarapp.dev" }] };
         }
@@ -556,9 +557,9 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
   /** s02's ticket leans on a name nothing in the plan owns. */
   const unprovidedDraft = (inputs: Record<string, unknown>): object =>
     sliceOf(inputs) === "s01"
-      ? { schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }
+      ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }
       : {
-          schema_version: 1,
+          schema_version: SCHEMA_VERSION,
           tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
           questions: [],
         };
@@ -614,7 +615,7 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
           draft: twoSliceDraft,
           review: (inputs) =>
             inputs["scope"] === "whole"
-              ? { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] }
+              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] }
               : APPROVE_PLAN,
         },
         [],
@@ -673,7 +674,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
               return APPROVE_PLAN;
             }
             /* A slice review that faults something forces the revision round. */
-            return { schema_version: 1, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] };
+            return { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] };
           },
         },
         [],
@@ -703,9 +704,9 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
     /* s02's ticket leans on a name no ticket in the plan owns — a finding code proves. */
     const unprovided = (inputs: Record<string, unknown>): object =>
       sliceOf(inputs) === "s01"
-        ? { schema_version: 1, tickets: [ticket("t-s01-001")], questions: [] }
+        ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }
         : {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
             questions: [],
           };

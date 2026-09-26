@@ -22,7 +22,7 @@ import { loadConfig } from "../../src/kernel/worstcase.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
 
 const BASE_CONFIG = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])),
   pinned: { agent_sdk: "0.3.280", claude_code: "2.1.258" },
 };
@@ -40,6 +40,7 @@ async function captureFailures(messages: unknown[]): Promise<readonly { name: st
   return result.mcpFailures;
 }
 import { contractEvidence, identifierOf, unverifiedProvides } from "../../src/kernel/contract-verify.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * S-3⁸ / S-3″ (PRDR-121) — the adapter's safety properties.

@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { stateDir } from "../../src/fs/layout.js";
 import { writeBindings } from "../../src/adapter/drift.js";
 import type { Binding } from "../../src/schemas/records.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-050 — `detent doctor` (S-5, X-1 reporting, S-3 rule forms, R-10 smoke). */
 
@@ -477,7 +478,7 @@ describe("PRDR-254 the agent-sdk pin reports, and reports to the right reader", 
  */
 describe("PRDR-276 doctor checks the toolchains a run would install", () => {
   const binding = (slot: Binding["slot"], resolved: string): Binding => ({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     slot,
     adapter: "greenfield:go",
     ref: resolved,

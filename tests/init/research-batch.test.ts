@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initLayout } from "../../src/fs/layout.js";
 import { analysisPath, analyzeStage } from "../../src/init/analyze.js";
 import { planResearch, questionHash } from "../../src/init/plan-research.js";
-import { parseArtifact } from "../../src/schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../../src/schemas/common.js";
 import { planningBriefSchema } from "../../src/schemas/init.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 
@@ -39,7 +39,7 @@ function repo(files: Record<string, string> = {}): string {
 }
 
 const ANALYSIS_BROWNFIELD = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   summary: "An existing TypeScript service with vitest already wired.",
   stack: null,
   questions: [],
@@ -55,7 +55,7 @@ const ANALYSIS_BROWNFIELD = {
  * tests here came to assert the right outcomes for the wrong reason.
  */
 const VALID_BRIEF = (question: string): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   question,
   question_hash: questionHash(question),
   answer: { claim: "callbacks are removed in v3", confidence: "high" },
@@ -97,7 +97,7 @@ function writeBrief(artifactOut: string, brief: object): void {
  * still open to research.
  */
 const SETTLED_BRIEF = (question: string): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   outcome: "undecidable",
   question,
   question_hash: questionHash(question),

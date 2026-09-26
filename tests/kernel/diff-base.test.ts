@@ -10,6 +10,7 @@ import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, removeTree, writeTree } from "../helpers.js";
 import { addTicket, makeRunRepo, writeArtifactStage } from "../kernel/run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-140 — the reviewer judges the TICKET's diff, from the claim base (the
@@ -54,7 +55,7 @@ describe("T-140 review diff spans committed work from the claim base", () => {
         });
         return okResult();
       },
-      review: writeArtifactStage({ schema_version: 1, verdict: "approve" }),
+      review: writeArtifactStage({ schema_version: SCHEMA_VERSION, verdict: "approve" }),
     });
     const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
     const journal = RunJournal.open(repo.root);
@@ -108,7 +109,7 @@ describe("T-140 review diff spans committed work from the claim base", () => {
         git(spec.cwd, "commit", "-q", "-m", "t-1: implement");
         return okResult();
       },
-      review: writeArtifactStage({ schema_version: 1, verdict: "approve" }),
+      review: writeArtifactStage({ schema_version: SCHEMA_VERSION, verdict: "approve" }),
     });
     const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
     const journal = RunJournal.open(repo.root);

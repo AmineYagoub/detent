@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { recordApprovals } from "./approvals.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { bindingsFileSchema, type Binding, type BindingsFile } from "../schemas/records.js";
 import { stateDir, writeArtifact } from "../fs/layout.js";
 import { normalizeInvocation } from "./normalize.js";
@@ -28,7 +28,7 @@ function bindingsPath(root: string): string {
 
 export function readBindings(root: string): BindingsFile {
   const file = bindingsPath(root);
-  if (!existsSync(file)) return { schema_version: 1, bindings: [], skips: [] };
+  if (!existsSync(file)) return { schema_version: SCHEMA_VERSION, bindings: [], skips: [] };
   const parsed = parseArtifact(bindingsFileSchema, JSON.parse(readFileSync(file, "utf8")));
   if (parsed.ok) return parsed.value;
   throw new Error(

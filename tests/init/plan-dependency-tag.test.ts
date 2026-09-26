@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PLAN_FINDING_TAGS, planReviewSchema } from "../../src/schemas/init.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-103 — t-112's criterion needed a status display t-154 builds, the plan
@@ -17,7 +18,7 @@ describe("PRDR-103 the plan review can name a criterion that reaches a later sib
 
   it("a finding tagged dependency parses, naming both tickets", () => {
     const parsed = planReviewSchema.safeParse({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       verdict: "changes",
       findings: [
         {
@@ -32,7 +33,7 @@ describe("PRDR-103 the plan review can name a criterion that reaches a later sib
 
   it("an unknown tag is still refused — the set stays closed", () => {
     const parsed = planReviewSchema.safeParse({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       verdict: "changes",
       findings: [{ tag: "reach", finding: "x", ticket: "t-1" }],
     });

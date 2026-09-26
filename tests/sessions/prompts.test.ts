@@ -12,6 +12,7 @@ import {
   stablePrefix,
 } from "../../src/sessions/prompts.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-047 — vendored role prompts, hash pinning, fail-closed resolution (S-7, D-9). */
 
@@ -94,7 +95,7 @@ describe("T-047 assignment resolution fails closed (S-7 AC)", () => {
 
   it("a valid role@hash resolves", () => {
     const ref = `review@${set.hashes.review}`;
-    expect(assignmentsFileSchema.parse({ schema_version: 1, assignments: { "t-1": ref } })).toBeTruthy();
+    expect(assignmentsFileSchema.parse({ schema_version: SCHEMA_VERSION, assignments: { "t-1": ref } })).toBeTruthy();
     expect(resolveAssignment(ref, set)).toEqual({ role: "review", hash: set.hashes.review });
   });
 
@@ -109,7 +110,7 @@ describe("T-047 assignment resolution fails closed (S-7 AC)", () => {
 
   it("a malformed reference fails closed", () => {
     expect(() => resolveAssignment("review", set)).toThrow(PromptIntegrityError);
-    expect(() => assignmentsFileSchema.parse({ schema_version: 1, assignments: { t: "review@short" } })).toThrow();
+    expect(() => assignmentsFileSchema.parse({ schema_version: SCHEMA_VERSION, assignments: { t: "review@short" } })).toThrow();
   });
 });
 

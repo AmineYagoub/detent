@@ -16,6 +16,7 @@ import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "../kernel/run-lock.js";
+import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { readBindings } from "../adapter/drift.js";
 
 /**
@@ -55,6 +56,20 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
     },
   });
   const root = values.root ?? process.cwd();
+
+  /**
+   * F-3″ (PRDR-300): an older state is carried to this build's version before
+   * the config is read, under the run lock, and a newer one is refused. Said on
+   * stderr, because stdout is the MCP channel.
+   */
+  const prompts = loadPromptSet();
+  const migrated = migrateState(root, { promptHashes: prompts.hashes });
+  if (migrated.kind === "refused") {
+    process.stderr.write(`${migrated.message}\n`);
+    return 2;
+  }
+  const note = migrationNote(migrated);
+  if (note !== null) process.stderr.write(`${note}\n`);
 
   const configPath = path.join(stateDir(root), "config.json");
   if (!existsSync(configPath)) {
@@ -184,7 +199,7 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
     {
       root,
       backend,
-      prompts: loadPromptSet(),
+      prompts,
       ...(values.worker !== undefined ? { worker: values.worker } : {}),
       worktree: values["no-worktree"] !== true,
     },

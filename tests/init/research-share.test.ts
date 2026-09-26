@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { removeTree, tmpTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * D-16 (PRDR-262) — `planning_research_tool_calls` is a POOL this module
@@ -32,7 +33,7 @@ function root(): string {
 /** Parses against `planningBriefSchema`: source/claim evidence, and a local_search that is non-empty because the source is a URL (X-6a). */
 function validBrief(question: string): object {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     question,
     question_hash: questionHash(question),
     answer: { claim: "the ladder is published", confidence: "high" },

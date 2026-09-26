@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { EVENTS } from "../../src/schemas/states.js";
 import * as events from "../../src/kernel/events.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-054 — ARCH-1's apply-site audit: every `machine.apply` call site's event
@@ -134,7 +135,7 @@ describe("T-054 constructors demand their justifying artifacts (type level, spot
     expect(events.gateGreen(null).evidence).toBe("no bound gates");
     expect(events.reproAsPredicted(gateResult).evidence).toContain("as-predicted");
 
-    const review = { schema_version: 1 as const, verdict: "changes" as const, changes: [{ tag: "scope" as const, finding: "x" }] };
+    const review = { schema_version: SCHEMA_VERSION as typeof SCHEMA_VERSION, verdict: "changes" as const, changes: [{ tag: "scope" as const, finding: "x" }] };
     expect(events.reviewChanges(review).evidence).toContain("1 findings");
 
     /**
@@ -152,7 +153,7 @@ describe("T-054 constructors demand their justifying artifacts (type level, spot
         events.premiseFalsified("note"),
         events.dependencyDiscovered(["t-b"], ["src/b/lib.ts"]),
         events.ticketOversized("three subsystems", ["the status display", "the dossier totals"]),
-        events.reviewApprove({ schema_version: 1, verdict: "approve", changes: [] }),
+        events.reviewApprove({ schema_version: SCHEMA_VERSION, verdict: "approve", changes: [] }),
         events.reviewChanges(review),
         events.researchDry("dry"),
         events.budgetBreach("reason"),

@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
-import { EXIT_ERROR, run } from "../kernel/run.js";
+import { EXIT_ERROR, notReady, run } from "../kernel/run.js";
+import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { buildLiveBackend } from "../sessions/live.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
@@ -109,6 +110,21 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
     process.stderr.write("--max-tickets must be a positive whole number\n");
     return EXIT_ERROR;
   }
+  /**
+   * F-3″ (PRDR-300): the state is carried before the backend is built, because
+   * building the live one reads `bindings.json`, which a file an older build
+   * wrote would refuse there. `run()` migrates too, for its other callers, and
+   * finds the state current. A refusal is reported the way `run()` reports one.
+   */
+  const prompts = loadPromptSet();
+  const migrated = migrateState(root, { promptHashes: prompts.hashes });
+  if (migrated.kind === "refused") {
+    const refused = notReady(migrated.message);
+    process.stdout.write(`${JSON.stringify(refused.summary, null, 2)}\n`);
+    return refused.exitCode;
+  }
+  const note = migrationNote(migrated);
+  if (note !== null) process.stdout.write(`${note}\n`);
   const backend = values.backend === "mock" ? new MockBackend() : (mainDeps.buildBackend ?? buildLiveBackend)(root);
   /**
    * C-14″ (PRDR-179): the banner follows the BACKEND, not the flag.
@@ -141,7 +157,7 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
   const outcome = await run({
     root,
     backend,
-    prompts: loadPromptSet(),
+    prompts,
     worker: values.worker,
     worktree: values.worktree === true && values["no-worktree"] !== true,
     announce: (message) => process.stdout.write(`${message}\n`),

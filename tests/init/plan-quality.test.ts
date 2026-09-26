@@ -9,6 +9,7 @@ import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * Planning QUALITY, as distinct from the pipeline's mechanics: the planner
@@ -128,7 +129,7 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
   it("changes buys exactly ONE revision, and the findings reach the redraft", async () => {
     const root = repo(LONE_CANDIDATE);
     const changes = {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       verdict: "changes",
       findings: [{ tag: "sizing", finding: "t-100 spans three subsystems", ticket: "t-100" }],
     };
@@ -238,7 +239,7 @@ describe("PRDR-087 a stale approval re-presents; it does not re-plan", () => {
     await runInit(root, buildPipeline(deps));
     writeFileSync(
       path.join(stateDir(root), "plan", "approval.json"),
-      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-28T00:00:00.000Z", plan_hash: "stale" }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, approved_by: "u", at: "2026-08-28T00:00:00.000Z", plan_hash: "stale" }),
     );
 
     const before = backend.calls.length;
@@ -389,7 +390,7 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
         const nth = reviews - PLAN_REVIEW_SAMPLES;
         artifact =
           nth <= 0
-            ? { schema_version: 1, verdict: "changes", findings: FIRST }
+            ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: FIRST }
             : (afterSample[nth - 1] ?? APPROVE_PLAN);
       } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
       else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
@@ -399,7 +400,7 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
     };
   };
 
-  const changes = (findings: readonly object[]): object => ({ schema_version: 1, verdict: "changes", findings });
+  const changes = (findings: readonly object[]): object => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings });
 
   it("the third draft carries the SECOND review's findings, never the first's again", async () => {
     const root = repo(LONE_CANDIDATE);
@@ -424,7 +425,7 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
   it("a review that never produced a usable verdict leaves the slice marked unreviewed", async () => {
     const root = repo(LONE_CANDIDATE);
     /** `reach` is not a tag: every draw and its one relaunch are unusable, so each `reviewPlan` yields null and the sample has no reads. */
-    const unusable = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
+    const unusable = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
     const backend = new MockBackend({ planner: staged(Array.from({ length: PLAN_REVIEW_SAMPLES * 2 }, () => unusable)) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, revisionRounds: 2 }));
 
@@ -468,8 +469,8 @@ describe("PRDR-269 what survived a revision is told apart from what the revision
         const nth = reviews - PLAN_REVIEW_SAMPLES;
         artifact =
           nth <= 0
-            ? { schema_version: 1, verdict: "changes", findings: [HANDED] }
-            : { schema_version: 1, verdict: "changes", findings: perDraw[nth - 1] ?? [] };
+            ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [HANDED] }
+            : { schema_version: SCHEMA_VERSION, verdict: "changes", findings: perDraw[nth - 1] ?? [] };
       } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
       else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
       else artifact = ANALYSIS(null);

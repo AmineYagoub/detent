@@ -15,6 +15,7 @@ import { ensureConfig, decideSymbols, type SymbolsDecision } from "../init/confi
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
+import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 
 /**
@@ -91,6 +92,22 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
     );
     return EXIT_NOT_READY;
   }
+
+  /**
+   * F-3″ (PRDR-300): an older state is carried to this build's version before
+   * anything reads it, under the run lock, and a newer one is refused. Below
+   * C-1's refusals, so a directory `init` declines is never touched; above the
+   * lock `init` holds for its pipeline, because the migration takes and
+   * releases its own.
+   */
+  const prompts = loadPromptSet();
+  const migrated = migrateState(root, { promptHashes: prompts.hashes });
+  if (migrated.kind === "refused") {
+    process.stderr.write(`${migrated.message}\n`);
+    return EXIT_NOT_READY;
+  }
+  const migratedNote = migrationNote(migrated);
+  if (migratedNote !== null) process.stdout.write(`${migratedNote}\n`);
 
   /**
    * X-1⁷ (PRDR-168): one pipeline per root, on the terms `run` already uses.
@@ -231,7 +248,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
     const handlers = buildPipeline({
       root,
       backend,
-      prompts: loadPromptSet(),
+      prompts,
       budgets: budgetsFor(config),
       modelRouting: config?.model_routing ?? {},
       /* PRDR-197: routed effort reaches init's sessions too — the loop read it from config directly and this path did not. */

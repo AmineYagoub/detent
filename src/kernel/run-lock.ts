@@ -146,14 +146,17 @@ export function lockPhaseSuffix(info: RunLockInfo | null): string {
   return info?.phase == null ? "" : `, which was: ${info.phase}`;
 }
 
+/** Who holds the root, as every refusal names it (PRDR-190); F-3″'s migration names it the same way (PRDR-300). */
+export function lockHolder(held: RunLockInfo | null): string {
+  return held === null
+    ? "another process"
+    : `pid ${held.pid} on ${held.host}${held.at === "" ? "" : ` since ${held.at}`}${lockPhaseSuffix(held)}`;
+}
+
 /** What the operator is told when the root is busy. */
 export function runLockRefusal(held: RunLockInfo | null): string {
-  const who =
-    held === null
-      ? "another process"
-      : `pid ${held.pid} on ${held.host}${held.at === "" ? "" : ` since ${held.at}`}${lockPhaseSuffix(held)}`;
   return (
-    `another run holds this root (${who}) — a second run would enforce its own spend ceiling and the two would ` +
+    `another run holds this root (${lockHolder(held)}) — a second run would enforce its own spend ceiling and the two would ` +
     "jointly spend past it (X-1). Wait for it to finish, or remove .detent/state/run.lock if that process is gone."
   );
 }

@@ -4,7 +4,7 @@ import type { Budgets } from "../schemas/budgets.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { contractKey, planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { sessionBudget } from "./plan-review.js";
 import { planSlices } from "./plan-slices.js";
@@ -128,7 +128,7 @@ export interface PlanDeps {
  */
 export function planDraftSkeleton(): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     tickets: [
       {
         id: "t-100",

@@ -7,6 +7,7 @@ import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, TWO_SLICES, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-3‴ (PRDR-207) — one question, asked once.
@@ -60,7 +61,7 @@ function planner(seen: Record<string, unknown>[], raise: boolean): StageFn {
     else if (spec.artifactOut.endsWith("plan-draft.json")) {
       const slice = sliceOf(inputs);
       artifact = {
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         tickets: [ticket(`t-${slice}-001`)],
         questions: raise && slice === "s01" ? [{ id: "q1", question: "Which registry mirror does the build pull from?", blocking: false, assumption: "the public one" }] : [],
       };

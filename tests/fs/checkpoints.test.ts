@@ -13,6 +13,7 @@ import {
 import { initLayout } from "../../src/fs/layout.js";
 import { checkpointSchema } from "../../src/schemas/records.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-024 — content-addressed checkpoints (F-4, P9, C-8 substrate). */
 
@@ -132,7 +133,7 @@ describe("T-024 P9: a stale checkpoint is unconsumable", () => {
     writeTree(root, { ".detent/state/ANALYZE.json": "{not json" });
     expect(readCheckpoint(root, "ANALYZE", "x".repeat(64)).status).toBe("invalid");
 
-    writeTree(root, { ".detent/state/ANALYZE.json": JSON.stringify({ schema_version: 1, phase: "ANALYZE" }) });
+    writeTree(root, { ".detent/state/ANALYZE.json": JSON.stringify({ schema_version: SCHEMA_VERSION, phase: "ANALYZE" }) });
     const read = readCheckpoint(root, "ANALYZE", "x".repeat(64));
     expect(read.status).toBe("invalid");
     expect(read).not.toHaveProperty("checkpoint");

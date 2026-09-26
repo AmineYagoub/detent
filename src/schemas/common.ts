@@ -4,7 +4,7 @@ import { z } from "zod";
  * F-3: every committed file carries `schema_version`; Detent refuses
  * newer-schema files with an upgrade hint rather than guessing.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const schemaVersioned = z.object({
   schema_version: z.number().int().positive(),

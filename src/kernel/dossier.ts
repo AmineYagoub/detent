@@ -5,6 +5,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import { cumulativeCounters } from "./generations.js";
 import { runsDir } from "./journal.js";
 import { findingLine, readPlanFindings } from "./plan-findings.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * T-049 — the dossier (A-8, C-10, X-8).
@@ -21,7 +22,7 @@ export function buildDossier(root: string, ticket: Ticket, reason: string): Doss
   const artifacts = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json") || f.endsWith(".jsonl")).sort() : [];
   const failure = readSignature(dir);
   return dossierSchema.parse({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     ticket: ticket.id,
     reason,
     generations: ticket.generations.map((g) => ({ index: g.index, counters: g.counters })),

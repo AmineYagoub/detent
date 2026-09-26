@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { stateDir } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { analysisSchema, type Analysis } from "../schemas/init.js";
 import type { PhaseOutcome } from "./machine.js";
 import { planResearch, type PlanResearchDeps, type PlanResearchResult } from "./plan-research.js";
@@ -55,7 +55,7 @@ export function isGreenfield(stackMarkers: readonly string[]): boolean {
  */
 export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     summary: "<one-paragraph summary of what is being built — required, non-empty>",
     stack: greenfield
       ? {

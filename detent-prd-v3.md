@@ -606,6 +606,33 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   present: `readCheckpoint` returns `invalid` and the caller re-executes. Crash-safe by
   validation rather than by durability.
 
+- **F-3″ (3.1.1, PRDR-300).** A persisted shape can be migrated. `SCHEMA_VERSION` had been 1
+  since the first commit, the stamp was read only to refuse a newer file, and no code migrated
+  anything: 22 schemas pinned the literal, and 31 places in `src/` and three prompts named it. The
+  3.1.1 line is `schema_version` 2, one event. Each shape the line changes adds its step to the one
+  v1→v2 migration before the release (S-1‴), and none gets a version of its own.
+  - **Data.** Migrations are an ordered list in `src/kernel/migrate.ts`, each from one version to
+    the next, with a name and the transforms it makes, by file. A file is carried from its own
+    stamp to the build's, nested stamps included, and a second migration changes nothing.
+  - **Who.** `init`, `run` and the referee migrate before they read the state, under the run lock
+    (X-1⁷), and write `config.json` last, so a migration cut short is resumed by the next
+    command. `run` migrates before it builds its backend, which reads the bindings. A state holding a file stamped newer than the build is refused with F-3's upgrade
+    hint, and nothing is written. The other verbs do not migrate: on an older state each refuses
+    and names `detent init` and `detent run`.
+  - **What.** Every JSON file under `.detent/` that carries a stamp, except `worktrees/`, and the
+    pack's conformance record. A file that is not JSON, or has no stamp, is left for its reader.
+    The JSONL logs are history and keep their rows as written; none of their readers reads a
+    stamp.
+  - **Kept.** `agents/assignments.json` is re-pinned to the prompts the build ships (S-7). An
+    approved plan stays approved and a conforming pack stays conforming. An unapproved plan
+    re-derives once, from SLICE on, because SLICE's and PLAN's digests cover restamped values,
+    and from DISCOVER on where the pack carries a record, whose bytes DISCOVER's digest covers.
+  - **Nothing names a version but the constant.** Writers and skeletons take `SCHEMA_VERSION`,
+    and the prompts say the stamp is the skeleton's, so the next event edits no prompt.
+
+  A team whose members run different versions on one repository is not supported: an older file
+  that arrives after the migration is refused by its reader, by name.
+
 - **S-4″ (3.1.1, PRDR-138).** A stream that ends with no result message is a CRASH on the kernel
   path, as it already is on the init path (S-4′). It parsed as `ok: true` with
   `telemetryParsed: false` and no `crashed` flag, so the ledger took a $0 row with no
@@ -1890,6 +1917,9 @@ the code does what the rules it amends describe, and each of those rules points 
     default routing (S-5⁵) into an existing config and leaves every role the config already
     routes untouched (S-5′). S-1's read-only set gains `audit`, `spec_review` and `plan_review`,
     and the `planner` keeps SLICE and PLAN, without Bash (C-4⁵).
+  *Amended by F-3″ (PRDR-300): the event is `schema_version` 1 to 2, and its migration is the one
+  entry in `MIGRATIONS` that the four roles, C-2⁶'s rounds key, D-10′'s phase list and D-5′'s
+  bindings each extend.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):

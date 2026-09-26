@@ -10,6 +10,7 @@ import { researchTools } from "../sessions/guard.js";
 import { recordOutOfBandSpend } from "../kernel/ledger.js";
 import { readBindings } from "../adapter/drift.js";
 import { currentPlatform, missingToolchains } from "../adapter/toolchain.js";
+import { stateVersionRefusal } from "../kernel/migrate.js";
 
 /**
  * T-050 — `detent doctor` (S-5, C-12, X-1, S-3).
@@ -357,6 +358,12 @@ export async function main(argv: readonly string[], mainDeps: DoctorMainDeps = {
     options: { smoke: { type: "boolean", default: false } },
   });
   const root = positionals[0] ?? process.cwd();
+  /** F-3″ (PRDR-300): `doctor` does not migrate, so an older or newer state is refused before any check reads it. */
+  const refused = stateVersionRefusal(root);
+  if (refused !== null) {
+    process.stderr.write(`${refused}\n`);
+    return 2;
+  }
   /**
    * PRDR-141: supply the backend. `main` passed no `deps`, so `deps.backend`
    * was always undefined on the only path a user can invoke — and both the S-5

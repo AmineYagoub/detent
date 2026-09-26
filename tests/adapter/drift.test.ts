@@ -14,6 +14,7 @@ import { EXIT_NOT_READY, EXIT_OK, main as verifyMain, renderSyncSummary, verifyS
 import { initLayout } from "../../src/fs/layout.js";
 import type { Binding } from "../../src/schemas/records.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-027 — drift halting (V-3), region precision, and `verify sync` (C-12). */
 
@@ -209,7 +210,7 @@ describe("T-027 bindings.json", () => {
     writeBindings(root, { bindings, skips: [{ slot: "e2e", acknowledged_by: "alice", at: NOW() }] });
 
     const read = readBindings(root);
-    expect(read.schema_version).toBe(1);
+    expect(read.schema_version).toBe(SCHEMA_VERSION);
     expect(read.bindings).toEqual(bindings);
     expect(read.skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
   });

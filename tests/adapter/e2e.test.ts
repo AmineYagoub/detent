@@ -14,6 +14,7 @@ import { EXIT_NOT_READY, EXIT_OK, verifySync } from "../../src/cli/verify.js";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
 import type { Binding } from "../../src/schemas/records.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-030 — the M1 exit: the full adapter flow, discover → execute → approve →
@@ -320,7 +321,7 @@ describe("T-030 bindings-only diffs between fixtures", () => {
     for (const r of done) {
       const parsed = JSON.parse(r.bindingsJson) as Record<string, unknown>;
       expect(Object.keys(parsed).sort()).toEqual(["bindings", "schema_version", "skips"]);
-      expect(parsed["schema_version"]).toBe(1);
+      expect(parsed["schema_version"]).toBe(SCHEMA_VERSION);
     }
     /** Pairwise distinct: the ecosystem lives in the values, nowhere else. */
     for (let i = 0; i < done.length; i += 1) {

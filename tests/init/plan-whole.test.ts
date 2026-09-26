@@ -5,6 +5,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, MockBackend, TWO_SLICES, ticket } from "./slicing-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-8⁗ (PRDR-199) — the redraft that was never written down.
@@ -57,7 +58,7 @@ function planner(script: Script, log: string[]): StageFn {
       } else {
         log.push(`PLAN:${slice}`);
       }
-      artifact = { schema_version: 1, tickets: [ticket(`t-${slice}-001`), ticket(`t-${slice}-002`, [`t-${slice}-001`])], questions: [] };
+      artifact = { schema_version: SCHEMA_VERSION, tickets: [ticket(`t-${slice}-001`), ticket(`t-${slice}-002`, [`t-${slice}-001`])], questions: [] };
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
       if (inputs["scope"] === "whole") {
         wholeReviews += 1;
@@ -65,7 +66,7 @@ function planner(script: Script, log: string[]): StageFn {
         /* The first whole review faults one ticket per slice; the second approves. */
         artifact =
           wholeReviews === 1
-            ? { schema_version: 1, verdict: "changes", findings: [finding("t-s01-002"), finding("t-s02-002")] }
+            ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [finding("t-s01-002"), finding("t-s02-002")] }
             : APPROVE_PLAN;
       } else {
         log.push("REVIEW:slice");

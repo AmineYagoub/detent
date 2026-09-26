@@ -2,12 +2,13 @@ import type { Ecosystem } from "../adapter/install.js";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { approvalSchema } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
 import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "./run-lock.js";
+import { migrateState, migrationNote } from "./migrate.js";
 import { approvalState } from "../init/machine.js";
 import { readPresentation, recordApproval, type ApprovalDecision } from "../init/present.js";
 import { NON_TICKET_FILES } from "./tickets/readers.js";
@@ -119,7 +120,7 @@ export interface RunOutcome {
   readonly exitCode: 0 | 1 | 2 | 10;
   /** C-10's non-TTY machine-readable summary; schema-stable. */
   readonly summary: {
-    readonly schema_version: 1;
+    readonly schema_version: typeof SCHEMA_VERSION;
     readonly exit: number;
     readonly pending: readonly PendingEntry[];
     readonly reason?: string;
@@ -128,6 +129,14 @@ export interface RunOutcome {
 
 /** C-9/C-7: `run` executes only an approved plan; R-9: config loads or nothing runs. */
 export async function run(opts: RunOptions): Promise<RunOutcome> {
+  /**
+   * F-3″ (PRDR-300): an older state is carried to this build's version before
+   * the config is read, under the run lock, and a newer one is refused.
+   */
+  const migrated = migrateState(opts.root, { promptHashes: opts.prompts.hashes });
+  if (migrated.kind === "refused") return notReady(migrated.message);
+  const note = migrationNote(migrated);
+  if (note !== null) opts.announce?.(note);
   const configPath = path.join(stateDir(opts.root), "config.json");
   if (!existsSync(configPath)) {
     return notReady(`no config at ${configPath} — run \`detent init\` first`);
@@ -258,7 +267,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
     );
   } catch (err) {
     /** An unreadable ticket, met while naming the stranded ones, is the kernel error the loop would have met (C-11). */
-    return { exitCode: EXIT_ERROR, summary: { schema_version: 1, exit: EXIT_ERROR, pending: [], reason: (err as Error).message } };
+    return { exitCode: EXIT_ERROR, summary: { schema_version: SCHEMA_VERSION, exit: EXIT_ERROR, pending: [], reason: (err as Error).message } };
   }
   if (!toolchain.ready) return notReady(toolchain.reason);
 
@@ -358,7 +367,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   } catch (err) {
     return {
       exitCode: EXIT_ERROR,
-      summary: { schema_version: 1, exit: EXIT_ERROR, pending: [], reason: (err as Error).message },
+      summary: { schema_version: SCHEMA_VERSION, exit: EXIT_ERROR, pending: [], reason: (err as Error).message },
     };
   } finally {
     journal.close();
@@ -367,8 +376,9 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   }
 }
 
-function notReady(reason: string): RunOutcome {
-  return { exitCode: EXIT_NOT_READY, summary: { schema_version: 1, exit: EXIT_NOT_READY, pending: [], reason } };
+/** C-11's exit 2 with C-10's summary; `cli/run.ts` reports a refusal it meets before `run()` the same way (PRDR-300). */
+export function notReady(reason: string): RunOutcome {
+  return { exitCode: EXIT_NOT_READY, summary: { schema_version: SCHEMA_VERSION, exit: EXIT_NOT_READY, pending: [], reason } };
 }
 
 /**

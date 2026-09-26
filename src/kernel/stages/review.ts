@@ -1,4 +1,4 @@
-import { parseArtifact } from "../../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../../schemas/common.js";
 import { reviewSchema, type Hypothesis } from "../../schemas/records.js";
 import type { Ticket } from "../../schemas/ticket.js";
 import { reviewTags } from "../../schemas/ticket.js";
@@ -28,7 +28,7 @@ export const REVIEWER_TICKET_KEYS = ["id", "title", "acceptance_criteria", "non_
 
 /** A-5's exact shape; skeletons.test parses it through `reviewSchema`. */
 export function reviewSkeleton(): Record<string, unknown> {
-  return { schema_version: 1, verdict: "approve", changes: [] };
+  return { schema_version: SCHEMA_VERSION, verdict: "approve", changes: [] };
 }
 
 /**

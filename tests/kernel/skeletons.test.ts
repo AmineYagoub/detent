@@ -3,6 +3,7 @@ import { reviewInputsNote } from "../../src/kernel/stages/review.js";
 import { reviewTags } from "../../src/schemas/ticket.js";
 import { hypothesisSkeleton, researchBriefSkeleton, reviewSkeleton } from "../../src/kernel/referee-stage.js";
 import { hypothesisSchema, researchBriefSchema, reviewSchema } from "../../src/schemas/records.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-140 — the worker expected_output skeletons parse through their own
@@ -21,7 +22,7 @@ describe("T-140 worker artifact skeletons cannot drift from their schemas", () =
     expect(reviewSchema.parse(reviewSkeleton()).verdict).toBe("approve");
     expect(
       reviewSchema.parse({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         verdict: "changes",
         changes: [{ tag: "correctness", finding: "off by one" }],
       }).changes,

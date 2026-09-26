@@ -6,6 +6,7 @@ import type { RoleId } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { resolveAssignment, type PromptSet } from "../sessions/prompts.js";
 import type { PhaseOutcome } from "./machine.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * T-067 — PREPARE_AGENTS (S-7, D-9, SEC-2).
@@ -54,7 +55,7 @@ export function prepareAgents(deps: PrepareAgentsDeps): PhaseOutcome {
     assignments[ticket.id] = ref;
   }
 
-  const file = assignmentsFileSchema.parse({ schema_version: 1, assignments });
+  const file = assignmentsFileSchema.parse({ schema_version: SCHEMA_VERSION, assignments });
   writeFileSync(assignmentsPath(deps.root), `${JSON.stringify(file, null, 2)}\n`);
   deps.note?.(`assigned ${Object.keys(assignments).length} ticket(s) from the vendored role set (S-7)`);
 

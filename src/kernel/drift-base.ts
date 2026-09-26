@@ -7,6 +7,7 @@ import { checkAll, currentFor, readBindings, writeBindings } from "../adapter/dr
 import { stateDir } from "../fs/layout.js";
 import type { Binding } from "../schemas/records.js";
 import { git } from "./git.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * V-3⁗ (PRDR-230) — a ticket's tree is judged against the commit its branch was
@@ -35,7 +36,7 @@ import { git } from "./git.js";
 export type Baseline = Readonly<Record<string, string>>;
 
 interface AcceptRecord {
-  readonly schema_version: 1;
+  readonly schema_version: typeof SCHEMA_VERSION;
   readonly by: string;
   readonly at: string;
   readonly hashes: Baseline;
@@ -130,7 +131,7 @@ export function readAcceptedDrift(root: string, id: string): AcceptRecord | null
     const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<AcceptRecord>;
     const hashes: Record<string, string> = {};
     for (const [slot, hash] of Object.entries(raw.hashes ?? {})) if (typeof hash === "string") hashes[slot] = hash;
-    return { schema_version: 1, by: typeof raw.by === "string" ? raw.by : "operator", at: typeof raw.at === "string" ? raw.at : "", hashes };
+    return { schema_version: SCHEMA_VERSION, by: typeof raw.by === "string" ? raw.by : "operator", at: typeof raw.at === "string" ? raw.at : "", hashes };
   } catch {
     return null;
   }
@@ -227,7 +228,7 @@ export function acceptDrift(root: string, id: string, by: string, at: string, ha
   const file = driftAcceptPath(root, id);
   const previous = readAcceptedDrift(root, id)?.hashes ?? {};
   mkdirSync(path.dirname(file), { recursive: true });
-  const record: AcceptRecord = { schema_version: 1, by, at, hashes: { ...previous, ...hashes } };
+  const record: AcceptRecord = { schema_version: SCHEMA_VERSION, by, at, hashes: { ...previous, ...hashes } };
   writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
 }
 

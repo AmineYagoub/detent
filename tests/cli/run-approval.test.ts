@@ -6,6 +6,7 @@ import { readBindings } from "../../src/adapter/drift.js";
 import { allTickets } from "../../src/kernel/tickets/readers.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, makeRunRepo } from "../kernel/run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-7 (PRDR-255) — the second exit. `detent run` presents a deferred plan.
@@ -110,7 +111,7 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
      * shape. Exit 2 is the case C-11 names — "not ready (no/unapproved plan)".
      */
     expect(said.out).toContain(`"exit": 2`);
-    expect(said.out).toContain(`"schema_version": 1`);
+    expect(said.out).toContain(`"schema_version": ${String(SCHEMA_VERSION)}`);
   }, 60_000);
 
   it("a yes at the prompt records who approved it, and the run proceeds", async () => {

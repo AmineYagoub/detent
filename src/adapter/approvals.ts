@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import type { Binding } from "../schemas/records.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * V-3⁵ (PRDR-231) — the record that a gate configuration was ever EXECUTED and
@@ -48,7 +49,7 @@ export function recordApprovals(root: string, bindings: readonly Binding[], at: 
     .filter((b) => b.status === "approved")
     .map((b) =>
       JSON.stringify({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         at,
         slot: b.slot,
         adapter: b.adapter,

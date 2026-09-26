@@ -13,6 +13,7 @@ import {
 } from "../../src/init/machine.js";
 import { INIT_PHASES, INTERRUPTS, INTERRUPT_PHASE } from "../../src/schemas/init.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-060 — the init phase machine: C-1 root-only, C-5 closed interrupts, C-8 replay. */
 
@@ -206,7 +207,7 @@ describe("T-060 C-8: approval state", () => {
     writeTree(root, { ".detent/plan/t-1.json": '{"id":"t-1"}\n' });
     writeFileSync(
       path.join(stateDir(root), "plan", "approval.json"),
-      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: planHash(root) }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: planHash(root) }),
     );
 
     const log: string[] = [];
@@ -228,7 +229,7 @@ describe("T-060 C-8: approval state", () => {
     writeTree(root, { ".detent/plan/t-1.json": '{"id":"t-1"}\n' });
     writeFileSync(
       path.join(stateDir(root), "plan", "approval.json"),
-      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: planHash(root) }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: planHash(root) }),
     );
     expect(approvalState(root).stale).toBe(false);
 
@@ -315,7 +316,7 @@ describe("C-9 the approval reader is the schema, not a cast", () => {
     mkdirSync(path.join(stateDir(root), "plan"), { recursive: true });
     writeFileSync(
       path.join(stateDir(root), "plan", "approval.json"),
-      JSON.stringify({ schema_version: 1, plan_hash: "a".repeat(64), approved_by: "alice", at: "2026-09-08T00:00:00.000Z" }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, plan_hash: "a".repeat(64), approved_by: "alice", at: "2026-09-08T00:00:00.000Z" }),
     );
     expect(approvalState(root).approved).toBe(true);
   });

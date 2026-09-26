@@ -14,6 +14,7 @@ import { planResearch, planningBriefPath, questionHash } from "../../src/init/pl
 import { okResult } from "../../src/sessions/mock.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import { makeRunRepo } from "./run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-265 — the X-1 ceilings that are genuinely budgets count instead of
@@ -81,7 +82,7 @@ const ENV: EnvFingerprint = {
 const SIGNATURE = "a".repeat(64);
 
 const GOOD_BRIEF = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   failure_signature: SIGNATURE,
   cache_key: cacheKey(SIGNATURE, ENV),
   root_cause: { claim: "found it", confidence: "high" },
@@ -93,7 +94,7 @@ const GOOD_BRIEF = {
 };
 
 const VALID_PLANNING_BRIEF = (question: string): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   question,
   question_hash: questionHash(question),
   answer: { claim: "the ladder is published", confidence: "high" },

@@ -17,7 +17,7 @@ import { ECOSYSTEMS, type Ecosystem } from "../adapter/install.js";
 import { SpendLedger } from "./ledger.js";
 import type { Budgets } from "../schemas/budgets.js";
 import type { LoadedConfig } from "./worstcase.js";
-import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
+import { SCHEMA_VERSION, STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { readRules } from "./rules.js";
 
 /**
@@ -277,7 +277,7 @@ export class RefereeContext {
     try {
       const sha = git(workDir, "rev-parse", "HEAD").trim();
       mkdirSync(path.dirname(file), { recursive: true });
-      writeFileSync(file, `${JSON.stringify({ schema_version: 1, sha }, null, 2)}\n`);
+      writeFileSync(file, `${JSON.stringify({ schema_version: SCHEMA_VERSION, sha }, null, 2)}\n`);
     } catch {
       /* No HEAD yet (empty repo): diff falls back to HEAD-relative below. */
     }

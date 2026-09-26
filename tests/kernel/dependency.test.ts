@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEPENDENCY_RELEASE_CAP, resolveMissing } from "../../src/kernel/dependency.js";
 import { ZERO_COUNTERS } from "../../src/kernel/generations.js";
 import type { Ticket } from "../../src/schemas/ticket.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * X-4′ (PRDR-111) — resolving a falsification's `missing` paths against the
@@ -12,7 +13,7 @@ import type { Ticket } from "../../src/schemas/ticket.js";
 
 function ticket(id: string, over: Partial<Ticket> = {}): Ticket {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     id,
     type: "feature",
     title: id,

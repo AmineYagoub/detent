@@ -9,6 +9,7 @@ import { planHash } from "../../src/init/machine.js";
 import { createTicket, type NewTicket } from "../../src/kernel/tickets/mutations.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
 import { git, gitInit, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-041 test fixture: a controllable, stack-agnostic repository — the TS port
@@ -168,7 +169,7 @@ export const researchValid: StageFn = (spec) => {
     /* no failure record */
   }
   return writeArtifactStage({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     failure_signature: signature,
     cache_key: createHash("sha256").update(signature).digest("hex"),
     root_cause: { claim: "off-by-one in totals", confidence: "high" },
@@ -181,11 +182,11 @@ export const researchValid: StageFn = (spec) => {
   })(spec);
 };
 
-export const reviewApprove: StageFn = writeArtifactStage({ schema_version: 1, verdict: "approve" });
+export const reviewApprove: StageFn = writeArtifactStage({ schema_version: SCHEMA_VERSION, verdict: "approve" });
 
 /** A valid A-3 hypothesis, for tests that need a diagnose session to complete (PRDR-178). */
 export const diagnoseValid: StageFn = writeArtifactStage({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   claim: "the handler drops the retry",
   evidence: [{ file: "src/a.ts", line: 1, what: "no retry branch" }],
   repro_test: "npm test -- a.test.ts",
@@ -194,7 +195,7 @@ export const diagnoseValid: StageFn = writeArtifactStage({
 });
 
 export const reviewChanges: StageFn = writeArtifactStage({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   verdict: "changes",
   changes: [{ tag: "scope", finding: "unrelated refactor" }],
 });

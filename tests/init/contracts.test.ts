@@ -5,6 +5,7 @@ import { analysisSchema } from "../../src/schemas/init.js";
 import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * A-1‴ (PRDR-120) — the contract checks, against the defects that produced them.
@@ -197,7 +198,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
 
     const root = repo({ "PRD.md": "# spec\n", "package.json": JSON.stringify({ scripts: { test: "sh t.sh" } }), "package-lock.json": "{}\n", "t.sh": "exit 0\n" });
     const draft = {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       tickets: [
         /** The consumer is drafted FIRST and declares no edge — exactly the ksar shape. */
         { ...bare("t-s01-001"), consumes: [{ kind: "config", id: "KSAR_BUILD_TIMEOUT" }] },
@@ -212,7 +213,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
           : spec.artifactOut.endsWith("plan-review.json")
             ? APPROVE_PLAN
             : spec.artifactOut.endsWith("slices.json")
-              ? { schema_version: 1, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 2, rationale: "" }], questions: [] }
+              ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 2, rationale: "" }], questions: [] }
               : ANALYSIS(null);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
@@ -277,7 +278,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
 
   it("a stray space does not turn one name into two", () => {
     const parsed = planDraftSchema.parse({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       tickets: [
         { ...bare("t-s01-001"), provides: [{ kind: "config", id: " SHARED_PORT ", note: "n" }] },
         { ...bare("t-s01-002"), consumes: [{ kind: "config", id: "SHARED_PORT " }] },
@@ -448,7 +449,7 @@ describe("A-1⁶ a scaffold file the bootstrap creates is provided, not unowned"
 
   it("an analysis written before the field reads with no scaffold files (F-3)", () => {
     const parsed = analysisSchema.parse({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       summary: "s",
       stack: { language: "TypeScript", runtime: "", test_framework: "", rationale: "" },
       questions: [],

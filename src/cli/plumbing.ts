@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { stateVersionRefusal } from "../kernel/migrate.js";
 import { approveTicket, requeueTicket, sweepStaleClaims, unclaimTicket } from "../kernel/plumbing.js";
 
 /**
@@ -8,6 +9,13 @@ import { approveTicket, requeueTicket, sweepStaleClaims, unclaimTicket } from ".
  * README golden path contains exactly two commands; these are documented,
  * scriptable, and never required on it.
  */
+
+/** F-3″ (PRDR-300): plumbing does not migrate, so an older or newer state is refused and nothing is written. */
+function refused(root: string): boolean {
+  const message = stateVersionRefusal(root);
+  if (message !== null) process.stderr.write(`${message}\n`);
+  return message !== null;
+}
 
 export function approveMain(argv: readonly string[]): number {
   const { values, positionals } = parseArgs({
@@ -20,6 +28,7 @@ export function approveMain(argv: readonly string[]): number {
     process.stderr.write("usage: detent approve [root] <ticket-id> [--user <name>]\n");
     return 2;
   }
+  if (refused(root as string)) return 2;
   const result = approveTicket(root as string, id, values.user as string);
   process.stdout.write(`${result.message}\n`);
   return result.exitCode;
@@ -39,6 +48,7 @@ export function requeueMain(argv: readonly string[]): number {
     process.stderr.write("usage: detent requeue [root] <ticket-id> [--guidance <text>] [--user <name>]\n");
     return 2;
   }
+  if (refused(root as string)) return 2;
   const result = requeueTicket(root as string, id, values.user as string, (values.guidance as string) || "requeued without guidance");
   process.stdout.write(`${result.message}\n`);
   return result.exitCode;
@@ -55,6 +65,7 @@ export function unclaimMain(argv: readonly string[]): number {
   });
   if (values.stale === true) {
     const root = (positionals[0] as string | undefined) ?? process.cwd();
+    if (refused(root)) return 2;
     const swept = sweepStaleClaims(root, values.user as string);
     process.stdout.write(`${swept.message}\n`);
     return swept.exitCode;
@@ -64,6 +75,7 @@ export function unclaimMain(argv: readonly string[]): number {
     process.stderr.write("usage: detent unclaim [root] <ticket-id> | detent unclaim [root] --stale [--user <name>]\n");
     return 2;
   }
+  if (refused(root as string)) return 2;
   const result = unclaimTicket(root as string, id, values.user as string);
   process.stdout.write(`${result.message}\n`);
   return result.exitCode;

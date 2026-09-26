@@ -14,6 +14,7 @@ import {
 import { CONFORMANCE_RECORD_PATH, conformanceRecordSchema, packKindOf, packSchema, packStatusSchema } from "../../src/schemas/pack.js";
 import { definitionText } from "../docs/prd-marks.js";
 import { CATALOG_PRD, CONFORMING_PACK, DECISION_LOG, ORACLE_ROUNDS, commitRecord, oracleRecord, packRepo } from "./pack-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-279 — the conformance record (C-2⁷): what it holds, where it lives, and
@@ -57,8 +58,8 @@ describe("PRDR-279: the conformance record", () => {
 
   it("is refused, with both versions named, when a newer build wrote it (F-3)", () => {
     const root = packRepo();
-    commitRecord(root, { ...oracleRecord(root), schema_version: 2 });
-    expect(() => readConformanceRecord(root)).toThrow(/schema_version 2.*supports 1/u);
+    commitRecord(root, { ...oracleRecord(root), schema_version: SCHEMA_VERSION + 1 });
+    expect(() => readConformanceRecord(root)).toThrow(new RegExp(`schema_version ${String(SCHEMA_VERSION + 1)}.*supports ${String(SCHEMA_VERSION)}`, "u"));
   });
 
   it("names its file when it is not JSON", () => {
@@ -119,11 +120,11 @@ describe("PRDR-280: conformance runs the checker, not only the schema", () => {
 });
 
 describe("PRDR-279: the record and the pack are versioned shapes (F-3)", () => {
-  it("stamps the record, the pack's parse and DISCOVER's classification with schema_version 1", () => {
+  it("stamps the record, the pack's parse and DISCOVER's classification with the build's schema_version", () => {
     const root = packRepo();
     commitRecord(root);
-    expect(conformanceRecordSchema.safeParse({ ...oracleRecord(root), schema_version: 1 }).success).toBe(true);
-    expect(packSchema.parse(parsePack(root, discoverDocs(root).docs, { greenfield: true }).pack).schema_version).toBe(1);
+    expect(conformanceRecordSchema.safeParse({ ...oracleRecord(root), schema_version: SCHEMA_VERSION }).success).toBe(true);
+    expect(packSchema.parse(parsePack(root, discoverDocs(root).docs, { greenfield: true }).pack).schema_version).toBe(SCHEMA_VERSION);
     for (const status of [{ kind: "raw" }, classifyPack(root, { greenfield: true })]) {
       expect(packStatusSchema.parse(status)).toEqual(status);
     }

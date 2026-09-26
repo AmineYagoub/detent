@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { checkpointSchema, type Checkpoint } from "../schemas/records.js";
 import { stateDir } from "./layout.js";
 
@@ -128,7 +128,7 @@ export function writeCheckpoint(
   opts: SaveOptions = {},
 ): Checkpoint {
   const checkpoint = checkpointSchema.parse({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     phase,
     inputs_hash: hash,
     outputs,

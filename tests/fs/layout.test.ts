@@ -183,7 +183,7 @@ describe("T-023 F-2 boundary lint", () => {
 describe("T-023 F-3 stamping", () => {
   it("stamps with the current schema version", () => {
     expect(stamp({ a: 1 })).toEqual({ schema_version: SCHEMA_VERSION, a: 1 });
-    expect(isStamped({ schema_version: 1 })).toBe(true);
+    expect(isStamped({ schema_version: SCHEMA_VERSION })).toBe(true);
     expect(isStamped({})).toBe(false);
   });
 

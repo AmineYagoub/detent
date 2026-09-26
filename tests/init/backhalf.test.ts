@@ -18,6 +18,7 @@ import { CEILINGS, type Budgets } from "../../src/schemas/budgets.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet, resolveAssignment } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-064 (auto-binding), T-065 (setup consent + allowlist), T-066 (PLAN +
@@ -46,7 +47,7 @@ function repo(files: Record<string, string> = {}): string {
 }
 
 const ANALYSIS = (stack: object | null) => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   summary: "A service.",
   stack,
   questions: [],
@@ -55,7 +56,7 @@ const ANALYSIS = (stack: object | null) => ({
 });
 
 const DRAFT = (ids: string[]) => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   tickets: ids.map((id, i) => ({
     id,
     type: "feature" as const,
@@ -70,10 +71,10 @@ const DRAFT = (ids: string[]) => ({
 });
 
 /** The planner answers whichever artifact the spec asks for (four stages since C-2‴). */
-const APPROVE_PLAN = { schema_version: 1, verdict: "approve", findings: [] };
+const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 /** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
 const ONE_SLICE = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" }],
   questions: [],
 };
@@ -413,7 +414,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     const writeBindingsFile = (file: { bindings: unknown[]; skips: unknown[] }): void => {
       writeFileSync(
         path.join(stateDir(root), "bindings.json"),
-        `${JSON.stringify({ schema_version: 1, ...file }, null, 2)}\n`,
+        `${JSON.stringify({ schema_version: SCHEMA_VERSION, ...file }, null, 2)}\n`,
       );
     };
 
@@ -459,10 +460,10 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
     writeFileSync(
       path.join(stateDir(root), "bindings.json"),
       JSON.stringify({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         bindings: [
           {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             slot: "test",
             adapter: "greenfield:typescript",
             ref: "npm run test",
@@ -554,7 +555,7 @@ describe("T-067 PREPARE_AGENTS (S-7)", () => {
     expect(() => resolveAssignment(stale, PROMPTS)).toThrow(/does not match|vendored set has/);
     expect(() => resolveAssignment(`nosuchrole@${PROMPTS.hashes.implement}`, PROMPTS)).toThrow(/unknown role/);
     /** And the shape itself is schema-guarded. */
-    expect(() => assignmentsFileSchema.parse({ schema_version: 1, assignments: { "t-1": "implement@short" } })).toThrow();
+    expect(() => assignmentsFileSchema.parse({ schema_version: SCHEMA_VERSION, assignments: { "t-1": "implement@short" } })).toThrow();
   });
 });
 

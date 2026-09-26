@@ -5,6 +5,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import { normaliseVerdict } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-4⁗ (PRDR-116) — on ksar-cloud the reviewer wrote `revise`, the validator
@@ -52,7 +53,7 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
 
   it("ksar's case: `revise` with findings buys the revision it always meant to", async () => {
     /* C-4⁗″: one read saying `revise` no longer buys a revision — the finding has to recur. */
-    const revise = { schema_version: 1, verdict: "revise", findings: [FINDING] };
+    const revise = { schema_version: SCHEMA_VERSION, verdict: "revise", findings: [FINDING] };
     /* PRDR-269: the review of the revised draft is sampled too, so it takes three approvals to pass. */
     const { stage, reviewInputs } = scriptedPlanner([revise, revise, revise, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
@@ -63,8 +64,8 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   });
 
   it("an unusable artifact is relaunched once, carrying the validator's words; the second one counts", async () => {
-    const bad = { schema_version: 1, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
-    const good = { schema_version: 1, verdict: "changes", findings: [FINDING] };
+    const bad = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
+    const good = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [FINDING] };
     const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
     const { backend, notes } = await init(stage);
     /**

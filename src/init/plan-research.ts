@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir, writeArtifact } from "../fs/layout.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { planningBriefSchema, type PlanningBrief } from "../schemas/init.js";
 import { scrubJson } from "../kernel/scrub.js";
 import { withOneRelaunch } from "./retry.js";
@@ -72,7 +72,7 @@ export function planningArtifactPath(root: string, hash: string): string {
  */
 export function planningBriefSkeleton(question: string, hash: string): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     outcome: "answered",
     question,
     question_hash: hash,

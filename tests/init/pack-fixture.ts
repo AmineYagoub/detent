@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach } from "vitest";
 import { discoverDocs } from "../../src/init/discover-docs.js";
 import { git, gitInit, removeTree, tmpTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-279 — a small pack in C-2⁷'s schema, shared by the pack tests.
@@ -193,7 +194,7 @@ export function oracleRecord(
     .map((doc) => `${doc}\0${documents[doc] ?? ""}\n`)
     .join("");
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     hash: sha256(lines),
     documents,
     checker: { green: overrides.green ?? true, findings: [] },

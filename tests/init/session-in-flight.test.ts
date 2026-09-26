@@ -10,6 +10,7 @@ import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js"
 import { okResult } from "../../src/sessions/mock.js";
 import { BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-203 — two init sessions in flight on one root.
@@ -69,7 +70,7 @@ const ledgerRows = (root: string): number => {
   return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter((l) => l.trim() !== "").length : 0;
 };
 
-const TICKETS = planDraftSchema.parse({ schema_version: 1, tickets: [ticket("t-1"), ticket("t-2"), ticket("t-3")], questions: [] }).tickets;
+const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-1"), ticket("t-2"), ticket("t-3")], questions: [] }).tickets;
 
 describe("PRDR-203 two init sessions in flight on one root", () => {
   it("both launches complete, and both reach the ledger (F-1: one writer — the process, not the launch)", async () => {
@@ -94,7 +95,7 @@ describe("PRDR-203 two init sessions in flight on one root", () => {
     const journal = RunJournal.open(root);
     const hold = deferred();
     const backend = writeThenHold(hold.promise, (n) => ({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       verdict: "changes",
       findings: [{ tag: "sizing", finding: `draw ${String(n)} saw this`, ticket: `t-${String(n)}` }],
     }));

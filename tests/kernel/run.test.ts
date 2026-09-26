@@ -35,6 +35,7 @@ import {
   researchValid,
   reviewApprove,
 } from "./run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-041 — the kernel run loop. Four oracle e2e ports plus the plan's AC
@@ -179,7 +180,7 @@ describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => 
     const root = await fixture();
     addTicket(root, { id: "t1" });
     /* The gate used to read "no binding matched" as a pass and march the ticket to DONE. */
-    writeFileSync(path.join(root, ".detent", "bindings.json"), JSON.stringify({ schema_version: 1, bindings: [], skips: [] }));
+    writeFileSync(path.join(root, ".detent", "bindings.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, bindings: [], skips: [] }));
     const backend = new MockBackend({ implement: implementGreen, review: reviewApprove });
     const outcome = await run(opts(root, backend));
     expect(outcome.exitCode).toBe(EXIT_NOT_READY);
@@ -681,7 +682,7 @@ describe("T-041 X-1 enforcement fixtures", () => {
 
     const loaded = {
       config: {
-        schema_version: 1 as const,
+        schema_version: SCHEMA_VERSION as typeof SCHEMA_VERSION,
         budgets: {
           blind_fix_attempts: 1 as const,
           informed_fix_attempts: 1 as const,
@@ -807,7 +808,7 @@ describe("T-041 exit codes are public API (C-11)", () => {
     );
     expect(outcome.exitCode).toBe(EXIT_HUMAN_GATED);
     const parsed = JSON.parse(JSON.stringify(outcome.summary)) as typeof outcome.summary;
-    expect(parsed.schema_version).toBe(1);
+    expect(parsed.schema_version).toBe(SCHEMA_VERSION);
     expect(parsed.pending[0]).toMatchObject({ id: "t1", state: "NEEDS_HUMAN" });
   });
 });

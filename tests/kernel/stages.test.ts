@@ -23,6 +23,7 @@ import {
   reviewChanges,
   writeArtifactStage,
 } from "./run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-043 (diagnosis gate), T-044 (review routing), T-045 (research cache) —
@@ -47,7 +48,7 @@ const opts = (root: string, backend: MockBackend) => ({ root, backend, prompts: 
 const diagnoseAsPredicted: StageFn = (spec) => {
   writeTree(spec.cwd, { ".fail": FAIL_OUTPUT });
   return writeArtifactStage({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     claim: "totals drops the seed row",
     evidence: [{ file: "src/calc.py", line: 2, what: "sum only" }],
     repro_test: "sh scripts/test.sh",
@@ -100,7 +101,7 @@ describe("T-043 X-4: the kernel executes the repro", () => {
 
     /** The repro PASSES — the hypothesis never verifies (X-4). */
     const wrongHypothesis = writeArtifactStage({
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       claim: "lint is broken",
       evidence: [{ file: "scripts/lint.sh", line: 1, what: "exit 0" }],
       repro_test: "sh scripts/lint.sh",
@@ -205,7 +206,7 @@ describe("T-044 review routing (D-6, A-5)", () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
 
-    const malformed = writeArtifactStage({ schema_version: 1, verdict: "changes", changes: [] });
+    const malformed = writeArtifactStage({ schema_version: SCHEMA_VERSION, verdict: "changes", changes: [] });
     const backend = new MockBackend({ implement: implementGreen, review: malformed });
     const outcome = await run(opts(root, backend));
 
@@ -256,7 +257,7 @@ describe("T-045 research cache (X-6, D-18)", () => {
 
     const upstreamBrief: StageFn = (spec) =>
       writeArtifactStage({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         failure_signature: "0".repeat(64),
         cache_key: "1".repeat(64),
         root_cause: { claim: "vendored parser bug", confidence: "high" },
@@ -295,7 +296,7 @@ describe("T-045 research cache (X-6, D-18)", () => {
 
     writeTree(path.dirname(briefCachePath(root, key)), {
       [path.basename(briefCachePath(root, key))]: JSON.stringify({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         failure_signature: signature,
         cache_key: key,
         root_cause: { claim: "stale", confidence: "low" },
@@ -353,7 +354,7 @@ describe("T-045 research cache (X-6, D-18)", () => {
       version_facts: {},
     };
     const brief = {
-      schema_version: 1,
+      schema_version: SCHEMA_VERSION,
       failure_signature: signature,
       cache_key: cacheKey(signature, env),
       root_cause: { claim: "found it", confidence: "high" },
@@ -401,7 +402,7 @@ describe("T-045 research cache (X-6, D-18)", () => {
       root,
       launch: async () => CEILINGS.failure_research_tool_calls.default,
       readArtifact: () => ({
-        schema_version: 1,
+        schema_version: SCHEMA_VERSION,
         failure_signature: signature,
         cache_key: cacheKey(signature, env),
         root_cause: { claim: "found it", confidence: "high" },

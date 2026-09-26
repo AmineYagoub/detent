@@ -8,6 +8,7 @@ import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-260 — what a plan review leaves behind, and what it says it measured.
@@ -29,7 +30,7 @@ import { DOCS, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture
  */
 
 const drawn = (slice: string): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   verdict: "changes",
   findings: [
     { tag: "sizing", ticket: `t-${slice}-001`, finding: `${slice} first read: too big` },
@@ -39,7 +40,7 @@ const drawn = (slice: string): object => ({
 
 /** Disjoint on `(ticket, tag)` from `drawn`, so the round resolves two and raises two. */
 const afterRevision = (slice: string): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   verdict: "changes",
   findings: [
     { tag: "coverage", ticket: `t-${slice}-001`, finding: `${slice} after revision: a requirement lost its ticket` },
@@ -124,8 +125,8 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
             if (inputs["scope"] !== "whole") return APPROVE_PLAN;
             whole += 1;
             return whole === 1
-              ? { schema_version: 1, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
-              : { schema_version: 1, verdict: "changes", findings: [{ tag: "boundaries", ticket: "t-s02-002", finding: "now reaches across the seam" }] };
+              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
+              : { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "boundaries", ticket: "t-s02-002", finding: "now reaches across the seam" }] };
           },
         },
         [],

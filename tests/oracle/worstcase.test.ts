@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { UnboundedWorstCaseError, loadConfig, maxPossibleSessions } from "../../src/kernel/worstcase.js";
 import { tableWith } from "../../src/kernel/machine.js";
 import { DEFAULT_BUDGETS } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 const validConfig = (overrides: Record<string, unknown> = {}) => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   /** Above the computed worst case (24 after PRDR-108/109), so the fixture config loads. */
   budgets: { run_spend_usd: 25, sessions: 30, ...((overrides.budgets as object) ?? {}) },
   pinned: { agent_sdk: "0.3.280", claude_code: "2.1.191" },

@@ -4,6 +4,7 @@ import { CEILINGS, type Budgets } from "../../src/schemas/budgets.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** Shared init-test fixture: one planner mock, one repo shape, one budget set. */
 
@@ -25,7 +26,7 @@ export function repo(files: Record<string, string> = {}): string {
 }
 
 export const ANALYSIS = (stack: object | null): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   summary: "s",
   stack,
   questions: [],
@@ -34,7 +35,7 @@ export const ANALYSIS = (stack: object | null): object => ({
 });
 
 export const DRAFT = (ids: string[]): object => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   tickets: ids.map((id, i) => ({
     id,
     type: "feature",
@@ -48,11 +49,11 @@ export const DRAFT = (ids: string[]): object => ({
   })),
 });
 
-export const APPROVE_PLAN = { schema_version: 1, verdict: "approve", findings: [] };
+export const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 
 /** C-2‴: one slice over the whole pack — the shape a small product's SLICE produces. */
 export const ONE_SLICE = {
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slices: [
     { id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" },
   ],

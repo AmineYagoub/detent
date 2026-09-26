@@ -13,6 +13,7 @@ import { heldFindings } from "../../src/init/plan-signal.js";
 import type { SampledReview } from "../../src/init/plan-sample.js";
 import type { PlanReview } from "../../src/schemas/init.js";
 import type { Ticket } from "../../src/schemas/ticket.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-271 — a held plan finding reaches the session that can confirm it.
@@ -43,7 +44,7 @@ describe("PRDR-271 an attempt session receives the plan findings naming its tick
     roots.push(root);
     const dir = path.join(root, ".detent", "state");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "PLAN.json"), JSON.stringify({ schema_version: 1, phase: "PLAN", outputs: { review_findings: findings } }));
+    writeFileSync(path.join(dir, "PLAN.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, phase: "PLAN", outputs: { review_findings: findings } }));
     return root;
   }
 
@@ -200,7 +201,7 @@ describe("PRDR-272 held findings rank and read the same whichever shape they car
     roots.push(root);
     const dir = path.join(root, ".detent", "state");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "PLAN.json"), JSON.stringify({ schema_version: 1, phase: "PLAN", outputs: { review_findings: findings } }));
+    writeFileSync(path.join(dir, "PLAN.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, phase: "PLAN", outputs: { review_findings: findings } }));
     return root;
   }
 

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CI_ENV } from "../adapter/normalize.js";
 import { runGate } from "../adapter/run.js";
-import { parseArtifact } from "../schemas/common.js";
+import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { Breach, publicTicket, type RefereeContext } from "./referee-context.js";
@@ -34,7 +34,7 @@ import { appendNote, linkDiscovered } from "./tickets/mutations.js";
  */
 export function hypothesisSkeleton(): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     claim: "<the single root-cause claim — required>",
     evidence: [{ file: "src/example.ts", line: 1, what: "<what this line shows — required>" }],
     repro_test: "<command or test that reproduces the failure — required>",
@@ -47,7 +47,7 @@ export { reviewSkeleton } from "./stages/review.js";
 
 export function researchBriefSkeleton(): Record<string, unknown> {
   return {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     failure_signature: "<the failure signature from your inputs>",
     cache_key: "0".repeat(64),
     root_cause: { claim: "<root cause — required>", confidence: "medium" },

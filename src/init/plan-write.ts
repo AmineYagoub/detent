@@ -11,6 +11,7 @@ import type { Analysis, PlanDraftTicket, PlanReview, SliceSpec } from "../schema
 import { planSchema, type Plan } from "../schemas/records.js";
 import { scrubJson } from "../kernel/scrub.js";
 import type { Ticket } from "../schemas/ticket.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * The write half of PLAN (C-4, A-2, C-2‴): drafted tickets become A-1
@@ -149,7 +150,7 @@ export function writePlan(
 
   /** ---- A-2: the plan artifact, validated before anything is written ------ */
   const plan: Plan = planSchema.parse({
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     tickets: settled.map((t) => t.id),
     edges: settled.flatMap((t) => t.blockers.map((b) => ({ from: b, to: t.id }))),
     /* PREPARE_AGENTS fills these (T-067) */

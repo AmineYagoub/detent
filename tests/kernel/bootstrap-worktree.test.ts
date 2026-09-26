@@ -10,6 +10,7 @@ import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js"
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, removeTree, writeTree } from "../helpers.js";
 import { addTicket, approveFixturePlan, makeRunRepo, reviewApprove } from "./run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * PRDR-218 — a baseline taken from the wrong tree.
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 const provisional = (slot: string): Binding => ({
-  schema_version: 1,
+  schema_version: SCHEMA_VERSION,
   slot: slot as Binding["slot"],
   adapter: "greenfield:typescript",
   ref: `npm run ${slot}`,

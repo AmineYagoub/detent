@@ -2,6 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { SPAWN_TOOLS } from "../fs/hook-files.js";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, stateDir } from "../fs/layout.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * T-120/T-121 — the referee's half of the plugin containment hook (D-21,
@@ -41,7 +42,7 @@ export const RUN_REFEED_TEXT =
 
 export function publishClaimPolicy(root: string, input: ClaimPolicyInput): void {
   writeJson(path.join(stateDir(root), HOOK_SURFACE_FILE), {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     ticket_id: input.ticketId,
     driver: true,
     surface: [],
@@ -70,7 +71,7 @@ export function refreshRunRefeed(root: string, active: boolean, expiresAtMs: num
     return;
   }
   writeJson(file, {
-    schema_version: 1,
+    schema_version: SCHEMA_VERSION,
     stage: "driver",
     gate_cmd: null,
     run_refeed: RUN_REFEED_TEXT,

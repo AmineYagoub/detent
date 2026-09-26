@@ -11,6 +11,7 @@ import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * T-140 (PRDR-072) — a usage-limit outage turned four live sessions into
@@ -115,7 +116,7 @@ describe("T-140 a fresh launch never inherits a stale artifact (PRDR-072)", () =
     mkdirSync(path.dirname(stale), { recursive: true });
     writeFileSync(
       stale,
-      `${JSON.stringify({ schema_version: 1, verdict: "changes", changes: [{ tag: "requirement", finding: "stale" }] })}\n`,
+      `${JSON.stringify({ schema_version: SCHEMA_VERSION, verdict: "changes", changes: [{ tag: "requirement", finding: "stale" }] })}\n`,
     );
 
     expect(core.acquire("t-1").ok).toBe(true);

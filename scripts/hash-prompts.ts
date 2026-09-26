@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { SCHEMA_VERSION } from "../src/schemas/common.js";
 import { ROLE_IDS } from "../src/schemas/roles.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -22,7 +23,7 @@ export function promptHash(role: string): string {
 
 export function renderManifest(): string {
   const roles = Object.fromEntries(ROLE_IDS.map((r) => [r, promptHash(r)]));
-  return `${JSON.stringify({ schema_version: 1, roles }, null, 2)}\n`;
+  return `${JSON.stringify({ schema_version: SCHEMA_VERSION, roles }, null, 2)}\n`;
 }
 
 function main(): void {

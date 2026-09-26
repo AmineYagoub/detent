@@ -27,6 +27,7 @@ import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { openGeneration } from "../../src/kernel/generations.js";
 import { readFileSync } from "node:fs";
 import { stateDir } from "../../src/fs/layout.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(path.join(tmpdir(), "detent-")); });
@@ -146,7 +147,7 @@ describe("T-017 ticket store (A-1, R-3)", () => {
     mk("t-1");
     writeFileSync(
       path.join(root, ".detent", "plan", "approval.json"),
-      JSON.stringify({ schema_version: 1, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: "a".repeat(64) }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, approved_by: "u", at: "2026-08-18T00:00:00.000Z", plan_hash: "a".repeat(64) }),
     );
     expect(allTickets(root).map((t) => t.id)).toEqual(["t-1"]);
   });

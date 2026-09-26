@@ -5,6 +5,7 @@ import { readTicket } from "./tickets/readers.js";
 import type { LoadedConfig } from "./worstcase.js";
 import type { RunOptions, RunOutcome } from "./run.js";
 import { EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK } from "./run.js";
+import { SCHEMA_VERSION } from "../schemas/common.js";
 
 /**
  * T-106 — the headless driver's loop (C-9, C-10, C-13, D-27).
@@ -113,14 +114,14 @@ export class Driver {
         if (err instanceof DriverIntegrationHalt) {
           return {
             exitCode: EXIT_HUMAN_GATED,
-            summary: { schema_version: 1, exit: EXIT_HUMAN_GATED, pending: [], reason: err.message },
+            summary: { schema_version: SCHEMA_VERSION, exit: EXIT_HUMAN_GATED, pending: [], reason: err.message },
           };
         }
         if (err instanceof DriverDriftHalt) {
           const { reason } = await this.tool<{ reason: string }>("record", { kind: "drift_halt" });
           return {
             exitCode: EXIT_NOT_READY,
-            summary: { schema_version: 1, exit: EXIT_NOT_READY, pending: [], reason },
+            summary: { schema_version: SCHEMA_VERSION, exit: EXIT_NOT_READY, pending: [], reason },
           };
         }
         if (err instanceof DriverRefusal) refused = err;
@@ -155,9 +156,9 @@ export class Driver {
   private async finish(): Promise<RunOutcome> {
     const { pending } = await this.tool<{ pending: PendingEntry[] }>("status", {});
     if (pending.length > 0) {
-      return { exitCode: EXIT_HUMAN_GATED, summary: { schema_version: 1, exit: EXIT_HUMAN_GATED, pending } };
+      return { exitCode: EXIT_HUMAN_GATED, summary: { schema_version: SCHEMA_VERSION, exit: EXIT_HUMAN_GATED, pending } };
     }
-    return { exitCode: EXIT_OK, summary: { schema_version: 1, exit: EXIT_OK, pending: [] } };
+    return { exitCode: EXIT_OK, summary: { schema_version: SCHEMA_VERSION, exit: EXIT_OK, pending: [] } };
   }
 
   /* ------------------------------------------------------ ticket driving */
