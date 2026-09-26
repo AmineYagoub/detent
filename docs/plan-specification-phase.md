@@ -81,6 +81,24 @@ ended it.
 9. **Headless takes defaults.** With no one to ask, DECIDE takes every recommended answer and
    logs it as vetoable. N-7 keeps the raw PRD and runs the phase headless.
 
+Settled later the same day, when the plan's open questions were put to the operator:
+
+10. **No switch.** The phase cannot be switched off. Documents that do not pass the checker go
+    through it; once they pass, each `init` runs the checker alone (decision 6). A switch is easy
+    to add later if run-time outcomes show a need, while taking one away would break anyone who
+    relies on it.
+11. **AUDIT has its own role.** An `audit` role, with its own prompt, model and effort, reading
+    the repository and dependency sources at their pinned versions, and the web. It joins the
+    planning redesign's `plan_review` role in one F-3 `schema_version` event, and follows the
+    redesign's rule of one job per prompt.
+12. **Fix sessions may declare a false premise.** Implement and the three fix roles
+    (`blind_fix`, `informed_fix` and `review_fix`) may all write the falsification signal, and so
+    file an amendment (§8). Their prompts already tell them to, but X-3 admits PREMISE_FALSIFIED
+    from IN_PROGRESS alone, so today the referee drops a fix session's signal. X-3's table gains a
+    row from each fix state, with IN_PROGRESS's outcome (PRDR-289). Review, diagnose and research
+    stay read-only.
+13. **Ceiling 8.** `spec_validation_rounds` defaults to 8 (§7).
+
 ## 3. The pipeline
 
 ```
@@ -204,7 +222,7 @@ checker runs at VALIDATE and on every amendment (§8). A red checker blocks ever
    hunts for the defects they introduced (seed: `verify6-brief.md`).
 4. **Stop.** A round with no blocker and no major ends the loop. Its minor findings are fixed
    without re-review (decision 3).
-5. **Ceiling.** After `spec_validation_rounds` rounds (configuration; proposed default 8), the
+5. **Ceiling.** After `spec_validation_rounds` rounds (configuration; default 8, decision 13), the
    loop stops with the last round's fixes applied and never verified. ksarjs, a large and
    money-heavy pack, converged in its seventh round. A ceiling of 6 would have stopped on round
    6's three majors, fixed but unverified. At the ceiling:
@@ -225,17 +243,17 @@ checker runs at VALIDATE and on every amendment (§8). A red checker blocks ever
 
 ## 8. Amendments during `run`
 
-- **Filing.** A session that proves a specification defect files it through X-4. Its
-  `falsified.json` carries an amendment that names:
+- **Filing.** An implement or fix session that proves a specification defect files it through
+  X-4 (decision 12). Its `falsified.json` carries an amendment that names:
   - the affected requirement ids;
   - the defect class;
   - the evidence: a failing test, or two passages of the pack that contradict each other,
     quoted;
   - the proposed text.
 
-  The referee admits PREMISE_FALSIFIED as it does today, and the ticket goes to NEEDS_HUMAN. No
-  state or event is added: v3 inherits §7's machine unchanged, and an amendment is a
-  falsification that names its fix.
+  The referee admits PREMISE_FALSIFIED, and the ticket goes to NEEDS_HUMAN. No state or event is
+  added: X-3's table gains a PREMISE_FALSIFIED row from each fix state (PRDR-289), the rest of
+  §7's machine is inherited unchanged, and an amendment is a falsification that names its fix.
 - **Holding.** Until the operator decides, the pool draws no READY ticket whose `requirement_ids`
   include an amended requirement, as it draws no ticket whose blockers are open. The rest of the
   run goes on.
@@ -268,16 +286,12 @@ self-build's folder, like everything else N-7 produces.
 
 ## 10. Open questions (not yet decided)
 
-- May an operator switch the phase off for a project, or is a conforming pack the only way past
-  it?
-- The ceiling's default: 8 is proposed (§7).
-- AUDIT checks facts on the web and in dependency sources at pinned versions. Does it reuse the
-  research role, or get an auditor role of its own?
-- Which roles may file an amendment? X-4 gives one to the implement role; review and diagnose
-  write read-only artifacts today.
 - Which model and effort does each phase use? The review rounds are the expensive part.
 - What will it cost? The ksarjs specification ran interactively, and its cost was never
   measured, so there is no projection yet.
+
+The switch, AUDIT's role, who may file an amendment and the ceiling were settled on 2026-09-26
+(decisions 10 to 13).
 
 ## 11. Tickets
 
@@ -291,7 +305,8 @@ self-build's folder, like everything else N-7 produces.
 | PRDR-283 | WRITE, and handing the pack to planning | PRDR-279, PRDR-282 |
 | PRDR-284 | VALIDATE: rounds, stop rule, ceiling, progress marks | PRDR-280, PRDR-283 |
 | PRDR-285 | Sandboxed scratch execution for VALIDATE's reviewers | PRDR-284 |
-| PRDR-286 | Amendments during `run`, and the scoped re-plan | PRDR-280, PRDR-284, PRDR-291 |
+| PRDR-286 | Amendments during `run`, and the scoped re-plan | PRDR-280, PRDR-284, PRDR-289, PRDR-291 |
+| PRDR-289 | Fix sessions may declare a false premise: X-3's new rows | PRDR-278 |
 
 The planning redesign's tickets, PRDR-290 to PRDR-298, are listed in
 `docs/plan-planning-redesign.md` §14.

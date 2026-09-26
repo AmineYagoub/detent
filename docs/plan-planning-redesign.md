@@ -42,6 +42,10 @@ and every mechanism problem above still appeared.
    redraft stops the plan at PRESENT.
 7. **Gates bind per package**, as part of this redesign. This lifts a limit v1 set on purpose
    (§8). The operator chose it before that was noticed, was told, and kept it the same day.
+8. **Mixed-build approval is explicit.** A plan more than one Detent build produced is approved
+   the way a toolchain install is (PRDR-276): on a terminal, PRESENT names each build and asks
+   [y/N]; off one, `--approve` also needs `--accept-mixed-builds`, or the approval is refused.
+   The approval record lists the builds. This was §13's open question, settled the same day.
 
 Accepted with the audit's recommendation:
 - mechanical cross-slice checks replace the whole-plan model review;
@@ -155,7 +159,8 @@ ksarjs's pack (2,024 requirements) is larger still.
 
 - **Role.** A new `plan_review` role, with its own prompt, model and effort, separate from the
   drafter. Role ids are persisted, so this is an F-3 schema event with a migration for `role@hash`
-  assignments. PRDR-084 declined that cost; the audit says it is now worth paying.
+  assignments. PRDR-084 declined that cost; the audit says it is now worth paying. The same event
+  adds AUDIT's `audit` role (the specification plan's decision 11), so the migration is paid once.
 - **One read per slice**, after the mechanical checks pass. The scope is judgement only:
   - sizing: does each ticket fit one implement session;
   - shape: walking skeleton first, vertical increments;
@@ -226,7 +231,8 @@ ksarjs's pack (2,024 requirements) is larger still.
 - **Evaluation hygiene.**
   - Every planning checkpoint records the Detent build that wrote it.
   - PRESENT names every build that contributed.
-  - Approving a plan built by more than one build takes an explicit flag.
+  - Approving a plan built by more than one build takes an explicit yes: [y/N] on a terminal,
+    `--accept-mixed-builds` beside `--approve` off one (decision 8).
   - Experiments run on a copy of the project, never on its live `.detent` tree. That is how s07 of
     the "no revision" arm reached ksar-cloud's plan.
 - **Sessions per plan** of N slices: `1 + 2N + R + C`, where R is the slices revised and C the
@@ -261,8 +267,8 @@ ksarjs's pack (2,024 requirements) is larger still.
   at xhigh.
 - Whether a compact model read of the cross-slice contract index is ever worth adding back. It
   would be added only if run-time outcomes show incoherence across slices that the checks miss.
-- The flag that approves a plan built by several builds: its name, and whether off a TTY it may be
-  given at all.
+
+The mixed-build approval was settled on 2026-09-26 (decision 8).
 
 ## 14. Tickets
 
