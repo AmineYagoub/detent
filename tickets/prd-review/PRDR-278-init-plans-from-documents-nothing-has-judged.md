@@ -1,16 +1,16 @@
 ---
 id: PRDR-278
-title: "`init` plans from documents nothing has judged: a contradiction, a wrong external fact or a rule that is consistent but wrong reaches a ticket as an assumption, and a session that implements it literally ships it with green gates. The operator's decision is a specification phase inside `init` (AUDIT, DECIDE, WRITE, VALIDATE), recorded in the PRD before any code"
+title: "`init` plans from documents nothing has judged: a contradiction, a wrong external fact or a rule that is consistent but wrong reaches a ticket as an assumption, and a session that implements it literally ships it with green gates. The operator's decisions: a specification phase inside `init` (AUDIT, DECIDE, WRITE, VALIDATE), and a planning phase rebuilt on the pack it produces, recorded in one PRD amendment before any code"
 state: OPEN
 severity: major
 category: decision
-labels: ["prd-review", "specification-phase", "operator-decision", "C-3′", "C-5", "C-14′", "N-7", "doc-claim-drift"]
-surface: ["detent-prd-v3.md", "docs/plan-specification-phase.md", "docs/release-checklist.md"]
-prd_refs: ["N-6", "C-2‴", "C-3′", "C-3″", "C-4″", "C-5", "C-8", "C-8′", "C-8‴", "C-10", "C-14′", "X-4", "D-26", "N-7", "F-3", "F-4", "S-1′"]
-acceptance_criteria: ["The PRD records the phase as four `init` phases between DISCOVER and ANALYZE: AUDIT, DECIDE, WRITE and VALIDATE, each with what it reads, what it writes and when it stops. v3's line for the inherited pipeline shows them in order.", "C-3′ is amended, not contradicted. Planning still never stops for a question an assumption can carry. AWAIT_INFO may now also be raised at DECIDE, on a TTY, for C-3″ (PRDR-119) questions, and at VALIDATE for a blocker left at the validation ceiling. The interrupt set stays C-5's five, and the amendment says why a sixth was refused: C-14′ makes a new decision class a major-version decision.", "The operator's nine decisions of 2026-09-26 are recorded with their reasons (the plan's §2). Decision 8 is recorded with its correction: the re-plan after an amendment covers only the affected slices, because `--replan` re-derives every slice (C-8′).", "Off a TTY, DECIDE takes every recommended answer and logs it as a vetoable default. PRESENT lists every default with C-3′'s assumptions.", "N-7 keeps `detent-prd-v3.md` as its only input and runs the phase headless. Release-checklist item 5 records the self-build's duration and spend beside the green.", "Every id the amendment adds is defined exactly once, the first rule the plan gives the pack checker."]
+labels: ["prd-review", "specification-phase", "planning-redesign", "operator-decision", "C-3′", "C-5", "C-14′", "D-5", "D-10", "N-7", "doc-claim-drift"]
+surface: ["detent-prd-v3.md", "docs/plan-specification-phase.md", "docs/plan-planning-redesign.md", "docs/planning-phase-audit-2026-09-26.md", "docs/release-checklist.md"]
+prd_refs: ["N-6", "C-2‴", "C-3′", "C-3″", "C-4″", "C-5", "C-8", "C-8′", "C-8‴", "C-10", "C-14′", "X-4", "D-5", "D-10", "D-26", "V-5", "NG2", "OQ-4", "N-7", "F-3", "F-4", "S-1′"]
+acceptance_criteria: ["The PRD records the phase as four `init` phases between DISCOVER and DETERMINE_VERIFICATION: AUDIT, DECIDE, WRITE and VALIDATE, each with what it reads, what it writes and when it stops. v3's line for the inherited pipeline shows them in order.", "C-3′ is amended, not contradicted. Planning still never stops for a question an assumption can carry. AWAIT_INFO may now also be raised at DECIDE, on a TTY, for C-3″ (PRDR-119) questions, and at VALIDATE for a blocker left at the validation ceiling. The interrupt set stays C-5's five, and the amendment says why a sixth was refused: C-14′ makes a new decision class a major-version decision.", "The operator's nine decisions of 2026-09-26 are recorded with their reasons (the plan's §2). Decision 8 is recorded with its correction: the re-plan after an amendment covers only the affected slices, because `--replan` re-derives every slice (C-8′).", "Off a TTY, DECIDE takes every recommended answer and logs it as a vetoable default. PRESENT lists every default with C-3′'s assumptions.", "N-7 keeps `detent-prd-v3.md` as its only input and runs the phase headless. Release-checklist item 5 records the self-build's duration and spend beside the green.", "The PRD records the planning redesign of `docs/plan-planning-redesign.md`: ANALYZE folded into DECIDE, with D-10's order naming DECIDE; SLICE seeded by the pack and keyed by requirement ids; PLAN drafted from pack records, with `criterion_ids` and `spec_defects` in place of questions; mechanical checks that drive one targeted redraft and block approval when they still fail; one review read by a `plan_review` role; gates bound per package, which amends D-5, V-5 and NG2 and closes OQ-4; and PRESENT as that plan's §9 describes.", "The PRD states the rule the operator chose on 2026-09-26: a planning mechanism that claims to improve plans names the run-time outcome it should move, and reviewer finding counts are not an outcome.", "Every id the amendment adds is defined exactly once, the first rule the plan gives the pack checker."]
 non_goals: ["Does NOT renumber the five ids `detent-prd-v3.md` already defines twice, as different rules (C-3″, C-9′, S-3′, V-1⁵, X-1‴). That is its own amendment; the plan cites them as evidence.", "Does NOT write code. PRDR-279 to PRDR-286 implement the phase, each after this lands (N-6).", "Does NOT settle the plan's open questions (§10): a switch to turn the phase off, the ceiling's default, the auditor's role, the model per phase, the cost. Each stays the operator's, and the amendment lists them as open."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
-links: ["PRDR-117", "PRDR-119", "PRDR-207", "PRDR-263", "PRDR-265"]
+links: ["PRDR-117", "PRDR-119", "PRDR-207", "PRDR-263", "PRDR-265", "PRDR-290", "PRDR-291", "PRDR-292", "PRDR-293", "PRDR-294", "PRDR-295", "PRDR-296", "PRDR-297", "PRDR-298"]
 depends_on: []
 ---
 
@@ -50,3 +50,15 @@ N-6 forbids building the phase before the PRD says so. The phase changes C-3′'
 - The amendment path during `run`, with decision 8's correction (plan §8).
 - N-7: the raw PRD stays its input, and the checklist records the added time and spend
   (plan §9).
+
+## The planning redesign, in the same amendment
+
+On 2026-09-26 an audit of the planning phase (`docs/planning-phase-audit-2026-09-26.md`) found that
+September's 79 planning tickets mostly measured the planner rather than improved it. ksar-cloud's
+approved plan was never reviewed as a whole, kept 34 defects that code had proved, and spent 78% of
+its planning on a review that never approved. The operator decided to rebuild planning on the pack,
+in this amendment (`docs/plan-planning-redesign.md`, PRDR-290 to PRDR-298). The amendment records:
+- ANALYZE folded into DECIDE, and D-10 amended to match;
+- SLICE, PLAN, the mechanical checks, the single review and PRESENT as that plan describes;
+- gates per package, which amends D-5, V-5 and NG2 and closes OQ-4;
+- the rule that run-time outcomes, not reviewer findings, decide which planning mechanisms stay.

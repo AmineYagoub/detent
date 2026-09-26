@@ -6,6 +6,9 @@ C-3′ ("Planning does not stop for a question") and the `init` pipeline, and N-
 rule forbids changing either in flight.
 **Decided by:** the operator, 2026-09-26, in the design discussion that followed the ksarjs
 specification (§2).
+**Companion:** `docs/plan-planning-redesign.md` rebuilds the planning phase on the pack this phase
+produces. The operator put both in the same PRD amendment, PRDR-278. One consequence runs through
+this plan: ANALYZE is folded into DECIDE, so the pack goes from VALIDATE to DETERMINE_VERIFICATION.
 
 ---
 
@@ -66,7 +69,8 @@ ended it.
 5. **One early stop.** DECIDE stops once, after AUDIT, for the founder's questions. PRESENT
    remains the other stop, and it also lists every vetoable default.
 6. **A conforming pack skips.** A pack that already conforms goes through the checker gate only,
-   and straight on to ANALYZE.
+   and straight on to ANALYZE. ANALYZE has since been folded into DECIDE, so this now means
+   straight on to DETERMINE_VERIFICATION (the planning redesign, §3).
 7. **Sandboxed simulation.** VALIDATE's reviewers may write and run throwaway scripts in a
    scratch directory outside the repository.
 8. **Amendments during `run`.** A session that proves a specification defect files an amendment.
@@ -81,7 +85,7 @@ ended it.
 
 ```
 INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO]
-        → ANALYZE → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT]
+        → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT]
         → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY
 ```
 
@@ -90,7 +94,7 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → 
 | AUDIT | the discovered documents and, in an existing project, the code | its checkpoint: contradictions, gaps and external claims, each claim with its source and a verdict | never |
 | DECIDE | AUDIT's checkpoint | `docs/founder-decisions.md`: asked decisions `D-n` and vetoable defaults `X-n` | once, on a TTY, for C-3″ (PRDR-119) questions |
 | WRITE | the documents, AUDIT's checkpoint, the decision log | the pack (§4); the originals moved to `archive/` | never |
-| VALIDATE | the pack | the conformance record (§4.3), and the pack's document set for ANALYZE | only at the ceiling, and only for a blocker (§7) |
+| VALIDATE | the pack | the conformance record (§4.3), and the checker's parse of the pack for the planning phases | only at the ceiling, and only for a blocker (§7) |
 
 - **No new interrupt.** Both new stops raise AWAIT_INFO, the decision class C-3′ already
   presents: a question the documents cannot answer. The set of five stays closed (C-5), so
@@ -99,8 +103,8 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → 
   at VALIDATE, as well as at PRESENT. That is an amendment to C-3′ (PRDR-278).
 - **No second DISCOVER.** Checkpoints are keyed by phase name (F-4), so DISCOVER cannot simply
   run twice. WRITE moves the originals out of every discovery glob, and VALIDATE ends by
-  discovering the pack with DISCOVER's own recorded patterns (PRDR-166) and handing that set to
-  ANALYZE. A later `detent init` finds the conforming pack at DISCOVER and takes decision 6's
+  discovering the pack with DISCOVER's own recorded patterns (PRDR-166) and handing the checker's
+  parse of it to the planning phases. A later `detent init` finds the conforming pack at DISCOVER and takes decision 6's
   path: AUDIT, DECIDE and WRITE are skipped, and VALIDATE runs only the checker.
 - **Precedent.** SLICE was added to the pipeline the same way (C-2‴). The new phase names and
   artifacts are persisted shapes, so F-3's schema discipline and release-checklist item 8 apply.
@@ -169,7 +173,7 @@ ksarjs's `check_pack.py` (kept at `~/ksar-spec-tools/`), generalized to the sche
 
 The first rule earns its place on Detent's own PRD: `detent-prd-v3.md` defines C-3″, C-9′,
 S-3′, V-1⁵ and X-1‴ twice each, as different rules. The checker runs at VALIDATE and on every
-amendment (§8). A red checker blocks ANALYZE.
+amendment (§8). A red checker blocks every phase after VALIDATE.
 
 ## 6. Stops, defaults and headless runs
 
@@ -280,7 +284,10 @@ green. The pack N-7 writes lives in the self-build's folder, like everything els
 | PRDR-280 | The checker as a referee gate | PRDR-279 |
 | PRDR-281 | AUDIT | PRDR-278 |
 | PRDR-282 | DECIDE: the early stop, vetoable defaults at PRESENT, headless | PRDR-278, PRDR-281 |
-| PRDR-283 | WRITE, and handing the pack to ANALYZE | PRDR-279, PRDR-282 |
+| PRDR-283 | WRITE, and handing the pack to planning | PRDR-279, PRDR-282 |
 | PRDR-284 | VALIDATE: rounds, stop rule, ceiling, progress marks | PRDR-280, PRDR-283 |
 | PRDR-285 | Sandboxed scratch execution for VALIDATE's reviewers | PRDR-284 |
-| PRDR-286 | Amendments during `run`, and the scoped re-plan | PRDR-280, PRDR-284 |
+| PRDR-286 | Amendments during `run`, and the scoped re-plan | PRDR-280, PRDR-284, PRDR-291 |
+
+The planning redesign's tickets, PRDR-290 to PRDR-298, are listed in
+`docs/plan-planning-redesign.md` §14.
