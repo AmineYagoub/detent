@@ -44,3 +44,12 @@ this file exists to make unskippable.
    platform-merge behavior re-verified live on the current CLI.
 8. **Schema discipline (F-3).** Any persisted-shape change this release
    bumped `schema_version` with a migration — never silently.
+   The 3.1.1 line adds these shapes, each at `schema_version` 1 (C-2⁷,
+   PRDR-279). A later change to any of them is an F-3 event:
+   - the conformance record, `docs/conformance.json`, which a project
+     commits beside its pack;
+   - the pack's schema, in `src/schemas/pack.ts`. Its version covers the
+     grammar as well as the parse, so a change to what a pack must say is
+     an event too;
+   - DISCOVER's `pack` output, the raw, conforming or changed
+     classification that its checkpoint persists.

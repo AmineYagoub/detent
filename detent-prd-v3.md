@@ -1597,6 +1597,8 @@ the code does what the rules it amends describe, and each of those rules points 
     healthy specification phase. Each phase's spend is reported beside planning's, in PRESENT
     and in `detent status`, and is never capped (specification decision 16). The phase names and
     every artifact the phases write are persisted shapes under F-3.
+  *Amended by C-2⁹ (PRDR-279): WRITE archives the originals it rewrote into the pack and leaves
+  context documents where they are.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1637,6 +1639,8 @@ the code does what the rules it amends describe, and each of those rules points 
     as a review. It runs at VALIDATE and on every amendment (X-4⁷), and a red checker blocks
     every phase after VALIDATE. Its first rule earned its place on this document: until PRDR-287
     and PRDR-288, nine marks here each named more than one rule.
+  *Amended by C-2⁹ (PRDR-279): the record is `docs/conformance.json`; a document outside the
+  layout's paths is context, hashed with the pack and never parsed.*
 
 - **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
   one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
@@ -1950,6 +1954,47 @@ the code does what the rules it amends describe, and each of those rules points 
   so release-checklist item 5 records its wall-clock duration and its spend, per phase, beside the
   green; the first such run gives specification decision 16 its projection. The N-7 scoping note
   (§13) still governs what the skeleton plans first.
+
+- **C-2⁹ (3.1.1, PRDR-279).** The conformance record lives at `docs/conformance.json`, and DISCOVER
+  classifies every document set as raw, conforming or changed. This settles what C-2⁷ left to its
+  first ticket, and amends C-2⁶'s WRITE and C-8's listing digest.
+  - **The pack's documents** are everything C-2's full discovery finds, whatever `plan_docs`
+    narrows planning to, and never the record. Inside `docs/`, the layout's names are typed:
+    `docs/founder-decisions.md`, `docs/research/verified-facts.md`, `docs/design/<name>.md`,
+    `docs/adr/ADR-<nnn>-<name>.md`, `docs/prd/index.md` and `docs/prd/<NN>-<name>.md`. Any other
+    name inside `research/`, `design/`, `adr/` or `prd/` breaks the layout. Every other document
+    is context, a README or a runbook. It is hashed with the pack, so an edit to it is a change
+    `init` names, but it is never read for requirements and has no precedence. WRITE moves to
+    `archive/` the originals it rewrote into the pack and leaves context where it is: archiving
+    everything that is not the pack would move a repository's README out of its root.
+  - **The hash** is sha256 over the sorted `path NUL sha256 LF` lines of the documents, and the
+    record keeps each document's own hash, which is what names a change. `init` stops, naming the
+    record, when the record is not JSON, breaks its schema, was written by a newer build (F-3), or
+    has a hash that disagrees with its own documents.
+  - **Conforming** means the documents hash to the record, the record's checker was green, and
+    the schema finds nothing in them now: rules can move under unchanged documents, and in
+    greenfield the stack entry is required (D-10′). Anything else with a record is **changed**,
+    never raw. DISCOVER names the documents modified, added and removed, or says why the record
+    no longer vouches for unchanged ones. The classification is DISCOVER's output, persisted in
+    its checkpoint. The phases C-2⁶ adds are what will route on it, so until they exist nothing
+    does.
+  - **The digest.** With a record, DISCOVER's digest covers the pack's contents and the
+    record's, since whether the pack is still the one validated is a question about what the
+    files say. Without one it is the listing alone, as C-8 has it: a raw document set behaves as
+    before, and no checkpoint written before this rule is invalidated.
+  - **`archive/`** is the root's. The discovery walk never enters it, so no configured glob
+    reaches it either, and a `docs/archive/` is an ordinary directory.
+  - **The grammar**, in `src/schemas/pack.ts`, versioned with the parse. Decisions, defaults, the
+    stack entry and packages are table rows under `## Decisions`, `## Defaults`, `## Stack` and
+    `## Packages` in the decision log. Codes and milestones are rows under `## Codes` and
+    `## Milestones` in the index, and facts are rows `| N.M | fact | source | tag |`. Catalogue
+    entries are rows whose first cell is the id in backticks, under `## Error codes`, `## Events`,
+    `## Settings`, `## Jobs` and `## Routes` in `docs/design/catalogues.md`. Requirements and
+    criteria are bold-headed bullets in the module PRDs: `- **<CODE>-F-<nnn>** [Mk] …` and
+    `- **<CODE>-AC-<nn>** [Mk] Given …, when …, then … (<ids>)`, where the ids may be a range
+    joined by an en dash. A fenced code block is an example, never an entry. Whether a
+    criterion's values are exact is not the schema's to judge; VALIDATE's reviewers judge it
+    (C-2⁶).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

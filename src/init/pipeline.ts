@@ -5,7 +5,7 @@ import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
-import { analysisFromOutputs, analysisPath, analyzeStage } from "./analyze.js";
+import { analysisFromOutputs, analysisPath, analyzeStage, isGreenfield } from "./analyze.js";
 import { determineVerification } from "./bind.js";
 import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
@@ -22,6 +22,8 @@ import { planningBriefSkeleton, questionHash, undecidableBriefSkeleton } from ".
 import { previousAttemptInput } from "./retry.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
+import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
+import { CONFORMANCE_RECORD_PATH } from "../schemas/pack.js";
 import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 
@@ -126,11 +128,21 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
      * The LISTING, not the contents: DISCOVER answers "which files exist",
      * so editing a document's text must not re-run it (C-8). Both halves of
      * C-2 are here — planning docs and stack facts.
+     *
+     * C-2⁹ (PRDR-279): with a conformance record, DISCOVER also answers
+     * whether the pack is still the one validated, which is a question about
+     * what its documents say, so their contents and the record's join the
+     * digest. Without a record the digest is the listing alone, exactly as
+     * before: a raw document set keeps C-8's behaviour, and a checkpoint
+     * written before this field is reused only where no record exists, which
+     * is the one case its missing `pack` output can mean.
      */
     digest: () => {
       const docs = discoverDocs(deps.root, docPatterns(deps)).docs;
       const stack = discoverStack(deps.root);
-      return listingDigest([...docs, ...stack.stack.markers.map((m) => `marker:${m}`)]);
+      const listing = listingDigest([...docs, ...stack.stack.markers.map((m) => `marker:${m}`)]);
+      if (!hasConformanceRecord(deps.root)) return listing;
+      return `${listing}|${contentsDigest(deps.root, [...packDocuments(deps.root), CONFORMANCE_RECORD_PATH])}`;
     },
     run: async () => {
       const docs = discoverDocs(deps.root, docPatterns(deps));
@@ -144,6 +156,14 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
           items: [...docs.patternsSearched],
         };
       }
+      /*
+       * C-2⁹ (PRDR-279): raw, conforming or changed, recorded for the phases
+       * after this one and said aloud when it is a pack. Nothing routes on it
+       * yet: the specification phases that do (C-2⁶) are not built.
+       */
+      const pack = classifyPack(deps.root, { greenfield: isGreenfield(stack.stack.markers) });
+      const said = packNote(pack);
+      if (said !== null) deps.note?.(said);
       return {
         kind: "complete",
         outputs: {
@@ -152,6 +172,7 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
           stack_markers: [...stack.stack.markers],
           package_manager: stack.stack.pm,
           candidate_count: stack.candidates.length,
+          pack,
         },
       };
     },

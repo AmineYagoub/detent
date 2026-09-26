@@ -26,6 +26,11 @@ import { parseArtifact } from "../schemas/common.js";
  * Editing a doc changes what ANALYZE saw without changing what DISCOVER found,
  * so discovery is reused and analysis re-runs. That is a modelling choice the
  * checkpoint layer cannot make for us, which is why the digests live here.
+ *
+ * One exception, C-2⁹'s (PRDR-279): where a conformance record exists,
+ * DISCOVER also says whether the pack is still the one validated, so it reads
+ * the pack's contents, and an edit re-runs it. The phases after it replay
+ * from the same edit either way, so the exception costs one scan.
  */
 
 export type PhaseOutcome =
