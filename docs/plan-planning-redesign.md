@@ -46,6 +46,11 @@ and every mechanism problem above still appeared.
    the way a toolchain install is (PRDR-276): on a terminal, PRESENT names each build and asks
    [y/N]; off one, `--approve` also needs `--accept-mixed-builds`, or the approval is refused.
    The approval record lists the builds. This was §13's open question, settled the same day.
+9. **The plan reviewer sits where the planner does.** `plan_review` runs on `claude-opus-5` at
+   `max`, the planner's seat, so it is never weaker than the drafts it judges.
+10. **No model reads the contracts between slices.** The mechanical checks stand alone. A model
+    read of the contract index is added only if run-time outcomes show tickets failing on
+    contracts between slices that the checks passed (decision 3).
 
 Accepted with the audit's recommendation:
 - mechanical cross-slice checks replace the whole-plan model review;
@@ -160,7 +165,9 @@ ksarjs's pack (2,024 requirements) is larger still.
 - **Role.** A new `plan_review` role, with its own prompt, model and effort, separate from the
   drafter. Role ids are persisted, so this is an F-3 schema event with a migration for `role@hash`
   assignments. PRDR-084 declined that cost; the audit says it is now worth paying. The same event
-  adds AUDIT's `audit` role (the specification plan's decision 11), so the migration is paid once.
+  adds the specification phase's `audit`, `spec_write` and `spec_review` roles (that plan's
+  decisions 11 and 15), so the migration is paid once. The role runs on the planner's seat,
+  `claude-opus-5` at `max` (decision 9).
 - **One read per slice**, after the mechanical checks pass. The scope is judgement only:
   - sizing: does each ticket fit one implement session;
   - shape: walking skeleton first, vertical increments;
@@ -263,12 +270,8 @@ ksarjs's pack (2,024 requirements) is larger still.
 
 ## 13. Open questions
 
-- The reviewer's model and effort. Today the planner runs at max effort and the run-time reviewer
-  at xhigh.
-- Whether a compact model read of the cross-slice contract index is ever worth adding back. It
-  would be added only if run-time outcomes show incoherence across slices that the checks miss.
-
-The mixed-build approval was settled on 2026-09-26 (decision 8).
+None. The mixed-build approval, the reviewer's model and effort, and the contract read were
+settled on 2026-09-26 (decisions 8 to 10).
 
 ## 14. Tickets
 

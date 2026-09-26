@@ -99,6 +99,20 @@ Settled later the same day, when the plan's open questions were put to the opera
     stay read-only.
 13. **Ceiling 8.** `spec_validation_rounds` defaults to 8 (§7).
 
+And three more, when the last open questions were put to the operator:
+
+14. **Opus 5.5 at max.** Every session of the phase runs on `claude-opus-5-5` at `max`. The
+    ksarjs specification ran entirely on it, in the main session and its reviewer subagents. The
+    runtime serves it since PRDR-275; nothing was routed to it before.
+15. **A role per tool set.** Routing and tools are set per role, so the phase gets three: `audit`
+    for AUDIT (reading and the web), `spec_write` for DECIDE, WRITE and VALIDATE's fixes (reading
+    and writing the pack), and `spec_review` for VALIDATE's reviewers (read-only, plus PRDR-285's
+    sandbox). With the planning redesign's `plan_review`, that is four new roles in one F-3
+    `schema_version` event. This extends decision 11.
+16. **Cost is reported, never capped.** Each phase's spend is shown beside planning's, in PRESENT
+    and in `detent status`, and nothing stops for it. The first N-7 run and the ksar-cloud re-plan
+    give the projection.
+
 ## 3. The pipeline
 
 ```
@@ -284,14 +298,11 @@ the defects nobody has noticed yet. N-7 therefore runs longer and costs more, an
 both figures to release-checklist item 5, beside the green. The pack N-7 writes lives in the
 self-build's folder, like everything else N-7 produces.
 
-## 10. Open questions (not yet decided)
+## 10. Open questions
 
-- Which model and effort does each phase use? The review rounds are the expensive part.
-- What will it cost? The ksarjs specification ran interactively, and its cost was never
-  measured, so there is no projection yet.
-
-The switch, AUDIT's role, who may file an amendment and the ceiling were settled on 2026-09-26
-(decisions 10 to 13).
+None. The switch, AUDIT's role, who may file an amendment, the ceiling, the models, the roles and
+the cost were settled on 2026-09-26 (decisions 10 to 16). The cost itself is still unmeasured; the
+first N-7 run and the ksar-cloud re-plan will measure it.
 
 ## 11. Tickets
 
