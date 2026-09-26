@@ -76,17 +76,21 @@ describe("T-060 C-5: the interrupt set is closed", () => {
     for (const interrupt of INTERRUPTS) {
       for (const phase of INTERRUPT_PHASE[interrupt]) expect(INIT_PHASES).toContain(phase);
     }
-    /** PRDR-282: AWAIT_INFO is raised at DECIDE as well as at PRESENT (C-3⁗); the set stays five (C-5). */
+    /**
+     * PRDR-282: AWAIT_INFO is raised at DECIDE as well as at PRESENT (C-3⁗);
+     * PRDR-284: and at VALIDATE, for a blocker left at its ceiling or a checker
+     * it cannot make green (C-2¹⁴). The set stays five (C-5).
+     */
     expect(INTERRUPT_PHASE).toEqual({
       AWAIT_DOCS: ["DISCOVER"],
-      AWAIT_INFO: ["DECIDE", "PRESENT"],
+      AWAIT_INFO: ["DECIDE", "VALIDATE", "PRESENT"],
       AWAIT_BINDING_CHOICE: ["DETERMINE_VERIFICATION"],
       AWAIT_SETUP_CONSENT: ["DETERMINE_VERIFICATION"],
       AWAIT_APPROVAL: ["PRESENT"],
     });
   });
 
-  /** PRDR-281: AUDIT, the first of the phases C-2⁶ adds, directly after DISCOVER; PRDR-282: DECIDE after it. */
+  /** PRDR-281: AUDIT, the first of the phases C-2⁶ adds, directly after DISCOVER; PRDR-282: DECIDE after it; PRDR-283, PRDR-284: WRITE, then VALIDATE. */
   it("the phase order is C-4.1's, as C-2⁶ amends it", () => {
     expect(INIT_PHASES).toEqual([
       "INIT_FS",
@@ -94,6 +98,7 @@ describe("T-060 C-5: the interrupt set is closed", () => {
       "AUDIT",
       "DECIDE",
       "WRITE",
+      "VALIDATE",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",

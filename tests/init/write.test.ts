@@ -302,7 +302,8 @@ describe("PRDR-283: when WRITE writes nothing (C-2⁶, C-2¹³)", () => {
     expect(notes.join("\n")).toContain("WRITE: the documents are a changed pack, which is never rewritten");
   });
 
-  it("writes nothing on the pack it wrote, edited since, and says planning reads it as it stands", async () => {
+  /** PRDR-284: VALIDATE, after WRITE, validates it, the edit with the rest. */
+  it("writes nothing on the pack it wrote, edited since, and says VALIDATE validates it", async () => {
     const root = repo(RAW);
     await initThroughWrite(root, writesPack());
     writeFileSync(path.join(root, "docs", "prd", "01-lending.md"), `${read(root, "docs/prd/01-lending.md")}\n`);
@@ -312,7 +313,7 @@ describe("PRDR-283: when WRITE writes nothing (C-2⁶, C-2¹³)", () => {
     expect(stub.inputs).toEqual([]);
     expect(writeOutputs(root)["reason"]).toBe("written");
     expect(notes.join("\n")).toContain(
-      "WRITE: the documents are the pack WRITE wrote, which is never rewritten: nothing has validated it, and planning reads it as it stands (C-2¹³)",
+      "WRITE: the documents are the pack WRITE wrote, which is never rewritten: VALIDATE, after it, validates it (C-2¹⁴)",
     );
   });
 

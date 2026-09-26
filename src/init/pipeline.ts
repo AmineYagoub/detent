@@ -28,6 +28,7 @@ import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
 import { decidePhase, decidedStack, planningDocs, type DecideAsk } from "./decide.js";
 import { planningMarkers, writePhase } from "./write.js";
+import { validatePhase } from "./validate.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -91,6 +92,7 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
     auditPhase(deps),
     decidePhase(deps),
     writePhase(deps),
+    validatePhase(deps),
     analyzePhase(deps),
     determinePhase(deps),
     slicePhase(deps),
@@ -174,8 +176,9 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
       /*
        * C-2⁹ (PRDR-279): raw, written, conforming or changed, recorded for the
        * phases after this one and said aloud when it is a pack. AUDIT, DECIDE
-       * and WRITE route on it (C-2¹¹, C-2¹², C-2¹³); VALIDATE, which C-2⁶ adds
-       * after WRITE, is not built.
+       * and WRITE route on it (C-2¹¹, C-2¹², C-2¹³). VALIDATE classifies the
+       * pack again when it runs, since WRITE, before it, may have written one
+       * (C-2¹⁴).
        */
       const pack = classifyPack(deps.root, { greenfield: isGreenfield(stack.stack.markers) });
       const said = packNote(pack);
@@ -204,7 +207,7 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
      * re-runs analysis.
      */
     digest: (ctx) => {
-      const told = ctx.outputs["WRITE"] ?? ctx.outputs["DISCOVER"];
+      const told = ctx.outputs["VALIDATE"] ?? ctx.outputs["WRITE"] ?? ctx.outputs["DISCOVER"];
       const docs = told === undefined ? discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog) : planningDocs(deps.root, ctx.outputs);
       /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
        * the phase reasons must invalidate it, exactly as an edited doc does. */

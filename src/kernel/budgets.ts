@@ -80,6 +80,8 @@ export const ENFORCEMENT_SITES = {
    * stopped letting a log string vouch for code.
    */
   planning_research_tool_calls: "init/pipeline",
+  /** C-2¹⁴ (PRDR-284): the loop that counts its rounds against it, and stops there. */
+  spec_validation_rounds: "init/validate",
   flake_reruns: "kernel/flake",
   gate_timeout_ms: "adapter/run",
   binding_probe_timeout_ms: "adapter/bind",

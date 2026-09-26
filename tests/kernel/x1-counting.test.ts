@@ -121,7 +121,9 @@ describe("PRDR-265 a converted ceiling declares NONE and keeps its counting site
     expect(CEILINGS.spend_without_progress_floor_usd.default).toBe(5);
     expect(CEILINGS.spend_without_progress_sessions.default).toBe(20);
     expect(CEILINGS.spend_without_progress_multiple.default).toBe(3);
-    expect(CEILING_KEYS, "no key is deleted — they stay configurable and reported").toHaveLength(17);
+    /* PRDR-284 added `spec_validation_rounds`, the eighteenth, at specification decision 13's 8; none of these was deleted. */
+    expect(CEILINGS.spec_validation_rounds.default).toBe(8);
+    expect(CEILING_KEYS, "no key is deleted — they stay configurable and reported").toHaveLength(18);
   });
 });
 

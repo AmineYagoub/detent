@@ -29,7 +29,7 @@ export type PackCheck = ConformanceRecord["checker"];
  * reader could assume was checked and was not.
  */
 export const UNCHECKED: readonly string[] = [
-  "whether the pack is right: a pack that is consistent and wrong passes; meaning is for VALIDATE's reviewers and simulations",
+  "whether the pack is right: a pack that is consistent and wrong passes; meaning is for VALIDATE's reviewers",
   "whether a criterion's values are exact, and whether it tests what it names",
   "whether a fact is true, or its source says what the fact says",
   "milestone order between requirements: a requirement that names a later one may be pointing forward, so only a criterion that tests a later milestone's requirement is refused",

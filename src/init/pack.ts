@@ -65,15 +65,15 @@ export interface RecordParts {
   readonly rounds: ConformanceRecord["rounds"];
   /** `YYYY-MM-DD`: the day the record was written. */
   readonly date: string;
-  /** C-2¹³: false from WRITE, which has not validated what it wrote; true only from VALIDATE. */
+  /** C-2¹³, C-2¹⁴: false from WRITE, which has not validated what it wrote, and from VALIDATE when it stops; true only from VALIDATE, when it finishes. */
   readonly validated: boolean;
 }
 
 /**
  * The record for the pack as it stands, built here, beside the reader, so
  * that the hash has a single definition. WRITE writes one, not validated
- * (C-2¹³, PRDR-283); VALIDATE (C-2⁶) is what will write one validated, and it
- * is not built.
+ * (C-2¹³, PRDR-283). VALIDATE writes one after each of its rounds, not
+ * validated, and one validated when it finishes (C-2¹⁴, PRDR-284).
  */
 export function conformanceRecord(root: string, parts: RecordParts): ConformanceRecord {
   const documents = documentHashes(root, packDocuments(root));
@@ -122,6 +122,25 @@ export function readConformanceRecord(root: string): ConformanceRecord | null {
   return parsed.value;
 }
 
+export interface Moved {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly modified: readonly string[];
+}
+
+/** What moved in the pack since `record` was written: the documents added, removed and modified, each sorted. */
+export function movedSince(root: string, record: ConformanceRecord): Moved {
+  const docs = packDocuments(root);
+  const current = documentHashes(root, docs);
+  return {
+    added: docs.filter((doc) => !Object.hasOwn(record.documents, doc)),
+    removed: Object.keys(record.documents)
+      .filter((doc) => !Object.hasOwn(current, doc))
+      .sort(),
+    modified: docs.filter((doc) => Object.hasOwn(record.documents, doc) && record.documents[doc] !== current[doc]),
+  };
+}
+
 /**
  * Raw, written, conforming or changed. A pack conforms when its documents hash
  * to the record, the record's checker was green, and the checker is green on
@@ -130,9 +149,10 @@ export function readConformanceRecord(root: string): ConformanceRecord | null {
  * the stack entry is required (D-10′). Only blocking findings count; the
  * heuristic's reports are for VALIDATE's reviewers.
  *
- * A record nothing validated is WRITE's, and its pack is written whatever
- * changed in it since (C-2¹³): VALIDATE's first run checks all of it, so what
- * changed is not asked.
+ * A record nothing validated is WRITE's, or a stopped VALIDATE's, and its pack
+ * is written whatever changed in it since (C-2¹³): VALIDATE checks all of it,
+ * or carries on from the rounds the record holds and reads what moved itself
+ * (C-2¹⁴), so what changed is not asked here.
  */
 export function classifyPack(root: string, opts: { readonly greenfield: boolean }): PackStatus {
   const record = readConformanceRecord(root);
@@ -141,14 +161,9 @@ export function classifyPack(root: string, opts: { readonly greenfield: boolean 
   if (!record.validated) {
     return { kind: "written", date: record.date, blocking: checkPack(root, docs, opts).findings.filter((f) => f.blocks).length };
   }
-  const current = documentHashes(root, docs);
-  const added = docs.filter((doc) => !Object.hasOwn(record.documents, doc));
-  const removed = Object.keys(record.documents)
-    .filter((doc) => !Object.hasOwn(current, doc))
-    .sort();
-  const modified = docs.filter((doc) => Object.hasOwn(record.documents, doc) && record.documents[doc] !== current[doc]);
+  const { added, removed, modified } = movedSince(root, record);
   if (added.length + removed.length + modified.length > 0) {
-    return { kind: "changed", date: record.date, added, removed, modified, reasons: [] };
+    return { kind: "changed", date: record.date, added: [...added], removed: [...removed], modified: [...modified], reasons: [] };
   }
   const reasons = [
     ...(record.checker.green ? [] : [`its record says the checker was red on ${record.date}`]),
@@ -166,15 +181,15 @@ const NOTED_REASONS = 10;
  * What `init` says at DISCOVER. A raw document set is the ordinary case and
  * says nothing. A conforming pack's note says what the checker does not
  * check, so that "conforming" is not read as "reviewed" (C-2¹⁰). A written
- * pack's says that nothing reviewed it (C-2¹³).
+ * pack's says that VALIDATE has not finished on it (C-2¹³, C-2¹⁴).
  */
 export function packNote(status: PackStatus): string | null {
   if (status.kind === "raw") return null;
   if (status.kind === "written") {
     const blocking = status.blocking === 0 ? "" : `; the pack checker finds ${String(status.blocking)} blocking finding${status.blocking === 1 ? "" : "s"} in it`;
     return (
-      `the documents are the pack WRITE wrote on ${status.date}, which nothing has validated: VALIDATE is not built, ` +
-      `so the pack goes to planning as WRITE left it (C-2¹³)${blocking}`
+      `the documents are the pack WRITE wrote, which VALIDATE has not finished on, as its record of ${status.date} says: ` +
+      `VALIDATE validates it before anything plans from it (C-2¹⁴)${blocking}`
     );
   }
   if (status.kind === "conforming") {

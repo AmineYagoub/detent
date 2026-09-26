@@ -264,6 +264,14 @@ export type PackFinding = z.infer<typeof packFindingSchema>;
 
 export const SEVERITIES = ["blocker", "major", "minor"] as const;
 
+/**
+ * C-2¹⁴ (PRDR-284): why a round left a finding open. The writer declined it,
+ * with its reason; its fix was undone, because the pack checker was red after
+ * it; or it was fixed in the round the loop stopped at, and no round verified
+ * the fix.
+ */
+export const OPEN_REASONS = ["declined", "undone", "unverified"] as const;
+
 export const conformanceRecordSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   /** sha256 over the sorted `path NUL sha256 LF` lines of `documents`. */
@@ -275,23 +283,34 @@ export const conformanceRecordSchema = z.strictObject({
     green: z.boolean(),
     findings: z.array(packFindingSchema.extend({ blocks: z.boolean() })).default([]),
   }),
+  /**
+   * The rounds of the validation that wrote the record (C-2¹⁴, PRDR-284): a
+   * re-validation of a change writes its own, and a validation that stopped
+   * carries on from its last. Each counts what its reviewers found, by
+   * severity, and says what it left open.
+   */
   rounds: z
     .array(
       z.strictObject({
         round: z.number().int().positive(),
         counts: z.strictObject({ blocker: z.number().int().nonnegative(), major: z.number().int().nonnegative(), minor: z.number().int().nonnegative() }),
-        /** What the round left unfixed, as each finding was written: severity, place, quote and fix. */
+        /** What the round left open, as each finding was written, its first place for its place, and why it is open. */
         open: z
           .array(
             z.strictObject({
+              id: nonEmptyString,
               severity: z.enum(SEVERITIES),
               file: nonEmptyString,
               line: z.number().int().nonnegative(),
               quote: z.string(),
               fix: z.string(),
+              left: z.enum(OPEN_REASONS),
+              reason: z.string(),
             }),
           )
           .default([]),
+        /** The documents the round's fixes changed, which the round after it verifies. */
+        changed: z.array(nonEmptyString).default([]),
       }),
     )
     .default([]),
@@ -299,8 +318,10 @@ export const conformanceRecordSchema = z.strictObject({
   /**
    * C-2¹³ (PRDR-283): whether VALIDATE finished on the pack. WRITE writes the
    * record with `false`, which DISCOVER reads as a pack written and not yet
-   * validated; VALIDATE is what will write `true`. Required: a record that did
-   * not say would be read as whichever a reader guessed.
+   * validated. VALIDATE writes `true` when it finishes, and `false`, with the
+   * rounds it ran, when it stops, so the next `init` carries on from them
+   * (C-2¹⁴). Required: a record that did not say would be read as whichever a
+   * reader guessed.
    */
   validated: z.boolean(),
 });
@@ -315,10 +336,10 @@ export type ConformanceRecord = z.infer<typeof conformanceRecordSchema>;
  * red checker, or a break the schema finds now. `reasons` says which, and the
  * three lists say what moved. A changed pack is still a pack, never raw.
  *
- * `written` (C-2¹³, PRDR-283) is a pack WRITE wrote that nothing has
- * validated, whatever changed in it since: VALIDATE's first run checks the
- * whole pack, an edit included. `blocking` counts what the checker blocks on
- * in it now.
+ * `written` (C-2¹³, PRDR-283) is a pack WRITE wrote that VALIDATE has not
+ * finished on, whatever changed in it since: VALIDATE checks the whole pack,
+ * an edit included, or carries on from the rounds a stopped validation left in
+ * the record (C-2¹⁴). `blocking` counts what the checker blocks on in it now.
  */
 export const packStatusSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("raw") }),

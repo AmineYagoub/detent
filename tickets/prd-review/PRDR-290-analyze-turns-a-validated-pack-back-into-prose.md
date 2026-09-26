@@ -60,3 +60,19 @@ and every re-init reads as a re-plan. The planning suites leave WRITE out (`plan
 `tests/init/plan-fixture.ts`, and `initThrough`'s `all` in `tests/init/decide-fixture.ts`) and
 plan from raw documents; once SLICE and PLAN read the checker's parse, their fixtures need packs.
 
+
+## From PRDR-284
+
+VALIDATE hands the planning phases the pack (C-2¹⁴). Its outputs carry what WRITE's did: `docs`,
+the log among them, `stack_markers`, and the log's decisions and defaults. They also carry
+`validated`, `rounds`, `risks` and `pack`, which is the checker's parse of the pack as VALIDATE
+left it (`parsePack` in `src/init/pack-parse.ts`). `planningDocs`, `planningMarkers`, ANALYZE's
+digest and PRESENT's `logged` each read VALIDATE's outputs first. Nothing reads `pack`, and the
+`finished` doc-block in `src/init/validate.ts` says so; that doc-block becomes false the day SLICE
+and PLAN read the parse.
+
+The parse sits whole in VALIDATE's checkpoint, and on a pack of ksarjs's size (2,024
+requirements, 1,144 criteria) that checkpoint is large. A reader may prefer to re-parse the
+handed documents instead, since the parse is deterministic and VALIDATE's key already names every
+byte it reads. The planning suites leave VALIDATE out as they leave WRITE out (`planningPipeline`,
+and `initThrough`'s `all`).

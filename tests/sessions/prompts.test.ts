@@ -20,8 +20,9 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
   /**
    * PRDR-281: `audit`, the first of S-1‴'s four, joins in the one F-3″ event, with its routing migrated.
    * PRDR-282: `spec_write`, the second, joins the same event, which no release has shipped yet.
+   * PRDR-284: `spec_review`, the third, VALIDATE's reviewers, joins it too.
    */
-  it("the role ids are exactly S-1's eight and S-1‴'s audit and spec_write, in order — adding or renaming one is an F-3 schema event", () => {
+  it("the role ids are exactly S-1's eight and S-1‴'s audit, spec_write and spec_review, in order — adding or renaming one is an F-3 schema event", () => {
     expect(ROLE_IDS).toEqual([
       "planner",
       "diagnose",
@@ -33,11 +34,13 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
       "review",
       "audit",
       "spec_write",
+      "spec_review",
     ]);
   });
 
-  it("the read-only set is S-1's four and S-1‴'s audit", () => {
-    expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "planner", "research", "review"]);
+  /** PRDR-284: VALIDATE's reviewers read the pack and write their findings alone; a simulation's scratch directory is not built. */
+  it("the read-only set is S-1's four and S-1‴'s audit and spec_review", () => {
+    expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "planner", "research", "review", "spec_review"]);
   });
 
   it("every execution state that launches a session maps to a role; the init roles have none", () => {

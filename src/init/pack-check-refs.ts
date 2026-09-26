@@ -74,8 +74,8 @@ const quoted = (ids: readonly string[]) => ids.map((id) => `\`${id}\``).join(", 
  * References
  */
 
-const DECISION_REF = /(?<![\w-])([DX])-(\d+)\b/u;
-const FACT_REF = /\b(?:verified-)?facts(?:\.md)?\s+§\s?(\d+(?:\.\d+)?)(?:\s*[–—-]\s*§?\s?(\d+(?:\.\d+)?))?/u;
+export const DECISION_REF = /(?<![\w-])([DX])-(\d+)\b/u;
+export const FACT_REF = /\b(?:verified-)?facts(?:\.md)?\s+§\s?(\d+(?:\.\d+)?)(?:\s*[–—-]\s*§?\s?(\d+(?:\.\d+)?))?/u;
 
 export function references(ctx: CheckContext): PackFinding[] {
   const { pack, refused } = ctx;
@@ -133,9 +133,9 @@ function milestoneTags({ pack, refused }: CheckContext): PackFinding[] {
  * Section references
  */
 
-const SECTION_REF = /(?<![\w./-])(?:[\w.-]+\/)*(ADR-\d{3}|[a-z0-9]+(?:-[a-z0-9]+)*)(\.md)?\s+§\s?(\d+(?:\.\d+)*)(?:\s*[–—-]\s*§?\s?(\d+(?:\.\d+)*))?/u;
+export const SECTION_REF = /(?<![\w./-])(?:[\w.-]+\/)*(ADR-\d{3}|[a-z0-9]+(?:-[a-z0-9]+)*)(\.md)?\s+§\s?(\d+(?:\.\d+)*)(?:\s*[–—-]\s*§?\s?(\d+(?:\.\d+)*))?/u;
 
-const stemOf = (rel: string): string => (rel.split("/").at(-1) ?? rel).replace(/\.md$/u, "");
+export const stemOf = (rel: string): string => (rel.split("/").at(-1) ?? rel).replace(/\.md$/u, "");
 
 /**
  * `architecture §3`, `ADR-001 §2`, `01-catalog.md §4`: the document by its
@@ -172,7 +172,7 @@ export function sectionRefs(ctx: CheckContext): PackFinding[] {
  * Relative links
  */
 
-const LINK = /\]\(\s*<?([^()<>#\s]+)>?(?:#[^()\s]*)?(?:\s+"[^"]*")?\s*\)/u;
+export const LINK = /\]\(\s*<?([^()<>#\s]+)>?(?:#[^()\s]*)?(?:\s+"[^"]*")?\s*\)/u;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
 
 /** Inline code spans become spaces of the same length: a link shown in backticks is text, and offsets stay true. */
@@ -199,7 +199,7 @@ export function links(ctx: CheckContext): PackFinding[] {
   return out;
 }
 
-function safeDecode(target: string): string {
+export function safeDecode(target: string): string {
   try {
     return decodeURIComponent(target);
   } catch {
@@ -208,7 +208,7 @@ function safeDecode(target: string): string {
 }
 
 /** A repo-relative POSIX path, or `null` when `target` climbs out of the repository. */
-function resolve(from: string, target: string): string | null {
+export function resolve(from: string, target: string): string | null {
   const base = target.startsWith("/") ? [] : from.split("/").slice(0, -1);
   const parts = [...base];
   for (const seg of target.split("/")) {

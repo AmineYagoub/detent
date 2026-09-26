@@ -39,3 +39,22 @@ The plan's §7, step 6. Running code is a containment change, so it is sandboxed
 rather than trusted to it: the hook sees the command, not what the script then does. The
 sandbox's scope is the scratch directory and no network. The reviewer reports, and the writer
 edits.
+
+## From PRDR-284
+
+VALIDATE is built (C-2¹⁴), and its reviewers run as `spec_review`. The role is read-only and
+writes its artifact alone. Four places say so, and each becomes false the day the sandbox lands:
+- `READ_ONLY_ROLES` in `src/schemas/roles.ts`, whose doc-block names the scratch directory as
+  not built;
+- `READ_ONLY_STAGES` in `src/sessions/guard.ts`: a role that runs scripts may need a stop-gate
+  rule of its own, but not the product's, since it changes no code;
+- the note `validateStage` in `src/init/validate.ts` gives once per run, "no reviewer runs a
+  simulation, since the scratch directory one needs is not built";
+- `prompts/spec_review.md`, which says the reviewer changes nothing and writes only its artifact.
+  The prompt says nothing of simulation, so the `invariant` category is judged by reading alone.
+
+A reviewer's launch is `reviewArea` in `src/init/validate-round.ts`. It passes no `surface`, so
+the session gets the read tools and its one artifact rule, and the scratch directory would be
+declared there. The findings a simulation produces go through the same checks as any other: each
+quotes the passages it stands on, at their lines. A sequence that broke an invariant belongs in
+`why`.

@@ -111,9 +111,9 @@ export interface Through {
 
 /**
  * The real pipeline, stopped after DECIDE unless `all`. With `all` it plans
- * from the documents and DECIDE's log as written, WRITE left out as
- * `planningPipeline` leaves it (PRDR-283): what planning reads from WRITE is
- * `write-plan.test.ts`'s.
+ * from the documents and DECIDE's log as written, WRITE and VALIDATE left out
+ * as `planningPipeline` leaves them (PRDR-283, PRDR-284): what planning reads
+ * from the pack is `write-plan.test.ts`'s and `validate-plan.test.ts`'s.
  */
 export async function initThrough(root: string, stub: Decide, opts: Through = {}) {
   const handlers = buildPipeline({
@@ -124,7 +124,7 @@ export async function initThrough(root: string, stub: Decide, opts: Through = {}
     ...(opts.ask === undefined ? {} : { askDecisions: opts.ask }),
     note: (t) => opts.notes?.push(t),
     ...opts.more,
-  }).filter((h) => (opts.all === true ? h.phase !== "WRITE" : THROUGH_DECIDE.has(h.phase)));
+  }).filter((h) => (opts.all === true ? h.phase !== "WRITE" && h.phase !== "VALIDATE" : THROUGH_DECIDE.has(h.phase)));
   return await runInit(root, handlers);
 }
 

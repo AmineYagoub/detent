@@ -694,6 +694,7 @@ describe("T-041 X-1 enforcement fixtures", () => {
           turns_per_stage: 30,
           failure_research_tool_calls: 8,
           planning_research_tool_calls: 16,
+          spec_validation_rounds: 8,
           flake_reruns: 1,
           gate_timeout_ms: 900_000,
           binding_probe_timeout_ms: 120_000,

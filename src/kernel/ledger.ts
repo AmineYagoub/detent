@@ -492,10 +492,12 @@ export class SpendLedger {
 /**
  * X-1⁵ (PRDR-191): a unit of work finished, recorded without a ledger instance.
  *
- * The progress sites — a slice checkpointed, a ticket reaching DONE — do not
- * hold a `SpendLedger` and should not have to construct one to say "something
- * finished". The mark lives on the run lock precisely so it can be written from
- * wherever the work actually completes.
+ * The progress sites — a slice checkpointed, a ticket reaching DONE, a
+ * specification phase completed, a claim brief AUDIT wrote (C-2¹¹), a
+ * VALIDATE round finished (C-2⁶, PRDR-284) —
+ * do not hold a `SpendLedger` and should not have to construct one to say
+ * "something finished". The mark lives on the run lock precisely so it can be
+ * written from wherever the work actually completes.
  */
 export function noteUnitComplete(root: string): void {
   const spent = readRecordedSpend(root);

@@ -41,3 +41,24 @@ The plan's §8. No state or event is added: v3 inherits §7's machine unchanged,
 is a falsification that names its fix. The hold is a pool filter, like a dependency. The
 decision is C-10's escalation. The re-plan is C-8‴'s slice cache, scoped by the amended
 requirement ids, with C-8′'s reconciliation and C-8″'s guard narrowed to the slices it touches.
+
+## From PRDR-284
+
+VALIDATE is built (C-2¹⁴), and an approved amendment's edit to the pack reaches it through the
+path every edit takes. The next `init` finds the record's documents moved and starts a new
+validation. That validation runs the checker first, then rounds scoped to the changed documents,
+to what the last validation left open, and to whatever cites either. Three things in it are this
+ticket's to take up:
+
+- **Two asks of the in-flight guard.** C-8″'s second ask is now made before VALIDATE runs
+  (`replansAt` in `src/init/replan-guard.ts`), and `inFlightTickets` counts the filing ticket's
+  own NEEDS_HUMAN. As built, an amendment's re-validation is refused before any reviewer runs,
+  and the first ask refuses it too. Narrowing both to the re-planned slices' tickets (C-8⁵) is
+  this ticket's.
+- **Stopping at the ceiling.** VALIDATE stops at its ceiling on a blocker with AWAIT_INFO. During
+  `run`, that is an `init` interrupt reached from an amendment, and whether `run` surfaces it
+  through C-10's escalation or leaves it to the next `detent init` is this ticket's to decide.
+- **Scope.** A changed decision log or facts file reaches every document that cites any entry of
+  it, since the record keeps no earlier copy to say which entry moved. An amendment that touches
+  the log therefore re-validates widely. Holding an earlier copy of the log, or scoping by the
+  amendment's own requirement ids, would narrow it.

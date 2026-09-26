@@ -19,6 +19,8 @@ export const INIT_PHASES = [
   "DECIDE",
   /** C-2¹³ (PRDR-283): the documents are rewritten into the pack, and planning reads the pack. */
   "WRITE",
+  /** C-2¹⁴ (PRDR-284): the pack is checked and reviewed in rounds, and fixed, before anything plans from it. */
+  "VALIDATE",
   "ANALYZE",
   "DETERMINE_VERIFICATION",
   /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */
@@ -62,10 +64,11 @@ export const INTERRUPT_PHASE = {
   AWAIT_DOCS: ["DISCOVER"],
   /**
    * C-3⁗ (PRDR-282): at DECIDE, on a terminal, for the questions a founder
-   * defers; and at PRESENT, where C-3′ (PRDR-117) asks what planning could not
-   * settle. VALIDATE joins when it is built (C-2⁶).
+   * defers; at VALIDATE, for a blocker left at its ceiling or a pack checker
+   * its writer could not make green (C-2¹⁴, PRDR-284); and at PRESENT, where
+   * C-3′ (PRDR-117) asks what planning could not settle.
    */
-  AWAIT_INFO: ["DECIDE", "PRESENT"],
+  AWAIT_INFO: ["DECIDE", "VALIDATE", "PRESENT"],
   AWAIT_BINDING_CHOICE: ["DETERMINE_VERIFICATION"],
   AWAIT_SETUP_CONSENT: ["DETERMINE_VERIFICATION"],
   AWAIT_APPROVAL: ["PRESENT"],

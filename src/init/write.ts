@@ -35,7 +35,7 @@ import { archiveOriginal, changedSince, restoreFile, rollback, snapshot, type Sn
  *
  * It writes on a raw document set only. A conforming pack is never rewritten
  * (specification decision 6); a changed pack's change and a written pack's
- * validation are VALIDATE's, which is not built; and `plan_docs`, which
+ * validation are VALIDATE's, after it (C-2¹⁴); and `plan_docs`, which
  * narrows discovery to part of the set, leaves the documents as they are,
  * since a pack is written from the whole set.
  */
@@ -234,11 +234,13 @@ export async function writeStage(deps: WriteStageDeps): Promise<PhaseOutcome> {
 }
 
 /**
- * What the phases after WRITE read, from the disk, whether WRITE wrote or
- * not: the documents DISCOVER's patterns find now, the decision log among
- * them where it exists, the stack markers, and the log's entries.
+ * What the planning phases read, from the disk, whether the phase handing it
+ * on wrote or not: the documents DISCOVER's patterns find now, the decision
+ * log among them where it exists, the stack markers, and the log's entries.
+ * VALIDATE hands it on, as the specification phase's last step (C-2¹⁴);
+ * WRITE's is what planning reads where VALIDATE is not in the pipeline.
  */
-function handoff(root: string, patterns: readonly string[], run: Json): PhaseOutcome {
+export function handoff(root: string, patterns: readonly string[], run: Json): PhaseOutcome {
   const log = readDecisionLog(root);
   const found = discoverDocs(root, patterns).docs.filter((doc) => doc !== DECISION_LOG_PATH);
   return {
@@ -254,14 +256,15 @@ function handoff(root: string, patterns: readonly string[], run: Json): PhaseOut
 }
 
 /**
- * C-2¹³: everything WRITE's outputs say, read from the disk alone, as a phase
- * that restarts the chain must: the documents and stack markers DISCOVER's
- * patterns find, the pack's contents and its record, whose kind decides
- * whether WRITE writes, and `plan_docs`. Never the prompt: once WRITE has
- * written, a new prompt writes nothing, and a key that named it would re-plan
- * every written pack on an upgrade.
+ * C-2¹³, C-2¹⁴: everything WRITE's and VALIDATE's outputs say, read from the
+ * disk alone, as a phase that restarts the chain must: the documents and stack
+ * markers DISCOVER's patterns find, the pack's contents and its record, whose
+ * kind decides whether either writes, and `plan_docs`. Never a prompt: once
+ * the pack is written or validated, a new prompt writes nothing, and a key
+ * that named it would re-plan every pack on an upgrade. Never VALIDATE's
+ * ceiling, which bounds a validation and never reopens a finished one.
  */
-function writeDigest(root: string, patterns: readonly string[], planDocs: readonly string[] | undefined): string {
+export function packDigest(root: string, patterns: readonly string[], planDocs: readonly string[] | undefined): string {
   const markers = discoverStack(root).stack.markers.map((m) => `marker:${m}`);
   return [
     listingDigest([...discoverDocs(root, patterns).docs, ...markers]),
@@ -279,11 +282,8 @@ function skipNote(skip: string): string {
     );
   }
   if (skip === "conforming") return "WRITE: the documents are a conforming pack, which is never rewritten (C-2⁶)";
-  if (skip === "written") return "WRITE: the documents are the pack WRITE wrote, which is never rewritten: nothing has validated it, and planning reads it as it stands (C-2¹³)";
-  return (
-    "WRITE: the documents are a changed pack, which is never rewritten: its change is VALIDATE's to check, and this build " +
-    "has no VALIDATE, so planning reads the pack as it stands (C-2¹³)"
-  );
+  if (skip === "written") return "WRITE: the documents are the pack WRITE wrote, which is never rewritten: VALIDATE, after it, validates it (C-2¹⁴)";
+  return "WRITE: the documents are a changed pack, which is never rewritten: VALIDATE, after it, re-validates its change (C-2¹⁴)";
 }
 
 export function writePhase(deps: PipelineDeps): PhaseHandler {
@@ -298,7 +298,7 @@ export function writePhase(deps: PipelineDeps): PhaseHandler {
     /* C-2¹³: the move re-runs DISCOVER on the next init, and must not re-plan; WRITE writes what its digest reads. */
     restartsChain: true,
     keyedAfterRun: true,
-    digest: () => writeDigest(deps.root, patterns, deps.planDocs),
+    digest: () => packDigest(deps.root, patterns, deps.planDocs),
     run: async (ctx) => {
       const pack = packOf(ctx);
       const narrowed = deps.planDocs !== undefined && deps.planDocs.length > 0;
@@ -329,8 +329,8 @@ export function writePhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
-/** C-2¹³: the stack markers the planning phases read, WRITE's, or DISCOVER's where WRITE is not in the pipeline. */
+/** C-2¹³, C-2¹⁴: the stack markers the planning phases read: VALIDATE's, or WRITE's or DISCOVER's where it is not in the pipeline. */
 export function planningMarkers(outputs: Readonly<Record<string, Record<string, unknown>>>): string[] {
-  const markers = outputs["WRITE"]?.["stack_markers"] ?? outputs["DISCOVER"]?.["stack_markers"];
+  const markers = outputs["VALIDATE"]?.["stack_markers"] ?? outputs["WRITE"]?.["stack_markers"] ?? outputs["DISCOVER"]?.["stack_markers"];
   return Array.isArray(markers) ? (markers as string[]) : [];
 }

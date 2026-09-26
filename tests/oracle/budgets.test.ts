@@ -10,7 +10,7 @@ import {
   countReviewFix,
   slotAvailable,
 } from "../../src/kernel/budgets.js";
-import { CEILINGS } from "../../src/schemas/budgets.js";
+import { CEILINGS, budgetsSchema } from "../../src/schemas/budgets.js";
 import { codeOnly } from "../../scripts/check-rules.js";
 import { ZERO_COUNTERS } from "../../src/kernel/generations.js";
 
@@ -145,10 +145,19 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     ]);
   });
 
-  it("the X-1 table has exactly seventeen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
-    expect(ALL_CEILING_KEYS).toHaveLength(17);
+  /** PRDR-284: `spec_validation_rounds` is the eighteenth, VALIDATE's ceiling (C-2⁶). */
+  it("the X-1 table has exactly eighteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
+    expect(ALL_CEILING_KEYS).toHaveLength(18);
     expect(CEILINGS.gate_timeout_ms.default).toBe(900_000);
     expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
+  });
+
+  /** PRDR-284: a ceiling of no rounds would validate nothing and call the pack validated, and a fraction of a round runs nothing. */
+  it("takes a rounds ceiling of one or more whole rounds, and refuses zero or a fraction (C-2¹⁴)", () => {
+    expect(budgetsSchema.parse({}).spec_validation_rounds).toBe(8);
+    expect(budgetsSchema.parse({ spec_validation_rounds: 1 }).spec_validation_rounds).toBe(1);
+    expect(budgetsSchema.safeParse({ spec_validation_rounds: 0 }).success).toBe(false);
+    expect(budgetsSchema.safeParse({ spec_validation_rounds: 1.5 }).success).toBe(false);
   });
 
   it("the run-scoped ceilings are the total and the breaker, and EVERY ceiling has a default (X-1′)", () => {

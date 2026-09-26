@@ -321,7 +321,8 @@ describe("PRDR-282: a pack's decision log is the founder's record already (C-2โ
     expect(readProgressMark(root).spent, "a completed phase is a progress mark, sessions or none (C-2โถ)").not.toBeNull();
   });
 
-  it("decides nothing on a changed pack either, and says its change is VALIDATE's, which is not built", async () => {
+  /** PRDR-284: VALIDATE is built, and re-validates the change. */
+  it("decides nothing on a changed pack either, and says VALIDATE re-validates its change", async () => {
     const root = packRepo();
     const prd = readdirSync(path.join(root, "docs", "prd")).find((f) => f.endsWith(".md") && f !== "index.md") ?? "";
     writeFileSync(path.join(root, "docs", "prd", prd), `${readFileSync(path.join(root, "docs", "prd", prd), "utf8")}\n`);
@@ -330,7 +331,7 @@ describe("PRDR-282: a pack's decision log is the founder's record already (C-2โ
     await initThrough(root, stub, { notes });
     expect(stub.inputs).toEqual([]);
     expect(decideOutputs(root)["reason"]).toBe("changed");
-    expect(notes.join("\n")).toContain("DECIDE: the documents are a changed pack, whose change is VALIDATE's to check, and this build has no VALIDATE");
+    expect(notes.join("\n")).toContain("DECIDE: the documents are a changed pack, whose change VALIDATE re-validates, so nothing is decided (C-2ยนโด)");
   });
 });
 

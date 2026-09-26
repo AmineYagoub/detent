@@ -10,12 +10,14 @@ import type { Json } from "./decide-fixture.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
 import { RAW, WROTE, initThroughWrite, packFor, read, write, writeOutputs, writesPack, type Write } from "./write-fixture.js";
+import { clean } from "./validate-fixture.js";
 
 /**
  * PRDR-283 — what the phases after WRITE read, and what the next `init` does
  * with a pack WRITE wrote (C-2⁶, C-2¹³). The whole pipeline runs, with
  * scripted sessions, in an existing project whose lone test script binds
- * without a question.
+ * without a question. PRDR-284: VALIDATE runs after WRITE, its reviewers
+ * finding nothing, so the pack planning reads is one VALIDATE validated.
  */
 
 const PROJECT = { ...LONE_CANDIDATE, ...RAW };
@@ -43,7 +45,7 @@ async function init(root: string, stub: Write, notes: string[] = []): Promise<Aw
   const result = await initThroughWrite(root, stub, {
     all: true,
     notes,
-    script: { planner },
+    script: { planner, spec_review: clean().stage },
     backend: (script) => (seen.backend.current = new MockBackend(script)),
   });
   return { ...result, ...seen };
@@ -63,29 +65,35 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     expect(drafted?.["docs"]).toEqual(["docs/prd/01-lending.md", DECISION_LOG_PATH]);
   });
 
+  /** PRDR-284: VALIDATE's record moved WRITE's key, so WRITE runs again, writing nothing; VALIDATE's key stands, and the planning chains from it. */
   it("re-plans nothing on the next init, though DISCOVER finds the pack where the originals were", async () => {
     const root = repo(PROJECT);
     await init(root, writesPack());
     const notes: string[] = [];
     const again = await init(root, writesPack(), notes);
-    expect(again.executed).toEqual(["DISCOVER", "AUDIT", "DECIDE"]);
+    expect(again.executed).toEqual(["DISCOVER", "AUDIT", "DECIDE", "WRITE"]);
     expect(again.reachedPhase, "PRESENT asks for the approval the first run deferred").toBe("PRESENT");
-    expect(again.reused).toEqual(expect.arrayContaining(["WRITE", "ANALYZE", "DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"]));
+    expect(again.reused).toEqual(expect.arrayContaining(["VALIDATE", "ANALYZE", "DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"]));
     expect(sessions(again), "no session of any role").toEqual([]);
     const said = notes.join("\n");
-    expect(said).toMatch(/the documents are the pack WRITE wrote on \d{4}-\d{2}-\d{2}, which nothing has validated/u);
-    expect(said).toContain("AUDIT: the documents are the pack WRITE wrote from documents AUDIT already read, so nothing is audited again");
-    expect(said).toContain("DECIDE: the documents are the pack WRITE wrote from what DECIDE decided, so nothing is decided again");
+    expect(said).toMatch(/the documents are a conforming pack: they match their conformance record of \d{4}-\d{2}-\d{2}/u);
+    expect(said).toContain("AUDIT: the documents are a conforming pack");
+    expect(said).toContain("DECIDE: the documents are a conforming pack");
+    expect(said).toContain("WRITE: the documents are a conforming pack, which is never rewritten (C-2⁶)");
+    const third = await init(root, writesPack());
+    expect(third.executed, "and the init after that runs nothing but PRESENT's ask").toEqual([]);
   });
 
-  it("re-runs WRITE without a session for an edit to the pack, and replays the planning phases from it", async () => {
+  /** PRDR-284: VALIDATE re-validates the edit, and the planning replays from it. */
+  it("re-runs WRITE without a session for an edit to the pack, and replays the planning phases from VALIDATE", async () => {
     const root = repo(PROJECT);
     await init(root, writesPack());
     await init(root, writesPack());
-    appendFileSync(path.join(root, "docs", "prd", "01-lending.md"), "- **LND-F-004** [M1] A loan MUST name its tool (X-1).\n");
+    appendFileSync(path.join(root, "docs", "prd", "01-lending.md"), "- **LND-AC-04** [M1] Given a loan, when it starts, then its tool is named (LND-F-001).\n");
     const edited = await init(root, writesPack());
-    expect(edited.executed).toEqual(expect.arrayContaining(["WRITE", "ANALYZE", "SLICE", "PLAN"]));
-    expect(sessions(edited).filter((r) => r === "spec_write"), "WRITE writes nothing over a pack").toEqual([]);
+    expect(edited.executed).toEqual(expect.arrayContaining(["WRITE", "VALIDATE", "ANALYZE", "SLICE", "PLAN"]));
+    expect(sessions(edited).filter((r) => r === "spec_write"), "WRITE writes nothing over a pack, and VALIDATE's reviewers found nothing to fix").toEqual([]);
+    expect(sessions(edited)).toContain("spec_review");
     expect(edited.replayedFrom).toBe("DISCOVER");
   });
 
@@ -104,7 +112,7 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     writeTicket(root, { ...readTicket(root, "t-s01-001"), state: "IN_PROGRESS" });
     const again = await init(root, writesPack());
     expect(again.messages.join(" ")).not.toContain("re-planning refused");
-    expect(again.executed).toEqual(["DISCOVER", "AUDIT", "DECIDE"]);
+    expect(again.executed, "WRITE runs again and is not asked, since VALIDATE restarts the chain after it (PRDR-284)").toEqual(["DISCOVER", "AUDIT", "DECIDE", "WRITE"]);
     expect(again.reachedPhase).toBe("PRESENT");
   });
 

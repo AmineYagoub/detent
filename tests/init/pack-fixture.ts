@@ -165,13 +165,29 @@ export function packRepo(files: Readonly<Record<string, string>> = CONFORMING_PA
   return root;
 }
 
-/** Two validation rounds: the first left a major, the second only a minor it did not fix. */
+/**
+ * Two validation rounds: the first fixed its three findings, and the second
+ * left its one minor open, declined (PRDR-284 gave each open finding its id
+ * and why it is open, and each round the documents its fixes changed).
+ */
 export const ORACLE_ROUNDS = [
-  { round: 1, counts: { blocker: 0, major: 1, minor: 2 }, open: [] },
+  { round: 1, counts: { blocker: 0, major: 1, minor: 2 }, open: [], changed: ["docs/prd/01-catalog.md"] },
   {
     round: 2,
     counts: { blocker: 0, major: 0, minor: 1 },
-    open: [{ severity: "minor", file: "docs/prd/01-catalog.md", line: 8, quote: "a legacy flag", fix: "Drop the withdrawn requirement's text." }],
+    open: [
+      {
+        id: "R2-1",
+        severity: "minor",
+        file: "docs/prd/01-catalog.md",
+        line: 8,
+        quote: "a legacy flag",
+        fix: "Drop the withdrawn requirement's text.",
+        left: "declined",
+        reason: "A withdrawn requirement keeps its text, so its id is not reused.",
+      },
+    ],
+    changed: [],
   },
 ] as const;
 

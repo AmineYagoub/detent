@@ -487,9 +487,13 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     );
     /**
      * X-1⁵ (PRDR-191): the slice is on disk, so the run has completed a unit of
-     * work and buys its next budget. This is the ONLY thing that resets the
-     * no-progress breaker, and putting it after the checkpoint write rather
-     * than before means a slice that failed to persist does not count.
+     * work and buys its next budget. Putting it after the checkpoint write
+     * rather than before means a slice that failed to persist does not count.
+     *
+     * It is not the only mark that resets the no-progress breaker, as this
+     * block said: a ticket reaching DONE is one, and so are each completed
+     * specification phase, each claim brief AUDIT writes (C-2¹¹) and each
+     * completed VALIDATE round (C-2⁶, PRDR-284).
      */
     noteUnitComplete(deps.root);
     if (revision !== null) revisions.push(revision);

@@ -19,7 +19,8 @@ import type { InitResult, PhaseHandler } from "./machine.js";
  * change what they read, as DECIDE does when it writes the decision log, and
  * the scan could not see that coming. A phase before one that restarts the
  * chain is not asked, since its re-run replays nothing past that phase
- * (C-2¹³, PRDR-283).
+ * (C-2¹³, PRDR-283): WRITE's re-run is not, since VALIDATE restarts the chain
+ * after it, and VALIDATE's is (C-2¹⁴, PRDR-284).
  */
 
 /**

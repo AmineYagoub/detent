@@ -35,10 +35,11 @@ always safe: every phase checkpoints, and C-8 replays exactly what changed —
 editing a planning document replays ANALYZE-forward; editing nothing replays
 nothing.
 
-## The eleven phases (C-4.1, in order)
+## The twelve phases (C-4.1, in order)
 
-`INIT_FS` → `DISCOVER` → `AUDIT` → `DECIDE` → `WRITE` → `ANALYZE` →
-`DETERMINE_VERIFICATION` → `SLICE` → `PLAN` → `PREPARE_AGENTS` → `PRESENT`
+`INIT_FS` → `DISCOVER` → `AUDIT` → `DECIDE` → `WRITE` → `VALIDATE` →
+`ANALYZE` → `DETERMINE_VERIFICATION` → `SLICE` → `PLAN` → `PREPARE_AGENTS` →
+`PRESENT`
 
 `AUDIT` (C-2⁶) reads the documents before anything plans from them: passages
 that contradict each other, gaps, and, in an existing project, what the
@@ -70,10 +71,20 @@ pattern looks, and deletes nothing; a README or a runbook stays where it is,
 as context. It never stops for a human. The pack checker checks what it
 wrote, and its session is relaunched once on a blocking finding; the result,
 red or green, goes into `docs/conformance.json`, which says the pack is not
-validated: nothing reviews the pack yet, so the planning phases read it as
-`WRITE` left it. A conforming
-pack, a changed one, a pack `WRITE` already wrote, and documents `plan_docs`
-narrows are never rewritten.
+validated. A conforming pack, a changed one, a pack `WRITE` already wrote, and
+documents `plan_docs` narrows are never rewritten.
+
+`VALIDATE` (C-2¹⁴) validates the pack before anything plans from it. A red
+pack checker is fixed first. Each round then runs one reviewer per area of the
+pack, the areas its index names, and one writer applies what they found, each
+finding with its severity, its `file:line`, a quote and the exact fix; the
+next round verifies those fixes and hunts what they introduced. A round with
+no blocker and no major ends the loop, its minor findings fixed.
+`spec_validation_rounds` (default 8) is the ceiling: there, the majors left
+open go to `PRESENT` as risks and planning goes on, and a blocker stops `init`
+for the human to settle. Every round is recorded in `docs/conformance.json`, so
+re-invoking carries on from the last. A conforming pack runs the checker
+alone; an edited one is re-validated for the edit and whatever cites it.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first — and `PLAN` then plans every slice in turn, one
@@ -95,13 +106,19 @@ decision yourself.
 
 1. **`AWAIT_DOCS`** — raised at `DISCOVER` when no planning documents exist
    (C-2). Channel: the human supplies or names the documents; re-invoke.
-2. **`AWAIT_INFO`** — raised at `DECIDE` or at `PRESENT`, for questions only
-   the human can answer. At `DECIDE` (C-3⁗), a human on a terminal chose to
-   answer later: the message lists every question with its options, the
-   recommended one first, and nothing was written to the decision log.
+2. **`AWAIT_INFO`** — raised at `DECIDE`, at `VALIDATE` or at `PRESENT`, for
+   what only the human can settle. At `DECIDE` (C-3⁗), a human on a terminal
+   chose to answer later: the message lists every question with its options,
+   the recommended one first, and nothing was written to the decision log.
    Channel: the human answers by re-running `detent init` on a terminal, or by
    writing each answer as a row under `## Decisions` in
-   `docs/founder-decisions.md`; then re-invoke. At `PRESENT` (C-3′), the whole
+   `docs/founder-decisions.md`; then re-invoke. At `VALIDATE` (C-2¹⁴), the
+   review rounds reached their ceiling with a blocker left open, or the pack
+   checker stayed red: the message lists each one at its `file:line`. Channel:
+   the human settles each in the pack, or, for a blocker, raises
+   `budgets.spec_validation_rounds` in `.detent/config.json`; then re-invoke.
+   `VALIDATE` runs the checker again, and carries on from the round it stopped
+   at. At `PRESENT` (C-3′), the whole
    plan is written first, and every question planning could not answer — from
    analysis, slicing, and each slice's drafting — is presented ONCE with it,
    each with the assumption the plan proceeds on. It becomes `AWAIT_INFO` only

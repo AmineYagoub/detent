@@ -449,7 +449,8 @@ describe("PRDR-281: a pack is not audited (specification decision 6, C-2⁷)", (
     expect(readProgressMark(root).spent, "a completed phase is a progress mark, sessions or none (C-2⁶)").not.toBeNull();
   });
 
-  it("does not audit a changed pack as a raw PRD, and says that nothing re-validates it in this build", async () => {
+  /** PRDR-284: VALIDATE is built, and re-validates the change. */
+  it("does not audit a changed pack as a raw PRD, and says VALIDATE re-validates its change", async () => {
     const root = packRepo();
     const prd = readdirSync(path.join(root, "docs", "prd")).find((f) => f.endsWith(".md") && f !== "index.md") ?? "";
     writeFileSync(path.join(root, "docs", "prd", prd), `${readFileSync(path.join(root, "docs", "prd", prd), "utf8")}\n`);
@@ -458,6 +459,6 @@ describe("PRDR-281: a pack is not audited (specification decision 6, C-2⁷)", (
     await initThroughAudit(root, stub, notes);
     expect(stub.specs).toEqual([]);
     expect(auditOutputs(root)).toEqual({ ran: false, reason: "changed" });
-    expect(notes.join("\n")).toMatch(/changed pack.*no VALIDATE.*unaudited/su);
+    expect(notes.join("\n")).toContain("AUDIT: the documents are a changed pack, which is not audited as a raw PRD (C-2⁷): VALIDATE re-validates its change (C-2¹⁴)");
   });
 });

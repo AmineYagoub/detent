@@ -9,11 +9,11 @@ import { commitRecord, oracleRecord, packRepo } from "./pack-fixture.js";
  * PRDR-283 — a pack WRITE wrote and nothing has validated (C-2¹³).
  *
  * WRITE moves the originals out of discovery and writes the pack in their
- * place, and until VALIDATE writes its verdict, nothing said the new pack was
+ * place, and before VALIDATE writes its verdict, nothing said the new pack was
  * one: with no record, the next `init` found a raw document set in the pack's
  * shape and ran AUDIT, DECIDE and WRITE over WRITE's own output. WRITE writes
  * the record, saying it is not validated, and DISCOVER calls such a pack
- * written.
+ * written. PRDR-284: so does a record VALIDATE wrote when it stopped.
  */
 
 describe("PRDR-283: the record says whether the pack was validated", () => {
@@ -55,7 +55,7 @@ describe("PRDR-283: DISCOVER calls a pack nothing has validated written", () => 
 
   it("says so at DISCOVER: written by WRITE, not validated, and what the checker blocks on", () => {
     expect(packNote({ kind: "written", date: "2026-09-26", blocking: 0 })).toBe(
-      "the documents are the pack WRITE wrote on 2026-09-26, which nothing has validated: VALIDATE is not built, so the pack goes to planning as WRITE left it (C-2¹³)",
+      "the documents are the pack WRITE wrote, which VALIDATE has not finished on, as its record of 2026-09-26 says: VALIDATE validates it before anything plans from it (C-2¹⁴)",
     );
     expect(packNote({ kind: "written", date: "2026-09-26", blocking: 2 })).toContain("; the pack checker finds 2 blocking findings in it");
   });

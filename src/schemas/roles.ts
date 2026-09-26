@@ -8,9 +8,10 @@ import type { State } from "./states.js";
  * F-3 with a migration — never an editorial change. A test pins these
  * strings for exactly that reason.
  *
- * `audit` (PRDR-281) is the first of S-1‴'s four roles and `spec_write`
- * (PRDR-282) the second. Both join the 3.1.1 line's one event (F-3″): the
- * v1→v2 migration writes their routing into an existing config.
+ * `audit` (PRDR-281) is the first of S-1‴'s four roles, `spec_write`
+ * (PRDR-282) the second and `spec_review` (PRDR-284) the third. All three
+ * join the 3.1.1 line's one event (F-3″): the v1→v2 migration writes their
+ * routing into an existing config.
  *
  * `blind_fix` is the draft.5 rename of the oracle's `fix` (PRDR-044): the
  * role's defining property is that it acts on the failure output alone, and
@@ -27,6 +28,7 @@ export const ROLE_IDS = [
   "review",
   "audit",
   "spec_write",
+  "spec_review",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
@@ -69,6 +71,7 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
   /** S-5⁵ (PRDR-278): every session of the specification phase runs on Opus 5.5 at `max` (specification decision 14). */
   audit: "claude-opus-5-5",
   spec_write: "claude-opus-5-5",
+  spec_review: "claude-opus-5-5",
 };
 
 /**
@@ -97,6 +100,7 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
   research: "xhigh",
   audit: "max",
   spec_write: "max",
+  spec_review: "max",
 };
 
 /**
@@ -105,9 +109,12 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
  * artifact — plan mode blocks the write the A-contract demands and survives
  * only for artifact-less sessions (doctor's smoke).
  *
- * `spec_write` is not in it: S-1‴ gives it a surface to write, the decision
- * log, the pack's paths and `archive/`. DECIDE, the one task of it built
- * (PRDR-282), writes its artifact alone, and code writes the log from it.
+ * `spec_write` is not in it: S-1‴ gives it the pack's paths to write, the
+ * decision log among them, for WRITE's and VALIDATE's tasks (PRDR-283,
+ * PRDR-284). DECIDE's task writes its artifact alone, and code writes the log
+ * from it. `spec_review` is in it: VALIDATE's reviewers read and write their
+ * artifact alone, since the scratch directory S-1‴ gives them for a
+ * simulation is not built.
  */
 export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "planner",
@@ -115,6 +122,7 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "research",
   "review",
   "audit",
+  "spec_review",
 ]);
 
 /**
@@ -128,9 +136,9 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
  * not change what a read-only role WRITES", which was false for `diagnose`.
  * `review` and `research` grant only their artifact, and are narrowed.
  *
- * `planner`, `audit` and `spec_write` are absent because they are init roles
- * and never reach this policy; `src/init/session.ts` builds their own
- * artifact-only surface.
+ * `planner`, `audit`, `spec_write` and `spec_review` are absent because they
+ * are init roles and never reach this policy; `src/init/session.ts` builds
+ * their own surface.
  */
 export const ARTIFACT_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["research", "review"]);
 

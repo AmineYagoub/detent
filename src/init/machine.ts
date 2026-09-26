@@ -45,9 +45,14 @@ import { inFlightTickets, replanRefusal, replansAt, wouldReplan } from "./replan
  * WRITE, C-2¹³'s (PRDR-283), restarts the chain (`restartsChain`). It moves
  * the originals it rewrote out of discovery, so the next `init` re-runs
  * DISCOVER, and the phases after WRITE chain from WRITE's key, which names the
- * pack, rather than from DISCOVER's: the move re-plans nothing, and an edit to
- * the pack re-plans from WRITE. It writes what its digest reads, so it is keyed
- * after it runs too.
+ * pack, rather than from DISCOVER's: the move re-plans nothing. It writes what
+ * its digest reads, so it is keyed after it runs too.
+ *
+ * VALIDATE, C-2¹⁴'s (PRDR-284), directly after it, restarts the chain as
+ * well, keyed after it runs by the same reads. Its fixes and its record move
+ * WRITE's key and DISCOVER's, so the next `init` re-runs both, and the planning
+ * phases chain from VALIDATE's key, which names the pack as it validated it:
+ * an edit to the pack re-plans from VALIDATE, and WRITE's key reaches nothing.
  */
 
 export type PhaseOutcome =
@@ -105,9 +110,10 @@ export interface PhaseHandler {
    * chain passes that key on. Keyed before, the phase's own write would move
    * its digest and re-run it on the next `init`.
    *
-   * DECIDE is the one: it writes the decision log, and an edit to the log is
-   * what must re-run it. Its digest must not read its own outputs: the lookup
-   * takes it before they exist.
+   * DECIDE writes the decision log, and an edit to the log is what must re-run
+   * it; WRITE and VALIDATE write the pack and its record (C-2¹³, C-2¹⁴). A
+   * digest must not read the phase's own outputs: the lookup takes it before
+   * they exist.
    */
   readonly keyedAfterRun?: boolean;
   /**
@@ -116,14 +122,15 @@ export interface PhaseHandler {
    * and the phases after it chain from its key, so a re-run before it that
    * leaves its key standing re-plans nothing.
    *
-   * WRITE is the one. It moves the originals it rewrote out of every discovery
-   * glob, so the next `init` finds the pack where they were, and DISCOVER
-   * re-runs; on the chain, that re-run replayed every phase after it and
-   * re-planned a product WRITE's own move had not changed. Its digest must
-   * read the disk alone and name everything its outputs carry, since the
-   * in-flight scan takes it after a miss before it, when no earlier phase's
-   * outputs can be read (P9). Both forced replays, `--replan`'s and a stale
-   * approval's, start after it, so it never ends one.
+   * WRITE and VALIDATE are the two. WRITE moves the originals it rewrote out
+   * of every discovery glob, so the next `init` finds the pack where they
+   * were, and DISCOVER re-runs; on the chain, that re-run replayed every phase
+   * after it and re-planned a product WRITE's own move had not changed.
+   * VALIDATE's fixes and record re-run DISCOVER and WRITE the same way (C-2¹⁴).
+   * Each digest must read the disk alone and name everything its outputs
+   * carry, since the in-flight scan takes it after a miss before it, when no
+   * earlier phase's outputs can be read (P9). Both forced replays, `--replan`'s
+   * and a stale approval's, start after them, so neither ends one.
    */
   readonly restartsChain?: boolean;
   run(ctx: InitContext): Promise<PhaseOutcome>;
@@ -131,10 +138,11 @@ export interface PhaseHandler {
 
 /**
  * The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans
- * whose own digests already catch new files. AUDIT, DECIDE and WRITE, between
- * DISCOVER and this phase, are not forced either: C-8⁵ keeps `--replan` out of
- * the specification phase, and each one's key covers everything it reads, so
- * it re-runs when that moves and only then (C-2¹¹, C-2¹², C-2¹³).
+ * whose own digests already catch new files. AUDIT, DECIDE, WRITE and
+ * VALIDATE, between DISCOVER and this phase, are not forced either: C-8⁵ keeps
+ * `--replan` out of the specification phase, and each one's key covers
+ * everything it reads, so it re-runs when that moves and only then (C-2¹¹,
+ * C-2¹², C-2¹³, C-2¹⁴).
  */
 const REPLAN_FROM: InitPhase = "ANALYZE";
 

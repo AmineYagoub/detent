@@ -123,9 +123,16 @@ export function write(answer: (attempt: number, inputs: Json, root: string) => W
 /** The pack, and the artifact that archives both originals and keeps the README. */
 export const writesPack = (): Write => write((_, inputs) => ({ files: packFor(inputs), artifact: WROTE() }));
 
-/** One `spec_write` role, two tasks: DECIDE's session and WRITE's, told apart by `task`. */
-export function specWrite(decideStub: Decide, writeStub: Write): StageFn {
-  return (spec) => ((inputsOf(spec) as Json)["task"] === "write" ? writeStub.stage(spec) : decideStub.stage(spec));
+/** One `spec_write` role, three tasks: DECIDE's session, WRITE's and VALIDATE's writer, told apart by `task`. */
+export function specWrite(decideStub: Decide, writeStub: Write, fixStub?: StageFn): StageFn {
+  return (spec) => {
+    const task = (inputsOf(spec) as Json)["task"];
+    if (task === "fix") {
+      if (fixStub === undefined) throw new Error("VALIDATE's writer ran, and this test scripted none");
+      return fixStub(spec);
+    }
+    return task === "write" ? writeStub.stage(spec) : decideStub.stage(spec);
+  };
 }
 
 /** The DECIDE fixture's AUDIT, reading every document it is given, the README included. */
@@ -136,15 +143,19 @@ const THROUGH_WRITE = new Set(["INIT_FS", "DISCOVER", "AUDIT", "DECIDE", "WRITE"
 export interface Run {
   readonly notes?: string[];
   readonly all?: boolean;
+  /** The phases to run, where not `all` and not through WRITE. */
+  readonly through?: ReadonlySet<string>;
   readonly decideStub?: Decide;
+  /** VALIDATE's writer, the `fix` task of `spec_write`. */
+  readonly fixStub?: StageFn;
   readonly more?: Partial<PipelineDeps>;
   readonly script?: Readonly<Record<string, StageFn>>;
   readonly backend?: (script: Record<string, StageFn>) => MockBackend;
 }
 
-/** The real pipeline, stopped after WRITE unless `all`. */
+/** The real pipeline, stopped after WRITE unless `all` or `through` says otherwise. */
 export async function initThroughWrite(root: string, stub: Write, opts: Run = {}) {
-  const script = { audit: auditReads, spec_write: specWrite(opts.decideStub ?? decide((_, i) => SORTED(i)), stub), ...opts.script };
+  const script = { audit: auditReads, spec_write: specWrite(opts.decideStub ?? decide((_, i) => SORTED(i)), stub, opts.fixStub), ...opts.script };
   const handlers = buildPipeline({
     root,
     backend: opts.backend?.(script) ?? new MockBackend(script),
@@ -152,7 +163,7 @@ export async function initThroughWrite(root: string, stub: Write, opts: Run = {}
     budgets: BUDGETS,
     note: (t) => opts.notes?.push(t),
     ...opts.more,
-  }).filter((h) => opts.all === true || THROUGH_WRITE.has(h.phase));
+  }).filter((h) => opts.all === true || (opts.through ?? THROUGH_WRITE).has(h.phase));
   return await runInit(root, handlers);
 }
 

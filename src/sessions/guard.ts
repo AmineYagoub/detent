@@ -369,7 +369,7 @@ function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p:
  */
 
 /** S-1's read-only roles have no stop gate: they produce artifacts, not diffs. */
-export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit"]);
+export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit", "spec_review"]);
 
 /**
  * S-1‴ (PRDR-283): roles that write documents and not code, which the
@@ -443,12 +443,13 @@ export function researchTools(docsDomains: readonly string[]): string[] {
  * pinned versions included, and reaches the web under the research role's
  * network rules, so it gets the research role's surface.
  *
- * S-1‴ (PRDR-282, PRDR-283): `spec_write` is not a read-only role, but what
- * it writes is its task's, so the role's tools are the read tools. DECIDE's
- * task writes its artifact alone, with the one artifact rule every init
- * session carries. WRITE's declares the pack's paths as its surface and gets
- * Edit and Write for them, which the hook confines (`InitSessionRequest`'s
- * `surface`). `archive/` is in neither: code moves the originals (C-2¹³).
+ * S-1‴ (PRDR-282, PRDR-283, PRDR-284): `spec_write` is not a read-only role,
+ * but what it writes is its task's, so the role's tools are the read tools.
+ * DECIDE's task writes its artifact alone, with the one artifact rule every
+ * init session carries. WRITE's and VALIDATE's fixes declare the pack's paths
+ * as their surface and get Edit and Write for them, which the hook confines
+ * (`InitSessionRequest`'s `surface`). `archive/` is in neither: code moves the
+ * originals (C-2¹³). `spec_review`, VALIDATE's reviewers, is read-only.
  */
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
   if (role === "research" || role === "audit") return researchTools(docsDomains);

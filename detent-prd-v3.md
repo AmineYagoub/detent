@@ -441,6 +441,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   writes the log.*
   *Amended by C-2¹³ (PRDR-283): WRITE's `spec_write` session declares the pack's paths as its
   surface, beside its artifact; `archive/` is code's to write.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE's reviewers keep their one artifact, and its writer
+  declares the pack's paths as WRITE's session does.*
 
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
@@ -952,6 +954,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   is about to run, since a standalone phase can change what planning reads.*
   *Amended by C-2¹³ (PRDR-283): the scan goes past a miss to a phase that restarts the chain, and
   the second ask is not made before the phases ahead of that phase.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE restarts the chain after WRITE, so the second ask is
+  made before VALIDATE runs and not before WRITE.*
 
 - **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
   whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
@@ -971,6 +975,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   runs. DECIDE does, and stands outside the chain beside AUDIT.*
   *Amended by C-2¹³ (PRDR-283): a phase may restart the chain: keyed by its own digest, looked up
   while earlier phases replay, and the phases after it chain from its key. WRITE does.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE restarts the chain too, directly after WRITE, whose key
+  then reaches nothing.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1647,6 +1653,9 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹³ (PRDR-283): WRITE is built, and restarts C-8's chain. Until VALIDATE is built,
   WRITE hands the pack to the phases after it, and a later `detent init` finds it at DISCOVER as
   a pack WRITE wrote, not a conforming one.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built, and hands the pack to the phases after it.
+  Its simulating reviewer is not: no reviewer runs a simulation until PRDR-285 builds the
+  sandbox. A red checker its writer cannot make green stops `init` at VALIDATE too.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1694,6 +1703,9 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹³ (PRDR-283): the record says whether VALIDATE finished on the pack
   (`validated`), and WRITE writes it not validated. Until VALIDATE is built, a red checker blocks
   nothing.*
+  *Amended by C-2¹⁴ (PRDR-284): a red checker blocks every phase after VALIDATE. A change's
+  re-validation also reviews what the last validation left open, and reads a changed decision
+  log or facts file as reaching every document that cites an entry of it.*
 
 - **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
   one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
@@ -1727,6 +1739,8 @@ the code does what the rules it amends describe, and each of those rules points 
     inputs changed.
   *Amended by C-2¹² (PRDR-282): DECIDE is built. Every slice reads the decision log until C-2⁸
   keys slices by their requirement ids, so for now a veto re-plans every slice.*
+  *Amended by C-2¹⁴ (PRDR-284): AWAIT_INFO at VALIDATE is built, for a blocker left at the
+  ceiling and for a pack checker VALIDATE's writer cannot make green.*
 
 - **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
   named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
@@ -1750,6 +1764,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹² (PRDR-282): until PRDR-290 removes ANALYZE, the stack entry reaches
   DETERMINE_VERIFICATION and the bootstrap through ANALYZE, which writes it over the stack its
   session chose.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE hands the checker's parse to the phases after it, and
+  nothing reads it until PRDR-290: SLICE and PLAN still receive ANALYZE's analysis.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -1878,6 +1894,8 @@ the code does what the rules it amends describe, and each of those rules points 
     needs `--accept-mixed-builds` beside it, or the approval is refused. The approval record
     lists the builds. At least four builds assembled ksar-cloud's plan, and one slice of it came
     from an experiment run against the live tree.
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE's residual majors are shown, as risks after the
+  defaults.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -1955,6 +1973,9 @@ the code does what the rules it amends describe, and each of those rules points 
   surface is WRITE's to build (PRDR-283).*
   *Amended by C-2¹³ (PRDR-283): the surface is built for WRITE's session, less `archive/`, which
   code writes. `spec_write` is not stop-gated by the product's gate.*
+  *Amended by C-2¹⁴ (PRDR-284): `spec_review` is built, read-only, and the migration writes its
+  routing. Its scratch directory and sandbox are not, so simulation is off and VALIDATE says so
+  (PRDR-285). VALIDATE's writer is `spec_write` over the pack's paths.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2067,6 +2088,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹¹ (PRDR-281): AUDIT routes on the classification.*
   *Amended by C-2¹³ (PRDR-283): a pack whose record is not validated is `written`, a fourth
   kind, and DECIDE and WRITE route on the classification too.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE routes on the classification, which it takes again when
+  it runs, and a written pack's record may hold the rounds of a validation that stopped.*
 
 - **C-2¹⁰ (3.1.1, PRDR-280).** The checker is built, in `src/init/pack-check.ts`: a TypeScript port
   of ksarjs's `check_pack.py`, generalized to C-2⁹'s grammar. This settles what C-2⁷ left to its
@@ -2115,6 +2138,8 @@ the code does what the rules it amends describe, and each of those rules points 
     criterion tests, 2 requirements that only say MAY, and a decision with no reason. The
     committed fixture, `tests/fixtures/pack/`, is a pack in ksarjs's shapes with content of its
     own, since ksarjs's pack is unpublished.
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built. It runs the checker first, and a red result
+  its writer cannot fix blocks every phase after it.*
 
 - **C-2¹¹ (3.1.1, PRDR-281).** AUDIT is built, in `src/init/audit.ts` and the modules beside it,
   directly after DISCOVER. This settles what C-2⁶ left to AUDIT's ticket, and amends C-8's chain.
@@ -2176,6 +2201,8 @@ the code does what the rules it amends describe, and each of those rules points 
     written.
   *Amended by C-2¹² (PRDR-282): DECIDE is built and reads the checkpoint. DISCOVER no longer lists
   the decision log, and DECIDE is a second standalone phase.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE re-validates a changed pack's change, so it no longer
+  reaches planning unchecked.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -2255,6 +2282,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹³ (PRDR-283): WRITE is built. On a changed pack DECIDE says the change is
   VALIDATE's to check and that this build has no VALIDATE, and the surface S-1‴ declares for
   `spec_write` is built for WRITE's session, less `archive/`.*
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built: `INTERRUPT_PHASE` lists it for AWAIT_INFO, and
+  DECIDE's note on a changed pack says VALIDATE re-validates the change.*
 
 - **C-2¹³ (3.1.1, PRDR-283).** WRITE is built, in `src/init/write.ts` and the modules beside it,
   directly after DECIDE. This settles what C-2⁶ and C-2⁹ left to WRITE's ticket, and amends
@@ -2336,6 +2365,122 @@ the code does what the rules it amends describe, and each of those rules points 
     PRDR-290). That the pack states nothing unbuilt in the present indicative is the session's
     instruction and the checker's heuristic, which reports and never blocks (C-2¹⁰); MUST and
     SHOULD are the schema's, which blocks.
+  *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built. It hands the pack to planning in WRITE's
+  place, restarts the chain after WRITE, whose key then reaches nothing, and a red checker it
+  cannot make green blocks planning.*
+
+- **C-2¹⁴ (3.1.1, PRDR-284).** VALIDATE is built, in `src/init/validate.ts` and the modules
+  beside it, directly after WRITE. This settles what C-2⁶ and C-2⁷ left to VALIDATE's ticket, and
+  amends C-2⁶'s simulating reviewer and handoff, C-2⁷'s re-validation and red checker, C-2¹³'s
+  chain, C-3⁗'s AWAIT_INFO and S-1‴'s `spec_review`.
+  - **When it runs.** VALIDATE classifies the pack again when it runs, since WRITE, before it,
+    may have written one. With no record, where WRITE wrote no pack, nothing is validated and
+    planning reads the documents as they are. A conforming pack runs no session: DISCOVER's
+    classification already ran the checker on it (specification decision 6). A written pack is
+    validated whole, or carried on from the rounds a stopped validation left in its record, and a
+    changed pack is re-validated for its change. `plan_docs` narrows what planning reads, never
+    what VALIDATE reviews.
+  - **The checker first.** When the checker blocks on anything, a writer session is given its
+    findings, each by an id with its rule, place, text and message, and fixes them before any
+    round, checked as a round's writer is (below). A checker still red after the writer's second
+    attempt has the writer's fixes undone and stops `init` at VALIDATE with AWAIT_INFO, listing
+    what the checker finds: nothing plans from a red pack (C-2⁷). Nothing records that stop, so
+    the next `init` runs VALIDATE again, its writer included.
+  - **Areas.** The pack's own. The foundations come first: every document at the layout's paths
+    that is not a module PRD, which is the decision log, the facts, design, the ADRs and the
+    index. Then one area per name in the index's `## Codes`, in its order, holding the module PRDs
+    its codes register; a module PRD two areas name is held by the first. A module PRD no code
+    registers is an area of its own, named by its file. A context document, or a document at a
+    path the layout does not hold, is never reviewed. ksarjs's five areas were an example, not a
+    default.
+  - **A round.** One `spec_review` reviewer per area that has a document in the round's scope or
+    a finding of the round before to verify, one after another, the foundations first. Each is
+    given the foundations, its area's documents in scope, the checker's heuristic reports on them
+    marked as a heuristic's (C-2¹⁰), and the precedence. The first round reviews. A later round
+    verifies: each reviewer is also given the findings of the round before in its area, with what
+    became of each, and the diff of that round's fixes, and hunts the defects those fixes
+    introduced. A finding carries its severity, blocker, major or minor, its category, every
+    passage it stands on at its `file:line` with a quote, why it is wrong, and the exact fix, and
+    names the finding of the round before that it continues, if any.
+  - **Checked by code.** Every passage a finding quotes must be in one of the pack's documents,
+    starting on its line, whitespace aside; a finding it continues must be one the reviewer was
+    given; and the reviewer must list every document it was given to review as read. A first
+    review with anything wrong is relaunched with the list. The second keeps the findings that
+    stand and drops the rest, each said, and names each document it still did not read, which
+    that round has not reviewed. A review unusable twice fails the phase, as a failed session
+    does. A round's findings are numbered `R<round>-<n>` in the order reported, and two that name
+    the same places for the same category are one, the more severe kept in the first one's place.
+  - **The writer.** One `spec_write` session applies the round's findings to the pack's paths, its
+    declared surface (C-2¹³), and accounts for each by its id, once: applied, or declined with its
+    reason. Code checks the pack as it checks WRITE's: the decision log keeps what it held, and is
+    restored at once where it does not; a default the writer adds is cited in the pack; the pack
+    holds a requirement; and the checker is green. A first attempt with anything wrong is
+    relaunched with the list. After the second, a red checker or a pack with no requirement undoes
+    every fix of the round, and each finding is left `undone`. An account unusable twice puts the
+    pack back as it was and fails the phase. A finding the writer calls applied is declined when
+    it changed no document, and one it did not account for is declined too, each with code's
+    reason. The diff of the fixes is kept under `.detent/state/validate/` for the next round.
+  - **Stop rule and ceiling.** A round with no blocker and no major ends the loop, its minor
+    findings fixed by its writer without another round (specification decision 3).
+    `spec_validation_rounds`, scope `init`, default 8 (specification decision 13), bounds the loop
+    as a ceiling and never a retry. A round at the ceiling that does not meet the stop rule ends
+    the loop as well, and the blockers and majors its writer fixed are left `unverified`, beside
+    the ones it declined or undid. Its majors go to PRESENT as risks, and planning goes on; a
+    blocker stops `init` at VALIDATE with AWAIT_INFO, each listed with its place, its fix and why
+    it is open.
+  - **The record.** VALIDATE writes the conformance record (C-2⁷) after each round, with the
+    rounds so far, not validated, and writes it validated when the loop ends. Each round holds its
+    counts by severity, the documents its fixes changed, and the findings it left open, each with
+    its first place and quote, its fix, and why it is open: `declined`, `undone` or `unverified`,
+    with a reason.
+  - **Carrying on.** A record that is not validated and holds rounds is a validation that
+    stopped, at the ceiling or in a crash. The next `init` carries it on as a verification of its
+    last round: of the findings it left open and the documents its fixes changed, with its diff
+    where one was kept. With nothing moved in the pack since, it runs no round when that round met
+    the stop rule or reached the ceiling: the rounds say how the validation ends, so a blocker left
+    open stops `init` again without a session. An edit to the pack, a removal included, which is
+    how a blocker is settled, earns one round past the ceiling to verify it; raising
+    `spec_validation_rounds` allows rounds up to its new value.
+  - **Re-validating a change.** A validated record whose pack changed starts a new validation, its
+    rounds numbered from 1, scoped to the documents added or modified, the documents the last
+    validation left findings open in, and whatever cites any of them. Whatever cites a document is
+    read from the pack as it is now: a document naming a requirement or criterion it defines, a
+    range included; one citing a section of it by its name, or an ADR by its id; one linking to
+    it; and, for a changed decision log or facts file, every document citing any decision, default
+    or fact, since the record keeps no earlier copy to say which entry moved. A context document
+    is never reached, and a change that reaches no reviewed document runs no round and renews the
+    record. A later round is scoped to what the round before changed and what its findings named,
+    and whatever cites them.
+  - **The handoff.** VALIDATE hands the planning phases what C-2¹³ has WRITE hand them: the
+    documents DISCOVER's patterns find now, the log among them, the stack markers and the log's
+    entries. Beside them go whether it ran, its rounds, the risks and the checker's parse of the
+    pack, which no planning phase reads yet (D-10′, PRDR-290). No phase runs twice under one name
+    (F-4). PRESENT lists the risks after the defaults, each with its id, its place, its fix and
+    why it is open, and says how to settle one: fix it in the pack, and re-run `detent init`.
+  - **The chain.** VALIDATE restarts C-8's chain, as WRITE does, keyed after it runs by WRITE's
+    digest, which reads the documents, the pack and its record from the disk, and never a prompt
+    or the ceiling: a new prompt or a raised ceiling never reopens a finished validation. Its
+    fixes and its record move DISCOVER's key and WRITE's, so the next `init` re-runs DISCOVER,
+    AUDIT, DECIDE and WRITE, none of which runs a session on a pack, and re-plans nothing: the
+    planning phases chain from VALIDATE's key. An edit to the pack re-plans from VALIDATE, and
+    WRITE's key reaches nothing. `--replan` does not force it (C-8⁵).
+  - **The in-flight refusal.** C-8″'s second ask is made before VALIDATE runs, and not before
+    WRITE, whose re-run replays nothing past VALIDATE, so a pack edited while a ticket is in flight
+    is refused before any reviewer runs.
+  - **Sessions.** `spec_review` is built, read-only: a reviewer writes its artifact alone. The
+    scratch directory and the sandbox S-1‴ gives it are not built, so no reviewer runs a
+    simulation, and VALIDATE says so once per run: the invariants a pack states are read and
+    never run (PRDR-285). The writer is `spec_write`'s `fix` task, on `prompts/spec_write.md`, with
+    the pack's paths as its surface (C-2¹³). Both run on `claude-opus-5-5` at `max` (S-5⁵), and
+    F-3″'s migration writes `spec_review`'s routing into an existing config as it does `audit`'s.
+    `spec_validation_rounds` needs no step: a config's budgets take the default of any key they
+    omit.
+  - **Progress.** Each round, and a completed VALIDATE with rounds or none, is a progress mark
+    (X-1⁵).
+  - **Not built here.** The simulating reviewer and its sandbox (PRDR-285); an amendment's
+    re-validation (PRDR-286); the reader of the checker's parse (PRDR-290); and each phase's spend
+    beside planning's, in PRESENT and `detent status` (C-2⁶), which none of the four phases
+    reports: their sessions are on the ledger against ticket `init`, as every init session is.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

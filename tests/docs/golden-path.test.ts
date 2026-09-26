@@ -273,7 +273,7 @@ describe("T-130/T-132 C-14′: the plugin surface carries the same freeze (MP3 e
     }
   });
 
-  /** PRDR-282: AWAIT_INFO is raised at DECIDE or at PRESENT, and the skill names each phase that may raise it. */
+  /** PRDR-282, PRDR-284: AWAIT_INFO is raised at DECIDE, at VALIDATE or at PRESENT, and the skill names each phase that may raise it. */
   it("T-130: each decision is documented at its bracketed phases (C-4.1 positions)", () => {
     for (const [interrupt, phases] of Object.entries(INTERRUPT_PHASE)) {
       const block = initSkill.slice(initSkill.indexOf(`\`${interrupt}\``)).slice(0, 200);

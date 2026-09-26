@@ -23,7 +23,9 @@ type BudgetScope =
  * The breach target a ceiling declares. Most emit BUDGET_BREACH, but three do
  * not, and encoding that here keeps T-012's coverage test honest (PRDR-043).
  * `NONE` is X-1″'s advisory figure: a number the planner sizes against and
- * nothing enforces, so it has no breach to target.
+ * nothing enforces, so it has no breach to target. `UNVERIFIED_FIXES` is
+ * VALIDATE's (C-2¹⁴): the loop ends with fixes no round verified, which go to
+ * the operator as risks, or as AWAIT_INFO for a blocker.
  */
 export type BreachTarget =
   | "BUDGET_BREACH"
@@ -32,7 +34,8 @@ export type BreachTarget =
   | "AWAIT_INFO_BATCH"
   | "LADDER_ENTRY"
   | "RED_GATE_NO_EXIT"
-  | "REJECTED_CANDIDATE";
+  | "REJECTED_CANDIDATE"
+  | "UNVERIFIED_FIXES";
 
 export interface CeilingSpec {
   readonly scope: BudgetScope;
@@ -81,6 +84,14 @@ export const CEILINGS = {
   turns_per_stage: { scope: "plan-sizing", breachTarget: "NONE", default: 80 },
   failure_research_tool_calls: { scope: "research-session", breachTarget: "NONE", default: 8 },
   planning_research_tool_calls: { scope: "init", breachTarget: "NONE", default: 16 },
+  /**
+   * C-2⁶, C-2¹⁴ (PRDR-284): the review rounds one validation may run, a
+   * ceiling and never a retry (specification decision 13). Reaching it leaves
+   * the last round's fixes applied and never verified: its majors go to
+   * PRESENT as risks, and a blocker stops `init` at VALIDATE with AWAIT_INFO.
+   * ksarjs converged in its seventh round, so 8 sits above it.
+   */
+  spec_validation_rounds: { scope: "init", breachTarget: "UNVERIFIED_FIXES", default: 8 },
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
   gate_timeout_ms: { scope: "gate-execution", breachTarget: "RED_GATE_NO_EXIT", default: 900_000 },
   binding_probe_timeout_ms: { scope: "binding-probe", breachTarget: "REJECTED_CANDIDATE", default: 120_000 },
@@ -150,6 +161,8 @@ export const budgetsSchema = z
     turns_per_stage: withDefault("turns_per_stage"),
     failure_research_tool_calls: withDefault("failure_research_tool_calls"),
     planning_research_tool_calls: withDefault("planning_research_tool_calls"),
+    /* A count of rounds: a fraction of one runs nothing. */
+    spec_validation_rounds: z.number().int().positive().default(CEILINGS.spec_validation_rounds.default),
     flake_reruns: withDefault("flake_reruns"),
     gate_timeout_ms: withDefault("gate_timeout_ms"),
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),

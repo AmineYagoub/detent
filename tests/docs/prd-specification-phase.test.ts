@@ -171,8 +171,7 @@ describe("PRDR-278 the PRD records the specification phase and planning on its p
     expect(text).toMatch(/never capped/iu);
     const ceiling = /`spec_validation_rounds`[^.]*?default (\d+)/u.exec(phase("VALIDATE"))?.[1];
     expect(ceiling).toBe("8");
-    const inCode = (CEILINGS as Record<string, { default: number } | undefined>).spec_validation_rounds;
-    if (inCode !== undefined) expect(inCode.default, "the code's default is the PRD's").toBe(8);
+    expect(CEILINGS.spec_validation_rounds.default, "the code's default is the PRD's (PRDR-284)").toBe(8);
   });
 
   it("N-7 keeps the raw PRD and runs the phase headless, and the checklist records its duration and spend", () => {

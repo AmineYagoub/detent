@@ -14,8 +14,9 @@ import { makeRunRepo } from "../kernel/run-fixture.js";
 
 /**
  * PRDR-281 — the `audit` role (S-1‴, S-5⁵) and the step it adds to the one
- * v1→v2 migration (F-3″). PRDR-282's `spec_write` joins the same step, so each
- * table the migration writes routes both.
+ * v1→v2 migration (F-3″). PRDR-282's `spec_write` and PRDR-284's
+ * `spec_review` join the same step, so each table the migration writes routes
+ * all three.
  */
 
 const roles = ROLE_IDS as readonly string[];
@@ -76,15 +77,15 @@ describe("PRDR-281, PRDR-282: the v1→v2 migration routes the new roles (F-3″
   it("writes audit's default model and effort into a config that routes other roles but not audit", async () => {
     const root = await olderConfig({ model_routing: { planner: "claude-fable-5-1" }, effort_routing: { planner: "high" } });
     migrateState(root, PROMPT_HASHES);
-    expect(config(root)["model_routing"]).toEqual({ planner: "claude-fable-5-1", audit: "claude-opus-5-5", spec_write: "claude-opus-5-5" });
-    expect(config(root)["effort_routing"]).toEqual({ planner: "high", audit: "max", spec_write: "max" });
+    expect(config(root)["model_routing"]).toEqual({ planner: "claude-fable-5-1", audit: "claude-opus-5-5", spec_write: "claude-opus-5-5", spec_review: "claude-opus-5-5" });
+    expect(config(root)["effort_routing"]).toEqual({ planner: "high", audit: "max", spec_write: "max", spec_review: "max" });
   });
 
   it("leaves a routed audit as the config says, model and effort separately", async () => {
     const root = await olderConfig({ model_routing: { audit: "claude-sonnet-5" }, effort_routing: {} });
     migrateState(root, PROMPT_HASHES);
-    expect(config(root)["model_routing"]).toEqual({ audit: "claude-sonnet-5", spec_write: "claude-opus-5-5" });
-    expect(config(root)["effort_routing"]).toEqual({ audit: "max", spec_write: "max" });
+    expect(config(root)["model_routing"]).toEqual({ audit: "claude-sonnet-5", spec_write: "claude-opus-5-5", spec_review: "claude-opus-5-5" });
+    expect(config(root)["effort_routing"]).toEqual({ audit: "max", spec_write: "max", spec_review: "max" });
   });
 
   it("leaves a routing table that is not a table for the config's reader to refuse", async () => {
@@ -97,7 +98,7 @@ describe("PRDR-281, PRDR-282: the v1→v2 migration routes the new roles (F-3″
   it("gives a config that never routed anything the new roles' routing alone", async () => {
     const root = await olderConfig({});
     migrateState(root, PROMPT_HASHES);
-    expect(config(root)["model_routing"]).toEqual({ audit: "claude-opus-5-5", spec_write: "claude-opus-5-5" });
-    expect(config(root)["effort_routing"]).toEqual({ audit: "max", spec_write: "max" });
+    expect(config(root)["model_routing"]).toEqual({ audit: "claude-opus-5-5", spec_write: "claude-opus-5-5", spec_review: "claude-opus-5-5" });
+    expect(config(root)["effort_routing"]).toEqual({ audit: "max", spec_write: "max", spec_review: "max" });
   });
 });

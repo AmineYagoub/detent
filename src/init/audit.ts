@@ -28,10 +28,9 @@ import { launchInitSession, withInitJournal } from "./session.js";
  *
  * It runs on a raw document set only. A conforming pack's checker stands for
  * it (specification decision 6). A changed pack is never audited as a raw
- * PRD: C-2⁷ gives its change to VALIDATE, and until VALIDATE is built it
- * reaches planning unaudited, as every document set did before this phase. A
+ * PRD: C-2⁷ gives its change to VALIDATE, which re-validates it (C-2¹⁴). A
  * pack WRITE wrote is not audited again: AUDIT read the documents it was
- * written from (C-2¹³).
+ * written from (C-2¹³), and VALIDATE reviews what WRITE made of them.
  */
 
 type Json = Record<string, unknown>;
@@ -224,10 +223,9 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
           pack === "conforming"
             ? "AUDIT: the documents are a conforming pack, and its checker stands for it, so nothing is audited (C-2⁶, specification decision 6)"
             : pack === "written"
-              ? "AUDIT: the documents are the pack WRITE wrote from documents AUDIT already read, so nothing is audited again. An " +
-                "edit to it since is VALIDATE's to check, and this build has no VALIDATE (C-2¹³)"
-              : "AUDIT: the documents are a changed pack, which is not audited as a raw PRD (C-2⁷). Re-validating its change is " +
-                "VALIDATE's, and this build has no VALIDATE, so the pack goes to planning unaudited (C-2¹¹)",
+              ? "AUDIT: the documents are the pack WRITE wrote from documents AUDIT already read, so nothing is audited again. " +
+                "VALIDATE reviews it, an edit to it since included (C-2¹⁴)"
+              : "AUDIT: the documents are a changed pack, which is not audited as a raw PRD (C-2⁷): VALIDATE re-validates its change (C-2¹⁴)",
         );
         noteUnitComplete(deps.root);
         return { kind: "complete", outputs: { ran: false, reason: pack } };

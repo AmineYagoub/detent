@@ -62,8 +62,8 @@ function repin(value: Json, deps: MigrateDeps): Json {
   return { ...value, assignments: out };
 }
 
-/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it (PRDR-281, PRDR-282). */
-const ROLES_ADDED: readonly RoleId[] = ["audit", "spec_write"];
+/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it (PRDR-281, PRDR-282, PRDR-284). */
+const ROLES_ADDED: readonly RoleId[] = ["audit", "spec_write", "spec_review"];
 
 /**
  * S-1‴, S-5′ (PRDR-281): an existing config gains the routing `init` writes
@@ -95,9 +95,15 @@ function sayValidated(value: Json): Json {
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
  * a new one. The three prompts that named the version stopped naming it here,
- * and their hashes moved, which is the re-pin; `audit` joined the roles, which
- * is the routing (PRDR-281); the conformance record gained `validated`
- * (PRDR-283).
+ * and their hashes moved, which is the re-pin; `audit`, `spec_write` and
+ * `spec_review` joined the roles, which is the routing (PRDR-281, PRDR-282,
+ * PRDR-284); the conformance record gained `validated` (PRDR-283). Two
+ * shapes need no step. C-2⁶'s rounds key, `spec_validation_rounds`: a
+ * config's budgets take the default of every key they omit, and `init` writes
+ * one key alone. And the record's rounds, whose open findings gained an id and
+ * why each is open (PRDR-284): no build wrote a round before them, so only a
+ * record written by hand holds the older shape, and its reader refuses it by
+ * name (C-2⁹).
  */
 export const MIGRATIONS: readonly Migration[] = [
   {

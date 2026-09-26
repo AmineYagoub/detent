@@ -14,7 +14,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import type { HeldFinding, PlanQuestion, PlanReview } from "../schemas/init.js";
 import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
 import { mergeSimilar, similarQuestions, type PresentQuestion } from "./questions.js";
-import { DECISION_LOG_PATH } from "../schemas/pack.js";
+import { specLines, type PresentedDefault, type PresentedRisk } from "./present-spec.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -71,7 +71,9 @@ export interface PresentInput {
   /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on; C-3‴ merges near-duplicates. */
   readonly questions?: readonly PresentQuestion[];
   /** C-3⁗ (PRDR-282): every vetoable default the decision log holds, with its reason, listed beside the assumptions. */
-  readonly defaults?: readonly { readonly id: string; readonly value: string; readonly reason: string }[];
+  readonly defaults?: readonly PresentedDefault[];
+  /** C-2¹⁴ (PRDR-284): the majors VALIDATE's last round left open, listed beside the defaults. */
+  readonly risks?: readonly PresentedRisk[];
   /** C-3‴ (PRDR-282): planning questions the log's decisions already answer, by id, so they are named and not asked again. */
   readonly answeredByLog?: readonly { readonly id: string; readonly entry: string }[];
   /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
@@ -129,7 +131,7 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "defaults" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
+): Pick<PresentInput, "slices" | "questions" | "defaults" | "risks" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -167,8 +169,8 @@ export function presentInputsFromOutputs(
     <K extends string>(...keys: readonly K[]) =>
     (v: unknown): v is Record<K, string> =>
       typeof v === "object" && v !== null && keys.every((k) => typeof (v as Record<string, unknown>)[k] === "string");
-  /* C-2¹³ (PRDR-283): the log as WRITE left it, defaults it added among them; DECIDE's where WRITE is not in the pipeline. */
-  const logged = Array.isArray(outputs["WRITE"]?.["defaults"]) ? "WRITE" : "DECIDE";
+  /* C-2¹³, C-2¹⁴: the log as the specification phase left it, defaults its writers added among them: VALIDATE's, else WRITE's, else DECIDE's. */
+  const logged = ["VALIDATE", "WRITE"].find((phase) => Array.isArray(outputs[phase]?.["defaults"])) ?? "DECIDE";
   const decisions = list<unknown>(logged, "decisions").filter(isRow("id", "question"));
   const answeredByLog: { id: string; entry: string }[] = [];
   const seen = new Set<string>();
@@ -210,6 +212,7 @@ export function presentInputsFromOutputs(
     /* C-3‴ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
     questions: mergeSimilar(questions),
     defaults: list<unknown>(logged, "defaults").filter(isRow("id", "value", "reason")),
+    risks: list<unknown>("VALIDATE", "risks").filter(isRow("id", "where", "fix", "left", "reason")),
     answeredByLog,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
@@ -284,17 +287,7 @@ export function renderPresentation(input: PresentInput): string {
   if (answered.length > 0) {
     lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
   }
-  const defaults = input.defaults ?? [];
-  if (defaults.length > 0) {
-    lines.push(
-      "",
-      `Defaults (${defaults.length}) — the plan follows each; to veto one, edit its row in ${DECISION_LOG_PATH} and re-run \`detent init\` (C-3⁗):`,
-    );
-    for (const d of defaults) {
-      lines.push(`  ${d.id}: ${d.value}`);
-      if (d.reason !== "") lines.push(`      because: ${d.reason}`);
-    }
-  }
+  lines.push(...specLines(input.defaults ?? [], input.risks ?? []));
   const edges = input.derivedEdges ?? [];
   if (edges.length > 0) {
     lines.push(
