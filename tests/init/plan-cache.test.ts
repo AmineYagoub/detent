@@ -5,7 +5,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
-import { ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { okResult } from "../../src/sessions/mock.js";
 import { DOCS, MockBackend, R, TWO_SLICES, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 
@@ -24,7 +24,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const root = repo(DOCS);
     const log: string[] = [];
     const notes: string[] = [];
-    const backend = new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
     const handlers = buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
@@ -59,7 +59,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const root = repo(DOCS);
     const log: string[] = [];
     const notes: string[] = [];
-    const backend = new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
     const build = (budgets: Budgets): PhaseHandler[] =>
       buildPipeline({ root, backend, prompts: PROMPTS, budgets, note: (t) => notes.push(t) });
 
@@ -127,7 +127,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const log: string[] = [];
     const notes: string[] = [];
     const handlers = (): ReturnType<typeof buildPipeline> =>
-      buildPipeline({ root, backend: new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) }), prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
+      buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) }), prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
     const cacheFile = path.join(sliceCacheDir(root), "s01.json");
     const replan = async (): Promise<void> => {
       writeFileSync(path.join(root, "prd-billing.md"), `# billing ${String(log.length)}\n`);
@@ -155,7 +155,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
   it("a cache whose tickets are missing the fields it casts to is a MISS, not a crash", async () => {
     const root = repo(DOCS);
     const handlers = (): ReturnType<typeof buildPipeline> =>
-      buildPipeline({ root, backend: new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, []) }), prompts: PROMPTS, budgets: BUDGETS });
+      buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, []) }), prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers());
 
     const cacheFile = path.join(sliceCacheDir(root), "s01.json");
@@ -172,7 +172,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const root = repo(DOCS);
     let summary = "the first analysis";
     const log: string[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
         const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
         let artifact: object;

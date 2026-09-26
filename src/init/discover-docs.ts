@@ -37,8 +37,8 @@ export const DOC_PATTERNS: readonly string[] = [
   "docs/**/*.rst",
 ];
 
-/** Never traversed: dependency and state trees are not planning documents. */
-const SKIP_DIRS = new Set(["node_modules", ".git", ".detent", "dist", "build", "vendor", "target", ".venv", "__pycache__"]);
+/** Never traversed: dependency and state trees are not planning documents, nor the project's code (C-2¹¹). */
+export const SKIP_DIRS: ReadonlySet<string> = new Set(["node_modules", ".git", ".detent", "dist", "build", "vendor", "target", ".venv", "__pycache__"]);
 
 /**
  * C-2⁷, C-2⁹ (PRDR-279): the root's `archive/` holds the originals a pack was

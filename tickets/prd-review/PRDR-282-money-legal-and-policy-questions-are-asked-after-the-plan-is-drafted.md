@@ -38,3 +38,18 @@ and C-14′'s freeze holds. The answers land in the decision log, where the next
 reads them (PRDR-166), and the replay starts at DECIDE. Off a TTY, the recommended answers are
 taken and logged as vetoable (decision 9). PRESENT then treats them exactly as it treats C-3′'s
 assumptions.
+
+## From PRDR-281
+
+AUDIT is built (C-2¹¹), and three things in it are DECIDE's to change when DECIDE lands:
+
+- **The checkpoint.** DECIDE reads `.detent/state/AUDIT.json`'s outputs: `ran`, and when it is
+  true `contradictions`, `gaps`, `drift`, `claims` (each with `verdict`, `source`, `correction` and
+  `checked`), `dropped`, `unread` and `research`. A claim with `checked: false` was never checked,
+  and reads as unverified.
+- **The digest.** AUDIT is a standalone phase: running it replays nothing after it, so a phase that
+  reads its outputs names them in its own digest. DECIDE's digest must cover AUDIT's outputs, or a
+  re-run AUDIT leaves DECIDE's checkpoint standing.
+- **The note.** `auditNotes` in `src/init/audit.ts` says "No phase reads them yet; planning goes on
+  from the documents as written", and its doc-block says nothing reads the checkpoint. Both become
+  false the day DECIDE reads it.

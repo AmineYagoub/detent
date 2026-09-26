@@ -3,7 +3,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import { runInit } from "../../src/init/machine.js";
 import { msUntilReset } from "../../src/init/session.js";
 import { MockBackend, outageResult, type StageFn } from "../../src/sessions/mock.js";
-import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
  * D-13 (PRDR-261) — the reset the backend actually states.
@@ -72,7 +72,7 @@ describe("D-13 a reset that states its hour and no minutes", () => {
     };
     const handlers = buildPipeline({
       root,
-      backend: new MockBackend({ planner: flaky }),
+      backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: flaky }),
       prompts: PROMPTS,
       budgets: BUDGETS,
       note: (t: string) => notes.push(t),

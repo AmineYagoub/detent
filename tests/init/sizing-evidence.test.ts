@@ -5,7 +5,7 @@ import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { sizingEvidence } from "../../src/init/sizing-evidence.js";
 import { MockBackend } from "../../src/sessions/mock.js";
-import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
  * X-4″ (PRDR-102) — the planner and the plan review size against what a
@@ -52,7 +52,7 @@ describe("X-4″ sizing evidence", () => {
   it("reaches PLAN and REVIEW_PLAN as `sizing_evidence`", async () => {
     const root = repo(LONE_CANDIDATE);
     seedEvidence(root);
-    const backend = new MockBackend({ planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     const inputs = backend.calls
       .filter((c) => c.spec.artifactOut.endsWith("plan-draft.json") || c.spec.artifactOut.endsWith("plan-review.json"))

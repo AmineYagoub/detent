@@ -3,6 +3,7 @@ import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, upgradeHint } from "../schemas/common.js";
 import { CONFORMANCE_RECORD_PATH } from "../schemas/pack.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, type RoleId } from "../schemas/roles.js";
 import { acquireRunLock, lockHolder, lockPhaseSuffix, type RunLockInfo } from "./run-lock.js";
 
 /**
@@ -61,14 +62,39 @@ function repin(value: Json, deps: MigrateDeps): Json {
   return { ...value, assignments: out };
 }
 
+/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it. */
+const ROLES_ADDED: readonly RoleId[] = ["audit"];
+
+/**
+ * S-1‴, S-5′ (PRDR-281): an existing config gains the routing `init` writes
+ * for each role this line adds, model and effort separately, and a role it
+ * already routes keeps what it says. A routing table that is not an object is
+ * left for the config's reader to refuse.
+ */
+function routeAdded(value: Json): Json {
+  const extend = (key: string, defaults: Readonly<Record<RoleId, string>>): unknown => {
+    const table = value[key] ?? {};
+    if (typeof table !== "object" || table === null || Array.isArray(table)) return table;
+    const out: Record<string, unknown> = { ...table };
+    for (const role of ROLES_ADDED) if (!Object.hasOwn(out, role)) out[role] = defaults[role];
+    return out;
+  };
+  return { ...value, model_routing: extend("model_routing", DEFAULT_MODEL_ROUTING), effort_routing: extend("effort_routing", DEFAULT_EFFORT_ROUTING) };
+}
+
 /**
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
  * a new one. The three prompts that named the version stopped naming it here,
- * and their hashes moved, which is the re-pin.
+ * and their hashes moved, which is the re-pin; `audit` joined the roles, which
+ * is the routing (PRDR-281).
  */
 export const MIGRATIONS: readonly Migration[] = [
-  { from: 1, name: "the 3.1.1 line", transforms: { ".detent/agents/assignments.json": repin } },
+  {
+    from: 1,
+    name: "the 3.1.1 line",
+    transforms: { ".detent/agents/assignments.json": repin, ".detent/config.json": routeAdded },
+  },
 ];
 
 export type MigrateOutcome =

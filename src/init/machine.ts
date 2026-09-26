@@ -31,6 +31,10 @@ import { parseArtifact } from "../schemas/common.js";
  * DISCOVER also says whether the pack is still the one validated, so it reads
  * the pack's contents, and an edit re-runs it. The phases after it replay
  * from the same edit either way, so the exception costs one scan.
+ *
+ * And one phase is off the chain, C-2¹¹'s (PRDR-281): AUDIT is keyed by its
+ * own digest alone, so a new decision log replays DISCOVER without re-running
+ * it, and a code edit re-runs it without re-planning (`standalone`).
  */
 
 export type PhaseOutcome =
@@ -68,10 +72,29 @@ export interface PhaseHandler {
    * used to reuse every checkpoint and report READY over an empty directory.
    */
   outputIntact?(ctx: InitContext): boolean;
+  /**
+   * C-2¹¹ (PRDR-281): the phase stands outside the chain. Its checkpoint is
+   * keyed by its own digest alone and looked up even while the phases before it
+   * replay, and running it replays nothing after it: a later phase that reads
+   * its outputs names them in its own digest.
+   *
+   * AUDIT is the one. C-2⁶ has DECIDE write the decision log, which moves
+   * DISCOVER's listing, and on the chain that replays everything after
+   * DISCOVER, the survey and every claim check included, for each answer to a
+   * question the audit raised. And AUDIT's key covers the code, which no phase after it reads, so
+   * on the chain an edit to the code would have re-planned the product.
+   */
+  readonly standalone?: boolean;
   run(ctx: InitContext): Promise<PhaseOutcome>;
 }
 
-/** The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans whose own digests already catch new files. */
+/**
+ * The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans
+ * whose own digests already catch new files. AUDIT, between DISCOVER and this
+ * phase, is not forced either: C-8⁵ keeps `--replan` out of the specification
+ * phase, and AUDIT's key covers everything it reads, so it re-runs when that
+ * moves and only then (C-2¹¹).
+ */
 const REPLAN_FROM: InitPhase = "ANALYZE";
 
 /**
@@ -363,6 +386,8 @@ function wouldReplan(root: string, handlers: readonly PhaseHandler[], now: () =>
   for (const phase of INIT_PHASES) {
     const handler = handlers.find((h) => h.phase === phase);
     if (handler === undefined) continue;
+    /* C-2¹¹: a standalone phase re-runs no other, PLAN included, whatever its own checkpoint says. */
+    if (handler.standalone === true) continue;
     let hash: string;
     try {
       hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest({ root, outputs, now })}`).digest("hex");
@@ -456,16 +481,18 @@ export async function runInit(
 
     opts.progress?.(phase);
     const ctx: InitContext = { root, outputs, now };
-    const hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
-    carried = hash;
+    /* C-2¹¹: a standalone phase's key is its own digest, and the chain passes it by. */
+    const standalone = handler.standalone === true;
+    const hash = createHash("sha256").update(`${standalone ? "" : carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
+    if (!standalone) carried = hash;
 
     /* PRDR-085/087: forced re-execution starts exactly here, not at phase one. */
     if (!replaying && phase === forceFrom) {
       replaying = true;
-      replayedFrom = phase;
+      replayedFrom ??= phase;
     }
 
-    if (!replaying) {
+    if (!replaying || standalone) {
       const read = readCheckpoint(root, phase, hash);
       if (read.status === "fresh" && handler.outputIntact?.(ctx) !== false) {
         outputs[phase] = { ...read.checkpoint.outputs };
@@ -473,8 +500,8 @@ export async function runInit(
         continue;
       }
       if (read.status === "fresh") messages.push(`${phase} is re-running: what it wrote is no longer on disk (C-8‴)`);
-      replaying = true;
-      replayedFrom = phase;
+      replayedFrom ??= phase;
+      if (!standalone) replaying = true;
     }
 
     const outcome = await handler.run(ctx);

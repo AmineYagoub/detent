@@ -34,3 +34,10 @@ changed underneath them.
 
 The redesign plan's §11. This lands last, after the tickets that replace each piece, so nothing is
 deleted before its replacement works.
+
+## From PRDR-281
+
+AUDIT has its own claim checker (`src/init/audit-claims.ts`), so taking planning research out of
+ANALYZE removes nothing AUDIT uses: it shares `withOneRelaunch`, the X-6a refinements in
+`src/schemas/init.ts` and `EXTERNAL_TIER`, and not `plan-research.ts`. Until then each of the two
+phases reports its own tool calls against `planning_research_tool_calls` (C-2¹¹).

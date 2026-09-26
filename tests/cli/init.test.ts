@@ -4,6 +4,8 @@ import path from "node:path";
 import { main } from "../../src/cli/init.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
 import { acquireRunLock } from "../../src/kernel/run-lock.js";
+import { routingNote } from "../../src/init/config.js";
+import { ROLE_IDS } from "../../src/schemas/roles.js";
 
 
 /**
@@ -140,9 +142,16 @@ describe("PRDR-197 the CLI forwards both routings", () => {
  * runtime default forever, with nothing printed.
  */
 describe("PRDR-263 the CLI announces the effort routing", () => {
+  /**
+   * PRDR-281: the note is built from the routing tables now, so a role added
+   * to them is named without an edit here; the source is checked for the call
+   * and the note for what it says.
+   */
   it("names the levels on a first init", () => {
     const source = readFileSync("src/cli/init.ts", "utf8");
-    expect(source, "a default an operator cannot see is one they do not have").toContain("effort routing defaulted");
-    expect(source, "the planner's level is the one worth naming outright").toContain("planner → max");
+    expect(source, "a default an operator cannot see is one they do not have").toContain("process.stdout.write(routingNote())");
+    expect(routingNote()).toContain("effort routing defaulted");
+    expect(routingNote(), "the planner's level is the one worth naming outright").toMatch(/planner[^;]*→ max/u);
+    for (const role of ROLE_IDS) expect(routingNote(), `${role} is named`).toMatch(new RegExp(`\\b${role}\\b`, "u"));
   });
 });

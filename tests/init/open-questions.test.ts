@@ -5,7 +5,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, TWO_SLICES, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -79,7 +79,7 @@ describe("C-3‴ the drafting stages are handed what was already asked", () => {
   it("SLICE and every PLAN draft see ANALYZE's questions, and a later slice sees the earlier slice's too", async () => {
     const root = repo(DOCS);
     const seen: Record<string, unknown>[] = [];
-    await runInit(root, buildPipeline({ root, backend: new MockBackend({ planner: planner(seen, true) }), prompts: PROMPTS, budgets: BUDGETS }));
+    await runInit(root, buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(seen, true) }), prompts: PROMPTS, budgets: BUDGETS }));
     const slice = seen.find((i) => i["__artifact"] === "slices.json");
     /* Before PRDR-207 no stage was told: `open_questions` absent everywhere, and s14 asked ANALYZE's question again. */
     expect(ids(slice), "SLICE sees ANALYZE's").toEqual(["q-analyze-1"]);
@@ -90,7 +90,7 @@ describe("C-3‴ the drafting stages are handed what was already asked", () => {
   it("with nothing asked, no stage is handed an empty list — the prompts are byte-for-byte what they were", async () => {
     const root = repo(DOCS);
     const seen: Record<string, unknown>[] = [];
-    await runInit(root, buildPipeline({ root, backend: new MockBackend({ planner: planner(seen, false) }), prompts: PROMPTS, budgets: BUDGETS }));
+    await runInit(root, buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(seen, false) }), prompts: PROMPTS, budgets: BUDGETS }));
     for (const i of seen) expect("open_questions" in i, String(i["__artifact"])).toBe(false);
   });
 });

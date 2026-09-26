@@ -11,7 +11,7 @@ import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { BOOTSTRAP_TICKET_ID, capstoneBlockers } from "../../src/init/plan-write.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import type { SliceSpec } from "../../src/schemas/init.js";
-import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -76,7 +76,7 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
     const root = repo(LONE_CANDIDATE);
     const victim = path.join(root, "package.json");
     const before = readFileSync(victim, "utf8");
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: plannerWith({ schema_version: SCHEMA_VERSION, tickets: [ticket("../../package"), ticket("t-s01-002")], questions: [] }),
     });
 
@@ -89,7 +89,7 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
 
   it("two ids differing only in case become two distinct tickets, not one file and a deadlock", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: plannerWith({
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("T-S01-001"), ticket("t-s01-002", ["T-S01-001"])],
@@ -109,7 +109,7 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
 
   it("a dependency cycle is broken and reported — it used to reach disk and deadlock the pool silently", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: plannerWith({
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001", ["t-s01-002"]), ticket("t-s01-002", ["t-s01-001"])],
@@ -155,7 +155,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   it("a plain `detent init` refuses to re-plan while a ticket is claimed — the guard covered only --replan", async () => {
     const root = repo(LONE_CANDIDATE);
     const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002")], questions: [] };
-    const deps = { root, backend: new MockBackend({ planner: plannerWith(draft) }), prompts: PROMPTS, budgets: BUDGETS };
+    const deps = { root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(draft) }), prompts: PROMPTS, budgets: BUDGETS };
     await runInit(root, buildPipeline(deps));
 
     claim(root, "t-s01-001", "worker-1");
@@ -177,7 +177,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
     const root = repo(LONE_CANDIDATE);
     const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] };
     let planned = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec: SessionSpec) => {
         if (spec.artifactOut.endsWith("plan-draft.json")) planned += 1;
         return plannerWith(draft)(spec);
@@ -200,7 +200,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   it("a DONE bootstrap is preserved, and a stale blocker it carries is dropped rather than crashing the write", async () => {
     const root = repo({ "PRD.md": "# build it\n" });
     const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] };
-    const backend = new MockBackend({ planner: plannerWith(first, ONE_SLICE, GREENFIELD_STACK) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(first, ONE_SLICE, GREENFIELD_STACK) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** Finish the scaffolding and one ticket, as a real run would. */
@@ -212,7 +212,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
     /** The new plan drops t-s01-001, which the DONE t-s01-002 still names as a blocker. */
     const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-002"), ticket("t-s01-003")], questions: [] };
-    const backend2 = new MockBackend({ planner: plannerWith(second, ONE_SLICE, GREENFIELD_STACK) });
+    const backend2 = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(second, ONE_SLICE, GREENFIELD_STACK) });
     const again = await runInit(root, buildPipeline({ root, backend: backend2, prompts: PROMPTS, budgets: BUDGETS }), { replan: true });
 
     expect(again.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -228,14 +228,14 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   it("a DONE ticket whose id the new plan reuses for different work is kept and flagged, never silently swapped", async () => {
     const root = repo(LONE_CANDIDATE);
     const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Add health endpoint")], questions: [] };
-    await runInit(root, buildPipeline({ root, backend: new MockBackend({ planner: plannerWith(first) }), prompts: PROMPTS, budgets: BUDGETS }));
+    await runInit(root, buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(first) }), prompts: PROMPTS, budgets: BUDGETS }));
     const done = readTicket(root, "t-s01-001");
     writeFileSync(ticketPath(root, "t-s01-001"), `${JSON.stringify({ ...done, state: "DONE" }, null, 2)}\n`);
 
     const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Implement OAuth callback")], questions: [] };
     const again = await runInit(
       root,
-      buildPipeline({ root, backend: new MockBackend({ planner: plannerWith(second) }), prompts: PROMPTS, budgets: BUDGETS }),
+      buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(second) }), prompts: PROMPTS, budgets: BUDGETS }),
       { replan: true },
     );
 
@@ -259,7 +259,7 @@ describe("A-1⁶ the bootstrap ticket provides the scaffold files the analysis n
       ],
       questions: [],
     };
-    const backend = new MockBackend({ planner: plannerWith(draft, ONE_SLICE, stack) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(draft, ONE_SLICE, stack) });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
 

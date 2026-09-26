@@ -4,7 +4,7 @@ import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { normaliseVerdict } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -34,7 +34,7 @@ function scriptedPlanner(reviews: readonly (object | null)[]): { stage: StageFn;
 
 async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: string[] }> {
   const root = repo(LONE_CANDIDATE);
-  const backend = new MockBackend({ planner: stage });
+  const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: stage });
   const notes: string[] = [];
   await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
   return { backend, notes };

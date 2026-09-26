@@ -41,3 +41,9 @@ would have stopped on round 6's three majors, fixed but never verified:
 
 Today a slice's checkpoint write is the only progress mark in `init`. Without marks of its own, a
 healthy specification phase would have the no-progress breaker announcing throughout it.
+
+## From PRDR-281
+
+AUDIT does not audit a changed pack (C-2¹¹), and until VALIDATE exists nothing re-validates one:
+it goes to planning unaudited, and AUDIT's note says "this build has no VALIDATE". That note, in
+`auditPhase` in `src/init/audit.ts`, and the module's doc-block become false the day VALIDATE lands.

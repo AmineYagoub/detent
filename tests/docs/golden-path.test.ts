@@ -257,7 +257,7 @@ describe("T-130/T-132 C-14′: the plugin surface carries the same freeze (MP3 e
     expect([...named].sort()).toEqual([...INTERRUPTS].sort());
   });
 
-  it("T-130: the seven phases appear in C-4.1 order", () => {
+  it("T-130: the phases appear in C-4.1 order, AUDIT included (PRDR-281)", () => {
     const positions = INIT_PHASES.map((phase) => initSkill.indexOf(`\`${phase}\``));
     for (const [i, at] of positions.entries()) {
       expect(at, `${INIT_PHASES[i]} missing from the init skill`).toBeGreaterThan(-1);

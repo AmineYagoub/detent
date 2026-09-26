@@ -11,7 +11,7 @@ import { RunJournal } from "../../src/kernel/journal.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -80,7 +80,7 @@ function scripted(reads: readonly (readonly object[])[]): {
 
 async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: string[]; message: string }> {
   const root = repo(LONE_CANDIDATE);
-  const backend = new MockBackend({ planner: stage });
+  const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: stage });
   const notes: string[] = [];
   const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
   return { backend, notes, message: result.interrupt?.message ?? "" };

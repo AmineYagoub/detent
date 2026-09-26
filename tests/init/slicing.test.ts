@@ -14,7 +14,7 @@ import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
-import { ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -115,7 +115,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const notes: string[] = [];
     const seen: Record<string, unknown>[] = [];
     let wholeReviews = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
@@ -176,7 +176,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
   it("C-3′: a blocking question is asked once, at PRESENT, after the whole plan is written", async () => {
     const root = repo(DOCS);
     const log: string[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           analysis: { ...ANALYSIS(null), questions: [{ id: "q1", question: "Which payment provider?", blocking: true, assumption: "" }] },
@@ -215,7 +215,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     for (const baseline of ["production", "none"] as const) {
       const root = repo(DOCS);
       const seen: Record<string, unknown>[] = [];
-      const backend = new MockBackend({ planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [], seen) });
+      const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [], seen) });
       await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planBaseline: baseline }));
       const slice = seen.find((i) => i["stage"] === "SLICE")!;
       expect((slice["production_baseline"] as unknown[]).length).toBe(baseline === "production" ? PRODUCTION_BASELINE.length : 0);
@@ -281,7 +281,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
   it("a finding a slice's own review still holds after its revision reaches the presentation — the single-slice case, where no whole-plan review runs", async () => {
     const root = repo(DOCS);
     const held = { tag: "sizing", ticket: "t-s01-002", finding: "still larger than one session after the revision" };
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
@@ -308,7 +308,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const root = repo(DOCS);
     const notes: string[] = [];
     let whole = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
@@ -336,7 +336,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
 
   it("a dependency dropped as impossible is presented as a finding, not swallowed", async () => {
     const root = repo(DOCS);
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
@@ -357,7 +357,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const root = repo(DOCS);
     const notes: string[] = [];
     const seen: Record<string, unknown>[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           slices: {
@@ -395,7 +395,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const first = { id: "s01-q1", question: "Which payment rail serves the USD tier?", blocking: false, assumption: "Chargily only" };
     const second = { id: "s01-q1", question: "What is the trial credit amount?", blocking: false, assumption: "5000 DZD" };
     let drafts = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
         let artifact: object;
         if (spec.artifactOut.endsWith("slices.json")) {
@@ -568,7 +568,7 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
     const root = repo(DOCS);
     const notes: string[] = [];
     const wholeInputs: Record<string, unknown>[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: unprovidedDraft,
@@ -609,7 +609,7 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
     const root = repo(DOCS);
     const notes: string[] = [];
     const progress: string[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
@@ -664,7 +664,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
     const root = repo(DOCS);
     const notes: string[] = [];
     let whole = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
@@ -710,7 +710,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
             tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
             questions: [],
           };
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),
     });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));

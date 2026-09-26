@@ -957,6 +957,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   checked precisely on reuse. The cache is validated on read like every other artifact.
   *Amended by C-2⁸ (PRDR-278): a slice's key is its requirement ids and their content hashes,
   never the model's words.*
+  *Amended by C-2¹¹ (PRDR-281): a phase may stand outside the chain, keyed by its own digest
+  alone; AUDIT does.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1626,6 +1628,8 @@ the code does what the rules it amends describe, and each of those rules points 
     every artifact the phases write are persisted shapes under F-3.
   *Amended by C-2⁹ (PRDR-279): WRITE archives the originals it rewrote into the pack and leaves
   context documents where they are.*
+  *Amended by C-2¹¹ (PRDR-281): AUDIT is built. A changed pack is not audited, and AUDIT's
+  checkpoint stands outside C-8's chain.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1920,6 +1924,7 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by F-3″ (PRDR-300): the event is `schema_version` 1 to 2, and its migration is the one
   entry in `MIGRATIONS` that the four roles, C-2⁶'s rounds key, D-10′'s phase list and D-5′'s
   bindings each extend.*
+  *Amended by C-2¹¹ (PRDR-281): `audit` is built, and the migration writes its routing.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2029,6 +2034,7 @@ the code does what the rules it amends describe, and each of those rules points 
     (C-2⁶).
   *Amended by C-2¹⁰ (PRDR-280): conforming requires the checker green on the documents now, not
   the schema alone.*
+  *Amended by C-2¹¹ (PRDR-281): AUDIT routes on the classification.*
 
 - **C-2¹⁰ (3.1.1, PRDR-280).** The checker is built, in `src/init/pack-check.ts`: a TypeScript port
   of ksarjs's `check_pack.py`, generalized to C-2⁹'s grammar. This settles what C-2⁷ left to its
@@ -2077,6 +2083,65 @@ the code does what the rules it amends describe, and each of those rules points 
     criterion tests, 2 requirements that only say MAY, and a decision with no reason. The
     committed fixture, `tests/fixtures/pack/`, is a pack in ksarjs's shapes with content of its
     own, since ksarjs's pack is unpublished.
+
+- **C-2¹¹ (3.1.1, PRDR-281).** AUDIT is built, in `src/init/audit.ts` and the modules beside it,
+  directly after DISCOVER. This settles what C-2⁶ left to AUDIT's ticket, and amends C-8's chain.
+  - **Raw only.** AUDIT runs on a raw document set. On a conforming pack it completes without a
+    session, since the checker stands for the pack (specification decision 6), and on a changed
+    pack it does the same: C-2⁷ has a changed pack re-validated for its change only and never
+    read as a raw PRD, which is VALIDATE's once PRDR-284 builds it. Until then a changed pack
+    reaches planning as every document set did before AUDIT.
+  - **Two steps, one role.** A survey session reads every document and, in an existing project,
+    the code. It writes the contradictions, gaps, drift and external claims it finds, and checks
+    none of them. Then each claim, once per claim and subject, gets a session of its own that
+    checks it against a primary source and writes a brief with a verdict. A claim the documents
+    rely on in more than one place is checked once, and each place is recorded with the verdict.
+    `confirmed` and `wrong` name the source that settles the claim, and `wrong` says what is true
+    instead; `unverified` names neither. Both are `audit` sessions on `prompts/audit.md`, told
+    their task by their inputs (S-1‴). C-3a's engine moves in with them: a brief per claim,
+    cached; one relaunch carrying the validator's words; X-6a's local search before the web; and
+    PRDR-266's ascent, which here has no exemption, since an external claim is never about this
+    project's own state. A brief refused twice leaves its claim unverified and marked unchecked,
+    and never ends the phase. A survey refused twice fails it, as an analysis does.
+  - **Briefs are committed** at `.detent/research/audit/<hash>.json`, a committed layout entry
+    beside planning's (F-1). The hash covers the claim and its subject, which names the
+    dependency at its pinned version, so a re-run pays nothing for a claim already checked and a
+    version bump checks it again. A cached brief is read with the checks a fresh one gets, so
+    one citing a file that has since gone is checked again.
+  - **Checked by code.** Every passage the survey cites must be in one of the documents it was
+    given, at its `file:line`: whitespace aside, starting on that line. The code a drift finding
+    names must exist, and no drift stands in greenfield. A first survey with anything missing is
+    relaunched with the list. On the second, what is still missing is dropped, recorded in the
+    checkpoint as `dropped` and said, and a document the survey still says it did not read is
+    recorded as `unread`. A `confirmed` or `wrong` verdict's source is a link or a repository
+    file with the lines it cites, and never one of the documents being checked.
+  - **The key.** AUDIT's checkpoint is keyed by the documents' contents without the decision
+    log, by the code, and by the pack's kind, the stack markers and the audit prompt's hash. The
+    code is every file git tracks or would track, as the working tree has it, outside the
+    documents, the decision log, `.detent/` and the root's `archive/`; where git cannot list it,
+    the walk discovery makes. The survey is not given the decision log, so nothing it was given
+    escapes the key.
+  - **A standalone phase.** A phase may stand outside C-8's chain: its key is its own digest
+    alone, it is looked up even while the phases before it replay, and running it replays
+    nothing after it, so a later phase that reads its outputs names them in its own digest. It
+    is never a re-plan, so C-8″'s in-flight refusal does not count it. AUDIT is the one. DECIDE
+    writes the decision log, which moves DISCOVER's listing, so on the chain every answer would
+    have re-run the survey and every claim. And AUDIT's key covers the code, which no phase after
+    it reads, so on the chain an edit to the code would have re-planned the product. `--replan`
+    does not force it (C-8⁵): it re-runs when its key moves, and only then.
+  - **Progress.** Each brief written is a progress mark, as a slice's checkpoint is, and so is
+    AUDIT's completion, with sessions or none (X-1⁵).
+  - **Research.** The claim checks' tool calls, a turn each as C-3a counts them, are reported
+    against `planning_research_tool_calls` and told to no session. Until PRDR-298 takes planning
+    research out of ANALYZE, each of the two phases reports its own calls against that pool.
+  - **Routing.** `audit` runs on `claude-opus-5-5` at `max` (S-5⁵). F-3″'s migration writes that
+    routing into an existing config that routes no `audit`, model and effort separately, and
+    leaves a routed one as it is (S-5′). `init`'s routing note is built from the routing tables,
+    so it names every role, `audit` included.
+  - **Nothing reads the checkpoint yet.** DECIDE is its reader, once PRDR-282 builds it. Until
+    then AUDIT's note names each contradiction and drift, and each claim the documents have wrong
+    or that could not be verified, up to ten of each, and planning goes on from the documents as
+    written.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

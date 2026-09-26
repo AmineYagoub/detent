@@ -5,8 +5,12 @@ import type { State } from "./states.js";
  *
  * A committed wire format: `agents/assignments.json` references `role@hash`,
  * so adding, removing, or renaming a role is a `schema_version` event under
- * F-3 with a migration — never an editorial change. A test pins these eight
+ * F-3 with a migration — never an editorial change. A test pins these
  * strings for exactly that reason.
+ *
+ * `audit` (PRDR-281) is the first of S-1‴'s four roles, and joins the 3.1.1
+ * line's one event (F-3″): the v1→v2 migration writes its routing into an
+ * existing config.
  *
  * `blind_fix` is the draft.5 rename of the oracle's `fix` (PRDR-044): the
  * role's defining property is that it acts on the failure output alone, and
@@ -21,6 +25,7 @@ export const ROLE_IDS = [
   "review_fix",
   "research",
   "review",
+  "audit",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
@@ -60,6 +65,8 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
   blind_fix: "claude-sonnet-5",
   review_fix: "claude-sonnet-5",
   research: "claude-sonnet-5",
+  /** S-5⁵ (PRDR-278): every session of the specification phase runs on Opus 5.5 at `max` (specification decision 14). */
+  audit: "claude-opus-5-5",
 };
 
 /**
@@ -86,6 +93,7 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
   blind_fix: "xhigh",
   review_fix: "xhigh",
   research: "xhigh",
+  audit: "max",
 };
 
 /**
@@ -99,6 +107,7 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "diagnose",
   "research",
   "review",
+  "audit",
 ]);
 
 /**
@@ -112,8 +121,8 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
  * not change what a read-only role WRITES", which was false for `diagnose`.
  * `review` and `research` grant only their artifact, and are narrowed.
  *
- * `planner` is absent because it is an init role and never reaches this policy;
- * `src/init/session.ts` builds its own artifact-only surface.
+ * `planner` and `audit` are absent because they are init roles and never reach
+ * this policy; `src/init/session.ts` builds their own artifact-only surface.
  */
 export const ARTIFACT_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["research", "review"]);
 

@@ -13,6 +13,8 @@ import { SCHEMA_VERSION, nonEmptyString, sha256Hex } from "./common.js";
 export const INIT_PHASES = [
   "INIT_FS",
   "DISCOVER",
+  /** C-2⁶ (PRDR-281): the documents are judged before anything plans from them. */
+  "AUDIT",
   "ANALYZE",
   "DETERMINE_VERIFICATION",
   /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */
@@ -263,7 +265,7 @@ export function requireLocalSearchBeforeWeb(
  * web — are the outside world, and they are what a verdict about the outside
  * world has to have touched.
  */
-const EXTERNAL_TIER = 3;
+export const EXTERNAL_TIER = 3;
 
 /**
  * PRDR-266: X-6a's ascent, the mirror of `requireLocalSearchBeforeWeb`.

@@ -11,7 +11,7 @@ import type { Budgets } from "../schemas/budgets.js";
 import { ClaudeCodeBackend } from "../sessions/sdk.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import { loadPromptSet } from "../sessions/prompts.js";
-import { ensureConfig, decideSymbols, type SymbolsDecision } from "../init/config.js";
+import { ensureConfig, decideSymbols, routingNote, type SymbolsDecision } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
@@ -176,18 +176,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
           "pass --spend-cap-usd on a first init, or edit .detent/config.json, to change it\n",
       );
     }
-    if (ensured !== "exists") {
-      process.stdout.write(
-        "model routing defaulted (PRDR-114, S-5″): planner, review, diagnose, informed_fix → claude-opus-5; " +
-          "implement, blind_fix, review_fix, research → claude-sonnet-5. A routed model this runtime cannot serve falls back " +
-          "to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n",
-      );
-      process.stdout.write(
-        "effort routing defaulted (PRDR-263): planner → max; review, diagnose, informed_fix, implement, blind_fix, " +
-          "review_fix, research → xhigh. A level the routed model cannot serve is downgraded silently by the SDK and " +
-          "noted per session. Edit effort_routing in .detent/config.json to change it.\n",
-      );
-    }
+    if (ensured !== "exists") process.stdout.write(routingNote());
     if (ensured === "exists" && cap !== undefined) {
       process.stdout.write("config exists — --spend-cap-usd ignored; edit .detent/config.json to change the ceiling\n");
     }

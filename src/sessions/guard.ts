@@ -369,7 +369,7 @@ function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p:
  */
 
 /** S-1's read-only roles have no stop gate: they produce artifacts, not diffs. */
-export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review"]);
+export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit"]);
 
 export interface StopGateInput {
   readonly stage: string;
@@ -428,8 +428,13 @@ export function researchTools(docsDomains: readonly string[]): string[] {
   return [...READ_ONLY_TOOLS, "WebSearch", ...docsDomains.map((d) => `WebFetch(domain:${d})`)];
 }
 
+/**
+ * S-1‴ (PRDR-281): `audit` reads the repository, dependency sources at their
+ * pinned versions included, and reaches the web under the research role's
+ * network rules, so it gets the research role's surface.
+ */
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
-  if (role === "research") return researchTools(docsDomains);
+  if (role === "research" || role === "audit") return researchTools(docsDomains);
   if (READ_ONLY_STAGES.has(role)) return [...READ_ONLY_TOOLS];
   /* S-3⁵ (PRDR-213): three verbs — the guard judges `git rm` per pathspec (judgeGitRm). */
   return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"];

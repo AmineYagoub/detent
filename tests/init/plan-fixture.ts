@@ -49,6 +49,18 @@ export const DRAFT = (ids: string[]): object => ({
   })),
 });
 
+/**
+ * PRDR-281: AUDIT runs on every raw document set, directly after DISCOVER. A
+ * test of the phases after it gets an audit that reads every document it is
+ * given and finds nothing, so what the test asserts is what its own stage did.
+ */
+export const CLEAN_AUDIT: StageFn = (spec) => {
+  const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
+  const survey = { schema_version: SCHEMA_VERSION, documents_read: inputs["documents"] ?? [], contradictions: [], gaps: [], drift: [], claims: [] };
+  writeFileSync(spec.artifactOut, `${JSON.stringify(survey)}\n`);
+  return okResult();
+};
+
 export const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 
 /** C-2‴: one slice over the whole pack — the shape a small product's SLICE produces. */

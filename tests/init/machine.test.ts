@@ -78,10 +78,12 @@ describe("T-060 C-5: the interrupt set is closed", () => {
     }
   });
 
-  it("the phase order is C-4.1's", () => {
+  /** PRDR-281: AUDIT, the first of the phases C-2⁶ adds, directly after DISCOVER. */
+  it("the phase order is C-4.1's, as C-2⁶ amends it", () => {
     expect(INIT_PHASES).toEqual([
       "INIT_FS",
       "DISCOVER",
+      "AUDIT",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",

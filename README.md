@@ -51,10 +51,11 @@ Two commands. That is the whole public workflow.
 detent init
 ```
 
-`init` runs eight phases, in order — and does not stop between them:
+`init` runs nine phases, in order — and does not stop between them:
 
 - **INIT_FS**: checks you're at a git root and scaffolds `.detent/`.
 - **DISCOVER**: finds your planning documents and candidate verification commands.
+- **AUDIT**: reads the documents before anything plans from them. It finds passages that contradict each other, gaps a plan would need filled, and, in an existing project, what the documents say is built that the code does not do. It checks every external claim they rely on, such as a library's behaviour at the version you pin, against a primary source. It prints what it found; no later phase reads its findings yet, so planning goes on from the documents as written.
 - **ANALYZE**: reads the documents and summarizes what's being built; every question they can't answer is noted with the assumption planning proceeds on.
 - **DETERMINE_VERIFICATION**: probes candidate test/lint/build commands and binds the ones that actually run.
 - **SLICE**: cuts the whole product into ordered increments — walking skeleton first — and places a production baseline (secrets, auth, backups, health checks, CI gates, …) in the slice where each item belongs, whether or not your documents asked for it.

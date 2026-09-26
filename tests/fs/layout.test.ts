@@ -46,7 +46,8 @@ describe("T-023 F-1 split", () => {
 
   it("the committed and local sets are exactly F-1's", () => {
     expect(COMMITTED.map((e) => e.rel).sort()).toEqual(
-      [".gitignore", "agents", "bindings.json", "config.json", "plan", "research/failures", "research/planning"],
+      /* PRDR-281: AUDIT's claim briefs, committed as planning briefs are (C-2¹¹). */
+      [".gitignore", "agents", "bindings.json", "config.json", "plan", "research/audit", "research/failures", "research/planning"],
     );
     /** T-120/T-121 added the two D-21 hook-policy files to the local set. */
     expect(LOCAL.map((e) => e.rel).sort()).toEqual(

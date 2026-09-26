@@ -6,6 +6,7 @@ import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import { CLEAN_AUDIT } from "./plan-fixture.js";
 
 /**
  * A-1‴ (PRDR-120) — the contract checks, against the defects that produced them.
@@ -206,7 +207,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
       ],
       questions: [],
     };
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
         const artifact = spec.artifactOut.endsWith("plan-draft.json")
           ? draft

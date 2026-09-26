@@ -7,7 +7,7 @@ import { runInit } from "../../src/init/machine.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
-import { ANALYSIS, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -131,7 +131,7 @@ describe("C-2‴ at product scale", () => {
   it("plans twenty-five slices into five hundred tickets and writes a graph `run` can execute", async () => {
     const root = repo(LONE_CANDIDATE);
     const seen: { stage: string; kb: number }[] = [];
-    const backend = new MockBackend({ planner: scaledPlanner(seen) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scaledPlanner(seen) });
 
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -245,14 +245,14 @@ describe("C-2‴ at product scale", () => {
 
     const first: string[] = [];
     await expect(
-      runInit(root, buildPipeline({ root, backend: new MockBackend({ planner: fragilePlanner(first, "s07") }), prompts: PROMPTS, budgets: BUDGETS })),
+      runInit(root, buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: fragilePlanner(first, "s07") }), prompts: PROMPTS, budgets: BUDGETS })),
     ).rejects.toThrow(/simulated session failure/);
     expect(first).toEqual(["s01", "s02", "s03", "s04", "s05", "s06", "s07"]);
 
     const second: string[] = [];
     const result = await runInit(
       root,
-      buildPipeline({ root, backend: new MockBackend({ planner: fragilePlanner(second, null) }), prompts: PROMPTS, budgets: BUDGETS }),
+      buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: fragilePlanner(second, null) }), prompts: PROMPTS, budgets: BUDGETS }),
     );
 
     /** The six slices that finished are reused from their caches; analysis and slicing from their checkpoints. */

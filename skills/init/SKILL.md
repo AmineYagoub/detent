@@ -32,12 +32,21 @@ Invoke the headless entry from the Detent checkout (this plugin's root):
 
 Pass through flags from $ARGUMENTS (for example `--replan`). Re-invoking is
 always safe: every phase checkpoints, and C-8 replays exactly what changed —
-editing PRD.md replays ANALYZE-forward; editing nothing replays nothing.
+editing PRD.md re-runs AUDIT and replays ANALYZE-forward; editing nothing
+replays nothing.
 
-## The eight phases (C-4.1, in order)
+## The nine phases (C-4.1, in order)
 
-`INIT_FS` → `DISCOVER` → `ANALYZE` → `DETERMINE_VERIFICATION` → `SLICE` →
-`PLAN` → `PREPARE_AGENTS` → `PRESENT`
+`INIT_FS` → `DISCOVER` → `AUDIT` → `ANALYZE` → `DETERMINE_VERIFICATION` →
+`SLICE` → `PLAN` → `PREPARE_AGENTS` → `PRESENT`
+
+`AUDIT` (C-2⁶) reads the documents before anything plans from them: passages
+that contradict each other, gaps, and, in an existing project, what the
+documents say is built that the code does not do. It checks every external
+claim the documents rely on against a primary source, and prints what it
+found; no later phase reads its findings yet. It never stops for a human. Its
+checkpoint is keyed by the documents and the code, so re-invoking after an
+edit to either re-runs it, and a claim it has checked is not checked again.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first — and `PLAN` then plans every slice in turn, one
@@ -65,8 +74,11 @@ decision yourself.
    the assumption the plan proceeds on. It becomes `AWAIT_INFO` only when a
    question is blocking: no assumption could carry it. Channel: the answers go
    INTO the planning documents; the human edits (or dictates edits they
-   approve), then re-invoke — changed contents replay ANALYZE-forward (C-8),
-   and only the slices whose inputs moved are re-planned.
+   approve), then re-invoke — changed contents re-run AUDIT and replay
+   ANALYZE-forward (C-8), and only the slices whose inputs moved are
+   re-planned. Answers written to `docs/founder-decisions.md` do not re-run
+   AUDIT: that file is the decision log, which AUDIT's key leaves out
+   (C-2¹¹).
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

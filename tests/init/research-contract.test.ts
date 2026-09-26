@@ -15,7 +15,7 @@ import { SCHEMA_VERSION, parseArtifact } from "../../src/schemas/common.js";
 import { planningBriefSchema } from "../../src/schemas/init.js";
 import { MockBackend, type RecordedCall } from "../../src/sessions/mock.js";
 import { removeTree, tmpTree } from "../helpers.js";
-import { BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo as fixtureRepo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo as fixtureRepo } from "./plan-fixture.js";
 
 /**
  * PRDR-264 — the contract planning research was never handed.
@@ -338,7 +338,7 @@ describe("PRDR-264 the pipeline hands planning research its contract (D-17)", ()
       assumptions: [],
       docs_read: ["PRD.md"],
     };
-    const backend = new MockBackend({ planner: planner(analysis, DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(analysis, DRAFT(["t-100"])) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     const calls = backend.calls.filter((c) => c.role === "research");
     expect(calls[0], "ANALYZE raised a question and no research session was launched at all").toBeDefined();

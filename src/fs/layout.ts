@@ -54,6 +54,8 @@ export const LAYOUT: readonly LayoutEntry[] = [
   { rel: "plan", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: "research/failures", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: "research/planning", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
+  /** C-2¹¹ (PRDR-281): AUDIT's claim briefs, committed as planning briefs are. */
+  { rel: "research/audit", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: "agents", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: ".gitignore", kind: "file", tracking: "committed", ownership: "repository", stamped: false },
 

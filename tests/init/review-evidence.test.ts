@@ -6,7 +6,7 @@ import { runInit } from "../../src/init/machine.js";
 import { PLAN_REVIEW_SAMPLES, planReviewPath } from "../../src/init/plan-review.js";
 import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
-import { APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -77,7 +77,7 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
   it("decomposes the slice count and prints the null it is read against, as a rate", async () => {
     const root = repo(DOCS);
     const notes: string[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: twoSliceDraft, review: stationaryReviewer() }, []),
     });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
@@ -117,7 +117,7 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
     const root = repo(DOCS);
     const notes: string[] = [];
     let whole = 0;
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
@@ -158,7 +158,7 @@ describe("PRDR-260 a slice's review evidence survives the next slice", () => {
   it("keys every draw by the slice it judged, and keeps the told path shared", async () => {
     const root = repo(DOCS);
     const specs: SessionSpec[] = [];
-    const backend = new MockBackend({
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: recording(scriptedPlanner({ draft: twoSliceDraft, review: stationaryReviewer() }, []), specs),
     });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));

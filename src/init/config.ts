@@ -76,6 +76,29 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
   return spendCapUsd === undefined ? "written-default" : "written";
 }
 
+/** `planner, audit → max`: the roles on each value, in the table's order. */
+function grouped(table: Readonly<Record<string, string>>): string {
+  const roles = new Map<string, string[]>();
+  for (const [role, value] of Object.entries(table)) roles.set(value, [...(roles.get(value) ?? []), role]);
+  return [...roles].map(([value, names]) => `${names.join(", ")} → ${value}`).join("; ");
+}
+
+/**
+ * PRDR-114, PRDR-263: what a first `init` says it routed, so a default the
+ * operator did not choose is one they can see.
+ *
+ * Built from the two tables. The sentences named every role by hand, and a
+ * role added to the tables would have been routed and never named (PRDR-281).
+ */
+export function routingNote(): string {
+  return (
+    `model routing defaulted (PRDR-114, S-5⁵): ${grouped(DEFAULT_MODEL_ROUTING)}. A routed model this runtime cannot serve ` +
+    "falls back to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n" +
+    `effort routing defaulted (PRDR-263, S-5⁵): ${grouped(DEFAULT_EFFORT_ROUTING)}. A level the routed model cannot serve ` +
+    "is downgraded silently by the SDK and noted per session. Edit effort_routing in .detent/config.json to change it.\n"
+  );
+}
+
 export type SymbolsDecision = "on" | "off";
 
 /**

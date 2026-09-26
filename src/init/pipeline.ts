@@ -1,5 +1,3 @@
-import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 import { discover as discoverStack } from "../adapter/discover/index.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
@@ -9,6 +7,7 @@ import { analysisFromOutputs, analysisPath, analyzeStage, isGreenfield } from ".
 import { determineVerification } from "./bind.js";
 import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
+import { planOutputIntact } from "./plan-write.js";
 import { presentInputsFromOutputs, presentStage, type ApprovalDecision } from "./present.js";
 import { sliceStage, slicesFromOutputs, slicesPath } from "./slice.js";
 import { baselineDigest } from "./baseline.js";
@@ -26,6 +25,7 @@ import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./p
 import { CONFORMANCE_RECORD_PATH } from "../schemas/pack.js";
 import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
+import { auditPhase } from "./audit.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -84,6 +84,7 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
   return [
     initFsPhase(deps),
     discoverPhase(deps),
+    auditPhase(deps),
     analyzePhase(deps),
     determinePhase(deps),
     slicePhase(deps),
@@ -158,8 +159,8 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
       }
       /*
        * C-2⁹ (PRDR-279): raw, conforming or changed, recorded for the phases
-       * after this one and said aloud when it is a pack. Nothing routes on it
-       * yet: the specification phases that do (C-2⁶) are not built.
+       * after this one and said aloud when it is a pack. AUDIT routes on it
+       * (C-2¹¹); the phases C-2⁶ adds after AUDIT are not built.
        */
       const pack = classifyPack(deps.root, { greenfield: isGreenfield(stack.stack.markers) });
       const said = packNote(pack);
@@ -368,26 +369,6 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
       });
     }),
   };
-}
-
-/**
- * Whether PLAN's own output is still on disk: the plan artifact exists and
- * every ticket it names has a file. Deleting `.detent/plan/` — a botched merge,
- * a branch switch, a start-over — used to reuse every checkpoint and report
- * READY over an empty directory. Re-planning after a deletion costs the write,
- * not the planning: the slice caches are untouched.
- */
-function planOutputIntact(root: string): boolean {
-  const file = path.join(stateDir(root), "plan", "plan.json");
-  if (!existsSync(file)) return false;
-  try {
-    const plan = JSON.parse(readFileSync(file, "utf8")) as { tickets?: unknown };
-    const ids = Array.isArray(plan.tickets) ? (plan.tickets as string[]) : [];
-    const have = new Set(allTickets(root).map((t) => t.id));
-    return ids.every((id) => have.has(id));
-  } catch {
-    return false;
-  }
 }
 
 function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {

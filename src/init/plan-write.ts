@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { writeArtifact } from "../fs/layout.js";
+import { stateDir, writeArtifact } from "../fs/layout.js";
 import { newTicket as buildTicket, writeTicket } from "../kernel/tickets/mutations.js";
 import { claimBreakable, pidAlive, readClaim } from "../kernel/tickets/mutations.js";
 import { hostname } from "node:os";
@@ -224,6 +224,27 @@ export function writePlan(
  * named — for the contract check, which runs over drafted tickets before the
  * bootstrap exists. Undefined in brownfield: there is no bootstrap.
  */
+/**
+ * C-8‴ (PRDR-118): whether what `writePlan` wrote is still on disk: the plan
+ * artifact exists and every ticket it names has a file. Deleting
+ * `.detent/plan/` — a botched merge, a branch switch, a start-over — used to
+ * reuse every checkpoint and report READY over an empty directory. Re-planning
+ * after a deletion costs the write, not the planning: the slice caches are
+ * untouched. Here beside the writer since PRDR-281 filled `pipeline.ts`.
+ */
+export function planOutputIntact(root: string): boolean {
+  const file = path.join(stateDir(root), "plan", "plan.json");
+  if (!existsSync(file)) return false;
+  try {
+    const plan = JSON.parse(readFileSync(file, "utf8")) as { tickets?: unknown };
+    const ids = Array.isArray(plan.tickets) ? (plan.tickets as string[]) : [];
+    const have = new Set(allTickets(root).map((t) => t.id));
+    return ids.every((id) => have.has(id));
+  } catch {
+    return false;
+  }
+}
+
 export function bootstrapScaffold(
   greenfield: boolean,
   analysis: Analysis | null,

@@ -16,8 +16,9 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /** T-047 — vendored role prompts, hash pinning, fail-closed resolution (S-7, D-9). */
 
-describe("T-047 the eight roles are a pinned wire format (S-1, S-7)", () => {
-  it("the role ids are exactly S-1's eight, in its order — renaming one is an F-3 schema event", () => {
+describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
+  /** PRDR-281: `audit`, the first of S-1‴'s four, joins in the one F-3″ event, with its routing migrated. */
+  it("the role ids are exactly S-1's eight and S-1‴'s audit, in order — adding or renaming one is an F-3 schema event", () => {
     expect(ROLE_IDS).toEqual([
       "planner",
       "diagnose",
@@ -27,23 +28,25 @@ describe("T-047 the eight roles are a pinned wire format (S-1, S-7)", () => {
       "review_fix",
       "research",
       "review",
+      "audit",
     ]);
   });
 
-  it("the read-only set is S-1's four", () => {
-    expect([...READ_ONLY_ROLES].sort()).toEqual(["diagnose", "planner", "research", "review"]);
+  it("the read-only set is S-1's four and S-1‴'s audit", () => {
+    expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "planner", "research", "review"]);
   });
 
-  it("every execution state that launches a session maps to a role; planner has none", () => {
+  it("every execution state that launches a session maps to a role; the init roles have none", () => {
     expect(Object.values(ROLE_FOR_STATE).sort()).toEqual(
       ["blind_fix", "diagnose", "implement", "informed_fix", "research", "review", "review_fix"].sort(),
     );
     expect(Object.values(ROLE_FOR_STATE)).not.toContain("planner");
+    expect(Object.values(ROLE_FOR_STATE)).not.toContain("audit");
   });
 });
 
 describe("T-047 packaging (S-7 AC)", () => {
-  it("the vendored set covers exactly the eight roles — a missing role fails at packaging, not runtime", () => {
+  it("the vendored set covers exactly the roles — a missing role fails at packaging, not runtime", () => {
     for (const role of ROLE_IDS) {
       expect(readFileSync(path.join(PROMPTS_DIR, `${role}.md`), "utf8").length).toBeGreaterThan(100);
     }

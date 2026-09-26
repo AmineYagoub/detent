@@ -163,6 +163,8 @@ describe("PRDR-197 effort_routing is validated on both axes", () => {
       blind_fix: "xhigh",
       review_fix: "xhigh",
       research: "xhigh",
+      /* PRDR-281: S-5⁵ seats the specification roles at max. */
+      audit: "max",
     });
   });
 });
@@ -185,22 +187,25 @@ describe("PRDR-263 init writes the effort routing", () => {
     return cfg["effort_routing"] as Record<string, string>;
   };
 
-  it("routes every role — the planner at max, the other seven at xhigh", () => {
+  it("routes every role — the planner and audit at max, the other seven at xhigh", () => {
     const routing = writtenRouting();
     expect(
       Object.keys(routing).sort(),
       "a role left out of the routing silently runs at the SDK default instead",
     ).toEqual([...ROLE_IDS].sort());
     expect(routing["planner"], "the planner drafts the whole plan in one session (S-5″)").toBe("max");
+    /* PRDR-281: S-5⁵ puts every specification role at max (specification decision 14). */
+    expect(routing["audit"], "audit judges the documents every later role builds on (S-5⁵)").toBe("max");
     for (const role of ROLE_IDS) {
-      if (role === "planner") continue;
+      if (role === "planner" || role === "audit") continue;
       expect(routing[role], `${role} is routed to xhigh`).toBe("xhigh");
     }
   });
 
   /**
-   * The SDK's own declaration is the oracle (`sdk.d.ts:1751-1754`): `xhigh` is
-   * Fable 5 / Opus 4.7+ / Sonnet 5, `max` is Fable 5 / Opus 4.6+ / Sonnet 4.6+.
+   * The SDK's own declaration is the oracle (`sdk.d.ts:1846-1847` at the
+   * 0.3.280 pin): `xhigh` is Fable 5 / Opus 4.7+ / Sonnet 5, `max` is Fable 5 /
+   * Opus 4.6+ / Sonnet 4.6+. Opus 5.5 is past both bounds (PRDR-281).
    * The PAIR is asserted, not the two tables separately, because checking them
    * apart leaves the join to a reader and the join is the whole claim. A pair
    * outside this table is a silent downgrade that PRDR-237 can only report
@@ -209,6 +214,7 @@ describe("PRDR-263 init writes the effort routing", () => {
   it("never routes a role to a level its own model cannot serve", () => {
     const servable: Readonly<Record<string, readonly string[]>> = {
       "claude-opus-5": ["low", "medium", "high", "xhigh", "max"],
+      "claude-opus-5-5": ["low", "medium", "high", "xhigh", "max"],
       "claude-sonnet-5": ["low", "medium", "high", "xhigh", "max"],
     };
     const routing = writtenRouting();
