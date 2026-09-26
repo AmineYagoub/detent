@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * PRDR-287 — one mark, one rule (N-6).
+ * PRDR-287, PRDR-288 — one mark, one rule (N-6).
  *
  * A requirement mark is how the code, the tests, the tickets and the planner
  * point at a rule, so a mark defined twice names two rules and every citation
  * of it is ambiguous. It still resolves, to whichever definition a reader meets
- * first. `detent-prd-v3.md` defined eight marks twice each, for two different
- * rules, and nothing noticed: a citation checker passes clean on a mark that
- * exists, whichever rule it lands on.
+ * first. `detent-prd-v3.md` defined nine marks more than once, C-9′ three
+ * times, for different rules, and nothing noticed: a citation checker passes
+ * clean on a mark that exists, whichever rule it lands on.
  *
  * A definition is a bold id at the head of a bullet — one id, ids joined by
  * `/`, or a range joined by `…` — or a decision-log row, or a bold id followed
@@ -67,18 +67,6 @@ function duplicated(text: string): Record<string, string[]> {
 }
 
 /**
- * Recorded in PRDR-287, not fixed. §4's range restates C-9…C-13 for v3
- * (PRDR-065, 2026-08-18), and four days later PRDR-079 and PRDR-078 defined
- * C-9′ and C-12′ as amendments. Whether a range restatement defines its members
- * is the owner's decision. Pinned EXACTLY, heads and all: a new duplicate
- * fails, and so does resolving one of these without taking it off this list.
- */
-const KNOWN_OVERLAPS: Record<string, string[]> = {
-  "C-9′": ["C-9′…C-13′", "C-9′ (3.0.2, PRDR-079)"],
-  "C-12′": ["C-9′…C-13′", "C-12′ (3.0.1, PRDR-078)"],
-};
-
-/**
  * One rule stated twice is a restatement, not a collision, and only a reader
  * can tell the two apart: the decision log states D-29, and §8 restates it
  * beside D-22, the decision it amends. Pinned exactly, so a second statement
@@ -89,13 +77,17 @@ const RESTATED: Record<string, string[]> = {
 };
 
 /**
- * The eight moves PRDR-287 made. The definition introduced first keeps the
- * mark; the later one takes its family's next free mark. `moved` is the ticket
- * of the rule that moved, which its new definition names.
+ * The ten moves PRDR-287 and PRDR-288 made. The definition introduced first
+ * keeps the mark, and a restatement is a definition: §8's S-3′ and §4's
+ * `C-9′…C-13′` kept theirs (PRDR-288, the owner's decision). Each later one
+ * takes its family's next FREE mark, so C-9‴ and C-9⁗ run against their dates.
+ * `moved` is the ticket of the rule that moved, which its new definition names.
  */
 const MOVES: readonly { from: string; to: string; moved: string }[] = [
   { from: "C-3″", to: "C-3‴", moved: "PRDR-207" },
   { from: "C-9′", to: "C-9‴", moved: "PRDR-139" },
+  { from: "C-9′", to: "C-9⁗", moved: "PRDR-079" },
+  { from: "C-12′", to: "C-12⁗", moved: "PRDR-078" },
   { from: "F-1′", to: "F-1‴", moved: "PRDR-118" },
   { from: "P6′", to: "P6″", moved: "PRDR-142" },
   { from: "S-3′", to: "S-3⁸", moved: "PRDR-121" },
@@ -106,11 +98,11 @@ const MOVES: readonly { from: string; to: string; moved: string }[] = [
 
 const names = (head: string, ticket: string): boolean => new RegExp(`${ticket}(?!\\d)`, "u").test(head);
 
-describe("PRDR-287 a requirement mark names one rule", () => {
-  it("every mark the PRD defines, it defines once — the range's two overlaps excepted, exactly", () => {
+describe("PRDR-287/288 a requirement mark names one rule", () => {
+  it("every mark the PRD defines, it defines once — a restatement of the same rule excepted, by name", () => {
     const found = duplicated(PRD);
     for (const [id, heads] of Object.entries(RESTATED)) expect(found[id], `${id} is restated, not redefined`).toEqual(heads);
-    expect(Object.fromEntries(Object.entries(found).filter(([id]) => !(id in RESTATED)))).toEqual(KNOWN_OVERLAPS);
+    expect(Object.fromEntries(Object.entries(found).filter(([id]) => !(id in RESTATED)))).toEqual({});
   });
 
   it("the parser sees every shape a definition takes, and a citation is not one", () => {
@@ -135,8 +127,9 @@ describe("PRDR-287 a requirement mark names one rule", () => {
   }
 
   it("the dated amendment note names every move", () => {
-    const note = PRD.split("\n\n").find((block) => block.startsWith("> ") && block.includes("PRDR-287, 2026-09-26"));
-    expect(note, "a dated note beside the reading guide").toBeDefined();
+    const note = PRD.split("\n\n").find((block) => block.startsWith("> **One mark, one rule ("));
+    expect(note, "a note beside the reading guide").toBeDefined();
+    expect(note, "dated").toMatch(/\(3\.1\.1, [^)]*\b2026-09-26\)/u);
     for (const { from, to, moved } of MOVES) {
       expect(note, `${from} → ${to}`).toMatch(new RegExp(`${from} \\(${moved}[^)]*\\) → ${to}`, "u"));
     }

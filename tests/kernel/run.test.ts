@@ -819,7 +819,7 @@ describe("T-041 stale claims never spin the loop (C-9/C-12)", () => {
     addTicket(root, { id: "t2" });
     /**
      * t1 sits mid-flight under ANOTHER LIVE worker's claim (this process's
-     * own pid — unambiguously alive on every OS). C-9′/PRDR-079: only a
+     * own pid — unambiguously alive on every OS). C-9⁗/PRDR-079: only a
      * verifiably DEAD owner's claim self-heals (tested in
      * claim-self-heal.test.ts); a live peer's claim is never guessed about.
      */

@@ -12,20 +12,24 @@
 
 > **Reading guide.** Requirement ids carry over from v2 (`C-*` command, `F-*` filesystem, `V-*` verification, `X-*` execution machine, `S-*` sessions/SDK, `B-*` branch, `A-*` artifacts, `SEC-*` security, `N-*` non-functional), plus v3's `R-*` referee surface. **One global reconciliation applies to every inherited section: "the kernel" now reads "the referee."** The Python reference v0.1.3 remains the porting oracle for the inherited machine; v3's new surfaces (the referee MCP boundary, the plugin, the model-driven loop) have no oracle and are specified here directly.
 
-> **One mark, one rule (3.1.1, PRDR-287, 2026-09-26).** Eight marks were each defined twice, for two
-> different rules, so every citation of one named two rules and a reader could not tell which was
-> meant. The definition introduced first keeps its mark; the later one takes its family's next free
-> mark and names the mark it had:
-> C-3″ (PRDR-207) → C-3‴ · C-9′ (PRDR-139) → C-9‴ · F-1′ (PRDR-118) → F-1‴ · P6′ (PRDR-142) → P6″ ·
+> **One mark, one rule (3.1.1, PRDR-287/PRDR-288, 2026-09-26).** Nine marks were each defined more
+> than once, for different rules, so every citation of one named more than one rule and a reader
+> could not tell which was meant. The definition introduced first keeps its mark; each later one
+> takes its family's next free mark and names the mark it had:
+> C-3″ (PRDR-207) → C-3‴ · C-9′ (PRDR-139) → C-9‴ · C-9′ (PRDR-079) → C-9⁗ ·
+> C-12′ (PRDR-078) → C-12⁗ · F-1′ (PRDR-118) → F-1‴ · P6′ (PRDR-142) → P6″ ·
 > S-3′ (PRDR-121) → S-3⁸ · S-5′ (PRDR-141) → S-5⁗ · V-1⁵ (PRDR-232) → V-1⁶ ·
 > X-1‴ (PRDR-136/PRDR-147) → X-1⁷.
-> A mark is an identifier, not a chronology: C-9″ amends what is now C-9‴, and S-3″ to S-3⁷‴ build
-> on what is now S-3⁸. Every citation in the code, the docs and the tickets was re-pointed, one at a
-> time, to the rule it means. Two records keep the mark they had and read through this note: a
-> quotation inside a `prd-review` ticket, which N-6 preserves as the document stood, and every commit
-> message. One overlap is left open: §4's `C-9′…C-13′` restates C-9…C-13 and so names C-9′ and
-> C-12′, which PRDR-079 and PRDR-078 also define. `tests/docs/prd-requirement-ids.test.ts` fails on a
-> mark defined twice and pins that overlap exactly.
+> A restatement is a definition. §8's S-3′ restates v2's S-3, and §4's range `C-9′…C-13′` restates
+> C-9…C-13, for v3; each was written before the amendments that reused its marks, so each kept them
+> (for the range, PRDR-288 records the owner's decision). A mark is an identifier, not a chronology:
+> C-9″ amends what is now C-9‴, S-3″ to S-3⁷‴ build on what is now S-3⁸, and C-9⁗ and C-12⁗ are
+> older than C-9″, C-9‴, C-12″ and C-12‴. Every citation in the code, the docs and the tickets was
+> re-pointed, one at a time, to the rule it means. Three records keep the mark they had and read
+> through this note: a quotation inside a `prd-review` ticket, which N-6 preserves as the document
+> stood; PRDR-287's account of the overlap it left open; and every commit message.
+> `tests/docs/prd-requirement-ids.test.ts` fails on a mark defined twice, unless the second is a
+> restatement of the same rule, named there one by one (D-29).
 
 ---
 
@@ -1513,13 +1517,13 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   M4 blocker; MIT matches the header's "public, open source" delivery and the plugin
   ecosystem's norm. `LICENSE` at the repo root is the operative text; the v2 document
   stays frozen with the question as it stood.
-- **C-12′ (3.0.1, PRDR-078).** The plumbing set gains `unclaim <id>` / `unclaim
+- **C-12⁗ (3.0.1, PRDR-078; renumbered from C-12′ by PRDR-288).** The plumbing set gains `unclaim <id>` / `unclaim
   --stale`: an explicit, state-independent release for claims whose owner is
   verifiably dead — the crash-resume case approve/requeue cannot legally reach.
   Live owners refuse with pid and age; unreadable claims stay held (R-3); the
   break is an attributed ticket note, never a transition. Porcelain unchanged
   (plumbing sits outside C-14's freeze).
-- **C-9′ (3.0.2, PRDR-079).** The resumable pool self-heals stale claims: a
+- **C-9⁗ (3.0.2, PRDR-079; renumbered from C-9′ by PRDR-288).** The resumable pool self-heals stale claims: a
   claim that is readable, recorded on this host, and held by a dead pid is
   released (kernel-noted) and its ticket rejoins the pool — D-30's crash-resume
   sentence now holds without operator surgery. Live, foreign-host, and
