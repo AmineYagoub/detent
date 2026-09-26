@@ -13,7 +13,8 @@ import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { HeldFinding, PlanQuestion, PlanReview } from "../schemas/init.js";
 import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
-import { mergeSimilar, type PresentQuestion } from "./questions.js";
+import { mergeSimilar, similarQuestions, type PresentQuestion } from "./questions.js";
+import { DECISION_LOG_PATH } from "../schemas/pack.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -69,6 +70,10 @@ export interface PresentInput {
   readonly slices?: readonly { readonly id: string; readonly title: string; readonly tickets: readonly string[] }[];
   /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on; C-3‴ merges near-duplicates. */
   readonly questions?: readonly PresentQuestion[];
+  /** C-3⁗ (PRDR-282): every vetoable default the decision log holds, with its reason, listed beside the assumptions. */
+  readonly defaults?: readonly { readonly id: string; readonly value: string; readonly reason: string }[];
+  /** C-3‴ (PRDR-282): planning questions the log's decisions already answer, by id, so they are named and not asked again. */
+  readonly answeredByLog?: readonly { readonly id: string; readonly entry: string }[];
   /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
   readonly findings?: readonly HeldFinding[];
   /** D-24′ (PRDR-209): where the full list went when it did not fit on the screen. */
@@ -124,7 +129,7 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
+): Pick<PresentInput, "slices" | "questions" | "defaults" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -157,6 +162,13 @@ export function presentInputsFromOutputs(
     typeof (e as { consumer?: unknown }).consumer === "string" &&
     typeof (e as { provider?: unknown }).provider === "string" &&
     typeof (e as { contract?: unknown }).contract === "string";
+  /** A decision-log row as DECIDE's outputs carry it, every named field a string. */
+  const isRow =
+    <K extends string>(...keys: readonly K[]) =>
+    (v: unknown): v is Record<K, string> =>
+      typeof v === "object" && v !== null && keys.every((k) => typeof (v as Record<string, unknown>)[k] === "string");
+  const decisions = list<unknown>("DECIDE", "decisions").filter(isRow("id", "question"));
+  const answeredByLog: { id: string; entry: string }[] = [];
   const seen = new Set<string>();
   const takenIds = new Set<string>();
   const questions: PlanQuestion[] = [];
@@ -168,6 +180,11 @@ export function presentInputsFromOutputs(
     const key = q.question.trim().toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    const answered = decisions.find((d) => similarQuestions(d.question, q.question));
+    if (answered !== undefined) {
+      answeredByLog.push({ id: q.id, entry: answered.id });
+      continue;
+    }
     /**
      * PRDR-119: three stages number their questions independently, so the
      * batch could show the same id twice. The id is what a human writes down
@@ -190,6 +207,8 @@ export function presentInputsFromOutputs(
     slices,
     /* C-3‴ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
     questions: mergeSimilar(questions),
+    defaults: list<unknown>("DECIDE", "defaults").filter(isRow("id", "value", "reason")),
+    answeredByLog,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
     ...(((v): v is { resolved: number; survived: number; introduced: number } =>
@@ -257,6 +276,21 @@ export function renderPresentation(input: PresentInput): string {
       if (q.assumption !== "") lines.push(`      assumed: ${q.assumption}`);
       /* C-3‴: one answer covers both; the other id is named so its own assumption can be found. */
       if (q.also !== undefined && q.also.length > 0) lines.push(`      also asked as ${q.also.join(", ")} — the same question in another stage's words; one answer covers both (C-3‴)`);
+    }
+  }
+  const answered = input.answeredByLog ?? [];
+  if (answered.length > 0) {
+    lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
+  }
+  const defaults = input.defaults ?? [];
+  if (defaults.length > 0) {
+    lines.push(
+      "",
+      `Defaults (${defaults.length}) — the plan follows each; to veto one, edit its row in ${DECISION_LOG_PATH} and re-run \`detent init\` (C-3⁗):`,
+    );
+    for (const d of defaults) {
+      lines.push(`  ${d.id}: ${d.value}`);
+      if (d.reason !== "") lines.push(`      because: ${d.reason}`);
     }
   }
   const edges = input.derivedEdges ?? [];

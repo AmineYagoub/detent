@@ -10,7 +10,7 @@ import { auditedDocuments, auditKey } from "./audit-key.js";
 import { checkSurvey, type Dropped, type SurveyCheck } from "./audit-passages.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
 import type { PipelineDeps } from "./pipeline.js";
-import { withOneRelaunch } from "./retry.js";
+import { refusedAttemptInput, withOneRelaunch } from "./retry.js";
 import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 
@@ -50,21 +50,6 @@ export function auditSurveySkeleton(greenfield: boolean): Json {
     gaps: [{ topic: "<what is missing>", detail: "<what no document says, and what a plan needs it for>", passages: [] }],
     drift: greenfield ? [] : [{ passage, code_checked: ["<the repository paths you read>"], finding: "<what the code does instead>" }],
     claims: [{ claim: "<one external fact the documents rely on>", subject: "<what it is about: a dependency at its pinned version, or a service>", passage }],
-  };
-}
-
-/**
- * What a relaunched session is told. Not `previousAttemptInput`'s words, which
- * tell the session its content was sound and only its shape refused: here a
- * quote that is not in the document is the content.
- */
-function relaunchInput(previous: { readonly issue: string } | null, what: string): Json {
-  if (previous === null) return {};
-  return {
-    previous_attempt: {
-      issue: previous.issue,
-      note: `Your previous ${what} was refused for the issue above. Fix what it names, and write the whole ${what} again in exactly the \`expected_output\` shape.`,
-    },
   };
 }
 
@@ -123,10 +108,10 @@ interface Found {
 }
 
 /**
- * C-2¹¹: what the operator is told. Nothing in this build reads AUDIT's
- * checkpoint, so the note is where its findings reach a person, and it names
- * each one that needs a person: a contradiction, a drift, a claim the
- * documents have wrong.
+ * C-2¹¹: what the operator is told. It names each finding that needs a person:
+ * a contradiction, a drift, a claim the documents have wrong. DECIDE reads the
+ * checkpoint and sorts what it leaves open (C-2¹², PRDR-282); the note is where
+ * the operator sees what DECIDE was given.
  */
 export function auditNotes(found: Found, pool: number): string[] {
   const at = (p: { readonly file: string; readonly line: number }): string => `${p.file}:${String(p.line)}`;
@@ -137,7 +122,7 @@ export function auditNotes(found: Found, pool: number): string[] {
       `AUDIT found ${count(found.contradictions.length, "contradiction")}, ${count(found.gaps.length, "gap")}, ` +
         `${count(found.drift.length, "drift finding")} and ${count(found.claims.length, "external claim")} ` +
         `(${String(found.claims.length - wrong.length - unverified.length)} confirmed, ${String(wrong.length)} wrong, ` +
-        `${String(unverified.length)} unverified). No phase reads them yet; planning goes on from the documents as written (C-2¹¹).`,
+        `${String(unverified.length)} unverified). DECIDE sorts what they leave open before anything plans (C-2¹²).`,
       ...listed("contradictions", found.contradictions, (c) => `${c.topic}: ${c.passages.map(at).join(" vs ")}`),
       ...listed("drift", found.drift, (d) => `${at(d.passage)}: ${d.finding}`),
       ...listed("wrong", wrong, (c) => `${c.claim} (${at(c.passage)}): ${c.correction ?? ""} [${c.source ?? ""}]`),
@@ -174,7 +159,7 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
         greenfield,
         stack_markers: [...deps.stackMarkers],
         expected_output: auditSurveySkeleton(greenfield),
-        ...relaunchInput(previous, "survey"),
+        ...refusedAttemptInput(previous, "survey"),
       },
       artifactOut,
     );
@@ -197,7 +182,7 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
           passage: claim.passage,
           hierarchy: HIERARCHY,
           ...claimBriefSkeletons(claim.claim, hash),
-          ...relaunchInput(previous, "claim brief"),
+          ...refusedAttemptInput(previous, "claim brief"),
         },
         out,
       ),

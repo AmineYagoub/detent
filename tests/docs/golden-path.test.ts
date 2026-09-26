@@ -147,6 +147,12 @@ const OPENS: Record<string, PromptSite> = {
       "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents — and PRDR-276's " +
       "toolchain question, which is not one",
   },
+  "cli/decide.ts": {
+    constructs: ["node:readline", "createInterface(", ".question("],
+    reason:
+      "C-3⁗'s DECIDE questions (PRDR-282), a screen of at most four answered by option, own words or later; " +
+      "a later answer is the phase's AWAIT_INFO, which the machine raises, not this module",
+  },
   "cli/escalate.ts": {
     constructs: ["node:readline", "createInterface(", ".question("],
     reason: "C-10/X-8's in-run escalation — approve / requeue / skip / quit; not a member of INTERRUPTS",
@@ -160,8 +166,10 @@ const OPENS: Record<string, PromptSite> = {
 /** Modules that hand an asker to something that will call it, and open no transport themselves. */
 const WIRES: Record<string, PromptSite> = {
   "cli/init.ts": {
-    constructs: ["makeTtyApproval"],
-    reason: "C-7's first exit — the approval asker passed to the init pipeline behind this file's TTY gate",
+    constructs: ["makeTtyApproval", "makeTtyDecisions"],
+    reason:
+      "C-7's first exit and C-3⁗'s DECIDE questions (PRDR-282) — the askers passed to the init pipeline behind " +
+      "this file's TTY gate",
   },
   "cli/run.ts": {
     constructs: ["makeTtyEscalation", "makeTtyApproval", "makeTtyToolchainApproval"],
@@ -257,7 +265,7 @@ describe("T-130/T-132 C-14′: the plugin surface carries the same freeze (MP3 e
     expect([...named].sort()).toEqual([...INTERRUPTS].sort());
   });
 
-  it("T-130: the phases appear in C-4.1 order, AUDIT included (PRDR-281)", () => {
+  it("T-130: the phases appear in C-4.1 order, AUDIT and DECIDE included (PRDR-281, PRDR-282)", () => {
     const positions = INIT_PHASES.map((phase) => initSkill.indexOf(`\`${phase}\``));
     for (const [i, at] of positions.entries()) {
       expect(at, `${INIT_PHASES[i]} missing from the init skill`).toBeGreaterThan(-1);
@@ -265,10 +273,12 @@ describe("T-130/T-132 C-14′: the plugin surface carries the same freeze (MP3 e
     }
   });
 
-  it("T-130: each decision is documented at its bracketed phase (C-4.1 positions)", () => {
-    for (const [interrupt, phase] of Object.entries(INTERRUPT_PHASE)) {
-      const block = initSkill.slice(initSkill.indexOf(`\`${interrupt}\``));
-      expect(block.slice(0, 200), interrupt).toContain(`raised at \`${phase}\``);
+  /** PRDR-282: AWAIT_INFO is raised at DECIDE or at PRESENT, and the skill names each phase that may raise it. */
+  it("T-130: each decision is documented at its bracketed phases (C-4.1 positions)", () => {
+    for (const [interrupt, phases] of Object.entries(INTERRUPT_PHASE)) {
+      const block = initSkill.slice(initSkill.indexOf(`\`${interrupt}\``)).slice(0, 200);
+      expect(block, interrupt).toContain(`raised at \`${phases[0] ?? ""}\``);
+      for (const phase of phases.slice(1)) expect(block, `${interrupt} at ${phase}`).toContain(`at \`${phase}\``);
     }
   });
 

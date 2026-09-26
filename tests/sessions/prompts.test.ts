@@ -17,8 +17,11 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 /** T-047 — vendored role prompts, hash pinning, fail-closed resolution (S-7, D-9). */
 
 describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
-  /** PRDR-281: `audit`, the first of S-1‴'s four, joins in the one F-3″ event, with its routing migrated. */
-  it("the role ids are exactly S-1's eight and S-1‴'s audit, in order — adding or renaming one is an F-3 schema event", () => {
+  /**
+   * PRDR-281: `audit`, the first of S-1‴'s four, joins in the one F-3″ event, with its routing migrated.
+   * PRDR-282: `spec_write`, the second, joins the same event, which no release has shipped yet.
+   */
+  it("the role ids are exactly S-1's eight and S-1‴'s audit and spec_write, in order — adding or renaming one is an F-3 schema event", () => {
     expect(ROLE_IDS).toEqual([
       "planner",
       "diagnose",
@@ -29,6 +32,7 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
       "research",
       "review",
       "audit",
+      "spec_write",
     ]);
   });
 

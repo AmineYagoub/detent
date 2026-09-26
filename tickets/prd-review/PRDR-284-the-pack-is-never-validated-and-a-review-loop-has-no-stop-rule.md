@@ -47,3 +47,11 @@ healthy specification phase would have the no-progress breaker announcing throug
 AUDIT does not audit a changed pack (C-2¹¹), and until VALIDATE exists nothing re-validates one:
 it goes to planning unaudited, and AUDIT's note says "this build has no VALIDATE". That note, in
 `auditPhase` in `src/init/audit.ts`, and the module's doc-block become false the day VALIDATE lands.
+
+## From PRDR-282
+
+`INTERRUPT_PHASE` is now a list of phases per interrupt, and the machine refuses an interrupt
+raised at a phase its list does not name (C-2¹²). VALIDATE's AWAIT_INFO for a blocker at the
+ceiling needs VALIDATE added to `AWAIT_INFO`'s list in `src/schemas/init.ts`, or the machine throws.
+DECIDE's note on a changed pack names VALIDATE as unbuilt (`decidePhase` in `src/init/decide.ts`),
+and becomes false the day it lands.

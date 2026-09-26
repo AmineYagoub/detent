@@ -4,6 +4,7 @@ import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { slicesSchema, type Analysis, type Slices } from "../schemas/init.js";
+import { DECISION_LOG_PATH } from "../schemas/pack.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { PhaseOutcome } from "./machine.js";
 import { previousAttemptInput, withOneRelaunch } from "./retry.js";
@@ -130,9 +131,15 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
  * from an empty desk; a slice left with no documents falls back to the whole
  * discovered set, which is the safe direction. An unknown PB id is dropped the
  * same way, noted, so a typo cannot silently retire a baseline item.
+ *
+ * C-2¹² (PRDR-282): the decision log joins every slice that names its own
+ * documents, whatever the model listed. A row there wins over the documents it
+ * settles (C-2⁷), and a slice planned without it would plan on what the log
+ * overrules. A slice with none plans from every document, the log among them.
  */
 function groundSlices(slices: Slices, deps: SliceDeps): Slices["slices"] {
   const discovered = new Set(deps.docs);
+  const log = discovered.has(DECISION_LOG_PATH) ? [DECISION_LOG_PATH] : [];
   const known = new Set(PRODUCTION_BASELINE.map((b) => b.id));
   return slices.slices.map((slice) => {
     const docs = slice.docs.filter((d) => discovered.has(d));
@@ -146,7 +153,7 @@ function groundSlices(slices: Slices, deps: SliceDeps): Slices["slices"] {
     const items = slice.baseline_items.filter((b) => known.has(b));
     const strays = slice.baseline_items.filter((b) => !known.has(b));
     if (strays.length > 0) deps.note?.(`${slice.id}: ${strays.join(", ")} name no production-baseline item — dropped`);
-    return { ...slice, docs, baseline_items: items };
+    return { ...slice, docs: docs.length === 0 || docs.includes(DECISION_LOG_PATH) ? docs : [...docs, ...log], baseline_items: items };
   });
 }
 

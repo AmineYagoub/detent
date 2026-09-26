@@ -41,3 +41,10 @@ AUDIT has its own claim checker (`src/init/audit-claims.ts`), so taking planning
 ANALYZE removes nothing AUDIT uses: it shares `withOneRelaunch`, the X-6a refinements in
 `src/schemas/init.ts` and `EXTERNAL_TIER`, and not `plan-research.ts`. Until then each of the two
 phases reports its own tool calls against `planning_research_tool_calls` (C-2¹¹).
+
+## From PRDR-282
+
+DECIDE and PRESENT use `similarQuestions` from `src/init/questions.ts`: DECIDE refuses a question
+the log's decisions already answer, and PRESENT names each planning question the log answers
+(`answeredByLog`) rather than asking it. Removing the question machinery keeps that function or
+moves it; the rest of `questions.ts` is this ticket's to remove.

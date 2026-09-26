@@ -36,3 +36,22 @@ DISCOVER's own recorded patterns, and a later `init` finds the conforming pack a
 WRITE is the first `init` session that writes documents. S-1′ gives `init` sessions a read-only
 surface plus one write rule, so the pack's paths become a declared write surface, enforced by
 the hook.
+
+## From PRDR-282
+
+DECIDE is built (C-2¹²), and four things in it are WRITE's to extend or change:
+
+- **The role.** `spec_write` exists, on `prompts/spec_write.md`, with one task, `decide`, told by
+  its inputs. WRITE adds its own task to that prompt. `toolsForRole` in `src/sessions/guard.ts`
+  gives the role the read tools only, since DECIDE's session writes its artifact alone. Building
+  the surface S-1‴ declares for the role (the log, the pack's paths and `archive/`) is WRITE's.
+- **The log.** DECIDE's rows sit under `### Asked at DECIDE` and `### Settled at DECIDE` headings
+  in each section of `docs/founder-decisions.md`, in the pack's grammar; code writes them, and a
+  founder's rows are never rewritten. A founder's log whose ids are not `D-n`/`X-n` is read only
+  by its raw ids: the grammar's parser refuses such rows, so C-3‴'s check and PRESENT's defaults
+  do not see them. Making it a pack is WRITE's.
+- **DISCOVER does not list the log**, and the planning phases add it themselves
+  (`planningDocs` in `src/init/decide.ts`). WRITE's move of the originals to `archive/` must leave
+  the log where it is.
+- **The note.** On a changed pack, DECIDE says "Applying its change is WRITE's and checking it
+  VALIDATE's, and this build has neither" (`decidePhase`). That becomes false the day WRITE lands.

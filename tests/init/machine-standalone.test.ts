@@ -7,10 +7,10 @@ import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 /**
  * PRDR-281 — a standalone phase (C-2¹¹).
  *
- * AUDIT's checkpoint is keyed by its own digest alone. The chain would have
- * re-run it for every answer DECIDE writes, since the decision log moves
- * DISCOVER's listing, and would have re-planned the product for every edit to
- * the code, which AUDIT's key covers and no phase after it reads. These drive
+ * AUDIT's checkpoint is keyed by its own digest alone. On the chain, every
+ * edit to the code, which AUDIT's key covers and no phase after it reads, would
+ * have re-planned the product; and so would every answer DECIDE writes, while
+ * DISCOVER listed the decision log (it no longer does, PRDR-282). These drive
  * the machine with recording handlers, so what they see is the machine alone.
  */
 

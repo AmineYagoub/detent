@@ -15,6 +15,8 @@ export const INIT_PHASES = [
   "DISCOVER",
   /** C-2⁶ (PRDR-281): the documents are judged before anything plans from them. */
   "AUDIT",
+  /** C-3⁗ (PRDR-282): what AUDIT left open is asked or settled, in the decision log, before anything plans. */
+  "DECIDE",
   "ANALYZE",
   "DETERMINE_VERIFICATION",
   /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */
@@ -49,15 +51,23 @@ export const INTERRUPTS = [
 
 export type Interrupt = (typeof INTERRUPTS)[number];
 
-/** Which phase may raise which interrupt (C-4.1's bracketed positions). */
+/**
+ * Which phases may raise which interrupt (C-4.1's bracketed positions). The
+ * machine refuses an interrupt raised anywhere else, so this is the rule and
+ * not a description of it.
+ */
 export const INTERRUPT_PHASE = {
-  AWAIT_DOCS: "DISCOVER",
-  /** C-3′ (PRDR-117): questions are batched from every planning stage and asked once, with the whole plan. */
-  AWAIT_INFO: "PRESENT",
-  AWAIT_BINDING_CHOICE: "DETERMINE_VERIFICATION",
-  AWAIT_SETUP_CONSENT: "DETERMINE_VERIFICATION",
-  AWAIT_APPROVAL: "PRESENT",
-} as const satisfies Record<Interrupt, InitPhase>;
+  AWAIT_DOCS: ["DISCOVER"],
+  /**
+   * C-3⁗ (PRDR-282): at DECIDE, on a terminal, for the questions a founder
+   * defers; and at PRESENT, where C-3′ (PRDR-117) asks what planning could not
+   * settle. VALIDATE joins when it is built (C-2⁶).
+   */
+  AWAIT_INFO: ["DECIDE", "PRESENT"],
+  AWAIT_BINDING_CHOICE: ["DETERMINE_VERIFICATION"],
+  AWAIT_SETUP_CONSENT: ["DETERMINE_VERIFICATION"],
+  AWAIT_APPROVAL: ["PRESENT"],
+} as const satisfies Record<Interrupt, readonly InitPhase[]>;
 
 /*
  * ---------------------------------------------------------------------------

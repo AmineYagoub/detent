@@ -61,6 +61,29 @@ export const CLEAN_AUDIT: StageFn = (spec) => {
   return okResult();
 };
 
+/**
+ * PRDR-282: DECIDE runs a session while any item is open, and in greenfield the
+ * stack is one until the decision log records it. A test of the phases after
+ * DECIDE gets a session that settles every item by one default, the stack by
+ * `stack`, so what the test asserts is what its own stage did.
+ */
+export const decideDefaults =
+  (stack: object = { language: "typescript", toolchain: "node" }): StageFn =>
+  (spec) => {
+    const inputs = (JSON.parse(spec.promptVariable) as { inputs: { items?: { id: string }[] } }).inputs;
+    const ids = (inputs.items ?? []).map((i) => i.id);
+    const rest = ids.filter((id) => id !== "stack");
+    const artifact = {
+      schema_version: SCHEMA_VERSION,
+      defaults: [
+        ...(rest.length === 0 ? [] : [{ value: "the documents as written", reason: "the fixture's", settles: rest }]),
+        ...(ids.includes("stack") ? [{ value: "the stack", reason: "the fixture's", settles: ["stack"], stack }] : []),
+      ],
+    };
+    writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
+    return okResult();
+  };
+
 export const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 
 /** C-2‴: one slice over the whole pack — the shape a small product's SLICE produces. */

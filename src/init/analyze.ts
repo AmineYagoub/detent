@@ -3,6 +3,8 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { analysisSchema, type Analysis } from "../schemas/init.js";
+import { languageKey } from "./bind.js";
+import type { DecidedStack } from "./decide-log.js";
 import type { PhaseOutcome } from "./machine.js";
 import { planResearch, type PlanResearchDeps, type PlanResearchResult } from "./plan-research.js";
 
@@ -20,6 +22,11 @@ import { planResearch, type PlanResearchDeps, type PlanResearchResult } from "./
  * planning research could not answer (C-3a) travel there together, each with
  * the assumption the plan proceeds on, because a stop in the middle of
  * planning is exactly the drip C-3 forbids.
+ *
+ * D-10′ (PRDR-282): where the decision log settles the stack, DECIDE chose it
+ * and ANALYZE plans on it. The session is handed the entry and code writes it
+ * over whatever stack the session wrote, so the stack the log records is the
+ * one every later phase binds and plans against.
  */
 
 export function analysisPath(root: string): string {
@@ -31,6 +38,8 @@ export interface AnalyzeDeps {
   /** Repo-relative docs from T-061, and the stack facts from T-025. */
   readonly docs: readonly string[];
   readonly stackMarkers: readonly string[];
+  /** D-10′ (PRDR-282): the stack the decision log settles; in greenfield it is the analysis's stack. */
+  readonly decided?: DecidedStack;
   /** Launch the read-only planner session; it writes `analysisPath(root)`. */
   readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
   /** C-3a: absent when planning research is not configured for this init. */
@@ -88,8 +97,42 @@ export function analysisSkeleton(greenfield: boolean): Record<string, unknown> {
   };
 }
 
+/** The slots an analysis names commands for, read off its schema; `test_single` is a binding's alone. */
+const ANALYSIS_SLOTS: ReadonlySet<string> = new Set(Object.keys(analysisSchema.shape.stack.unwrap().shape.verification.unwrap().shape));
+
+/**
+ * D-10′ (PRDR-282): the decided stack in the analysis's shape, its toolchain as
+ * the runtime. What the session wrote fills a field the entry leaves empty, and
+ * only where the session wrote the decided language: a session that chose some
+ * other stack wrote commands and a scaffold for that one, and a gate command
+ * the entry names always wins.
+ */
+export function withDecidedStack(stack: NonNullable<Analysis["stack"]> | null, decided: DecidedStack): NonNullable<Analysis["stack"]> {
+  const key = languageKey(decided.language);
+  const own = stack !== null && key !== null && languageKey(stack.language) === key ? stack : null;
+  const named = Object.fromEntries(Object.entries(decided.gates).filter(([slot]) => ANALYSIS_SLOTS.has(slot)));
+  const verification = { ...own?.verification, ...named };
+  return {
+    language: decided.language,
+    runtime: decided.toolchain,
+    test_framework: own?.test_framework ?? "",
+    rationale: `The decision log settles the stack, as ${decided.decision} (D-10′).`,
+    scaffold_files: decided.scaffold_files.length > 0 ? [...decided.scaffold_files] : [...(own?.scaffold_files ?? [])],
+    ...(Object.keys(verification).length === 0 ? {} : { verification }),
+  };
+}
+
+function stackInstruction(greenfield: boolean, decided: DecidedStack | undefined): string {
+  if (!greenfield) return "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen.";
+  if (decided !== undefined) {
+    return `This is a greenfield project whose stack the decision log settles, as ${decided.decision}: \`decided_stack\` is it (D-10′). Write it in \`stack\` — its toolchain as \`runtime\`, its gates as \`verification\` — and choose nothing about the stack; code writes the decided stack over yours.`;
+  }
+  return "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object, and `stack.scaffold_files` must name every file the scaffold creates that later tickets may lean on — the bootstrap ticket provides each of them, so a ticket consuming one is not reported as consuming a file no ticket creates (A-1⁶).";
+}
+
 export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
   const greenfield = isGreenfield(deps.stackMarkers);
+  const decided = greenfield ? deps.decided : undefined;
 
   /*
    * A re-run derives fresh (C-8): a stale analysis from a prior firing is an
@@ -102,13 +145,10 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
     docs: deps.docs,
     stack_markers: deps.stackMarkers,
     greenfield,
+    ...(decided === undefined ? {} : { decided_stack: decided }),
     expected_output: analysisSkeleton(greenfield),
     instruction:
-      `${
-        greenfield
-          ? "This is a greenfield project: choose the stack and justify it. Your analysis must include a `stack` object, and `stack.scaffold_files` must name every file the scaffold creates that later tickets may lean on — the bootstrap ticket provides each of them, so a ticket consuming one is not reported as consuming a file no ticket creates (A-1⁶)."
-          : "This is an existing repository: describe what it is, and set `stack` to null — the stack is discovered, not chosen."
-      } Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone. A question the documents cannot answer goes in \`questions\` WITH the assumption the plan proceeds on while it is unanswered; \`blocking: true\` only when no assumption can carry it — questions are asked once, with the whole plan (C-3′).`,
+      `${stackInstruction(greenfield, decided)} Write EXACTLY the \`expected_output\` shape to artifact_out — same keys, no extras: the validator is strict and refuses unknown keys (P2). Do NOT write a plan, tickets, or bindings here; ANALYZE produces the analysis alone. A question the documents cannot answer goes in \`questions\` WITH the assumption the plan proceeds on while it is unanswered; \`blocking: true\` only when no assumption can carry it — questions are asked once, with the whole plan (C-3′).`,
   });
 
   const raw = readAnalysis(deps.root);
@@ -125,7 +165,7 @@ export async function analyzeStage(deps: AnalyzeDeps): Promise<PhaseOutcome> {
         : `ANALYZE produced an invalid analysis: ${parsed.reason === "invalid" ? parsed.issues.join("; ") : "newer schema"}`,
     );
   }
-  const analysis = parsed.value;
+  const analysis = decided === undefined ? parsed.value : { ...parsed.value, stack: withDecidedStack(parsed.value.stack, decided) };
 
   if (greenfield && analysis.stack === null) {
     throw new Error("ANALYZE ran on a greenfield project without choosing a stack — DETERMINE_VERIFICATION has nothing to bind (D-10)");

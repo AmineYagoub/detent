@@ -22,10 +22,11 @@ import { previousAttemptInput } from "./retry.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
-import { CONFORMANCE_RECORD_PATH } from "../schemas/pack.js";
+import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH } from "../schemas/pack.js";
 import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
+import { decidePhase, decidedStack, planningDocs, type DecideAsk } from "./decide.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -75,6 +76,8 @@ export interface PipelineDeps {
    * without an asker of its own.
    */
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
+  /** C-3⁗ (PRDR-282): DECIDE's questions, asked on a terminal; absent, each recommended answer is taken (specification decision 9). */
+  readonly askDecisions?: DecideAsk;
   readonly print?: (text: string) => void;
 }
 
@@ -85,6 +88,7 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
     initFsPhase(deps),
     discoverPhase(deps),
     auditPhase(deps),
+    decidePhase(deps),
     analyzePhase(deps),
     determinePhase(deps),
     slicePhase(deps),
@@ -106,6 +110,13 @@ export function pendingPhases(handlers: readonly PhaseHandler[]): InitPhase[] {
 function docPatterns(deps: PipelineDeps): readonly string[] {
   return deps.planDocs !== undefined && deps.planDocs.length > 0 ? deps.planDocs : DOC_PATTERNS;
 }
+
+/**
+ * C-2¹² (PRDR-282): DISCOVER never lists the decision log. DECIDE writes it,
+ * and a listing that held it would replay every phase from DISCOVER on the next
+ * `init`; the planning phases add it to what they read (`planningDocs`).
+ */
+const notTheLog = (doc: string): boolean => doc !== DECISION_LOG_PATH;
 
 function initFsPhase(deps: PipelineDeps): PhaseHandler {
   return {
@@ -139,14 +150,15 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
      * is the one case its missing `pack` output can mean.
      */
     digest: () => {
-      const docs = discoverDocs(deps.root, docPatterns(deps)).docs;
+      const docs = discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog);
       const stack = discoverStack(deps.root);
       const listing = listingDigest([...docs, ...stack.stack.markers.map((m) => `marker:${m}`)]);
       if (!hasConformanceRecord(deps.root)) return listing;
       return `${listing}|${contentsDigest(deps.root, [...packDocuments(deps.root), CONFORMANCE_RECORD_PATH])}`;
     },
     run: async () => {
-      const docs = discoverDocs(deps.root, docPatterns(deps));
+      const found = discoverDocs(deps.root, docPatterns(deps));
+      const docs = { ...found, docs: found.docs.filter(notTheLog) };
       const stack = discoverStack(deps.root);
       if (docs.docs.length === 0) {
         /* C-2: no docs → AWAIT_DOCS with the exact list of what was looked for. */
@@ -159,8 +171,9 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
       }
       /*
        * C-2⁹ (PRDR-279): raw, conforming or changed, recorded for the phases
-       * after this one and said aloud when it is a pack. AUDIT routes on it
-       * (C-2¹¹); the phases C-2⁶ adds after AUDIT are not built.
+       * after this one and said aloud when it is a pack. AUDIT and DECIDE route
+       * on it (C-2¹¹, C-2¹²); WRITE and VALIDATE, which C-2⁶ adds after them,
+       * are not built.
        */
       const pack = classifyPack(deps.root, { greenfield: isGreenfield(stack.stack.markers) });
       const said = packNote(pack);
@@ -189,19 +202,20 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
      * re-runs analysis.
      */
     digest: (ctx) => {
-      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? discoverDocs(deps.root, docPatterns(deps)).docs;
+      const docs = ctx.outputs["DISCOVER"] === undefined ? discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog) : planningDocs(deps.root, ctx.outputs);
       /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
        * the phase reasons must invalidate it, exactly as an edited doc does. */
       return `${contentsDigest(deps.root, docs)}|${valueDigest([ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [], deps.prompts.hashes.planner])}`;
     },
     /* PRDR-203: one journal for the phase, handed to every launch it makes. */
     run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
-      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
       const stackMarkers = (ctx.outputs["DISCOVER"]?.["stack_markers"] as string[] | undefined) ?? [];
+      const decided = decidedStack(ctx.outputs);
       return await analyzeStage({
         root: deps.root,
-        docs,
+        docs: planningDocs(deps.root, ctx.outputs),
         stackMarkers,
+        ...(decided === null ? {} : { decided }),
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs) => {
           await launchInitSession(
@@ -292,7 +306,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
     phase: "SLICE",
     /** The CONTENTS of every document, the analysis, the baseline and the prompt: any of them moving re-slices. */
     digest: (ctx) => {
-      const docs = (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
+      const docs = planningDocs(deps.root, ctx.outputs);
       return `${contentsDigest(deps.root, docs)}|${valueDigest([
         ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
         deps.planBaseline ?? "production",
@@ -305,7 +319,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
     run: async (ctx) =>
       await withInitJournal(deps.root, async (journal) => await sliceStage({
         root: deps.root,
-        docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
+        docs: planningDocs(deps.root, ctx.outputs),
         analysis: analysisFromOutputs(ctx.outputs),
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         baseline: deps.planBaseline ?? "production",
@@ -346,7 +360,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         root: deps.root,
         greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
         analysis: analysisFromOutputs(ctx.outputs),
-        docs: (ctx.outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [],
+        docs: planningDocs(deps.root, ctx.outputs),
         boundSlots: bindings.map((b) => b.slot),
         budgets: deps.budgets,
         slices: slicesFromOutputs(ctx.outputs),

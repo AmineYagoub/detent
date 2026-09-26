@@ -152,7 +152,7 @@ describe("PRDR-281: AUDIT reads the documents before anything plans from them", 
     expect(notes.join("\n")).toMatch(/did not read docs\/roadmap\.md/u);
   });
 
-  it("names each contradiction and each claim the documents have wrong, since no phase reads the checkpoint yet", async () => {
+  it("names each contradiction and each claim the documents have wrong, and says DECIDE sorts what they leave open", async () => {
     const root = repo(DOCS);
     const notes: string[] = [];
     await initThroughAudit(root, audit({}), notes);
@@ -160,6 +160,7 @@ describe("PRDR-281: AUDIT reads the documents before anything plans from them", 
     expect(said).toMatch(/1 contradiction, 1 gap, 0 drift findings and 1 external claim \(0 confirmed, 1 wrong, 0 unverified\)/u);
     expect(said).toContain("the price of borrowing: PRD.md:3 vs docs/roadmap.md:4");
     expect(said).toContain("Stripe keeps the processing fee when a payment is refunded.");
+    expect(said).toContain("DECIDE sorts what they leave open before anything plans (C-2¹²)");
     expect(said).not.toMatch(/AUDIT dropped/u);
   });
 });
@@ -362,13 +363,14 @@ describe("PRDR-281: AUDIT's sessions (S-1‴, S-5⁵, C-2⁶)", () => {
 });
 
 describe("PRDR-281: what re-runs AUDIT (C-8, C-2¹¹)", () => {
-  it("does not re-run for a decision log DECIDE writes, though DISCOVER does", async () => {
+  /** PRDR-282: nor does DISCOVER, which no longer lists the log (C-2¹²). */
+  it("does not re-run for a decision log DECIDE writes, and neither does DISCOVER", async () => {
     const root = repo(DOCS);
     await initThroughAudit(root, audit({}));
     writeTree(root, { "docs/founder-decisions.md": "# Decisions\n\n- **D-1** Borrowing is free in the MVP.\n" });
     const again = audit({});
     const result = await initThroughAudit(root, again);
-    expect(result.executed).toContain("DISCOVER");
+    expect(result.reused).toContain("DISCOVER");
     expect(result.reused).toContain("AUDIT");
     expect(again.specs).toEqual([]);
   });

@@ -5,11 +5,11 @@ import path from "node:path";
 import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import { git } from "../kernel/git.js";
-import { NON_TICKET_FILES, readTicket, isClaimed } from "../kernel/tickets/readers.js";
-import { ticketsDir } from "../kernel/tickets/paths.js";
-import { INIT_PHASES, type InitPhase, type Interrupt } from "../schemas/init.js";
+import { NON_TICKET_FILES } from "../kernel/tickets/readers.js";
+import { INIT_PHASES, INTERRUPT_PHASE, type InitPhase, type Interrupt } from "../schemas/init.js";
 import { approvalSchema } from "../schemas/records.js";
 import { parseArtifact } from "../schemas/common.js";
+import { inFlightTickets, replanRefusal, replansAt, wouldReplan } from "./replan-guard.js";
 
 /**
  * T-060 — the `init` phase machine (C-4.1, C-5, C-8, C-1).
@@ -32,9 +32,15 @@ import { parseArtifact } from "../schemas/common.js";
  * the pack's contents, and an edit re-runs it. The phases after it replay
  * from the same edit either way, so the exception costs one scan.
  *
- * And one phase is off the chain, C-2¹¹'s (PRDR-281): AUDIT is keyed by its
- * own digest alone, so a new decision log replays DISCOVER without re-running
- * it, and a code edit re-runs it without re-planning (`standalone`).
+ * Two phases are off the chain (`standalone`). AUDIT, C-2¹¹'s (PRDR-281), is
+ * keyed by its own digest alone, so a code edit re-runs it without re-planning.
+ * DECIDE, C-2¹²'s (PRDR-282), is too, so a re-run AUDIT re-runs DECIDE without
+ * re-planning, and what DECIDE decides reaches planning through the decision
+ * log, which the planning phases read in their own digests.
+ *
+ * DECIDE also writes what its digest reads, the decision log, so its
+ * checkpoint is keyed after it runs: its own write does not re-run it, and an
+ * edit by anyone else does (`keyedAfterRun`).
  */
 
 export type PhaseOutcome =
@@ -78,22 +84,34 @@ export interface PhaseHandler {
    * replay, and running it replays nothing after it: a later phase that reads
    * its outputs names them in its own digest.
    *
-   * AUDIT is the one. C-2⁶ has DECIDE write the decision log, which moves
-   * DISCOVER's listing, and on the chain that replays everything after
-   * DISCOVER, the survey and every claim check included, for each answer to a
-   * question the audit raised. And AUDIT's key covers the code, which no phase after it reads, so
-   * on the chain an edit to the code would have re-planned the product.
+   * AUDIT and DECIDE are the two. AUDIT's key covers the code, which no phase
+   * after it reads, so on the chain an edit to the code would have re-planned
+   * the product. DECIDE re-runs whenever the items AUDIT left open move, which
+   * a code edit can do, and it reaches the planning phases only through the
+   * decision log, which each of them names in its own digest (C-2¹²): a re-run
+   * that leaves the log as it was re-plans nothing.
    */
   readonly standalone?: boolean;
+  /**
+   * C-2¹² (PRDR-282): the phase writes a file its digest reads, so its
+   * checkpoint is keyed by the digest taken after it runs, and a phase on the
+   * chain passes that key on. Keyed before, the phase's own write would move
+   * its digest and re-run it on the next `init`.
+   *
+   * DECIDE is the one: it writes the decision log, and an edit to the log is
+   * what must re-run it. Its digest must not read its own outputs: the lookup
+   * takes it before they exist.
+   */
+  readonly keyedAfterRun?: boolean;
   run(ctx: InitContext): Promise<PhaseOutcome>;
 }
 
 /**
  * The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans
- * whose own digests already catch new files. AUDIT, between DISCOVER and this
- * phase, is not forced either: C-8⁵ keeps `--replan` out of the specification
- * phase, and AUDIT's key covers everything it reads, so it re-runs when that
- * moves and only then (C-2¹¹).
+ * whose own digests already catch new files. AUDIT and DECIDE, between DISCOVER
+ * and this phase, are not forced either: C-8⁵ keeps `--replan` out of the
+ * specification phase, and each one's key covers everything it reads, so it
+ * re-runs when that moves and only then (C-2¹¹, C-2¹²).
  */
 const REPLAN_FROM: InitPhase = "ANALYZE";
 
@@ -106,33 +124,6 @@ const REPLAN_FROM: InitPhase = "ANALYZE";
  * says and what the old comment claimed to do.
  */
 const STALE_APPROVAL_FROM: InitPhase = "PRESENT";
-
-/**
- * PRDR-085: tickets a replan must not pull the ground out from under. Read
- * defensively — an unparseable ticket file is a problem, but it is not
- * evidence of a live session, and this guard must not be the thing that
- * crashes on it.
- */
-function inFlightTickets(root: string): string[] {
-  const dir = ticketsDir(root);
-  if (!existsSync(dir)) return [];
-  const found: string[] = [];
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json") || file === "plan.json" || file === "approval.json") continue;
-    const id = file.slice(0, -".json".length);
-    if (isClaimed(root, id)) {
-      found.push(`${id} (claimed)`);
-      continue;
-    }
-    try {
-      const state = readTicket(root, id).state;
-      if (state !== "DONE" && state !== "READY") found.push(`${id} (${state})`);
-    } catch {
-      /* unparseable: surfaced by the phases that actually consume it */
-    }
-  }
-  return found;
-}
 
 export interface InitOptions {
   /** PRDR-194: called as each phase begins, so a killed run can name the phase. */
@@ -374,37 +365,6 @@ export function approvalState(root: string): ApprovalState {
  * before it are reused from their checkpoints; the interrupted phase is NOT
  * checkpointed, so re-running `init` resumes exactly there.
  */
-/**
- * Whether PLAN would re-execute on this invocation — i.e. whether some phase
- * at or before it has drifted. Digests are pure reads, so this costs nothing
- * and spends nothing; it is the same walk the driver does below, stopped at
- * the first miss.
- */
-function wouldReplan(root: string, handlers: readonly PhaseHandler[], now: () => number): boolean {
-  let carried = "";
-  const outputs: Record<string, Record<string, unknown>> = {};
-  for (const phase of INIT_PHASES) {
-    const handler = handlers.find((h) => h.phase === phase);
-    if (handler === undefined) continue;
-    /* C-2¹¹: a standalone phase re-runs no other, PLAN included, whatever its own checkpoint says. */
-    if (handler.standalone === true) continue;
-    let hash: string;
-    try {
-      hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest({ root, outputs, now })}`).digest("hex");
-    } catch {
-      /* A digest that cannot be computed is drift by definition. */
-      return true;
-    }
-    carried = hash;
-    const read = readCheckpoint(root, phase, hash);
-    if (read.status !== "fresh") return true;
-    if (handler.outputIntact?.({ root, outputs, now }) === false) return true;
-    outputs[phase] = { ...read.checkpoint.outputs };
-    if (phase === "PLAN") return false;
-  }
-  return false;
-}
-
 export async function runInit(
   root: string,
   handlers: readonly PhaseHandler[],
@@ -428,9 +388,8 @@ export async function runInit(
   }
   /**
    * PRDR-085: re-deriving under a ticket that is mid-ladder or claimed pulls
-   * the ground out from a running session — `writePlan` resets every drafted
-   * ticket to READY with fresh counters and deletes the ones the new plan does
-   * not name. The refusal comes BEFORE any model spend.
+   * the ground out from a running session (`replan-guard.ts`). The refusal
+   * comes BEFORE any model spend.
    *
    * C-8″ (PRDR-118): this guarded `--replan` only, and every other route to a
    * re-plan was unguarded — including the one PRESENT itself recommends.
@@ -441,20 +400,7 @@ export async function runInit(
    */
   if (opts.replan === true || wouldReplan(root, handlers, now)) {
     const inFlight = inFlightTickets(root);
-    if (inFlight.length > 0) {
-      return {
-        exitCode: 2,
-        reachedPhase: "PLAN",
-        replayedFrom: null,
-        executed: [],
-        reused: [],
-        messages: [
-          `${opts.replan === true ? "--replan" : "re-planning"} refused: ${inFlight.join(", ")} still in flight. ` +
-            "Let the run finish or resolve them (detent status), then plan again.",
-        ],
-        outputs: {},
-      };
-    }
+    if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true);
   }
   if (approval.approved && approval.stale) {
     /* Hand-edited tickets invalidate the approval; PRESENT re-presents the diff. */
@@ -483,7 +429,10 @@ export async function runInit(
     const ctx: InitContext = { root, outputs, now };
     /* C-2¹¹: a standalone phase's key is its own digest, and the chain passes it by. */
     const standalone = handler.standalone === true;
-    const hash = createHash("sha256").update(`${standalone ? "" : carried}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
+    const keyOf = (upstream: string): string =>
+      createHash("sha256").update(`${standalone ? "" : upstream}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
+    const upstream = carried;
+    const hash = keyOf(upstream);
     if (!standalone) carried = hash;
 
     /* PRDR-085/087: forced re-execution starts exactly here, not at phase one. */
@@ -504,8 +453,17 @@ export async function runInit(
       if (!standalone) replaying = true;
     }
 
+    /* C-8″ (PRDR-282): what a standalone phase wrote this run can re-plan, which the scan above could not see. */
+    if (!standalone && replansAt(phase)) {
+      const inFlight = inFlightTickets(root);
+      if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true, { reachedPhase: phase, replayedFrom, executed, reused, outputs });
+    }
     const outcome = await handler.run(ctx);
     if (outcome.kind === "interrupt") {
+      /* C-3⁗ (PRDR-282): an interrupt is raised only where INTERRUPT_PHASE says; anything else is a defect in this build. */
+      if (!(INTERRUPT_PHASE[outcome.interrupt] as readonly InitPhase[]).includes(phase)) {
+        throw new Error(`${phase} raised ${outcome.interrupt}, which INTERRUPT_PHASE does not let it raise (C-5)`);
+      }
       /**
        * PRDR-166: a repeated question says whether anything new was read.
        *
@@ -514,9 +472,13 @@ export async function runInit(
        * an answer the planner judged inadequate, at the cost of a full ANALYZE
        * round per wrong guess. The machine already knows: a reused DISCOVER
        * means the document set did not change. It simply never said so.
+       *
+       * PRESENT's alone (PRDR-282): DECIDE reads the decision log itself, and
+       * DISCOVER no longer lists it, so an answer written there is read whatever
+       * DISCOVER did.
        */
       const message =
-        outcome.interrupt === "AWAIT_INFO" && reused.includes("DISCOVER")
+        outcome.interrupt === "AWAIT_INFO" && phase === "PRESENT" && reused.includes("DISCOVER")
           ? `${outcome.message}\n\nThe document set is unchanged since the last run — no new planning document was read, so if you answered this already, the answer is somewhere DISCOVER does not look.`
           : outcome.message;
       /* Not checkpointed: the phase did not complete, so a re-run resumes here. */
@@ -532,8 +494,11 @@ export async function runInit(
       };
     }
 
+    /* C-2¹²: what the phase wrote is now what its digest reads, and the chain goes on from there. */
+    const key = handler.keyedAfterRun === true ? keyOf(upstream) : hash;
+    if (!standalone) carried = key;
     outputs[phase] = outcome.outputs;
-    writeCheckpoint(root, phase, hash, outcome.outputs, { at: new Date(now()).toISOString() });
+    writeCheckpoint(root, phase, key, outcome.outputs, { at: new Date(now()).toISOString() });
     executed.push(phase);
   }
 

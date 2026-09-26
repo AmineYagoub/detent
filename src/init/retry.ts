@@ -46,6 +46,21 @@ export async function withOneRelaunch<T>(
   return second;
 }
 
+/**
+ * The `previous_attempt` block for an artifact refused for what it SAYS: a quote
+ * that is not in its document, an item settled twice (C-2¹¹, C-2¹²). Unlike
+ * `previousAttemptInput`, it does not tell the session its content was sound.
+ */
+export function refusedAttemptInput(previous: { readonly issue: string } | null, what: string): Record<string, unknown> {
+  if (previous === null) return {};
+  return {
+    previous_attempt: {
+      issue: previous.issue,
+      note: `Your previous ${what} was refused for the issue above. Fix what it names, and write the whole ${what} again in exactly the \`expected_output\` shape.`,
+    },
+  };
+}
+
 /** The `previous_attempt` block a relaunched session receives. Shared so both stages say the same thing. */
 export function previousAttemptInput(previous: { readonly issue: string } | null, what: string): Record<string, unknown> {
   if (previous === null) return {};

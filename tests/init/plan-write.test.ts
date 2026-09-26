@@ -11,7 +11,7 @@ import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { BOOTSTRAP_TICKET_ID, capstoneBlockers } from "../../src/init/plan-write.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import type { SliceSpec } from "../../src/schemas/init.js";
-import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, decideDefaults, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -200,7 +200,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   it("a DONE bootstrap is preserved, and a stale blocker it carries is dropped rather than crashing the write", async () => {
     const root = repo({ "PRD.md": "# build it\n" });
     const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(first, ONE_SLICE, GREENFIELD_STACK) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(first, ONE_SLICE, GREENFIELD_STACK) });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** Finish the scaffolding and one ticket, as a real run would. */
@@ -212,7 +212,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
     /** The new plan drops t-s01-001, which the DONE t-s01-002 still names as a blocker. */
     const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-002"), ticket("t-s01-003")], questions: [] };
-    const backend2 = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(second, ONE_SLICE, GREENFIELD_STACK) });
+    const backend2 = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(second, ONE_SLICE, GREENFIELD_STACK) });
     const again = await runInit(root, buildPipeline({ root, backend: backend2, prompts: PROMPTS, budgets: BUDGETS }), { replan: true });
 
     expect(again.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -259,7 +259,7 @@ describe("A-1⁶ the bootstrap ticket provides the scaffold files the analysis n
       ],
       questions: [],
     };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(draft, ONE_SLICE, stack) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(draft, ONE_SLICE, stack) });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
 

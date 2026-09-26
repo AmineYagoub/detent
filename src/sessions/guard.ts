@@ -432,10 +432,16 @@ export function researchTools(docsDomains: readonly string[]): string[] {
  * S-1‴ (PRDR-281): `audit` reads the repository, dependency sources at their
  * pinned versions included, and reaches the web under the research role's
  * network rules, so it gets the research role's surface.
+ *
+ * S-1‴ (PRDR-282): `spec_write` is not a read-only role, but DECIDE, the one
+ * task of it built, writes its artifact alone, so it gets the read tools and
+ * the one artifact rule every init session carries. The surface S-1‴ declares
+ * for it, the decision log, the pack's paths and `archive/`, is WRITE's to
+ * build (C-2⁶).
  */
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
   if (role === "research" || role === "audit") return researchTools(docsDomains);
-  if (READ_ONLY_STAGES.has(role)) return [...READ_ONLY_TOOLS];
+  if (READ_ONLY_STAGES.has(role) || role === "spec_write") return [...READ_ONLY_TOOLS];
   /* S-3⁵ (PRDR-213): three verbs — the guard judges `git rm` per pathspec (judgeGitRm). */
   return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"];
 }

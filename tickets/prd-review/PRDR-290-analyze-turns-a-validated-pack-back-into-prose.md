@@ -36,3 +36,14 @@ paraphrase of documents a checker has already parsed.
 
 The redesign plan's §3. D-10's reason for putting analysis before verification survives: the stack
 still exists before DETERMINE_VERIFICATION, because DECIDE precedes it.
+
+## From PRDR-282
+
+DECIDE records the stack (C-2¹²): a structured entry, `language`, `toolchain`, `scaffold_files`
+and `gates` by slot, written to the log's `## Stack` and the root package's `## Packages` rows and
+carried in DECIDE's outputs as `stack`. Until this ticket, it reaches the bindings through
+ANALYZE: the session is handed `decided_stack`, and `withDecidedStack` in `src/init/analyze.ts`
+writes the entry over the stack the session chose. Removing ANALYZE removes that override, the
+`decided_stack` input and `stackInstruction`'s decided branch; DETERMINE_VERIFICATION then binds
+from the entry directly. `test_single` is in the entry and not in an analysis's `verification`,
+so binding from the entry gains it.

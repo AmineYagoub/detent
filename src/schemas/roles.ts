@@ -8,9 +8,9 @@ import type { State } from "./states.js";
  * F-3 with a migration — never an editorial change. A test pins these
  * strings for exactly that reason.
  *
- * `audit` (PRDR-281) is the first of S-1‴'s four roles, and joins the 3.1.1
- * line's one event (F-3″): the v1→v2 migration writes its routing into an
- * existing config.
+ * `audit` (PRDR-281) is the first of S-1‴'s four roles and `spec_write`
+ * (PRDR-282) the second. Both join the 3.1.1 line's one event (F-3″): the
+ * v1→v2 migration writes their routing into an existing config.
  *
  * `blind_fix` is the draft.5 rename of the oracle's `fix` (PRDR-044): the
  * role's defining property is that it acts on the failure output alone, and
@@ -26,6 +26,7 @@ export const ROLE_IDS = [
   "research",
   "review",
   "audit",
+  "spec_write",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
@@ -67,6 +68,7 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
   research: "claude-sonnet-5",
   /** S-5⁵ (PRDR-278): every session of the specification phase runs on Opus 5.5 at `max` (specification decision 14). */
   audit: "claude-opus-5-5",
+  spec_write: "claude-opus-5-5",
 };
 
 /**
@@ -94,6 +96,7 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
   review_fix: "xhigh",
   research: "xhigh",
   audit: "max",
+  spec_write: "max",
 };
 
 /**
@@ -101,6 +104,10 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
  * with the read-only tool surface plus one scoped write rule for their own
  * artifact — plan mode blocks the write the A-contract demands and survives
  * only for artifact-less sessions (doctor's smoke).
+ *
+ * `spec_write` is not in it: S-1‴ gives it a surface to write, the decision
+ * log, the pack's paths and `archive/`. DECIDE, the one task of it built
+ * (PRDR-282), writes its artifact alone, and code writes the log from it.
  */
 export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "planner",
@@ -121,8 +128,9 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
  * not change what a read-only role WRITES", which was false for `diagnose`.
  * `review` and `research` grant only their artifact, and are narrowed.
  *
- * `planner` and `audit` are absent because they are init roles and never reach
- * this policy; `src/init/session.ts` builds their own artifact-only surface.
+ * `planner`, `audit` and `spec_write` are absent because they are init roles
+ * and never reach this policy; `src/init/session.ts` builds their own
+ * artifact-only surface.
  */
 export const ARTIFACT_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["research", "review"]);
 

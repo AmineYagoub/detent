@@ -104,10 +104,10 @@ const configStamp = (root: string): unknown =>
  * A state holding every kind the layout stamps, and a nested stamp.
  *
  * Its assignment already names the prompt this build ships, and its config
- * already routes `audit`, so both of the migration's transforms are no-ops
- * here and what these tests see is the restamp alone. Each transform has its
- * own test: the re-pin below, the routing in `tests/init/audit-role.test.ts`
- * (PRDR-281).
+ * already routes `audit` and `spec_write`, so both of the migration's
+ * transforms are no-ops here and what these tests see is the restamp alone.
+ * Each transform has its own test: the re-pin below, the routing in
+ * `tests/init/audit-role.test.ts` (PRDR-281, PRDR-282).
  */
 async function richState(): Promise<string> {
   const { root } = await makeRunRepo();
@@ -116,7 +116,11 @@ async function richState(): Promise<string> {
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Record<string, Record<string, unknown> | undefined>;
   writeFileSync(
     configFile,
-    `${JSON.stringify({ ...config, model_routing: { ...config["model_routing"], audit: "claude-opus-5-5" }, effort_routing: { ...config["effort_routing"], audit: "max" } }, null, 2)}\n`,
+    `${JSON.stringify({
+      ...config,
+      model_routing: { ...config["model_routing"], audit: "claude-opus-5-5", spec_write: "claude-opus-5-5" },
+      effort_routing: { ...config["effort_routing"], audit: "max", spec_write: "max" },
+    }, null, 2)}\n`,
   );
   addTicket(root, { id: "t-1" });
   writeArtifact(root, "agents/assignments.json", { assignments: { "t-1": `implement@${PROMPTS.hashes.implement}` } });

@@ -19,7 +19,7 @@ import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js"
 import { loadPromptSet, resolveAssignment } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { CLEAN_AUDIT } from "./plan-fixture.js";
+import { CLEAN_AUDIT, decideDefaults } from "./plan-fixture.js";
 
 /**
  * T-064 (auto-binding), T-065 (setup consent + allowlist), T-066 (PLAN +
@@ -364,7 +364,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
 
   it("greenfield: bootstrap #1 exists, everything blocks on it, bindings provisional", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
       planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }), DRAFT(["t-100", "t-200"])),
     });
     const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
@@ -387,7 +387,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
 
   it("bootstrap DONE flips provisional bindings to approved with baselines (C-4's other half)", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
       planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }), DRAFT(["t-100"])),
     });
     await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
@@ -492,7 +492,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
 
   it("a planner that drafts the bootstrap ticket's id has it renamed and flagged — not a fatal, poisoned run (C-4)", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
       planner: planner(
         ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }),
         DRAFT([BOOTSTRAP_TICKET_ID, "t-100"]),
@@ -563,7 +563,7 @@ describe("T-067 PREPARE_AGENTS (S-7)", () => {
 describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
   it("the presentation lists bindings with provenance, tickets, and the bootstrap explanation", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
       planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD says TS" }), DRAFT(["t-100"])),
     });
     const printed: string[] = [];
@@ -655,6 +655,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
       "INIT_FS",
       "DISCOVER",
       "AUDIT",
+      "DECIDE",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",

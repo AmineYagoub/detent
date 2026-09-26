@@ -38,3 +38,11 @@ The specification phase's scoped re-plan (PRDR-286) needs this to work.
 The redesign plan's §4. With a pack, the structure SLICE re-derived from prose is already data:
 requirement ids, milestones and module codes. Code builds the seed, the model makes the one
 judgement code cannot, and identity rests on the ids.
+
+## From PRDR-282
+
+Every slice reads the decision log (C-2¹²): `groundSlices` in `src/init/slice.ts` adds it to
+each slice that names its own documents, and a slice with none plans from every document, the
+log among them. So a veto, which edits one row, re-plans every slice. Keying a slice by its
+requirement ids would let a veto re-plan only the slices whose requirements the edited entry
+settles, which is what C-3⁗ promises.

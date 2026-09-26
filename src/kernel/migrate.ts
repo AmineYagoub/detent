@@ -62,8 +62,8 @@ function repin(value: Json, deps: MigrateDeps): Json {
   return { ...value, assignments: out };
 }
 
-/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it. */
-const ROLES_ADDED: readonly RoleId[] = ["audit"];
+/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it (PRDR-281, PRDR-282). */
+const ROLES_ADDED: readonly RoleId[] = ["audit", "spec_write"];
 
 /**
  * S-1‴, S-5′ (PRDR-281): an existing config gains the routing `init` writes

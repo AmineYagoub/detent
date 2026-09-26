@@ -14,6 +14,7 @@ import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig, decideSymbols, routingNote, type SymbolsDecision } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
 import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
+import { makeTtyDecisions } from "./decide.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
 import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
@@ -275,6 +276,8 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
         : interactive
           ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") }
           : {}),
+      /* C-3⁗ (PRDR-282): DECIDE asks on a terminal; anywhere else it takes each recommended answer as a vetoable default (specification decision 9). */
+      ...(interactive ? { askDecisions: makeTtyDecisions() } : {}),
     });
 
     let result;

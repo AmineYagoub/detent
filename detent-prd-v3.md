@@ -437,6 +437,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   analyse them.
   *Amended by S-1‴ (PRDR-278): a `spec_write` session's surface is the decision log, the pack's
   paths and `archive/`, declared.*
+  *Amended by C-2¹² (PRDR-282): DECIDE's `spec_write` session keeps this one artifact; code
+  writes the log.*
 
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
@@ -944,6 +946,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   into PLAN, which resets the ticket a session is working in.
   *Amended by C-8⁵ (PRDR-278): on an amendment's scoped re-plan, the refusal covers only the
   re-planned slices' tickets.*
+  *Amended by C-2¹² (PRDR-282): the refusal is asked again as each phase on the chain up to PLAN
+  is about to run, since a standalone phase can change what planning reads.*
 
 - **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
   whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
@@ -959,6 +963,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   never the model's words.*
   *Amended by C-2¹¹ (PRDR-281): a phase may stand outside the chain, keyed by its own digest
   alone; AUDIT does.*
+  *Amended by C-2¹² (PRDR-282): a phase that writes what its digest reads is keyed after it
+  runs. DECIDE does, and stands outside the chain beside AUDIT.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1630,6 +1636,8 @@ the code does what the rules it amends describe, and each of those rules points 
   context documents where they are.*
   *Amended by C-2¹¹ (PRDR-281): AUDIT is built. A changed pack is not audited, and AUDIT's
   checkpoint stands outside C-8's chain.*
+  *Amended by C-2¹² (PRDR-282): DECIDE is built, outside C-8's chain beside AUDIT. On a TTY its
+  questions are asked inline, and AWAIT_INFO is raised there when the founder answers later.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1705,6 +1713,8 @@ the code does what the rules it amends describe, and each of those rules points 
     plan proceeded on. An answer or a veto is an edit to the decision log: the next `detent init`
     replays from DECIDE forward (C-8), never re-runs AUDIT, and re-plans only the slices whose
     inputs changed.
+  *Amended by C-2¹² (PRDR-282): DECIDE is built. Every slice reads the decision log until C-2⁸
+  keys slices by their requirement ids, so for now a veto re-plans every slice.*
 
 - **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
   named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
@@ -1725,6 +1735,9 @@ the code does what the rules it amends describe, and each of those rules points 
     in place of `analysis`.
   - **Persisted.** The phase list is persisted in checkpoints, so removing ANALYZE is an F-3 schema
     event: an `init` resumed from an ANALYZE checkpoint re-runs from DECIDE and says why.
+  *Amended by C-2¹² (PRDR-282): until PRDR-290 removes ANALYZE, the stack entry reaches
+  DETERMINE_VERIFICATION and the bootstrap through ANALYZE, which writes it over the stack its
+  session chose.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -1925,6 +1938,9 @@ the code does what the rules it amends describe, and each of those rules points 
   entry in `MIGRATIONS` that the four roles, C-2⁶'s rounds key, D-10′'s phase list and D-5′'s
   bindings each extend.*
   *Amended by C-2¹¹ (PRDR-281): `audit` is built, and the migration writes its routing.*
+  *Amended by C-2¹² (PRDR-282): `spec_write` is built for DECIDE, and the migration writes its
+  routing. DECIDE's session writes its artifact alone and code writes the log, so the declared
+  surface is WRITE's to build (PRDR-283).*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2142,6 +2158,84 @@ the code does what the rules it amends describe, and each of those rules points 
     then AUDIT's note names each contradiction and drift, and each claim the documents have wrong
     or that could not be verified, up to ten of each, and planning goes on from the documents as
     written.
+  *Amended by C-2¹² (PRDR-282): DECIDE is built and reads the checkpoint. DISCOVER no longer lists
+  the decision log, and DECIDE is a second standalone phase.*
+
+- **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
+  directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
+  chain, C-8″'s refusal and D-10′'s route to the bindings.
+  - **What it sorts.** Every item AUDIT left open: each contradiction, each gap, each drift
+    finding, and each external claim that is wrong or unverified, every place the documents rely
+    on one claim being one item. A confirmed claim is not open. In greenfield, while the decision
+    log records no stack, the stack is an item too (D-10′). With nothing open, no session runs.
+  - **One session, checked by code.** A `spec_write` session on `prompts/spec_write.md`, told its
+    task by its inputs (S-1‴), sorts each item by the id its inputs gave it: into a question only
+    the founder can answer (C-3″), with at least two options, the recommended one first and each
+    with its consequence; into a vetoable default, with its value and its reason; or into an entry
+    the log already holds, cited by its id. It writes that artifact and nothing else. Code checks
+    the sorting: every item settled once, every id one of the items or one the log holds, only
+    the stack's settler carrying a stack, and a question that settles it carrying one on every
+    option. A question the log's decisions already answer, in C-3‴'s words, is refused, and its
+    items are cited as settled by the entry that answers it. A first attempt with anything wrong
+    is relaunched with the list; the second keeps what stands, and an item still settled by
+    nothing is said and left to the documents as written.
+  - **Code writes the log**, in the pack's grammar (C-2⁷), so every row it adds is one the checker
+    reads: a `D-n` for each answer, with the question, the answer and the chosen option's
+    consequence as its reason; an `X-n` for each default; and, in greenfield, `## Stack` and the
+    root package's gate commands under `## Packages`. It appends under a `###` heading of its own
+    in each section and changes no row the founder wrote, and a log that has a `## Stack` keeps
+    it. Ids continue from the highest the log holds.
+  - **On a terminal** the questions are asked inline, in screens of at most four. The stack's
+    question takes no answer in the founder's own words, which would carry no stack entry. A
+    founder who answers later gets AWAIT_INFO at DECIDE, listing every question with its options;
+    nothing is written, and the session's checked artifact is kept, so the next `detent init`
+    asks again without a session while its inputs stand. Writing the answers as `D-n` rows in the
+    log is the other way to answer, and the next session reads them. `INTERRUPT_PHASE` lists
+    DECIDE and PRESENT for AWAIT_INFO, and the machine refuses an interrupt raised at a phase it
+    does not list. PRDR-166's note, that the document set is unchanged, is PRESENT's alone, since
+    DECIDE reads the log itself.
+  - **Off a terminal**, the plugin's path included, each recommended answer is taken and logged
+    as a vetoable `X-n` whose reason says so, and `init`'s output lists each one (specification
+    decision 9).
+  - **Asked once.** DECIDE keeps a record beside its checkpoint that maps each item it sorted to
+    the entry that settled it, by a key made of what a second survey of the same documents most
+    likely repeats: the passages it quotes, a claim with its verdict, and for a gap, which is
+    often a silence, its topic. A run whose items are all still settled by entries the log holds
+    runs no session, since an answer or a veto edits an entry and leaves it standing. An item
+    whose entry was deleted is asked about again, and nothing else is.
+  - **The log is DECIDE's input and its output.** DISCOVER no longer lists it, so DECIDE's writes
+    never move DISCOVER, and AUDIT's key already left it out (C-2¹¹). The planning phases add it
+    to what they read, from disk: ANALYZE, SLICE, and every slice PLAN drafts, whatever documents
+    the slice names, since a row there wins over the documents it settles (C-2⁷). Until C-2⁸ keys
+    a slice by its requirement ids (PRDR-291), a veto therefore re-plans every slice, not only the
+    slices whose documents it touches.
+  - **Keyed after it runs, off the chain.** DECIDE writes the log its digest reads, so its
+    checkpoint is keyed by the digest taken after it runs: its own write does not re-run it, and
+    an edit by anyone else does. It stands outside C-8's chain beside AUDIT (C-2¹¹), keyed by the
+    items AUDIT left open rather than by AUDIT's words, which a re-run survey never repeats. A code
+    edit re-runs AUDIT; an item that did not move re-runs nothing; and a re-run DECIDE re-plans
+    only through the log, which the planning phases name in their own digests. `--replan` does
+    not force it (C-8⁵).
+  - **The in-flight refusal is asked twice.** A standalone phase can now change what planning
+    reads during the run, which C-8″'s scan before the run cannot see. So the refusal is asked
+    again as each phase on the chain up to PLAN is about to run, before any planning session, and
+    it reports what ran before it. What DECIDE recorded stays in the log.
+  - **The stack.** In greenfield the decided entry reaches the bindings through ANALYZE, until
+    PRDR-290 removes it. ANALYZE's session is handed the entry, and code writes it over the stack
+    the session chose, keeping what the session wrote only where it wrote the decided language.
+    A gate command the entry names is the binding, and the bootstrap provides the entry's
+    scaffold files.
+  - **Packs.** On a conforming pack DECIDE runs no session: its log is the founder's record
+    already, and it reaches planning as it stands. On a changed pack it runs none either, and says
+    so: applying the change is WRITE's and checking it VALIDATE's, and this build has neither.
+  - **PRESENT** lists every `X-n` the log holds, with its reason, beside C-3′'s assumptions, and
+    names each planning question the log's decisions already answer rather than asking it.
+  - **Routing.** `spec_write` runs on `claude-opus-5-5` at `max` (S-5⁵), and F-3″'s migration
+    writes that routing into an existing config as it does `audit`'s. It is not a read-only role,
+    but DECIDE's session writes its artifact alone, so it has the read tools and the one artifact
+    rule every init session carries (S-1″). The surface S-1‴ declares for it is WRITE's to build
+    (PRDR-283).
+  - **Progress.** A completed DECIDE is a progress mark, with a session or none (X-1⁵).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

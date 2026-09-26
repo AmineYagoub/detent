@@ -74,16 +74,25 @@ describe("T-060 C-5: the interrupt set is closed", () => {
       ["AWAIT_APPROVAL", "AWAIT_BINDING_CHOICE", "AWAIT_DOCS", "AWAIT_INFO", "AWAIT_SETUP_CONSENT"],
     );
     for (const interrupt of INTERRUPTS) {
-      expect(INIT_PHASES).toContain(INTERRUPT_PHASE[interrupt]);
+      for (const phase of INTERRUPT_PHASE[interrupt]) expect(INIT_PHASES).toContain(phase);
     }
+    /** PRDR-282: AWAIT_INFO is raised at DECIDE as well as at PRESENT (C-3⁗); the set stays five (C-5). */
+    expect(INTERRUPT_PHASE).toEqual({
+      AWAIT_DOCS: ["DISCOVER"],
+      AWAIT_INFO: ["DECIDE", "PRESENT"],
+      AWAIT_BINDING_CHOICE: ["DETERMINE_VERIFICATION"],
+      AWAIT_SETUP_CONSENT: ["DETERMINE_VERIFICATION"],
+      AWAIT_APPROVAL: ["PRESENT"],
+    });
   });
 
-  /** PRDR-281: AUDIT, the first of the phases C-2⁶ adds, directly after DISCOVER. */
+  /** PRDR-281: AUDIT, the first of the phases C-2⁶ adds, directly after DISCOVER; PRDR-282: DECIDE after it. */
   it("the phase order is C-4.1's, as C-2⁶ amends it", () => {
     expect(INIT_PHASES).toEqual([
       "INIT_FS",
       "DISCOVER",
       "AUDIT",
+      "DECIDE",
       "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",
@@ -346,7 +355,8 @@ describe("PRDR-166 a repeated AWAIT_INFO says whether the documents changed", ()
     const handlers = (): PhaseHandler[] => [
       probe("INIT_FS", () => listingDigest([".detent"]), log),
       probe("DISCOVER", () => listingDigest(["PRD.md"]), log),
-      asking("ANALYZE", () => contentsDigest(root, ["PRD.md"])),
+      /* PRDR-282: PRESENT, where C-3′'s questions are asked; the machine refuses AWAIT_INFO from ANALYZE. */
+      asking("PRESENT", () => contentsDigest(root, ["PRD.md"])),
     ];
 
     /* First ask: DISCOVER ran, so nothing is claimed about the documents. */
