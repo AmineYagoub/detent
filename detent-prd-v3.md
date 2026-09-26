@@ -1641,6 +1641,8 @@ the code does what the rules it amends describe, and each of those rules points 
     and PRDR-288, nine marks here each named more than one rule.
   *Amended by C-2⁹ (PRDR-279): the record is `docs/conformance.json`; a document outside the
   layout's paths is context, hashed with the pack and never parsed.*
+  *Amended by C-2¹⁰ (PRDR-280): the checker is built; milestone order is checked between a
+  criterion and the requirements it tests, and the heuristic reads requirements only.*
 
 - **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
   one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
@@ -1995,6 +1997,56 @@ the code does what the rules it amends describe, and each of those rules points 
     joined by an en dash. A fenced code block is an example, never an entry. Whether a
     criterion's values are exact is not the schema's to judge; VALIDATE's reviewers judge it
     (C-2⁶).
+  *Amended by C-2¹⁰ (PRDR-280): conforming requires the checker green on the documents now, not
+  the schema alone.*
+
+- **C-2¹⁰ (3.1.1, PRDR-280).** The checker is built, in `src/init/pack-check.ts`: a TypeScript port
+  of ksarjs's `check_pack.py`, generalized to C-2⁹'s grammar. This settles what C-2⁷ left to its
+  first ticket, and amends C-2⁷'s milestone rule and C-2⁹'s conforming.
+  - **Its rules.** Blocking: the schema's own breaks, where a bold head shaped like a requirement
+    or criterion id that the grammar refuses is one, and another family's ids under bold heads,
+    such as ksarjs's spikes, are prose; every id defined once (requirements, criteria, decisions,
+    defaults, facts, codes, milestones, ADRs, and each catalogue's entries, two spellings of one
+    route counting as one); requirement ids running from 001 without a gap; each requirement and
+    criterion in the PRD its code is registered to, under a milestone the registry allows; every
+    requirement, criterion, decision, default, fact and milestone a document names resolving;
+    every `§` a document names after a document's name existing among that document's numbered
+    headings; every relative link reaching a file inside the repository; every error code,
+    event, setting, job and route a document uses being in its catalogue, when `catalogues.md`
+    has that section; every live requirement tested by a criterion; and no criterion testing
+    what a later milestone delivers. One heuristic reports and never blocks: a requirement
+    sentence that states behaviour without MUST, SHOULD or MAY.
+  - **Milestone order** is checked between a criterion and the requirements it tests, the one
+    dependency the schema states. A requirement that names a later one may be pointing forward,
+    as to the requirement that will use a hook it provides. 47 of ksarjs's requirements name a
+    later milestone's, 65 times, and a blocking rule reading each as a dependency would refuse
+    them all. So the order of requirements is among the properties the checker lists as not
+    checked, and C-2⁷'s rule for it is VALIDATE's reviewers' to judge.
+  - **The heuristic reads requirements only.** Design documents describe the design in the
+    present tense by nature. Read for "already", "currently" and "is built", ksarjs gave 137
+    reports, one of them a claim about code.
+  - **What a use is.** A route is `` `METHOD /path` `` or a bare path, read under a first path
+    segment the catalogue's own routes use, so a framework's `GET /health` is not a route the pack
+    forgot; `{a,b}` is one path per alternative, `[/x]` an optional segment, and a parameter,
+    `:id`, `{id}` or an example value in capitals, matches any parameter in its place. A setting
+    is the noun, "the setting `x`". Context documents are read for requirement and criterion ids
+    and for links only. An entry the schema refused is still defined, so one defect is one
+    finding.
+  - **Its output** is sorted by file, line, rule and message, each finding quoting its line, and
+    ends with the eight properties it does not check, as `scripts/check-tickets.ts` does.
+  - **Where it runs.** DISCOVER calls a pack conforming only when the checker is green on it now,
+    and its note lists what the checker does not check. `init` is one pipeline for both drivers,
+    so both reach the checker the same way (ARCH-2), with no referee tool of its own. VALIDATE
+    runs it, and a red result blocks every phase after VALIDATE, once PRDR-284 builds VALIDATE;
+    an amendment runs it once PRDR-286 builds amendments.
+  - **Parity.** Converted into the schema, ksarjs's pack (2,024 requirements, 1,144 criteria)
+    gives no finding in any class `check_pack.py` checks, as the script gives none, and each of
+    the script's seventeen ported catch types, seeded into it, is reported by both. The 35
+    findings the checker adds are in classes the script never checked, each a real property of
+    ksarjs: 19 criteria with no When, 9 criteria under an unregistered code, 4 requirements no
+    criterion tests, 2 requirements that only say MAY, and a decision with no reason. The
+    committed fixture, `tests/fixtures/pack/`, is a pack in ksarjs's shapes with content of its
+    own, since ksarjs's pack is unpublished.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

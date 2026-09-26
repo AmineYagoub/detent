@@ -99,6 +99,25 @@ describe("PRDR-279: conformance", () => {
   });
 });
 
+describe("PRDR-280: conformance runs the checker, not only the schema", () => {
+  it("does not call a pack conforming while its checker is red now, whatever its record says", () => {
+    const text = CONFORMING_PACK["docs/prd/02-checkout.md"]?.replace("`cart_empty` (CHK-F-001).", "`cart_empty` (CHK-F-009).") ?? "";
+    const root = packRepo({ ...CONFORMING_PACK, "docs/prd/02-checkout.md": text });
+    commitRecord(root);
+    const status = classifyPack(root, { greenfield: true });
+    expect(status).toMatchObject({ kind: "changed", added: [], removed: [], modified: [] });
+    expect(JSON.stringify(status)).toMatch(/\[reference\].*CHK-F-009/u);
+  });
+
+  it("still calls a pack conforming when the heuristic only reports", () => {
+    const extra = "- **CAT-F-004** [M1] Tags MUST exist. The catalog indexes them nightly.\n- **CAT-AC-03** [M1] Given a tag, when read, then it exists (CAT-F-004).\n";
+    const catalog = `${CONFORMING_PACK["docs/prd/01-catalog.md"] ?? ""}${extra}`;
+    const root = packRepo({ ...CONFORMING_PACK, "docs/prd/01-catalog.md": catalog });
+    commitRecord(root);
+    expect(classifyPack(root, { greenfield: true }).kind).toBe("conforming");
+  });
+});
+
 describe("PRDR-279: the record and the pack are versioned shapes (F-3)", () => {
   it("stamps the record, the pack's parse and DISCOVER's classification with schema_version 1", () => {
     const root = packRepo();

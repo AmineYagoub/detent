@@ -22,6 +22,8 @@ export interface Row {
 
 export interface Bullet {
   readonly n: number;
+  /** The bullet's first line as written, trimmed: what a finding quotes. */
+  readonly text: string;
   readonly head: string;
   /** What follows the bold head on its line, then every continuation line, joined by one space. */
   readonly rest: string;
@@ -120,7 +122,7 @@ export function boldBullets(lines: readonly Line[]): Bullet[] {
     const n = lines[i]?.n ?? 0;
     const parts = [head[2]?.trim() ?? ""];
     for (let line = lines[i + 1]; continues(line); line = lines[++i + 1]) parts.push(line.text.trim());
-    bullets.push({ n, head: head[1]?.trim() ?? "", rest: parts.filter((p) => p !== "").join(" ") });
+    bullets.push({ n, text: head[0].trim(), head: head[1]?.trim() ?? "", rest: parts.filter((p) => p !== "").join(" ") });
   }
   return bullets;
 }

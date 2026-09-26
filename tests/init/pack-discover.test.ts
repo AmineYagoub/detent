@@ -50,6 +50,14 @@ describe("PRDR-279: DISCOVER classifies the document set (C-2⁷)", () => {
     expect(notes.join("\n")).toMatch(/conforming pack/u);
   });
 
+  it("says what the checker does not check when it calls a pack conforming (PRDR-280)", async () => {
+    const root = packRepo();
+    commitRecord(root);
+    const { notes } = await discover(root);
+    const { UNCHECKED } = await import("../../src/init/pack-check.js");
+    for (const blind of UNCHECKED) expect(notes.join("\n")).toContain(blind);
+  });
+
   it("does not call a pack conforming when its record says the checker was red", async () => {
     const root = packRepo();
     commitRecord(root, oracleRecord(root, { green: false }));

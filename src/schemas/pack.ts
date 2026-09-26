@@ -88,6 +88,8 @@ export const REQUIREMENT_REFS = new RegExp(
   "u",
 );
 export const CRITERION_ID = new RegExp(`^(${CODE})-AC-(\\d{2,3})$`, "u");
+/** A criterion id anywhere in text; not global, for the reason `REQUIREMENT_REFS` gives. */
+export const CRITERION_REF = new RegExp(`\\b(${CODE})-AC-(\\d{2,3})\\b`, "u");
 export const DECISION_ID = /^D-\d+$/u;
 export const DEFAULT_ID = /^X-\d+$/u;
 export const FACT_ID = /^\d+\.\d+$/u;
@@ -199,6 +201,16 @@ export const packageSchema = z.strictObject({ path: nonEmptyString, gates });
 
 const catalogueEntry = z.strictObject({ id: nonEmptyString, line: z.number().int().positive() });
 export const CATALOGUE_KINDS = ["error_codes", "events", "settings", "jobs", "routes"] as const;
+export type CatalogueKind = (typeof CATALOGUE_KINDS)[number];
+
+/** The `##` section of `docs/design/catalogues.md` each kind lives under, by lower-cased title. */
+export const CATALOGUE_SECTIONS: Readonly<Record<string, CatalogueKind>> = {
+  "error codes": "error_codes",
+  events: "events",
+  settings: "settings",
+  jobs: "jobs",
+  routes: "routes",
+};
 
 export const packSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),

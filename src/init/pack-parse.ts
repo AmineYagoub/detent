@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { GATE_SLOTS, type GateSlot } from "../schemas/gates.js";
 import {
   CATALOGUES_PATH,
+  CATALOGUE_SECTIONS,
   CRITERION_ID,
   DECISION_ID,
   DECISION_LOG_PATH,
@@ -45,14 +46,22 @@ export interface ParsedPack {
   readonly pack: Pack;
   /** Breaks of the schema, each at its place. A pack with any does not conform. */
   readonly problems: readonly PackFinding[];
+  /**
+   * The id of every entry the schema refused (`## Stack` for the stack, which
+   * has none). A refused entry is still defined: the checker (C-2¹⁰) reads a
+   * reference to it as resolved, so one defect is reported once.
+   */
+  readonly refused: ReadonlySet<string>;
 }
 
-type Problems = PackFinding[];
+/** The problems found so far, carrying the ids of the entries refused for them. */
+type Problems = PackFinding[] & { readonly refused: Set<string> };
 
 /** One candidate entry through its schema: the entry, or its issues as findings. */
 function admit<T>(schema: z.ZodType<T>, candidate: unknown, rule: string, file: string, at: { readonly n: number; readonly text: string }, label: string, problems: Problems): T | null {
   const parsed = schema.safeParse(candidate);
   if (parsed.success) return parsed.data;
+  problems.refused.add(label);
   for (const message of new Set(parsed.error.issues.map((i) => i.message))) {
     problems.push({ rule, file, line: at.n, text: at.text, message: `${label}: ${message}` });
   }
@@ -82,7 +91,7 @@ const blank = (): Pack => ({
  */
 export function parsePack(root: string, documents: readonly string[], opts: { readonly greenfield: boolean }): ParsedPack {
   const pack = blank();
-  const problems: Problems = [];
+  const problems: Problems = Object.assign([], { refused: new Set<string>() });
   for (const rel of documents) {
     const kind = packKindOf(rel);
     if (kind === null) {
@@ -102,7 +111,7 @@ export function parsePack(root: string, documents: readonly string[], opts: { re
   requireDocuments(pack, problems);
   if (opts.greenfield && !problems.some((p) => p.rule === "stack")) requireStack(pack, problems);
   pack.milestones.sort((a, b) => a.order - b.order);
-  return { pack, problems };
+  return { pack, problems: [...problems], refused: problems.refused };
 }
 
 function requireDocuments(pack: Pack, problems: Problems): void {
@@ -240,14 +249,6 @@ function parseIndex(file: string, lines: readonly Line[], pack: Pack, problems: 
   if (pack.milestones.length === 0) problems.push({ rule: "milestone", file, line: 0, text: "", message: "the index defines no milestone under ## Milestones" });
 }
 
-const CATALOGUE_SECTIONS: Readonly<Record<string, keyof Pack["catalogues"]>> = {
-  "error codes": "error_codes",
-  events: "events",
-  settings: "settings",
-  jobs: "jobs",
-  routes: "routes",
-};
-
 function parseCatalogues(file: string, lines: readonly Line[], pack: Pack, problems: Problems): void {
   for (const [name, body] of sections(lines)) {
     const kind = CATALOGUE_SECTIONS[name];
@@ -264,8 +265,13 @@ function parseCatalogues(file: string, lines: readonly Line[], pack: Pack, probl
  * Module PRDs: requirements and criteria
  */
 
-/** Anything shaped like an id under a bold bullet head, so a typo is reported rather than skipped. */
-const ID_LIKE = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+$/u;
+/**
+ * A head shaped like a requirement or criterion id, `-F-`, `-N-` or `-AC-`
+ * and digits, that the grammar refuses: a typo is reported rather than
+ * skipped. Another family's ids under bold heads (`**S-1**`, `**OQ-3**`) are
+ * prose: ksarjs lists its spikes that way, 17 times in PRDR-280's parity run.
+ */
+const ID_LIKE = /^(?:[A-Z][A-Z0-9]*-)*(?:F|N|AC)-(?:[A-Z0-9]+-)*\d+$/u;
 
 /** The `[..]` tags that open a bullet's text, and the text after them. */
 function leadingTags(rest: string): { readonly tags: string[]; readonly text: string } {
@@ -280,7 +286,7 @@ function leadingTags(rest: string): { readonly tags: string[]; readonly text: st
 
 function parseModule(file: string, lines: readonly Line[], pack: Pack, problems: Problems): void {
   for (const bullet of boldBullets(lines)) {
-    const at = { n: bullet.n, text: `**${bullet.head}** ${bullet.rest}` };
+    const at = { n: bullet.n, text: bullet.text };
     const { tags, text } = leadingTags(bullet.rest);
     const milestone = tags.map((t) => MILESTONE_ID.exec(t)?.[1]).find((m) => m !== undefined);
     const others = tags.filter((t) => !MILESTONE_ID.test(t) && t !== "withdrawn");
@@ -328,7 +334,7 @@ function withoutTrailingRefs(then: string): string {
 }
 
 /** Every requirement id the text names, ranges expanded, in the order they appear. */
-function namedRequirements(text: string): string[] {
+export function namedRequirements(text: string): string[] {
   const out: string[] = [];
   const add = (id: string) => {
     if (!out.includes(id)) out.push(id);

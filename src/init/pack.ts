@@ -9,7 +9,7 @@ import {
   type PackStatus,
 } from "../schemas/pack.js";
 import { DOC_PATTERNS, discoverDocs } from "./discover-docs.js";
-import { parsePack } from "./pack-parse.js";
+import { UNCHECKED, checkPack } from "./pack-check.js";
 
 /**
  * C-2⁷ (PRDR-279) — whether a document set is a pack that was validated.
@@ -120,10 +120,11 @@ export function readConformanceRecord(root: string): ConformanceRecord | null {
 
 /**
  * Raw, conforming or changed. A pack conforms when its documents hash to the
- * record, the record's checker was green, and the schema finds nothing now.
- * The last clause is the one a record cannot vouch for: the rules can move
- * under unchanged documents, in greenfield most of all, where the stack entry
- * is required (D-10′).
+ * record, the record's checker was green, and the checker is green on them
+ * now (C-2¹⁰). The last clause is the one a record cannot vouch for: the
+ * rules can move under unchanged documents, in greenfield most of all, where
+ * the stack entry is required (D-10′). Only blocking findings count; the
+ * heuristic's reports are for VALIDATE's reviewers.
  */
 export function classifyPack(root: string, opts: { readonly greenfield: boolean }): PackStatus {
   const record = readConformanceRecord(root);
@@ -140,7 +141,9 @@ export function classifyPack(root: string, opts: { readonly greenfield: boolean 
   }
   const reasons = [
     ...(record.checker.green ? [] : [`its record says the checker was red on ${record.date}`]),
-    ...parsePack(root, docs, opts).problems.map((p) => `${p.file}${p.line > 0 ? `:${String(p.line)}` : ""}: ${p.message}`),
+    ...checkPack(root, docs, opts)
+      .findings.filter((f) => f.blocks)
+      .map((f) => `${f.file}${f.line > 0 ? `:${String(f.line)}` : ""} [${f.rule}] ${f.message}`),
   ];
   if (reasons.length === 0) return { kind: "conforming", date: record.date, hash: record.hash };
   return { kind: "changed", date: record.date, added: [], removed: [], modified: [], reasons };
@@ -148,11 +151,19 @@ export function classifyPack(root: string, opts: { readonly greenfield: boolean 
 
 const NOTED_REASONS = 10;
 
-/** What `init` says at DISCOVER. A raw document set is the ordinary case and says nothing. */
+/**
+ * What `init` says at DISCOVER. A raw document set is the ordinary case and
+ * says nothing. A conforming pack's note says what the checker does not
+ * check, so that "conforming" is not read as "reviewed" (C-2¹⁰).
+ */
 export function packNote(status: PackStatus): string | null {
   if (status.kind === "raw") return null;
   if (status.kind === "conforming") {
-    return `the documents are a conforming pack: they match their conformance record of ${status.date} (hash ${status.hash.slice(0, 12)}…)`;
+    return [
+      `the documents are a conforming pack: they match their conformance record of ${status.date} (hash ${status.hash.slice(0, 12)}…),`,
+      " and the pack checker is green on them now. It does not check:",
+      ...UNCHECKED.map((u) => `\n  - ${u}`),
+    ].join("");
   }
   const moved = [
     ...(status.modified.length > 0 ? [`modified ${status.modified.join(", ")}`] : []),
