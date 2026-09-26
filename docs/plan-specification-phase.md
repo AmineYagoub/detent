@@ -171,9 +171,11 @@ ksarjs's `check_pack.py` (kept at `~/ksar-spec-tools/`), generalized to the sche
 - present-indicative claims about unbuilt behaviour are reported to VALIDATE's reviewers as
   findings. This rule is a heuristic, so it reports and never blocks.
 
-The first rule earns its place on Detent's own PRD: `detent-prd-v3.md` defines C-3″, C-9′,
-S-3′, V-1⁵ and X-1‴ twice each, as different rules. The checker runs at VALIDATE and on every
-amendment (§8). A red checker blocks every phase after VALIDATE.
+The first rule earned its place on Detent's own PRD. Until PRDR-287 and PRDR-288,
+`detent-prd-v3.md` gave nine marks to more than one rule each: C-3″ named both PRDR-119 and
+PRDR-207, and C-9′ three rules. Ten definitions moved, and `tests/docs/prd-requirement-ids.test.ts`
+now keeps that one document's marks unique; the checker will do the same for every pack. The
+checker runs at VALIDATE and on every amendment (§8). A red checker blocks every phase after VALIDATE.
 
 ## 6. Stops, defaults and headless runs
 
@@ -257,10 +259,12 @@ amendment (§8). A red checker blocks every phase after VALIDATE.
 
 ## 9. N-7
 
-The self-build runs the phase headless on `detent-prd-v3.md` (decision 9). AUDIT will meet the
-five duplicated ids of §5 at once, and DECIDE will default its way past them. N-7 therefore runs
-longer and costs more, and PRDR-278 adds both figures to release-checklist item 5, beside the
-green. The pack N-7 writes lives in the self-build's folder, like everything else N-7 produces.
+The self-build runs the phase headless on `detent-prd-v3.md` (decision 9). AUDIT reads the
+whole PRD, and DECIDE defaults its way past whatever it finds. The duplicated marks of §5 would
+have been its first finding; PRDR-287 and PRDR-288 have since fixed them, and AUDIT is there for
+the defects nobody has noticed yet. N-7 therefore runs longer and costs more, and PRDR-278 adds
+both figures to release-checklist item 5, beside the green. The pack N-7 writes lives in the
+self-build's folder, like everything else N-7 produces.
 
 ## 10. Open questions (not yet decided)
 

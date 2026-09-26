@@ -40,7 +40,8 @@ and every mechanism problem above still appeared.
    parse replaces ANALYZE's summary.
 6. **A failed check blocks approval.** A mechanical check that still fails after one targeted
    redraft stops the plan at PRESENT.
-7. **Gates bind per package**, as part of this redesign.
+7. **Gates bind per package**, as part of this redesign. This lifts a limit v1 set on purpose
+   (§8). The operator chose it before that was noticed, was told, and kept it the same day.
 
 Accepted with the audit's recommendation:
 - mechanical cross-slice checks replace the whole-plan model review;
@@ -110,7 +111,8 @@ INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → 
   `spec_defects`: a contradiction or gap in the pack, quoted from it. A spec defect found while
   planning takes the specification phase's amendment path (its §8) before approval: PRESENT raises
   AWAIT_INFO, an approved amendment edits the pack, the checker gates it, VALIDATE re-validates the
-  change, and only the affected slices re-plan.
+  change, and only the affected slices re-plan. This amends C-3‴ (PRDR-207): with no planning
+  stage asking, DECIDE's decision log is what keeps a question to one asking (PRDR-282).
 - **Prompts.**
   - One prompt per job: `prompts/slice.md`, `prompts/plan.md`, and `prompts/plan_review.md` for
     the new role.

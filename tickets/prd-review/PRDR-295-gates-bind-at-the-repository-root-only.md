@@ -37,3 +37,7 @@ that are verified by nothing.
 
 The redesign plan's §8. This is the migration D-5 named, with `schema_version` carrying the
 upgrade, as D-5 said it would.
+
+Lifting a limit v1 set on purpose is the operator's call, and it was made knowingly. The operator
+chose per-package gates before anyone noticed that D-5 makes root-only binding deliberate; told so
+on 2026-09-26, the operator kept the decision, in this redesign.
