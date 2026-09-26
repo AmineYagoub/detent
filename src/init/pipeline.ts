@@ -46,7 +46,7 @@ export interface PipelineDeps {
   readonly effortRouting?: Readonly<Record<string, string>>;
   /** C-2‴ (PRDR-117): the production baseline SLICE plans against; "none" opts out. */
   readonly planBaseline?: "production" | "none";
-  /** S-3′ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
+  /** S-3⁸ (PRDR-121): optional symbol intelligence; absent, every stage runs unchanged. */
   readonly symbols?: SymbolsConfig;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };

@@ -64,7 +64,7 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
   const loaded = loadConfig(JSON.parse(readFileSync(configPath, "utf8")));
 
   /**
-   * C-9′ / B-2″ (PRDR-153): the MCP path is the interface the plugin actually
+   * C-9‴ / B-2″ (PRDR-153): the MCP path is the interface the plugin actually
    * drives, and it had NEITHER guard — no approval check anywhere in the path,
    * and no `worktree`, so `RefereeContext` defaulted it to false and the
    * model-driven driver ran an unapproved plan in the operator's own checkout.
@@ -157,7 +157,7 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
   }
 
   /**
-   * X-1‴ (PRDR-181): one referee per root, on the terms `run` already uses.
+   * X-1⁷ (PRDR-181): one referee per root, on the terms `run` already uses.
    *
    * `acquireRunLock` was wired to `kernel/run.ts` and then to `cli/init.ts`,
    * and not here — so two plugin referees could serve one root, each enforcing
@@ -172,7 +172,7 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
   }
   if (lock.brokeStale !== null) {
     process.stderr.write(
-      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)\n`,
+      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1⁷)\n`,
     );
   }
 

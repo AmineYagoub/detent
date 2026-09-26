@@ -4,9 +4,9 @@ title: "The symbol server is pointed at the root, not at the session's worktree,
 state: DONE
 severity: major
 category: defect
-labels: ["prd-review", "symbols", "S-3′", "B-2″", "serena", "gate-313"]
+labels: ["prd-review", "symbols", "S-3⁸", "B-2″", "serena", "gate-313"]
 surface: ["src/kernel/referee-context.ts", "src/kernel/referee-session.ts", "src/kernel/git.ts", "tests/kernel/session-policy.test.ts", "tests/kernel/git.test.ts", "detent-prd-v3.md"]
-prd_refs: ["S-3′", "S-3⁷", "S-3⁷″", "B-2″", "V-6", "N-6", "PRDR-121", "PRDR-145b", "PRDR-223"]
+prd_refs: ["S-3⁸", "S-3⁷", "S-3⁷″", "B-2″", "V-6", "N-6", "PRDR-121", "PRDR-145b", "PRDR-223"]
 acceptance_criteria: ["The symbol server a session receives is started on the session's WORK DIRECTORY: `symbolServerConfig` is given `workDir`, so under worktrees `--project` names the ticket's worktree and `find_symbol`, `find_referencing_symbols` and `get_symbols_overview` answer for the tree the session is editing, uncommitted work included. Observed FIRST (V-6): the launched spec's server args carry `--project <root>` — gate-313's every Serena process was started on `/Users/workstation/detent-gate-313`, the run branch checkout, while the session worked in `.detent/worktrees/<ticket>`.", "Non-worktree mode is unchanged: the work directory is the root.", "Detent's context file stays under the ROOT's local state — it is Detent's, not the tree's — and Serena's own project directory (`.serena/`) lands in the worktree, where finalize must not stage it: it joins the excluded set beside F-1's local entries (PRDR-228), and a test proves a run's merge carries no `.serena/`."]
 non_goals: ["Does not change the tool set, the allowlist or the prompts (S-3⁷″).", "Does not make Serena's memories or project config Detent's concern beyond keeping them out of the change set."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }

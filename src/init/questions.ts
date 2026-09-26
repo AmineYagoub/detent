@@ -1,7 +1,7 @@
 import type { PlanQuestion } from "../schemas/init.js";
 
 /**
- * C-3″ (PRDR-207) — one question, asked once.
+ * C-3‴ (PRDR-207) — one question, asked once.
  *
  * C-3′ batches every stage's questions at PRESENT and dedups them on exact
  * text. gate-313 asked the founder which npm identity publishes Detent at
@@ -66,5 +66,5 @@ export function openQuestionsInput(questions: readonly PlanQuestion[] | undefine
 
 export function openQuestionsInstruction(questions: readonly PlanQuestion[] | undefined, askedBy: string): string {
   if (questions === undefined || questions.length === 0) return "";
-  return ` \`open_questions\` lists what ${askedBy} already asked the human, each with the assumption the plan proceeds on: do NOT ask any of them again, in any words; if this stage needs a different assumption, record the difference where it decides — a ticket's \`description\`, a slice's \`rationale\` (C-3″).`;
+  return ` \`open_questions\` lists what ${askedBy} already asked the human, each with the assumption the plan proceeds on: do NOT ask any of them again, in any words; if this stage needs a different assumption, record the difference where it decides — a ticket's \`description\`, a slice's \`rationale\` (C-3‴).`;
 }

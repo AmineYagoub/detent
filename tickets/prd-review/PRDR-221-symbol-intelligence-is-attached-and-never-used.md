@@ -4,11 +4,11 @@ title: "Symbol intelligence is attached to every session and used by none: Seren
 state: DONE
 severity: major
 category: defect
-labels: ["prd-review", "symbols", "S-3′", "prompts", "sdk", "gate-313", "measurement"]
+labels: ["prd-review", "symbols", "S-3⁸", "prompts", "sdk", "gate-313", "measurement"]
 surface: ["src/adapter/symbols.ts", "src/kernel/referee-context.ts", "src/kernel/referee-session.ts", "hooks/dist/detent-hook.cjs", "prompts/implement.md", "prompts/review.md", "prompts/blind_fix.md", "prompts/informed_fix.md", "prompts/review_fix.md", "prompts/diagnose.md", "prompts/research.md", "prompts/manifest.json", "agents/implement.md", "agents/review.md", "agents/diagnose.md", "agents/research.md", "tests/sessions/symbols.test.ts", "tests/sessions/prompts.test.ts", "tests/kernel/session-policy.test.ts", "detent-prd-v3.md"]
-prd_refs: ["S-3′", "S-3″", "S-3⁗", "S-6", "S-7", "C-8", "V-6", "N-6", "PRDR-121", "PRDR-123", "PRDR-198", "PRDR-220"]
+prd_refs: ["S-3⁸", "S-3″", "S-3⁗", "S-6", "S-7", "C-8", "V-6", "N-6", "PRDR-121", "PRDR-123", "PRDR-198", "PRDR-220"]
 acceptance_criteria: ["The symbol server's tools are never deferred: `symbolServerConfig` sets the SDK's per-server option that keeps a server's tools in the prompt instead of behind tool search (`defer_loading: false` on the API), so `find_symbol`, `find_referencing_symbols`, `find_implementations` and `get_symbols_overview` are callable on turn one. Observed FIRST (V-6): the config carries no such option, and gate-313's transcripts show the eighteen Serena tools arriving only as a `deferred_tools_delta`, with zero tool searches and zero calls across 113 sessions.", "A session with symbol tools is TOLD: when the server is configured, the variable inputs carry `symbol_tools` (the four read tools by name) and the write and read-only role prompts say what they are for — definitions, references, implementations and a file's symbol overview, before grep — and that they are absent when the field is. The stable prefix is unchanged for a root without symbols (S-6), and a root with them gets the same prefix and one more input.", "`prompts:check` hash updated; `agents/*.md` regenerated; the prompt-marker test requires the mention in every role that receives the tools.", "The next gate tickets are the measurement: Serena calls per session are counted from the transcripts and reported, so the decision S-3⁗ leaves to the operator has a number behind it."]
-non_goals: ["Does not widen the tool surface: the four read tools are still the only ones allowlisted, and the editing and memory tools stay refused (S-3′).", "Does not make symbols on by default — that stays the operator's flag (S-3⁗).", "Does not change init sessions, which never receive the server."]
+non_goals: ["Does not widen the tool surface: the four read tools are still the only ones allowlisted, and the editing and memory tools stay refused (S-3⁸).", "Does not make symbols on by default — that stays the operator's flag (S-3⁗).", "Does not change init sessions, which never receive the server."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-220", "PRDR-198", "PRDR-121", "PRDR-208"]
 depends_on: []
@@ -21,7 +21,7 @@ the browser tabs came from
 
 ## Problem
 
-S-3′ makes Serena an optional MCP server a session may call for symbol reads; S-3⁗ made it a
+S-3⁸ makes Serena an optional MCP server a session may call for symbol reads; S-3⁗ made it a
 flag at init. gate-313 has it on, so every write-role and read-only-role session gets a server:
 a Python process, a language-server initialisation, a port, and until PRDR-220 a browser tab.
 The measurement, across every session transcript the gate has produced:
@@ -81,7 +81,7 @@ offers exists on the HTTP and SSE server configs only ("carried on mcp_set_serve
 servers"), not on the stdio config Serena uses, so nothing narrows what the model SEES. What
 it may CALL is unchanged: the allowlist carries the four read tools and nothing else, the
 guard abstains on an MCP call so the allowlist decides (S-2‴), and a headless session's
-unlisted tool is refused — S-3′'s posture exactly, now with the refusal visible to the model
+unlisted tool is refused — S-3⁸'s posture exactly, now with the refusal visible to the model
 as one wasted turn rather than a hidden hole. `alwaysLoad` also waits for the server to connect
 before the first prompt, capped at five seconds; Serena reaches its MCP server within
 milliseconds of start and initialises the language server in the background, observed on the

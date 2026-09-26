@@ -67,7 +67,7 @@ export interface PresentInput {
   readonly assignments: Readonly<Record<string, string>>;
   /** C-2‴: the increments the plan was planned in. */
   readonly slices?: readonly { readonly id: string; readonly title: string; readonly tickets: readonly string[] }[];
-  /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on; C-3″ merges near-duplicates. */
+  /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on; C-3‴ merges near-duplicates. */
   readonly questions?: readonly PresentQuestion[];
   /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
   readonly findings?: readonly HeldFinding[];
@@ -188,7 +188,7 @@ export function presentInputsFromOutputs(
   const slices = (Array.isArray(plan?.slices) ? plan.slices : []).filter(isSlice);
   return {
     slices,
-    /* C-3″ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
+    /* C-3‴ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
     questions: mergeSimilar(questions),
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
@@ -255,8 +255,8 @@ export function renderPresentation(input: PresentInput): string {
     for (const q of questions) {
       lines.push(`  ${q.blocking ? "[BLOCKING] " : ""}${q.id}: ${q.question}`);
       if (q.assumption !== "") lines.push(`      assumed: ${q.assumption}`);
-      /* C-3″: one answer covers both; the other id is named so its own assumption can be found. */
-      if (q.also !== undefined && q.also.length > 0) lines.push(`      also asked as ${q.also.join(", ")} — the same question in another stage's words; one answer covers both (C-3″)`);
+      /* C-3‴: one answer covers both; the other id is named so its own assumption can be found. */
+      if (q.also !== undefined && q.also.length > 0) lines.push(`      also asked as ${q.also.join(", ")} — the same question in another stage's words; one answer covers both (C-3‴)`);
     }
   }
   const edges = input.derivedEdges ?? [];

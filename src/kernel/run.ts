@@ -154,7 +154,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
     if (decided !== "ok") return decided;
   }
   /**
-   * C-9′ (PRDR-139): the approval must be OF THIS PLAN. `run` parsed the file
+   * C-9‴ (PRDR-139): the approval must be OF THIS PLAN. `run` parsed the file
    * and never compared it, so tickets edited after approval executed
    * unreviewed. Safe to check at run start only because `planHash` now covers
    * the approved fields rather than whole ticket files — the whole-file hash
@@ -263,13 +263,13 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   if (!toolchain.ready) return notReady(toolchain.reason);
 
   /**
-   * X-1‴ (PRDR-147): one run per root. Taken before the journal, so a refused
+   * X-1⁷ (PRDR-147): one run per root. Taken before the journal, so a refused
    * second run touches nothing; released on every exit path below.
    */
   const lock = acquireRunLock(root);
   if (!lock.ok) return notReady(runLockRefusal(lock.heldBy));
   if (lock.brokeStale !== null) {
-    opts.announce?.(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)`);
+    opts.announce?.(`broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1⁷)`);
   }
 
   let journal: RunJournal;
@@ -362,7 +362,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
     };
   } finally {
     journal.close();
-    /** X-1‴: released on every exit path, including a throw. */
+    /** X-1⁷: released on every exit path, including a throw. */
     lock.release();
   }
 }
@@ -396,7 +396,7 @@ function notReady(reason: string): RunOutcome {
  * No record means no presentation and no approval, not a substitute rendering.
  *
  * A STALE approval is deliberately not handled here. `readApproval` returns
- * "ok" for one, and the C-9′ comparison below refuses it by name; C-7′ made
+ * "ok" for one, and the C-9‴ comparison below refuses it by name; C-7′ made
  * staleness an init-side PRESENT replay and PRDR-087 closed it there.
  */
 async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise<RunOutcome | "ok"> {
@@ -448,7 +448,7 @@ function readApproval(root: string): string {
 }
 
 /**
- * C-9′ (PRDR-153): `plan.json` is what NAMES the approved set, so an unreadable
+ * C-9‴ (PRDR-153): `plan.json` is what NAMES the approved set, so an unreadable
  * one is a refusal in its own right. It used to fall into the same bucket as a
  * corrupt ticket and silently disable the whole comparison — and nothing
  * downstream noticed, because `allTickets` skips it by name.

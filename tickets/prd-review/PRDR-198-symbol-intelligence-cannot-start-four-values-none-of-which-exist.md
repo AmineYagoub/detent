@@ -6,7 +6,7 @@ severity: major
 category: bug
 labels: ["prd-review", "found-by-live-run", "dead-control", "unverified-claim"]
 surface: ["src/kernel/worstcase.ts", "src/adapter/symbols.ts", "src/cli/doctor.ts", "tests/adapter/symbols.test.ts"]
-prd_refs: ["S-3", "S-3′", "S-3″", "PRDR-121", "D-4", "V-1‴"]
+prd_refs: ["S-3", "S-3⁸", "S-3″", "PRDR-121", "D-4", "V-1‴"]
 acceptance_criteria: ["`symbols.command` defaults to an EXECUTABLE the pinned package installs, not to the package name.", "The liveness probe uses an invocation the tool answers. `--version` exits 2 on this CLI, so the probe reports `missing` for a correctly installed tool.", "`--context` and `--mode` carry values Serena actually has, and the comment records HOW that was established rather than asserting it.", "`doctor` verifies symbol intelligence end to end when it is enabled — the command resolves AND the context and mode validate. A unit test cannot check values that live in another program; only a live probe can, and this defect is what a missing one costs."]
 non_goals: ["Does not install tooling. D-4 stands: Detent binds to what the machine has.", "Does not change what symbol intelligence is for, or S-3's tool surface."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }

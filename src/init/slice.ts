@@ -91,7 +91,7 @@ async function sliceOnce(deps: SliceDeps, previous: { readonly issue: string } |
     production_baseline: deps.baseline === "none" ? [] : PRODUCTION_BASELINE,
     slice_size: deps.sliceSize,
     expected_output: slicesSkeleton(),
-    /* C-3″ (PRDR-207): what ANALYZE already asked — only when non-empty, so the bytes are unchanged otherwise (S-6). */
+    /* C-3‴ (PRDR-207): what ANALYZE already asked — only when non-empty, so the bytes are unchanged otherwise (S-6). */
     ...openQuestionsInput(deps.analysis?.questions),
     ...previousAttemptInput(previous, "slices artifact"),
     instruction:

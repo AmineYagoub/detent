@@ -198,7 +198,7 @@ export interface ApprovalState {
 
 /** The hash an approval covers: every ticket file's content, order-independent. */
 /**
- * C-9′ (PRDR-139): the fields a human APPROVES. Everything else in a ticket
+ * C-9‴ (PRDR-139): the fields a human APPROVES. Everything else in a ticket
  * file is run state.
  *
  * This hashed whole ticket files, and `writeTicket` rewrites them on every

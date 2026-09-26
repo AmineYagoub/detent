@@ -9,7 +9,7 @@ import { ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.j
 import { DOCS, TWO_SLICES, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
 
 /**
- * C-3″ (PRDR-207) — one question, asked once.
+ * C-3‴ (PRDR-207) — one question, asked once.
  *
  * gate-313 asked the founder the npm-identity question twice: ANALYZE raised
  * it, s14's draft raised it again in its own words, and the batch dedups on
@@ -29,7 +29,7 @@ const S14Q2 =
 
 const q = (id: string, question: string) => ({ id, question, blocking: false, assumption: "proceeds on the founder's own account" });
 
-describe("C-3″ PRESENT merges a question asked twice in two stages' words", () => {
+describe("C-3‴ PRESENT merges a question asked twice in two stages' words", () => {
   it("gate-313's pair merges; the two other `Which …` questions do not", () => {
     expect(similarQuestions(Q1, S14Q2), "same question, two drafts").toBe(true);
     expect(similarQuestions(Q1, Q2), "two different founder questions").toBe(false);
@@ -74,7 +74,7 @@ function planner(seen: Record<string, unknown>[], raise: boolean): StageFn {
 const drafts = (seen: Record<string, unknown>[], slice: string) => seen.filter((i) => i["__artifact"] === "plan-draft.json" && sliceOf(i) === slice);
 const ids = (i: Record<string, unknown> | undefined) => ((i?.["open_questions"] as { id: string }[] | undefined) ?? []).map((x) => x.id);
 
-describe("C-3″ the drafting stages are handed what was already asked", () => {
+describe("C-3‴ the drafting stages are handed what was already asked", () => {
   it("SLICE and every PLAN draft see ANALYZE's questions, and a later slice sees the earlier slice's too", async () => {
     const root = repo(DOCS);
     const seen: Record<string, unknown>[] = [];

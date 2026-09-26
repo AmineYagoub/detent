@@ -6,7 +6,7 @@ severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "spend"]
 surface: ["src/cli/init.ts"]
-prd_refs: ["X-1‴", "X-1", "NG4"]
+prd_refs: ["X-1⁷", "X-1", "NG4"]
 acceptance_criteria: ["A second `detent init` on a root already running one refuses, on the same terms `detent run` already refuses — and the refusal names who holds the root.", "The lock is released on every exit path out of the planning pipeline, including a thrown phase error."]
 non_goals: ["Does not make concurrent inits SAFE. NG4 stands: the second one declines, which is the honest answer.", "Does not lock the parsing and validation that precede the pipeline — nothing there spends."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }

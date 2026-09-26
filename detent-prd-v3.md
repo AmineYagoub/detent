@@ -12,6 +12,21 @@
 
 > **Reading guide.** Requirement ids carry over from v2 (`C-*` command, `F-*` filesystem, `V-*` verification, `X-*` execution machine, `S-*` sessions/SDK, `B-*` branch, `A-*` artifacts, `SEC-*` security, `N-*` non-functional), plus v3's `R-*` referee surface. **One global reconciliation applies to every inherited section: "the kernel" now reads "the referee."** The Python reference v0.1.3 remains the porting oracle for the inherited machine; v3's new surfaces (the referee MCP boundary, the plugin, the model-driven loop) have no oracle and are specified here directly.
 
+> **One mark, one rule (3.1.1, PRDR-287, 2026-09-26).** Eight marks were each defined twice, for two
+> different rules, so every citation of one named two rules and a reader could not tell which was
+> meant. The definition introduced first keeps its mark; the later one takes its family's next free
+> mark and names the mark it had:
+> C-3″ (PRDR-207) → C-3‴ · C-9′ (PRDR-139) → C-9‴ · F-1′ (PRDR-118) → F-1‴ · P6′ (PRDR-142) → P6″ ·
+> S-3′ (PRDR-121) → S-3⁸ · S-5′ (PRDR-141) → S-5⁗ · V-1⁵ (PRDR-232) → V-1⁶ ·
+> X-1‴ (PRDR-136/PRDR-147) → X-1⁷.
+> A mark is an identifier, not a chronology: C-9″ amends what is now C-9‴, and S-3″ to S-3⁷‴ build
+> on what is now S-3⁸. Every citation in the code, the docs and the tickets was re-pointed, one at a
+> time, to the rule it means. Two records keep the mark they had and read through this note: a
+> quotation inside a `prd-review` ticket, which N-6 preserves as the document stood, and every commit
+> message. One overlap is left open: §4's `C-9′…C-13′` restates C-9…C-13 and so names C-9′ and
+> C-12′, which PRDR-079 and PRDR-078 also define. `tests/docs/prd-requirement-ids.test.ts` fails on a
+> mark defined twice and pins that overlap exactly.
+
 ---
 
 ## 1. Summary
@@ -328,7 +343,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `coverage` tag, which PRDR-200 measured at Jaccard 0.45 across two independent sweeps and 0.56
   after majority filtering; a set operation decides the same question exactly, for no session.
 
-- **S-3′ (3.1.1, PRDR-121).** Symbol intelligence is an OPTIONAL adapter, discovered and never
+- **S-3⁸ (3.1.1, PRDR-121; renumbered from S-3′ by PRDR-287).** Symbol intelligence is an OPTIONAL adapter, discovered and never
   installed. `symbols: { enabled, command, pinned }` in config; absent or disabled, every stage
   runs unchanged. Enabled with a command Detent cannot run raises `AWAIT_SETUP_CONSENT` naming
   the pinned install command — Detent binds to what the machine has and does not put software
@@ -405,12 +420,12 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   granting rather than declining to object: `implement` is allowlisted only `Bash(git add:*)`
   and `Bash(git commit:*)`, yet every bash command passed, because a bash call names no path.
   The same hole waved through any MCP tool, whose parameters the guard cannot read — including
-  the editing tools S-3′ was written to keep out. Now `deny` is terminal and unchanged, `allow`
+  the editing tools S-3⁸ was written to keep out. Now `deny` is terminal and unchanged, `allow`
   is reserved for a mutating call the guard positively cleared, and `abstain` omits the
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
 
-- **V-3′ / S-5′ / R-10′ (3.1.1, PRDR-141).** Five features were implemented, tested, documented
+- **V-3′ / S-5⁗ / R-10′ (3.1.1, PRDR-141; S-5⁗ renumbered from S-5′ by PRDR-287).** Five features were implemented, tested, documented
   and unreachable, and each is now wired at its ENTRY POINT or its claim withdrawn.
   `detent verify sync` — the only sanctioned V-3 recovery, which the drift halt message itself
   names — was absent from the dispatcher, so every drift-blocked ticket sat behind an instruction
@@ -428,7 +443,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   environment cannot make it answer no. The entry point decides liveness; the backend's presence
   is the signal.
 
-- **P6′ (3.1.1, PRDR-142).** A bound that cannot be read is refused rather than dropped, the
+- **P6″ (3.1.1, PRDR-142; renumbered from P6′ by PRDR-287).** A bound that cannot be read is refused rather than dropped, the
   routing's keys are validated against the real role set, and the enforcement map names where each
   ceiling is actually enforced. `--max-tickets tenn` yielded `NaN` and the option was silently
   omitted, so the full pool ran against the full ceiling having been asked for a limit.
@@ -440,7 +455,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   and `failure_research_tool_calls`, which the new test found. The test now reads the named module
   and requires it to mention the ceiling.
 
-- **C-9′ (3.1.1, PRDR-139).** "Executes only an approved plan" is CHECKED, and the approval is
+- **C-9‴ (3.1.1, PRDR-139; renumbered from C-9′ by PRDR-287).** "Executes only an approved plan" is CHECKED, and the approval is
   a statement about the plan rather than about the files that carry it. `run` schema-parsed
   `approval.json` and never compared `plan_hash`, so tickets edited after approval executed
   unreviewed. The obvious repair — call the existing `approvalState` at run start — would have
@@ -505,7 +520,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `readBindings` answers an empty set for a missing file and `run` checked config and approval
   at startup but never bindings. P2's "only exit codes count" is vacuous when nothing runs.
 
-- **X-1‴ (3.1.1, PRDR-136/PRDR-147).** The run ceiling is enforced against the FILE, and a root
+- **X-1⁷ (3.1.1, PRDR-136/PRDR-147; renumbered from X-1‴ by PRDR-287).** The run ceiling is enforced against the FILE, and a root
   has one writer. `SpendLedger` seeded its total once at construction and thereafter counted in
   memory, so two runs on one root each enforced the full `run_spend_usd` and jointly spent past
   it — silently, because per-ticket claims correctly kept them off the same ticket, so nothing
@@ -529,7 +544,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   implement session and a review per ticket plus gates plus the fix ladder, so planning is the
   cheap quarter of a self-build and one number is wrong for at least one phase of the same run.
   Nor was it ever the backstop X-8 named: D-25 evaluates at session launch, so a run overshoots
-  by a whole session's cost, and before X-1‴ two runs on one root reached $16 against a $10
+  by a whole session's cost, and before X-1⁷ two runs on one root reached $16 against a $10
   ceiling with neither ever seeing `SpendExhaustedError`. **The replacement bounds the quantity
   the fear actually describes.** Legitimate work COMPLETES things — a slice for `init`, a ticket
   reaching DONE for the loop — and a runaway does not, so the ceiling is dollars accrued since
@@ -840,7 +855,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   an id are indistinguishable to the human answering them, and a slice's first and revised
   drafts each numbered from one.
 
-- **F-1′ (3.1.1, PRDR-118).** A ticket id is a FILE NAME under `.detent/plan/`, and a model
+- **F-1‴ (3.1.1, PRDR-118; renumbered from F-1′ by PRDR-287).** A ticket id is a FILE NAME under `.detent/plan/`, and a model
   writes it. It is therefore constrained like one: lowercase, alphanumeric with `-` and `_`,
   at most 64 characters, and never `plan` or `approval`, which are artifact names in the same
   directory. The schema rejects one on the way in and the path builder refuses one that
@@ -946,7 +961,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   sessions are $4–10 on smoke-1's ledger (mean $2.08, peak $5.18 over 45 rows), against a
   no-progress threshold whose unit term there was about $40. Two things had to hold first, and
   neither was the ledger, which appends a row per session and re-reads the file at the gate
-  (X-1‴): `init` now holds one journal per PHASE and hands it to every launch, as the run loop
+  (X-1⁷): `init` now holds one journal per PHASE and hands it to every launch, as the run loop
   has held one per run — F-1's single writer is the process, which the lock decides, not the
   launch — and each draw writes its own artifact under its own S-1″ surface. The draws still
   run in sequence; making them concurrent is C-4⁗″'s own amendment, and this is what had to
@@ -1078,7 +1093,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   The number is a constant beside PRDR-119's noise rules, not a knob; `--approve` re-presents
   the same summary, since the wall is in the file.
 
-- **C-3″ (3.1.1, PRDR-207).** A question is asked **once**. C-3′ batches every stage's
+- **C-3‴ (3.1.1, PRDR-207; renumbered from C-3″ by PRDR-287).** A question is asked **once**. C-3′ batches every stage's
   questions at PRESENT and dedups them on exact text; nothing told a later stage what an
   earlier one had asked. gate-313 asked the founder which npm identity publishes Detent at
   ANALYZE and again, in s14's own words, at PLAN — two paid assumptions, two answers. Now the
@@ -1192,7 +1207,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the root.
 
 - **X-1⁶ (3.1.1, PRDR-219).** The breaker's mark is read from the file at every launch, as the
-  ledger is (X-1‴). X-1⁵'s mark — spend at the last completed unit — lives in `progress.json`,
+  ledger is (X-1⁷). X-1⁵'s mark — spend at the last completed unit — lives in `progress.json`,
   written by `noteUnitComplete` from wherever work completes: a slice checkpoint in `init`, the
   DONE finalize in the run. The ledger read it once, in its constructor. `init` builds a
   ledger per session launch and so always saw a fresh mark, and PRDR-191's proof ran on that
@@ -1217,7 +1232,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   surface, its pin — is unchanged.
 
 - **S-3⁷ (3.1.1, PRDR-221).** A symbol server is on the tool list and the session is told it is
-  there. S-3′ attached Serena to every write-role and read-only-role session of a root with
+  there. S-3⁸ attached Serena to every write-role and read-only-role session of a root with
   symbols on; the platform defers MCP tools behind tool search by default, so its eighteen
   tools reached a session only as names in a deferred-tools delta — callable after a search,
   never before — and no prompt said they existed. gate-313 measured it: 113 sessions with a
@@ -1229,7 +1244,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   server is told what they are for: a symbol's definition, its references, its implementations
   and a file's symbol overview, before grep, and absent when the field is. A root without
   symbols keeps a byte-identical prefix and variable (S-6). The surface does not widen: the
-  editing and memory tools stay refused (S-3′), and symbols stay the operator's flag (S-3⁗).
+  editing and memory tools stay refused (S-3⁸), and symbols stay the operator's flag (S-3⁗).
   The next tickets are the measurement.
 
 - **S-3⁷′ (3.1.1, PRDR-222).** The session is told where the symbol server's boundary is. S-3⁷
@@ -1320,7 +1335,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   directory being off every surface), so only an operator's executed re-baseline makes a changed
   tree agree with itself.
 
-- **C-9″ (3.1.1, PRDR-227).** A kernel surface grant leaves the approval valid. C-9′ checks
+- **C-9″ (3.1.1, PRDR-227).** A kernel surface grant leaves the approval valid. C-9‴ checks
   the approval's hash at every run start over the fields the human was shown; PRDR-153 anchored
   it to the tickets the plan named so the run's own bookkeeping cannot stale it. A grant
   (PRDR-073, SEC-3's lever) appended the granted path to `surface`, an approved field, so the
@@ -1382,7 +1397,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   weakening; observed answering `allow` under the production policy before the move. A tree
   still runs the gate definitions it was cut with, which this records rather than hides.
 
-- **V-1⁵ (3.1.1, PRDR-232).** The referee runs nothing the judged tree DECLARES, and installs
+- **V-1⁶ (3.1.1, PRDR-232; renumbered from V-1⁵ by PRDR-287).** The referee runs nothing the judged tree DECLARES, and installs
   only with the project's own package manager. V-1⁗ has the referee install a work directory's
   dependencies before its gates run, with `npm install` — in a tree a session has just written,
   and npm runs that manifest's `preinstall`, `install`, `postinstall` and `prepare`. Everything

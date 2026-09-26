@@ -223,7 +223,7 @@ const configSchema = z.strictObject({
     claude_code: nonEmptyString,
   }),
   /**
-   * S-3′ (PRDR-121): optional symbol intelligence. Absent or disabled, every
+   * S-3⁸ (PRDR-121): optional symbol intelligence. Absent or disabled, every
    * stage runs unchanged. Detent never installs it — `enabled` with a command
    * it cannot run is a setup message, not an install (D-4/F-2).
    */

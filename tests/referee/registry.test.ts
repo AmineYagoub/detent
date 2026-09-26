@@ -241,7 +241,7 @@ describe("T-104 R-4: attempt is metered", () => {
      * the fixture sets the breaker's floor below one session's own estimate and
      * lets the launch gate see the spend the first session recorded.
      *
-     * X-1‴ (PRDR-136): a FULL row, validated by `ledgerRowSchema` on read. This
+     * X-1⁷ (PRDR-136): a FULL row, validated by `ledgerRowSchema` on read. This
      * used to write `{ cost_estimate_usd: 1000 }` alone — a shape the product
      * cannot produce, since `journal.appendLedger` parses every row it writes.
      * The fixture was only viable while the reader was an unvalidated cast.

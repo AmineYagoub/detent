@@ -4,7 +4,7 @@ import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 
 /**
- * S-3′ (PRDR-121) — symbol intelligence as an optional adapter.
+ * S-3⁸ (PRDR-121) — symbol intelligence as an optional adapter.
  *
  * A ticket can declare that it provides `v1.TerminalStates` (A-1‴), and
  * nothing can check whether it did. A session changing a symbol has no way to
@@ -218,7 +218,7 @@ function defaultProbe(command: string): void {
  * removal from the MCP surface, not the guarantee about remembering, and that
  * sentence stays false. A Serena newer than the pin may add tools this list
  * does not name; they would be exposed, and the allowlist would still refuse
- * the call (S-3′), so the inventory test is what keeps the pin and the list
+ * the call (S-3⁸), so the inventory test is what keeps the pin and the list
  * together.
  *
  * PRDR-220: the dashboard and the GUI log window are turned OFF per launch.

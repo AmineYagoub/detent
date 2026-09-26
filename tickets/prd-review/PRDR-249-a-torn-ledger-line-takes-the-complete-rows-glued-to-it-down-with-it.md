@@ -7,7 +7,7 @@ category: defect
 labels: ["prd-review", "found-by-audit", "ledger", "spend", "crash-recovery", "X-1"]
 surface: ["src/kernel/jsonl-recover.ts", "src/kernel/ledger.ts", "tests/kernel/jsonl-recover.test.ts", "tests/kernel/ledger.test.ts"]
 prd_refs: ["X-1", "X-1⁵", "N-5", "S-4"]
-acceptance_criteria: ["A line holding a torn fragment followed by one or more COMPLETE ledger rows contributes every complete row to the total; only the fragment is lost.", "A line holding two complete rows glued at the record separator contributes both, rather than neither.", "A torn last line with nothing after it still contributes nothing and still does not throw — PRDR-151's rule that unparseable text is a crash artifact at any position is unchanged.", "A recovered object that is well-formed JSON but not a ledger row is SKIPPED rather than fatal, because it came out of a damaged line; a non-row on an INTACT line still throws, which is what X-1‴ was about.", "The recovery is a pure function with its own tests over the glue shapes, and the existing ledger tests that encode the lossy totals are updated to the recovered ones."]
+acceptance_criteria: ["A line holding a torn fragment followed by one or more COMPLETE ledger rows contributes every complete row to the total; only the fragment is lost.", "A line holding two complete rows glued at the record separator contributes both, rather than neither.", "A torn last line with nothing after it still contributes nothing and still does not throw — PRDR-151's rule that unparseable text is a crash artifact at any position is unchanged.", "A recovered object that is well-formed JSON but not a ledger row is SKIPPED rather than fatal, because it came out of a damaged line; a non-row on an INTACT line still throws, which is what X-1⁷ was about.", "The recovery is a pure function with its own tests over the glue shapes, and the existing ledger tests that encode the lossy totals are updated to the recovered ones."]
 non_goals: ["Does not make a torn line fatal in any position; PRDR-151 recorded that bricking a root is worse than an under-count and that stands.", "Does not attempt to recover the torn fragment itself — its bytes were never fully written and its cost is genuinely unknown.", "Does not change how the ledger is WRITTEN; making appends crash-atomic is a separate and much larger question.", "Does not touch `journal.ts`, which guards an identical parse for a different artifact."]
 attempts: { fix: 1, hypothesis: 0, review: 0 }
 links: ["PRDR-151", "PRDR-191", "PRDR-219"]
@@ -59,7 +59,7 @@ already exists:
    where the fragment's unterminated string makes the balanced scan useless.
 
 A recovered object that parses but is not a ledger row is **skipped, not fatal**. On an
-intact line a non-row still throws — that is the X-1‴ property, that the ceiling cannot
+intact line a non-row still throws — that is the X-1⁷ property, that the ceiling cannot
 trust a shape its writer could not produce. But an object dug out of a damaged line is
 itself a crash artifact, and PRDR-151's lesson is that a crash artifact must never brick
 a root.

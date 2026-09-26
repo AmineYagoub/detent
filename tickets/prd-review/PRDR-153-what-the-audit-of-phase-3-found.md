@@ -6,7 +6,7 @@ severity: major
 category: correctness
 labels: ["prd-review", "found-by-audit", "self-inflicted"]
 surface: ["src/kernel/run.ts", "src/init/machine.ts", "src/init/plan-write.ts", "src/cli/referee.ts", "src/kernel/tickets/mutations.ts", "src/kernel/tickets/readers.ts", "src/kernel/referee.ts", "tests/kernel/run.test.ts"]
-prd_refs: ["C-9′", "X-1⁗", "B-2″", "PRDR-118", "PRDR-064"]
+prd_refs: ["C-9‴", "X-1⁗", "B-2″", "PRDR-118", "PRDR-064"]
 acceptance_criteria: ["One definition of `NON_TICKET_FILES`, exported and used by `planHash` and `run`; there were three, and two were wrong.", "An unreadable `plan.json` REFUSES rather than disabling the approval comparison; an unreadable TICKET still yields `readTicket`'s named error.", "`planHash` covers only the ids `plan.json` names, so a ticket the RUN files — X-5 quarantine, X-6 discovery — does not invalidate the approval.", "`waits_on` and `links` are run state and leave the approved projection; `blockers` stays.", "The live-claim refusal runs BEFORE any ticket is written, and covers retained tickets as well as orphans.", "`detent referee` — the MCP path the plugin drives — takes the approval check and the worktree default.", "Claim time and the wall-clock check read the SAME injectable clock.", "The resume test no longer re-approves between the run and the resume."]
 non_goals: ["Does not add a worktree flag beyond `--no-worktree` on the referee path.", "Does not address the escalation think-time counting against the ticket wall clock (M-2), or the stale ENFORCEMENT_SITES entry (L-2) — both recorded for phase 4."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
@@ -32,7 +32,7 @@ ticket files and false of this one. That was a third divergent definition of "ti
 drives, and it had no approval check anywhere in its path and never passed `worktree` — so
 `RefereeContext` defaulted it to false and the model-driven driver ran an unapproved plan in the
 operator's own checkout. X-1⁗ moved the wall clock to the launch seam *precisely* so a ceiling
-would not live on one driver only; C-9′ and B-2″ were then left on one driver, in the same
+would not live on one driver only; C-9‴ and B-2″ were then left on one driver, in the same
 commit.
 
 **A run's own tickets refused its next resume.** `ticketsDir` IS the directory `planHash`

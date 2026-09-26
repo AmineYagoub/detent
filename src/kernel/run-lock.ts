@@ -5,7 +5,7 @@ import { stateDir } from "../fs/layout.js";
 import { pidAlive } from "./tickets/mutations.js";
 
 /**
- * X-1‴ (PRDR-147) — one run per root.
+ * X-1⁷ (PRDR-147) — one run per root.
  *
  * `OPEN_ROOTS` in the journal is a process-local `Set`, and its own comment is
  * honest that cross-process protection is NG4 ground, "documented, not silently

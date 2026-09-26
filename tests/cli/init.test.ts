@@ -45,14 +45,14 @@ describe("T-060 mode-1 parity: a PRD-only, non-git folder is not a runnable proj
 });
 
 /**
- * X-1‴ (PRDR-168) — one pipeline per root.
+ * X-1⁷ (PRDR-168) — one pipeline per root.
  *
  * `acquireRunLock` was built for PRDR-147's "two runs jointly spend past the
  * ceiling" and wired to `detent run` alone. `init` is the first command an
  * operator runs, and the one whose sessions cannot use the fixture backend —
  * so its sessions are the first genuinely billed ones in a project's life.
  */
-describe("X-1‴ init refuses a root another process is already planning", () => {
+describe("X-1⁷ init refuses a root another process is already planning", () => {
   it("refuses, names the holder, and does not run the pipeline", async () => {
     const root = tmpTree({ "PRD.md": "# product\n", "package.json": '{"name":"x","scripts":{"test":"vitest run"}}\n' });
     roots.push(root);
