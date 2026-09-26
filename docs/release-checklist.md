@@ -29,6 +29,11 @@ this file exists to make unskippable.
    `--symbols` when the runner's serena probe is ready and `--no-symbols`
    otherwise, and prints which (S-3⁗) — a gate on a runner with serena is the
    one to trust for the symbol-level checks.
+   Record the self-build's wall-clock duration and its spend, per phase —
+   planning, and the four specification phases once PRDR-279 to PRDR-284
+   build them — beside the green (N-7′). The self-build will then run the
+   specification phase headless on the raw PRD, so it will take longer and
+   cost more; nothing caps either, and these figures say by how much.
    No green, no release — every version bump and every S-5 backend upgrade
    re-runs it.
 6. **Version pins coherent (SEC-2/S-5).** `plugin.json` version equals

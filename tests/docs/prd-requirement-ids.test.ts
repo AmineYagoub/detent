@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { definitions } from "./prd-marks.js";
 
 /**
  * PRDR-287, PRDR-288 — one mark, one rule (N-6).
@@ -11,55 +12,10 @@ import { describe, expect, it } from "vitest";
  * times, for different rules, and nothing noticed: a citation checker passes
  * clean on a mark that exists, whichever rule it lands on.
  *
- * A definition is a bold id at the head of a bullet — one id, ids joined by
- * `/`, or a range joined by `…` — or a decision-log row, or a bold id followed
- * at once by its release in parentheses anywhere in a line, which is how the
- * inherited §5 bullet defines F-1′. A bold sentence that merely OPENS with an
- * id cites it: D-29's row opens "**D-22 splits by driver.**" and defines
- * nothing.
+ * What counts as a definition is `prd-marks.ts`'s, shared with PRDR-278's
+ * amendment test so the two cannot read the PRD two ways.
  */
 const PRD = readFileSync(new URL("../../detent-prd-v3.md", import.meta.url), "utf8");
-
-const MARK = "[′″‴⁗⁰¹²³⁴⁵⁶⁷⁸⁹]*";
-const ONE = `(?:[A-Z]{1,4}-\\d+[a-z]?|P\\d+)${MARK}`;
-const LEAD = new RegExp(`^(${ONE}(?:\\s*[/…]\\s*${ONE})*)(?=$|[\\s.:(])`, "u");
-const INLINE = new RegExp(`^(${ONE}) \\((?:draft\\.\\d+|\\d+\\.\\d+(?:\\.\\d+)?)[,)]`, "u");
-const ROW = new RegExp(`^\\|\\s*(D-\\d+${MARK})\\s*\\|`, "u");
-const PARTS = new RegExp(`^([A-Z]{1,4}-)(\\d+)(${MARK})$`, "u");
-
-/** `C-9′…C-13′` names five marks, and a reader looking up C-12′ lands on it. */
-function expand(part: string): string[] {
-  const [from, to] = part.split("…");
-  if (from === undefined || to === undefined) return [part];
-  const a = PARTS.exec(from.trim());
-  const b = PARTS.exec(to.trim());
-  if (a === null || b === null || a[1] !== b[1] || a[3] !== b[3]) return [from.trim(), to.trim()];
-  const [lo, hi] = [Number(a[2]), Number(b[2])];
-  return Array.from({ length: hi - lo + 1 }, (_, i) => `${a[1] ?? ""}${String(lo + i)}${a[3] ?? ""}`);
-}
-
-/** Every mark the PRD defines, with the bold head of each definition that names it, in document order. */
-function definitions(text: string): Map<string, string[]> {
-  const found = new Map<string, string[]>();
-  const add = (id: string, head: string): void => {
-    found.set(id, [...(found.get(id) ?? []), head.replace(/[.:]$/u, "").trim()]);
-  };
-  for (const line of text.split("\n")) {
-    const row = ROW.exec(line);
-    if (row?.[1] !== undefined) add(row[1], `${row[1]} (decision log)`);
-    const bullet = /^\s*[-*]\s+\*\*([^*]+?)\*\*/u.exec(line);
-    const lead = bullet?.[1] === undefined ? null : LEAD.exec(bullet[1]);
-    if (bullet?.[1] !== undefined && lead?.[1] !== undefined) {
-      for (const id of lead[1].split(/\s*\/\s*/u).flatMap(expand)) add(id, bullet[1]);
-    }
-    for (const span of line.matchAll(/\*\*([^*]+?)\*\*/gu)) {
-      if (bullet !== null && span.index === bullet[0].indexOf("**")) continue;
-      const inline = INLINE.exec(span[1] ?? "");
-      if (inline?.[1] !== undefined) add(inline[1], span[1] ?? "");
-    }
-  }
-  return found;
-}
 
 /** The marks defined more than once, each with the heads that define it. */
 function duplicated(text: string): Record<string, string[]> {

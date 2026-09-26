@@ -57,6 +57,9 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
 | D-28 | **Budgets are enforced at the referee-tool + `PreToolUse`-hook boundary.** A billable session spawns only through the metered `R-4` `attempt` tool, which checks the ledger before and records after; the hook denies ambient billable tool use (a direct `Task` spawn, a direct gate-running `Bash`) that would bypass the ledger; overshoot is bounded at one in-flight session (inherits D-25). | PRDR-065 (OQ-A); with the model driving, "hard" cannot mean "the kernel is the only actor" — it means every spend path passes through a counter the hook makes unavoidable. |
 | D-29 | **D-22 splits by driver.** `settingSources: []` is retained unchanged on the headless driver (it still constructs sessions directly). On the interactive plugin driver — which runs inside the user's configured Claude Code and cannot suppress loaded settings the same way — the D-21 `PreToolUse` hook is **authoritative over any allow rule a settings file introduces**, and referee legality never consults repo settings. | PRDR-065 (OQ-C); the isolation `settingSources: []` bought is preserved where available and backstopped by the hook where it is not. |
 | D-30 | **Resume is a referee property, not a driver property.** Checkpoints in `.detent/` are written by the referee on every admitted transition and reload identically under either driver (C-8/C-9). Interactive redirection mid-loop reuses C-8 content-addressed invalidation; an abandoned interactive attempt resumes as a C-9 crash (stale claim, resumable pool). No new state. | PRDR-065 (OQ-D); the model-driven loop changes who picks the next move, not where state lives or how it is keyed. |
+| D-31 | **`init` judges the documents before it plans from them.** A specification phase, AUDIT, DECIDE, WRITE and VALIDATE, turns the discovered documents into a validated pack with a fixed schema, a conformance record and a deterministic checker, inside `init` and with no switch (C-2⁶, C-2⁷). Only money, legal and policy questions are asked, once and early; every other gap is a vetoable default, and off a TTY every recommended answer is taken (C-3⁗). A session that proves the pack wrong files an amendment, and fix sessions may too (X-3′, X-4⁷). | PRDR-278 (3.1.1); the operator's sixteen decisions of 2026-09-26, in `docs/plan-specification-phase.md` §2. Trials on other projects kept hitting contradictions in the PRD, and a rule that is consistent but wrong passes every gate, because the code and its tests both follow it. The ksarjs specification turned a raw PRD into 2,024 requirements and 1,144 criteria through the same four steps, and its validation found what no build would have: a rounding defect a simulation caught, a race, a security hole left by omission, and a forfeiture rule that was consistent and wrong. |
+| D-32 | **Planning is built on the pack.** SLICE is seeded by code and keyed by requirement ids (C-2⁸); PLAN drafts from pack records and asks nothing (C-4⁵); code checks what code can prove, drives one targeted redraft and blocks approval on what still fails (A-1⁷); one `plan_review` read per slice judges what code cannot (C-4⁶); ANALYZE is folded into DECIDE (D-10′); and gates bind per package (D-5′). | PRDR-278 (3.1.1); the operator's ten decisions of 2026-09-26, in `docs/plan-planning-redesign.md` §2, after `docs/planning-phase-audit-2026-09-26.md`. September's 79 planning tickets delivered about 19 results a live run could see, nearly all plumbing. ksar-cloud's approved plan was never reviewed whole (1.55M tokens against a 1M limit), kept 34 defects code had proved, and spent 78% of its planning on a review whose 151 verdicts were all `changes`. The pack alone would not fix that: ksar-cloud's documents were already half a pack. Planning decision 1 put this in the same amendment as D-31, and planning decision 4 pauses ksar-cloud's plan until the new planner re-plans it, as the baseline for later changes. |
+| D-33 | **Run-time outcomes decide which planning mechanisms stay.** A mechanism that claims to improve plans names the outcome it should move, among escalations to NEEDS_HUMAN, falsifications by cause, budget breaches, first-generation DONE, review rounds, and cost or wall-clock per ticket (N-5′), and a measured run in which that outcome does not move is grounds to remove it. Reviewer finding counts are not an outcome. | PRDR-278 (3.1.1); planning decision 3. September judged its planning patches by reviewer finding counts, and its own experiments showed those counts track how much the reviewer writes. |
 
 ---
 
@@ -141,6 +144,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the audit log, `config.json` is the user's own settings, and `runs/` plus DONE tickets
   are the record of work that exists in the code — and planning increment by increment
   makes replanning a project with finished work the normal case.
+  *Amended by C-8⁵ (PRDR-278): `--replan` enters at DETERMINE_VERIFICATION and never re-runs the
+  specification phase.*
 
 - **C-4″ (3.0.3, PRDR-084).** The plan is reviewed before it is written. After PLAN
   validates its draft, a fresh session judges it at a **REVIEW_PLAN** stage over a
@@ -153,6 +158,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   advises and never blocks: an absent verdict leaves the draft standing, announced.
   No new role (the planner prompt multiplexes by stage; a new `RoleId` is an F-3
   schema event) and no new X-1 key.
+  *Amended by C-4⁶ and S-1‴ (PRDR-278): each slice gets one review read, by its own `plan_review`
+  role.*
 
 - **X-1′ (3.0.3, PRDR-083).** `run_spend_usd` carries a default (100) like every
   other ceiling in the table, and a first `init` without `--spend-cap-usd` writes it
@@ -233,6 +240,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `sizing`; a finding names both tickets, because the remedy is an edge or a surface and
   either needs the pair. The planner is told the same at PLAN. X-4′ recovers a missing
   edge at run time; this is the plan saying it first.
+  *Amended by C-4⁶ (PRDR-278): `dependency` is one of the review's four tags.*
 
 - **X-4″ (3.1.1, PRDR-102).** A session that judges its ticket larger than one session
   commits what is finished, writes `oversized.json` — a note and the split it proposes, one
@@ -260,6 +268,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   its key is the first known language named as a word in `stack.language` — the planner
   writes that field as prose as readily as a name, and an exact-match lookup refused a Go
   project whose documents named all three canonical gates.
+  *Amended by D-10′ (PRDR-278): the documented commands come from the decision log's stack entry,
+  in structured form.*
 
 - **C-4⁗ (3.1.1, PRDR-116).** REVIEW_PLAN's verdict vocabulary stays closed, but a reviewer
   that writes a plain synonym — `revise` for `changes`, `approved` for `approve` — has still
@@ -295,6 +305,9 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the user sized at five hundred tickets planned as twenty-seven, because one pass over one
   slice was all the pipeline could hold, and the sequencing and the stopping were the
   operator's.
+  *Amended by C-2⁸, A-1⁷ and C-4⁶ (PRDR-278): SLICE is seeded by the pack and keyed by requirement
+  ids, mechanical checks replace the whole-plan review, and each slice gets one `plan_review`
+  read.*
 
 - **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
   ask for it. Detent carries a **production baseline** — fifteen items across six areas
@@ -306,6 +319,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   document's explicit decision wins over the baseline, and the ticket records it.
   `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
   used by people who will not write "and back it up" — the plan says it for them.
+  *Amended by A-1⁷ (PRDR-278): baseline coverage is code's check, not the review's judgement.*
 
 - **A-1‴ (3.1.1, PRDR-120).** A ticket declares the interface it OWNS and the interfaces it
   LEANS ON. `provides` names what it brings into existence — a `symbol`, a `config` key, a
@@ -327,6 +341,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   one value agree stays the reviewer's, now with the right pair in front of it. Found on
   ksar-cloud, where eight findings survived a revision round and five were one defect wearing
   different costumes — two tickets disagreeing about a name neither of them owned.
+  *Amended by A-1⁷ (PRDR-278): a proved contract failure buys one targeted redraft, and what still
+  fails blocks approval.*
 
 - **A-1⁵ (3.1.1, PRDR-201).** A ticket declares the **requirement ids and production-baseline
   items it delivers**, in typed fields, so coverage is a set operation rather than a reading.
@@ -346,6 +362,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   something. This matters now because the only thing watching coverage today is the review's own
   `coverage` tag, which PRDR-200 measured at Jaccard 0.45 across two independent sweeps and 0.56
   after majority filtering; a set operation decides the same question exactly, for no session.
+  *Amended by A-1⁷ (PRDR-278): coverage adds criterion ids, and a failure buys one targeted
+  redraft and then blocks approval.*
 
 - **S-3⁸ (3.1.1, PRDR-121; renumbered from S-3′ by PRDR-287).** Symbol intelligence is an OPTIONAL adapter, discovered and never
   installed. `symbols: { enabled, command, pinned }` in config; absent or disabled, every stage
@@ -394,6 +412,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   review, revision and re-review are paid per slice — they buy a failure you can afford. The
   band stays guidance rather than enforcement: `expected_tickets` is planning judgement (A-1),
   and a slice that ignores it is the reviewer's `sizing` finding.
+  *Amended by C-2⁸ (PRDR-278): the slicer estimates no ticket count; the band stays its guidance.*
 
 - **S-5″ (3.1.1, PRDR-125).** The planner runs on `claude-opus-5`. S-5′ seated it on Fable 5.1
   on the strength of a probe; the first self-build gate measured it on real work, and the
@@ -416,6 +435,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   nothing where it was told to look. Reads are unchanged — non-mutating calls abstain (S-2‴)
   and the worktree bound holds — because a planner that cannot read the documents cannot
   analyse them.
+  *Amended by S-1‴ (PRDR-278): a `spec_write` session's surface is the decision log, the pack's
+  paths and `archive/`, declared.*
 
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
@@ -858,6 +879,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   one session writes, and the batch keeps it unique across every stage: two questions sharing
   an id are indistinguishable to the human answering them, and a slice's first and revised
   drafts each numbered from one.
+  *Amended by C-3⁗ (PRDR-278): DECIDE asks this class of question, and records every other
+  decision as a vetoable default in the decision log.*
 
 - **F-1‴ (3.1.1, PRDR-118; renumbered from F-1′ by PRDR-287).** A ticket id is a FILE NAME under `.detent/plan/`, and a model
   writes it. It is therefore constrained like one: lowercase, alphanumeric with `-` and `_`,
@@ -892,6 +915,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   including the one PRESENT itself recommends: answer a question in a planning document while
   a run is executing, re-run `detent init`, and the content digest replays ANALYZE-forward
   into PLAN, which resets the ticket a session is working in.
+  *Amended by C-8⁵ (PRDR-278): on an amendment's scoped re-plan, the refusal covers only the
+  re-planned slices' tickets.*
 
 - **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
   whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
@@ -903,6 +928,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   re-run, so a typo in one slice's document re-planned all twenty, and the ids cascaded the
   same way. What the slice actually reached into is recorded as its external dependencies and
   checked precisely on reuse. The cache is validated on read like every other artifact.
+  *Amended by C-2⁸ (PRDR-278): a slice's key is its requirement ids and their content hashes,
+  never the model's words.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -920,6 +947,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   item. And the exit record stops promising otherwise — PRDR-190's "every finished slice is
   checkpointed" was true of slices and false of redrafts, which cost the operator the ability to
   notice.
+  *Amended by A-1⁷ (PRDR-278): the cross-slice checks send the redrafts, where the whole-plan
+  review did; the rule stands.*
 
 - **C-4⁗′ (3.1.1, PRDR-118).** Every strict planning artifact gets the one relaunch PRDR-116
   gave the review — the validator's own words in the inputs, and only then a failure. The
@@ -952,6 +981,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   two-rate break-even test fails an operation that provably did nothing. The recorded numbers
   were never wrong; what they isolate is smaller than it was read to be, and from here each one
   is reported beside its own null.
+  *Amended by C-4⁶ (PRDR-278): the sampling is deleted; each slice gets one review read.*
 
 - **D-28′ (3.1.1, PRDR-203).** The overshoot bound is one in-flight **batch**, not one in-flight
   session. D-25 evaluates the gate at launch and never mid-flight, and D-28 states the
@@ -970,6 +1000,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   launch — and each draw writes its own artifact under its own S-1″ surface. The draws still
   run in sequence; making them concurrent is C-4⁗″'s own amendment, and this is what had to
   hold before it could be.
+  *Amended by C-4⁶ (PRDR-278): the draws this bounds are deleted; the rule stands for any later
+  batch, bounded by that batch's own size.*
 
 - **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
   independent by construction — that independence is what the threshold rests on — and they ran
@@ -988,6 +1020,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   cost, carried by PRDR-205, and the stagger's own value can be measured only once the first
   turns are byte-identical again. The whole-plan review is still drawn once; slice planning and
   the redrafts are still sequential; there is no knob.
+  *Amended by C-4⁶ (PRDR-278): the draws are deleted with the sampling.*
 
 - **S-6′ (3.1.1, PRDR-205).** The sessions of one batch are handed **byte-identical first
   turns**, and the file each writes is still its own. S-6's stable prefix was never the whole
@@ -1081,6 +1114,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   every other file exactly as before: nothing is inferred from a file's name, and an analysis
   that names nothing yields today's findings unchanged. The symbol and test-file findings on
   gate-313 were the plan's, and were right.
+  *Amended by D-10′ (PRDR-278): the scaffold files come from DECIDE's stack entry.*
 
 - **D-24′ (3.1.1, PRDR-209).** The advice D-24 hands the human is rendered so a human can act
   on it. gate-313's PRESENT printed 144 held findings as one flat list, twice — once at init and
@@ -1096,6 +1130,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   away or resolved by the machine: all of it is still the human's, and the file is the proof.
   The number is a constant beside PRDR-119's noise rules, not a knob; `--approve` re-presents
   the same summary, since the wall is in the file.
+  *Amended by C-7″ (PRDR-278): the held-finding labels and the advice file are deleted; PRESENT
+  shows what survives a revision as risks.*
 
 - **C-3‴ (3.1.1, PRDR-207; renumbered from C-3″ by PRDR-287).** A question is asked **once**. C-3′ batches every stage's
   questions at PRESENT and dedups them on exact text; nothing told a later stage what an
@@ -1109,6 +1145,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   overlap past a stated threshold render as one entry naming both ids, so one answer covers
   both — pinned on gate-313's pair, which merges, and on its two other founder questions, both
   beginning "Which …", which do not.
+  *Amended by C-3⁗ (PRDR-278): no planning stage asks, so the decision log keeps a question to one
+  asking, and `open_questions` goes.*
 
 - **S-3⁵ (3.1.1, PRDR-213).** A write session has **three** git verbs: `git add`, `git rm`
   and `git commit`. Nothing a session had removed a file — Write and Edit create and change,
@@ -1305,6 +1343,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   artifact is). `oversized.json` is deliberately NOT cleared: it is cross-run evidence
   `sizing-evidence` reads for a later PLAN of the same documents (X-4″), and its own stale-consume
   re-lands a requeued oversized ticket at NEEDS_HUMAN rather than passing silently.
+  *Amended by X-3′ (PRDR-278): the signal is read after a session in IN_PROGRESS or in any fix
+  state.*
 
 - **X-4⁶ (3.1.1, PRDR-277).** A premise that failed for want of a toolchain is re-tested once the
   toolchain is installed. PRDR-274 and PRDR-276 bounded D-4/F-2 for a REQUIRED toolchain: `run`
@@ -1472,6 +1512,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   a stop in the middle of a product that takes a night to plan. Planning research (C-3a)
   still runs first over every question; its unanswered residue joins the batch as before,
   now with the analyst's assumption beside it. The interrupt set is unchanged at five (C-5).
+  *Amended by C-3⁗ (PRDR-278): questions are asked at DECIDE, before planning; AWAIT_INFO may also
+  be raised at DECIDE and at VALIDATE; init's research is AUDIT's (C-2⁶).*
 
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
@@ -1485,7 +1527,431 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   remains planning judgment, deliberately unvalidated (A-1 is unchanged): a numeric
   ceiling would refuse honest atomic work.
 
-The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1): `INIT_FS → DISCOVER → [AWAIT_DOCS] → ANALYZE → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five — and re-surfaced as plugin commands and skills. C-1…C-8 hold verbatim (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
+**The specification phase, and planning on its pack (3.1.1, PRDR-278).** The rules from C-2⁶ to
+N-7′ below, with D-31 to D-33 in the decision log, were recorded on 2026-09-26, before any code,
+as N-6 requires. They carry the operator's decisions of that day: sixteen for the specification
+phase, in `docs/plan-specification-phase.md` §2 and cited here as *specification decision n*, and
+ten for the planning phase, in `docs/plan-planning-redesign.md` §2 and cited as *planning
+decision n*. PRDR-279 to PRDR-286, PRDR-289 and PRDR-290 to PRDR-298 build them; until each lands,
+the code does what the rules it amends describe, and each of those rules points here.
+
+- **C-2⁶ (3.1.1, PRDR-278).** `init` judges the documents before it plans from them. Four phases run
+  between DISCOVER and DETERMINE_VERIFICATION and turn the discovered documents into a validated
+  pack (C-2⁷). They are phases of `init`, not a command of their own (specification decision 1),
+  so C-14′'s two commands stand. Nothing judged the documents before: a contradiction, a wrong
+  external fact or a rule that is consistent but wrong reached a ticket as an assumption, and a
+  session that implemented it literally shipped it with green gates, its tests written from the
+  same criteria.
+  - **AUDIT** reads the discovered documents and, in an existing project, the code, and checks
+    the documents against it: a document that states as built what the code does not do is a
+    finding. It reads dependency sources at their pinned versions and reaches the web to check
+    every external claim against a primary source. It writes its checkpoint: contradictions, each
+    with both passages quoted at their `file:line`; gaps; and external claims, each with its
+    source and a verdict, confirmed, wrong or unverified. An unverified claim is never recorded
+    as a fact. It never stops. This is the init-time research D-11 names, now done for every
+    external claim rather than when a stage asks: C-3a's research leaves ANALYZE and PLAN, its
+    engine and brief format (PRDR-262/264) move into AUDIT, and its pool,
+    `planning_research_tool_calls`, keeps its name and is counted and reported against AUDIT's
+    research. It is never told to a session as a share to stay within: nothing in the phase is
+    capped (specification decision 16), and a share a session is told caps how much it checks.
+    Its checkpoint is keyed by the documents and the code, never by the decision log.
+  - **DECIDE** reads AUDIT's checkpoint and writes the decision log, `docs/founder-decisions.md`:
+    each question asked, as `D-n`, and each gap settled as a vetoable default, as `X-n`, each
+    with its value and its reason. It stops once, on a TTY, for the questions C-3⁗ lets it ask,
+    and off a TTY it never stops. In greenfield it also records the stack (D-10′).
+  - **WRITE** reads the documents, AUDIT's checkpoint and the decision log, and writes the pack in
+    C-2⁷'s schema, citing each decision and default by id where the pack relies on it. It moves
+    the originals to `archive/`, outside every discovery glob, and deletes nothing. It never
+    stops.
+  - **VALIDATE** reads the pack. It runs the checker first (C-2⁷), and a red checker is fixed
+    before any review round starts. Each round then runs one reviewer per area of the pack; each
+    finding carries its severity (blocker, major or minor), its `file:line`, a quote and the
+    exact fix. A writer applies the round's findings, and the next round verifies those fixes and
+    hunts for the defects they introduced. A round with no blocker and no major ends the loop,
+    and its minor findings are fixed without another round (specification decision 3).
+    `spec_validation_rounds`, a new X-1 ceiling with scope `init`, default 8 (specification
+    decision 13), bounds the loop as a ceiling, never a retry: ksarjs converged in its seventh
+    round, and a ceiling of 6 would have stopped on round 6's three majors, fixed and never
+    verified. At the ceiling the last round's majors reach PRESENT as recorded risks and planning
+    goes on, while a blocker stops `init` here with AWAIT_INFO, because a plan built on an
+    unverified fix to a blocker can be wrong everywhere; `detent init` resumes VALIDATE once the
+    operator settles it. A pack that states invariants, a ledger's or a state machine's, gets a
+    reviewer that writes and runs a randomized simulation in a sandboxed scratch directory
+    (S-1‴, specification decision 7); it reports and never edits. VALIDATE writes the
+    conformance record (C-2⁷) and, for the phases after it, the checker's parse of the pack. It
+    stops only at the ceiling, and only for a blocker.
+  - **A conforming pack** goes through the checker only: AUDIT, DECIDE and WRITE are skipped,
+    VALIDATE runs the checker, and `init` goes on to DETERMINE_VERIFICATION (specification
+    decision 6).
+  - **No switch.** Nothing skips the phase for documents that do not conform (specification
+    decision 10). A switch is easy to add later if run-time outcomes show a need (D-33); taking
+    one away would break whoever relied on it.
+  - **No second DISCOVER.** Checkpoints are keyed by phase name (F-4), so DISCOVER cannot run
+    twice. WRITE moves the originals out of every discovery glob, and VALIDATE ends by discovering
+    the pack with DISCOVER's recorded patterns (PRDR-166) and handing the checker's parse of it to
+    the phases after it. A later `detent init` finds the conforming pack at DISCOVER.
+  - **Sessions and spend.** Every session of the four phases is an init launch under P6′: metered,
+    on the ledger against ticket `init`, and journaled. Each completed phase and each completed
+    round is a progress mark for X-1⁵'s breaker, as a slice's checkpoint is; without them the
+    breaker, which counts sessions before the first unit completes, would announce throughout a
+    healthy specification phase. Each phase's spend is reported beside planning's, in PRESENT
+    and in `detent status`, and is never capped (specification decision 16). The phase names and
+    every artifact the phases write are persisted shapes under F-3.
+
+- **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
+  deterministic checker (specification decision 4), so that `init` and the operator can tell a
+  document set that was specified and validated from a raw PRD.
+  - **Layout and precedence.** `docs/founder-decisions.md` holds decisions and defaults;
+    `docs/research/verified-facts.md` holds external facts, each with an id, its source and a tag,
+    `source-read`, `doc` or `unverified`; `docs/design/` holds architecture and cross-cutting
+    design; `docs/adr/` holds decision records; `docs/prd/` holds the code registry, the
+    milestones and the module requirements; and `archive/` holds the originals, outside every
+    discovery glob. Precedence runs decisions, facts, design, ADRs, PRDs: a disagreement is a
+    defect in the lower document, and the fix lands there.
+  - **Requirements.** Ids are `<CODE>-F-<nnn>` for functional requirements and `<CODE>-N-<nnn>`
+    for non-functional ones, each code registered in the index and each id tagged with a
+    milestone, `[M0]`, `[M1]`, and so on. Requirements use MUST and SHOULD and never state unbuilt
+    behaviour in the present indicative: that is the doc-claim drift PRDR-263 names, caught where
+    claims are born. Every requirement is tested by at least one acceptance criterion, in
+    Given / When / Then with exact values, and every criterion names the requirements it tests.
+    An `[Mk]` requirement never depends on an `[Mj]` with `j > k`. Catalogues of error codes,
+    events, settings, jobs and routes are optional, and checked when present. In greenfield the
+    decision log carries the stack (D-10′), and a pack may declare its packages and their gate
+    commands (V-5′).
+  - **The conformance record** is committed beside the pack. It holds the schema version, a hash
+    of the pack's documents excluding the record, the checker's result, every validation round
+    with its counts by severity and the findings it left open, and the date. A pack conforms when
+    its hash matches its documents and the checker is green. A pack whose documents no longer
+    match is re-validated for the change only, the checker and then rounds scoped to the changed
+    documents and whatever cites them, under C-2⁶'s stop rule, and `init` names the documents
+    that changed. An edit never re-runs the whole phase, and a pack is never treated as a raw PRD.
+  - **The checker** is deterministic: no model, no network and no clock, byte-identical output for
+    the same pack, and each finding naming its rule, its `file:line` and the offending text. It
+    is a referee gate that both drivers reach the same way (ARCH-2). Its rules: every id is
+    defined exactly once; every reference to a requirement, criterion, decision, fact or section
+    resolves; every error code, event, setting, job and route a PRD uses is in its catalogue,
+    when the pack has one; every requirement has a criterion, and no criterion names an unknown
+    requirement; milestone order holds; and, as a heuristic that reports to VALIDATE's reviewers
+    and never blocks, present-indicative claims about unbuilt behaviour. Like
+    `scripts/check-tickets.ts`, it prints what it does not check, so a green result is not read
+    as a review. It runs at VALIDATE and on every amendment (X-4⁷), and a red checker blocks
+    every phase after VALIDATE. Its first rule earned its place on this document: until PRDR-287
+    and PRDR-288, nine marks here each named more than one rule.
+
+- **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
+  one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
+  money or contracts had every slice resting on it drafted, reviewed and cached before the founder
+  saw it. C-3′ is amended, not contradicted: planning still never stops for a question an
+  assumption can carry, and no planning stage asks at all (C-4⁵).
+  - **What is asked.** Only C-3″'s class (PRDR-119), a decision counted in money or contracts
+    rather than in code (specification decision 2). Everything else is settled as a vetoable
+    default, `X-n`, with its value and its reason; that is where C-3″'s settled decisions are now
+    recorded, in place of a ticket's description, a slice's rationale or the analysis's
+    assumptions.
+  - **Where AWAIT_INFO is raised.** At DECIDE, on a TTY, for those questions, in screens of at most
+    four; each lists its recommended option first, each option states its consequence, and the
+    answers become `D-n` entries with the question, the answer and the reason. That is the one
+    early stop (specification decision 5). At VALIDATE, for a blocker left at the ceiling
+    (C-2⁶). And at PRESENT, for what blocks approval (C-7″). `INTERRUPT_PHASE` records every
+    phase AWAIT_INFO may be raised at.
+  - **The five stay five.** Both new stops raise AWAIT_INFO, the decision class C-3′ already
+    presents, a question the documents cannot answer, so C-5's closed set holds. A sixth
+    interrupt was considered and refused: it would be a new decision class, which C-14′ makes a
+    major-version decision.
+  - **Off a TTY** DECIDE never stops. It takes every recommended answer, logs each as a vetoable
+    `X-n`, and says so in `init`'s output (specification decision 9).
+  - **Asked once.** A question the decision log already answers is never asked again, in any
+    words. The log does for every stage what C-3‴'s `open_questions` did for the stages after
+    ANALYZE, since no later stage asks; `open_questions` and PRESENT's merge of near-duplicate
+    questions go with the rest of the question machinery (PRDR-298).
+  - **Vetoes.** PRESENT lists every `X-n`, marked vetoable, where C-3′ listed the assumptions the
+    plan proceeded on. An answer or a veto is an edit to the decision log: the next `detent init`
+    replays from DECIDE forward (C-8), never re-runs AUDIT, and re-plans only the slices whose
+    inputs changed.
+
+- **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
+  named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
+  PLAN (planning decision 5). D-10's reason holds: nothing binds before a stack exists, and the
+  stack now exists after DECIDE, which still precedes DETERMINE_VERIFICATION. Unambiguous bindings
+  still auto-accept (C-3b). ANALYZE handed the later phases three things, and each has a new home:
+  - `greenfield` is computed by code from the stack markers, as `isGreenfield` already does, and
+    reaches DETERMINE_VERIFICATION, SLICE and PLAN without a model session;
+  - in greenfield the stack is a decision. DECIDE records it, asked when C-3″ applies and a
+    vetoable `X-n` otherwise, as a structured entry holding the language, the toolchain, the
+    documented gate command for each slot and the scaffold files. The pack carries it, and a
+    greenfield pack without it does not conform (C-2⁷). DETERMINE_VERIFICATION binds from it, and
+    documented commands remain the bindings: the entry holds them in structured form, where V-1′
+    had ANALYZE copy them out of prose. The bootstrap ticket provides the entry's scaffold files,
+    where A-1⁶ took them from ANALYZE's `stack.scaffold_files`. A conforming pack takes its stack
+    from its decision log;
+  - the prose summary is replaced by the checker's parse of the pack, which SLICE and PLAN receive
+    in place of `analysis`.
+  - **Persisted.** The phase list is persisted in checkpoints, so removing ANALYZE is an F-3 schema
+    event: an `init` resumed from an ANALYZE checkpoint re-runs from DECIDE and says why.
+
+- **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
+  SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
+  identical documents drew estimates of 308 and 554 tickets, 1 of 24 slice titles survived
+  between two runs, and an edit to one document could re-plan every slice.
+  - **The seed.** Code groups the pack's requirement ids by milestone, then by module code, and
+    counts each group's criteria.
+  - **One slice session** orders and groups the seed. It puts the walking skeleton through the
+    riskiest integration first, a judgement that stays the model's, and places C-2⁗'s baseline
+    items as before. Code refuses its artifact unless every requirement id lands in exactly one
+    slice, the slices respect milestone order, and no slice names an id the pack does not define;
+    a refusal gets C-4⁗′'s one relaunch.
+  - **No guessed sizes.** The slicer estimates no ticket count: `expected_tickets`, and the
+    planned-tickets figure built from it, are gone. C-2⁵′'s band stays the slice session's
+    guidance, since one session still drafts each slice. The announcement states N-5′'s session
+    formula for the slice count, not a guess.
+  - **Identity.** A slice's cache key is its sorted requirement ids; the content hash of each
+    requirement with its criteria and the decisions, facts and catalogue entries it cites; the
+    stack, the bindings, the session budget and the prompt. The model's own words, a slice's title
+    and goal, are never in it. This replaces C-8‴'s key, whose documents and spec were prose.
+  - **Reuse.** SLICE is reused while the pack's set of requirement ids and their milestones is
+    unchanged, and its other inputs, the baseline, the band and the prompt, are too. The criteria
+    counts guide the grouping and do not key it, so an edited requirement re-plans only its own
+    slice and never re-cuts the product. An added requirement is placed by a slice session that
+    may only add, to an existing slice or a new one, and existing slices keep their ids and
+    members. A removed requirement re-plans its slice. This is what makes C-8⁵'s scoped re-plan
+    possible.
+
+- **C-4⁵ (3.1.1, PRDR-278).** PLAN drafts from the pack's records, not from prose, and asks
+  nothing.
+  - **Inputs.** For each slice, from the checker's parse: each requirement's id, milestone and MUST
+    or SHOULD text; its criteria, each with its id and Given / When / Then; the decisions, facts
+    and catalogue entries it cites; the slice's baseline items (C-2⁗); the stack, the bindings
+    and the session budget (C-4′); X-4″'s `sizing_evidence`; and a compact index of the tickets
+    in the slices this one depends on, with each ticket's id, title, surface and what it provides
+    as `kind:id`. Catalogue ids (routes, events, error codes, settings, jobs) are the canonical
+    names in `provides` and `consumes` (A-1‴), so a drafter no longer digs through Detent's state
+    files for them, as 56 of 60 drafting sessions did.
+  - **Outputs.** A-1's ticket gains `criterion_ids`. Every pack criterion a ticket carries is
+    copied into its acceptance criteria verbatim, and a ticket may add criteria of its own. The
+    draft has no `questions`. It has `spec_defects` instead, each quoting, with ids, the pack
+    passages that contradict each other, or the gap. A spec defect found while planning takes
+    X-4⁷'s amendment path before approval: PRESENT raises AWAIT_INFO, an approved amendment edits
+    the pack, the checker gates it, VALIDATE re-validates the change, and only the affected slices
+    re-plan. The draft and ticket shapes change under F-3.
+  - **Prompts.** One prompt per job, SLICE's, PLAN's and the review's (C-4⁶), where one planner
+    prompt served four stages. No prompt a model reads cites a Detent PRD id, and every rule in
+    one is either enforced by code or stated as a judgement the reviewer makes.
+  - **Tools.** Planning sessions read with Read, Grep and Glob and write their artifact, with no
+    Bash and no subagents (D-28″). The planning audit counted 2,846 read-only Bash calls, 97
+    attempts to spawn subagents, and 1,104 of 6,117 tool calls that errored or were denied.
+
+- **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
+  fixed rather than reported. A-1‴ and A-1⁵ made contracts and coverage set operations and then
+  only reported what they proved: ksar-cloud's approved plan kept 34 such defects, 28 names
+  consumed that no ticket provides and 6 names with two providers, because the whole-plan review
+  was told to treat them as handled.
+  - **The checks** run after each slice's draft and after its revision. Coverage: every
+    requirement id and baseline item of the slice is in some ticket's `requirement_ids` or
+    `baseline_items`, every criterion id of those requirements is in some ticket's
+    `criterion_ids`, and no ticket names an id from outside its slice. Contracts: every consumed
+    name has a provider in this slice or an earlier one, no name has two providers, and derived
+    edges are added as A-1‴ adds them. Milestone order: no ticket delivering an `[Mk]`
+    requirement depends on one delivering an `[Mj]` with `j > k`. Gates: every path of every
+    ticket's surface lies in a package with bound gates (V-5′). The graph: no cycle remains, and
+    a derived edge A-1‴ refuses because it would close one counts as a failure. A-1″'s repairs of
+    the drafted graph run first and are still reported.
+  - **One targeted redraft.** A failing slice gets one redraft with the failures as its inputs.
+    They are proved, so no reviewer's judgement is needed. Then the checks run again.
+  - **Across the plan.** After every slice the same checks run over the whole plan. A name nobody
+    provides sends one redraft to the earliest slice that consumes it, and a name with two
+    providers sends one to each owner's slice. A redraft keeps the ids later slices depend on,
+    and each is checkpointed before the next begins (C-8⁗), keyed by the failures that sent it.
+  - **What still fails blocks approval** (planning decision 6). PRESENT raises AWAIT_INFO naming
+    each failure (C-7″); the operator amends the pack or edits the tickets, and `detent init`
+    resumes.
+  - **In place of the whole-plan review.** This replaces C-2‴'s whole-plan model review. The checks
+    grow linearly with the plan. The review's prompt carried every ticket in full: it worked at
+    about 260 tickets and reached 1.55M tokens against a 1M limit at 547, and ksarjs's pack holds
+    2,024 requirements. No model reads the contracts between slices (planning decision 10); one
+    is added only if run-time outcomes show tickets failing on contracts the checks passed (D-33).
+
+- **C-4⁶ (3.1.1, PRDR-278).** Each slice gets one review read, by its own role, limited to judgement
+  (planning decision 2). C-4″'s REVIEW_PLAN grew into three reads, a revision and three more reads
+  (C-4⁗″, PRDR-269) and took 78% of planning's spend; in the runs that built ksar-cloud's plan its
+  reviewers wrote 151 verdicts, every one `changes`, and revisions resolved 121 findings while
+  introducing 119.
+  - **The role** is `plan_review` (S-1‴), with its own prompt, on the planner's seat (S-5⁵,
+    planning decision 9), so it is never weaker than the drafts it judges.
+  - **One read**, after A-1⁷'s checks pass. Its scope is four of the tags C-4″, C-4‴ and C-2‴
+    defined: `sizing`, whether each ticket fits one implement session (C-4′); `shape`, the walking
+    skeleton first and vertical increments; `dependency`, what contracts cannot see; and
+    `coherence`, tickets that contradict each other or the pack. Coverage, traceability and
+    contracts are code's (A-1⁷). The review receives X-4″'s `sizing_evidence`.
+  - **Findings** carry a severity, blocker, major or minor, with their tag, their ticket and their
+    fix. `approve` is the verdict when nothing is blocker or major. C-4⁗'s synonyms and C-4⁗′'s one
+    relaunch apply to its artifact.
+  - **One revision.** A blocker or major buys one revision of the slice. A-1⁷'s checks run on it,
+    and there is no second review. Minor findings are recorded on their tickets and reach the run
+    sessions by PRDR-271's path. What survives the revision is presented as a risk, not ground on:
+    D-24 holds for the review, which advises and never blocks. What blocks is code's.
+  - **Deleted:** the three-read sampling (C-4⁗″), and with it the draws launched together
+    (C-4⁗‴) and the batch D-28′ bounds, whose rule stands for any later batch, bounded by that
+    batch's own size; the review after the revision (PRDR-269); the churn and null lines; the
+    held-finding labels and the advice file (D-24′). A slice costs at most three sessions, the
+    draft, the review and one revision, plus A-1⁷'s targeted redrafts.
+
+- **C-7″ (3.1.1, PRDR-278).** PRESENT shows what the operator decides on, and approval is refused
+  while the plan is proved wrong. ksar-cloud's PRESENT printed 457 held findings, a revision
+  headline that summed 16 of 24 slices and a 457-KB advice file, and never showed the decisions
+  the plan rests on.
+  - **Shown:** the slices, tickets and milestones; the decision log, every `D-n` and every `X-n`,
+    the `X-n` marked vetoable (C-3⁗); the checks that still fail (A-1⁷); the spec defects
+    planning found (C-4⁵); VALIDATE's residual majors and the review majors left after revision,
+    as risks (C-2⁶, C-4⁶); and what each specification phase and planning cost, with no cap
+    (specification decision 16).
+  - **Gone:** the revision and churn lines, the advice file, and the question list, which is
+    DECIDE's now. The presentation is printed once, off a TTY as on one, and the persisted
+    presentation `run` replays (PRDR-255) is the same text.
+  - **Refused** while a check fails or a spec defect is open: PRESENT raises AWAIT_INFO with each
+    item, and `--approve` refuses the plan.
+  - **Mixed builds** (planning decision 8). Every planning checkpoint records the Detent build that
+    wrote it (N-5′), and PRESENT names every build that contributed. A plan more than one build
+    produced is approved the way a toolchain install is (PRDR-276): on a TTY, PRESENT names the
+    builds and asks [y/N], and so does `run`'s deferred approval (PRDR-255); off one, `--approve`
+    needs `--accept-mixed-builds` beside it, or the approval is refused. The approval record
+    lists the builds. At least four builds assembled ksar-cloud's plan, and one slice of it came
+    from an experiment run against the live tree.
+
+- **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
+  - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
+    requirement ids changed are re-planned, and every other slice's cache is reused (C-2⁸).
+    C-8′'s reconciliation applies: a DONE ticket is never redrafted, so a change to built code
+    becomes a new ticket. C-8″'s in-flight refusal covers only the re-planned slices' tickets; it
+    counts every ticket that is neither READY nor DONE, so the filing ticket's own NEEDS_HUMAN
+    would otherwise refuse the re-plan it asked for. The changed plan is presented for approval
+    again (C-7′), since its hash changed. Neither existing path does this: a plain `init` on an
+    approved plan re-plans nothing (C-8), and `--replan` re-derives every slice.
+  - **`--replan`** still re-derives every slice, for an operator who wants that (C-8′). It now
+    enters at DETERMINE_VERIFICATION, where it entered at ANALYZE (D-10′), and never re-runs the
+    specification phase: the pack is the founder's record, and a changed pack is re-validated by
+    content (C-2⁷).
+
+- **X-3′ (3.1.1, PRDR-278).** X-3's table admits PREMISE_FALSIFIED from BLIND_FIX, INFORMED_FIX and
+  REVIEW_FIX, each with IN_PROGRESS's outcome: hypotheses++, then a bug returns to DIAGNOSED, or
+  to NEEDS_HUMAN past two, and a feature goes to NEEDS_HUMAN as a plan-level flaw.
+  DEPENDENCY_DISCOVERED gains the same three rows, so a fix session's `missing` (X-4′) is a
+  dependency as an implementer's is, and a retraction (X-4‴) is no signal after any of the four
+  states. The referee reads `falsified.json` after a session in each of them. No state or event
+  is added, and the rest of §7 stands. Implement and the three fix roles may all declare a false
+  premise, and so file an amendment (X-4⁷, specification decision 12); review, diagnose and
+  research stay read-only. The fix prompts have told their sessions to write the signal since
+  X-4⁴, while the referee read it after IN_PROGRESS alone, so a fix session's signal was written,
+  ignored and deleted at the next launch; PRDR-289 builds the rows. X-4⁵'s clearing stands: every
+  launch removes a signal an earlier session left. X-4″'s oversized signal stays IN_PROGRESS's.
+
+- **X-4⁷ (3.1.1, PRDR-278).** A session that proves the specification wrong files an amendment, and
+  the pack is fixed before the tickets built on it are (specification decision 8).
+  - **Filing.** An implement or fix session (X-3′) writes `falsified.json` with an amendment: the
+    affected requirement ids, the defect class, the evidence, either a failing test or two
+    passages of the pack that contradict each other, quoted, and the proposed text. The referee
+    admits PREMISE_FALSIFIED, and the ticket goes to NEEDS_HUMAN. No state or event is added: an
+    amendment is a falsification that names its fix.
+  - **Holding.** Until the operator decides, the pool draws no READY ticket whose
+    `requirement_ids` include an amended requirement, as it draws none whose blockers are open,
+    and the run goes on with the rest.
+  - **Deciding.** The operator approves, edits or rejects the amendment through C-10's escalation:
+    on a TTY inside `run`, and with exit 10 off one. A rejection returns the held tickets to the
+    pool and leaves the filing ticket in NEEDS_HUMAN, with the rejection as its note.
+  - **Applying.** On approval the pack is edited, the checker gates it (C-2⁷), VALIDATE
+    re-validates the change, and C-8⁵'s scoped re-plan follows. The filing ticket and the held
+    tickets return through HUMAN_REQUEUE, as X-4⁶ returns the tickets an install frees, or are
+    superseded by the re-plan. The option the operator chose named `init --replan` for the last
+    step, but C-8′ makes `--replan` re-derive every slice, so the decision is recorded with
+    C-8⁵'s scoped re-plan in its place.
+
+- **S-1‴ (3.1.1, PRDR-278).** S-1's role set gains four roles, one per tool set, because routing and
+  tools are both set per role (specification decisions 11 and 15):
+  - `audit` runs AUDIT. It is read-only (S-1′): it reads the repository, dependency sources at
+    their pinned versions, and the web under the research role's network rules.
+  - `spec_write` runs DECIDE, WRITE and VALIDATE's fixes. It reads, and it writes only the decision
+    log, the pack's paths and `archive/`: a declared surface the containment hook enforces, as it
+    enforces an implement session's, where S-1″ gave an init session its one artifact.
+  - `spec_review` runs VALIDATE's reviewers. It is read-only, plus a scratch directory outside the
+    repository and `.detent/`, created for the round and removed after it, where it may write
+    throwaway scripts and run them (specification decision 7). Execution is sandboxed below the
+    hook: a script cannot write outside the scratch directory or reach the network, whatever it
+    contains, and it runs under a time limit and an output limit. Where the platform offers no
+    such sandbox, simulation is off and the round says so. No other role has the sandbox.
+  - `plan_review` runs C-4⁶'s review read. It is read-only (S-1′).
+  - **One schema event.** Role ids are persisted, so the four are one F-3 `schema_version` event
+    with a migration for `role@hash` assignments, paid once. C-4″ declined that cost for one role
+    (PRDR-084); the planning audit found it worth paying. The migration writes the four roles'
+    default routing (S-5⁵) into an existing config and leaves every role the config already
+    routes untouched (S-5′). S-1's read-only set gains `audit`, `spec_review` and `plan_review`,
+    and the `planner` keeps SLICE and PLAN, without Bash (C-4⁵).
+
+- **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
+  routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
+  `planner`: `claude-opus-5` at `max`; `plan_review`: `claude-opus-5` at `max`;
+  `audit`: `claude-opus-5-5` at `max`; `spec_write`: `claude-opus-5-5` at `max`;
+  `spec_review`: `claude-opus-5-5` at `max`; `review`: `claude-opus-5` at `xhigh`;
+  `diagnose`: `claude-opus-5` at `xhigh`; `informed_fix`: `claude-opus-5` at `xhigh`;
+  `implement`: `claude-sonnet-5` at `xhigh`; `blind_fix`: `claude-sonnet-5` at `xhigh`;
+  `review_fix`: `claude-sonnet-5` at `xhigh`; `research`: `claude-sonnet-5` at `xhigh`.
+  The three specification roles run on Opus 5.5 at `max` (specification decision 14): the ksarjs
+  specification ran on it throughout, in its main session and its reviewer subagents, and S-5‴'s
+  pin is the first whose runtime serves it; nothing was routed to it before. `plan_review` takes
+  the planner's seat (planning decision 9), and the planner stays where S-5″ put it. Nothing else
+  moves, and the routing is not tuned past these defaults until a run-time outcome says it should
+  (D-33).
+
+- **D-5′ (3.1.1, PRDR-278).** Gates bind per package. D-5 bound the repository root only in v1 and
+  named workspace scoping a v2 migration; NG2 made per-workspace gate scoping a non-goal; V-5
+  binds root entrypoints only; and OQ-4 left the design open. The operator chose to bind per
+  package in this amendment (planning decision 7), was then told that it lifts a limit v1 set on
+  purpose, and kept it the same day. This amends D-5 and V-5 (V-5′), lifts NG2 and resolves OQ-4.
+  The per-package binding is a persisted shape, so it is the F-3 migration D-5 anticipated,
+  "`schema_version` carries the upgrade". The evidence: ksar-cloud's gates ran Go at the root
+  while 69 of its 547 tickets wrote `dashboard/`, 41 of them nothing else, and no gate could fail
+  for any of them.
+
+- **V-5′ (3.1.1, PRDR-278).** DETERMINE_VERIFICATION finds a manifest in every package directory,
+  not only the root, for each ecosystem an adapter supports, and binds each package's gates with
+  that package as their working directory. V-5's rules, the orchestrator-native candidates, the
+  workspace notice and `[BASE]`, govern the root package's own binding. A pack may declare
+  packages and their gate commands (C-2⁷), and declared commands are the bindings, as documented
+  commands are (V-1′). A ticket's gates are those of the packages its surface touches, and `run`
+  runs exactly those. A surface path that lies in no package with bound gates fails A-1⁷'s gate
+  check, so an approved plan has no ticket writing where no gate can fail. Nothing invents gates
+  for a package that has none: its tickets wait until the pack declares them or the operator
+  binds them. `run`'s toolchain check (PRDR-276) covers every package's toolchain, and V-1's
+  execute-before-approve rule is unchanged.
+
+- **OQ-4 resolved (3.1.1, PRDR-278).** v2's open question on workspace scoping is settled by D-5′
+  and V-5′: gates bind per package.
+
+- **N-5′ (3.1.1, PRDR-278).** Plans are measured by how they run (planning decision 3), from what
+  `run` already records in `transitions.jsonl` and the ledger. The figures sit beside §14's
+  metrics, and they are reported and never gated:
+  - per ticket: escalations to NEEDS_HUMAN; falsifications by cause, premise, oversized or
+    dependency discovered; budget breaches; whether it was DONE in its first generation; review
+    rounds; cost and wall-clock;
+  - per slice and per plan, with the Detent build and the pack hash that produced the plan: a
+    quality section in `detent status`, and a record when a run ends. `detent status` also shows
+    what each specification phase and planning cost, with no cap or threshold (specification
+    decision 16);
+  - evaluation hygiene: every planning checkpoint records the Detent build that wrote it (C-7″),
+    and an experiment runs on a copy of the project, never on its live `.detent/` tree, which is
+    how an experiment's slice reached ksar-cloud's approved plan;
+  - sessions per plan: a plan of N slices takes `1 + 2N + R + C` planning sessions, where R is the
+    slices revised and C the targeted redrafts. C-2‴'s pipeline took at least `4N + 3`, and
+    ksar-cloud's 24 slices took 186; this takes 49 with no revision and 73 with every slice
+    revised, plus redrafts. The figure is an estimate for the first run to measure.
+
+- **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
+  specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes
+  every recommended answer as a vetoable default, and the pack it writes lives in the self-build's
+  folder, like everything else N-7 produces. The self-build therefore runs longer and costs more,
+  so release-checklist item 5 records its wall-clock duration and its spend, per phase, beside the
+  green; the first such run gives specification decision 16 its projection. The N-7 scoping note
+  (§13) still governs what the skeleton plans first.
+
+The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
 - **C-1′** `init` and `run` are the plugin's two commands (`/detent:init`, `/detent:run`), and Detent registers skills so the model invokes the right phase from natural intent ("plan this repo", "keep going"). The headless driver exposes the same two as the retained CLI verbs. C-1's git-root rule and the five C-5 interrupts are unchanged; interrupts are surfaced as the plugin's **presented decisions**, still a closed set of five.
   *AC:* the plugin manifest registers exactly two commands; a docs test asserts the five-decision closed set; subdirectory invocation still exits/《presents》 the root hint with no `.detent/` created.
@@ -1550,12 +2016,12 @@ The v2 milestones (M0…M4) delivered the CLI line and its 52-test oracle parity
 
 ---
 
-## Inheritance (unchanged from v2.0-draft.7)
-The following sections are **driver-agnostic** and are inherited verbatim from `detent-prd-v2.md`, with the single reconciliation "kernel" → "referee":
-- **§3 Scope & Non-Goals** — including NG7 (Claude Code remains the only backend; a plugin *is* Claude Code, so NG7 is reinforced, not weakened).
+## Inheritance (from v2.0-draft.7)
+The following sections are **driver-agnostic** and are inherited from `detent-prd-v2.md`, with the single reconciliation "kernel" → "referee", as the dated entries of §4 and §8 amend them; each of those entries names the rule it amends:
+- **§3 Scope & Non-Goals** — including NG7 (Claude Code remains the only backend; a plugin *is* Claude Code, so NG7 is reinforced, not weakened). NG2 is lifted by D-5′ (3.1.1, PRDR-278): gates bind per package.
 - **§5 Filesystem Contract (F)** — `.detent/` layout, the committed set, content-addressed checkpoints (F-4). **F-1′ (draft.4, PRDR-066/PRDR-064 applied):** the local set gains the two D-21 hook-policy files (`active_surface.json`, `stage.json` — run-level, never committed); and the plan directory is `plan/` (tickets `<ticket-id>.json`, plus the plan artifact `plan.json` and the approval record `approval.json`) — a file in `plan/` is a ticket **iff** its name is not one of the reserved names `plan.json` and `approval.json`; the reserved set is closed, and a reader that enumerates the directory asserts against it rather than carrying its own list. This is A-2's stated home, raised unprompted by the N-7 analyst reading this document (T-140).
-- **§6 Verification Adapter Contract (V)** — discovery, binding, execution, drift.
-- **§7 Execution State Machine (X)** — the twenty states, the X-3 transition table, the escalation ladder, the budgets of X-1, `GATE_DRIFT` (D-23), attempt generations (D-17). The referee *is* this machine; nothing in it changes.
-- **§9 Branch & Merge Contract (B)**, **§10 Artifacts (A)**, **§12 Non-Functional (N)** — including N-7 self-build, now naming `detent-prd-v3.md` as its target — **§14 Metrics**, **§15 Risks**.
+- **§6 Verification Adapter Contract (V)** — discovery, binding, execution, drift. V-5 is amended by V-5′ (3.1.1, PRDR-278): each package's gates are bound.
+- **§7 Execution State Machine (X)** — the twenty states, the X-3 transition table, the escalation ladder, the budgets of X-1, `GATE_DRIFT` (D-23), attempt generations (D-17). The referee *is* this machine. Its twenty states are unchanged; its table, budgets and signals are amended by the dated `X-*` entries of §4, among them X-3′ (3.1.1, PRDR-278), which admits a false premise from the three fix states, and by C-12‴'s requeue rows.
+- **§9 Branch & Merge Contract (B)**, **§10 Artifacts (A)**, **§12 Non-Functional (N)** — including N-7 self-build, now naming `detent-prd-v3.md` as its target and running the specification phase headless (N-7′) — **§14 Metrics**, **§15 Risks**.
 
-Where an inherited section says the CLI is the entry point, read "the headless driver or the plugin"; where it says "the kernel decides", read "the referee admits, the driver sequences" (D-27). No inherited requirement's *semantics* change; only the delivery surface and the loop's driver do.
+Where an inherited section says the CLI is the entry point, read "the headless driver or the plugin"; where it says "the kernel decides", read "the referee admits, the driver sequences" (D-27). An inherited requirement's *semantics* change only where a dated entry amends it by name; otherwise only the delivery surface and the loop's driver do.

@@ -1,6 +1,8 @@
 # The specification phase — implementation plan
 
-**Status:** proposed; filed as PRDR-278 … PRDR-286; no code yet.
+**Status:** recorded in the PRD by PRDR-278 on 2026-09-26 (C-2⁶, C-2⁷, C-3⁗, X-3′, X-4⁷, S-1‴,
+S-5⁵, N-7′ and D-31); PRDR-279 … PRDR-286 and PRDR-289 build it; no code yet. Where this plan
+and the PRD differ, the PRD wins, and PRDR-278 lists what it settled that this plan left open.
 **Prerequisite (N-6):** PRDR-278, the PRD amendment, lands before any code. The phase changes
 C-3′ ("Planning does not stop for a question") and the `init` pipeline, and N-6's no-deviation
 rule forbids changing either in flight.

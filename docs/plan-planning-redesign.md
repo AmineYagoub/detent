@@ -1,6 +1,9 @@
 # The planning phase, rebuilt on the pack — implementation plan
 
-**Status:** proposed; filed as PRDR-290 … PRDR-298; no code yet.
+**Status:** recorded in the PRD by PRDR-278 on 2026-09-26 (D-10′, C-2⁸, C-4⁵, A-1⁷, C-4⁶, C-7″,
+C-8⁵, D-5′, V-5′, N-5′, D-32 and D-33); PRDR-290 … PRDR-298 build it; no code yet. Where this
+plan and the PRD differ, the PRD wins, and PRDR-278 lists what it settled that this plan left
+open.
 **Prerequisite (N-6):** PRDR-278 lands before any code. It is the one PRD amendment for this plan and
 for `docs/plan-specification-phase.md`, by the operator's decision.
 **Evidence:** `docs/planning-phase-audit-2026-09-26.md`.
