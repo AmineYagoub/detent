@@ -2,10 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
-import { buildPipeline } from "../../src/init/pipeline.js";
 import { sizingEvidence } from "../../src/init/sizing-evidence.js";
 import { MockBackend } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
  * X-4″ (PRDR-102) — the planner and the plan review size against what a
@@ -53,7 +52,7 @@ describe("X-4″ sizing evidence", () => {
     const root = repo(LONE_CANDIDATE);
     seedEvidence(root);
     const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     const inputs = backend.calls
       .filter((c) => c.spec.artifactOut.endsWith("plan-draft.json") || c.spec.artifactOut.endsWith("plan-review.json"))
       .map((c) => (JSON.parse(c.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs);

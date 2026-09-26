@@ -51,12 +51,13 @@ Two commands. That is the whole public workflow.
 detent init
 ```
 
-`init` runs ten phases, in order. On a terminal it asks you DECIDE's questions as it goes, and otherwise it does not stop between them:
+`init` runs eleven phases, in order. On a terminal it asks you DECIDE's questions as it goes, and otherwise it does not stop between them:
 
 - **INIT_FS**: checks you're at a git root and scaffolds `.detent/`.
 - **DISCOVER**: finds your planning documents and candidate verification commands.
 - **AUDIT**: reads the documents before anything plans from them. It finds passages that contradict each other, gaps a plan would need filled, and, in an existing project, what the documents say is built that the code does not do. It checks every external claim they rely on, such as a library's behaviour at the version you pin, against a primary source. It prints what it found, and DECIDE settles it.
 - **DECIDE**: settles what AUDIT left open before anything plans from it. A decision counted in money or contracts is asked, in screens of at most four, the recommended answer first and each option with what choosing it means; everything else is settled as a default you can veto. Both go into `docs/founder-decisions.md`, the decision log, which every later phase reads, and a question the log already answers is not asked again. Off a terminal it takes each recommended answer and says so. In a new project it also decides the stack.
+- **WRITE**: rewrites the documents into the pack, a fixed layout under `docs/` in which every requirement has an id, a milestone and MUST or SHOULD, every acceptance criterion states Given, When and Then, and every decision and default the pack relies on is cited by id. It moves each original it rewrote to `archive/` and deletes nothing; a README stays where it is. The pack checker checks what it wrote, its session is relaunched once on a blocking finding, and the result, red or green, goes into `docs/conformance.json`, which says the pack is not validated yet. The phases after it plan from the pack.
 - **ANALYZE**: reads the documents and summarizes what's being built; every question they can't answer is noted with the assumption planning proceeds on.
 - **DETERMINE_VERIFICATION**: probes candidate test/lint/build commands and binds the ones that actually run.
 - **SLICE**: cuts the whole product into ordered increments — walking skeleton first — and places a production baseline (secrets, auth, backups, health checks, CI gates, …) in the slice where each item belongs, whether or not your documents asked for it.

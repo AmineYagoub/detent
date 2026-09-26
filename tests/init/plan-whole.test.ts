@@ -1,9 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
-import { buildPipeline } from "../../src/init/pipeline.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, MockBackend, TWO_SLICES, ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -82,7 +81,7 @@ function planner(script: Script, log: string[]): StageFn {
 }
 
 async function init(root: string, script: Script, log: string[]): Promise<void> {
-  const handlers = buildPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(script, log) }), prompts: PROMPTS, budgets: BUDGETS });
+  const handlers = planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(script, log) }), prompts: PROMPTS, budgets: BUDGETS });
   try {
     await runInit(root, handlers);
   } catch {

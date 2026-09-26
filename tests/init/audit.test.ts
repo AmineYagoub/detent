@@ -434,7 +434,7 @@ describe("PRDR-281: a pack is not audited (specification decision 6, C-2⁷)", (
     }
     const root = repo(files);
     const checker = checkPack(root, discoverDocs(root).docs, { greenfield: true });
-    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26" }));
+    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26", validated: true }));
     return root;
   }
 

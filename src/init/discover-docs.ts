@@ -37,6 +37,18 @@ export const DOC_PATTERNS: readonly string[] = [
   "docs/**/*.rst",
 ];
 
+/** PRDR-086: the configured slice scope, or the full C-2 family set. */
+export function docPatternsFor(planDocs: readonly string[] | undefined): readonly string[] {
+  return planDocs !== undefined && planDocs.length > 0 ? planDocs : DOC_PATTERNS;
+}
+
+/**
+ * C-2¹³ (PRDR-283): the families that name a planning document by its file
+ * name, README's excepted, which names context. WRITE never keeps a document
+ * of one as context.
+ */
+export const PLANNING_NAMES: readonly string[] = DOC_PATTERNS.filter((p) => !p.includes("/") && !p.startsWith("README"));
+
 /** Never traversed: dependency and state trees are not planning documents, nor the project's code (C-2¹¹). */
 export const SKIP_DIRS: ReadonlySet<string> = new Set(["node_modules", ".git", ".detent", "dist", "build", "vendor", "target", ".venv", "__pycache__"]);
 

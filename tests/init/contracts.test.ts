@@ -190,8 +190,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
   });
 
   it("end to end: the derived edge reaches the written plan and the presentation says Detent added it", async () => {
-    const { repo, PROMPTS, BUDGETS, ANALYSIS, APPROVE_PLAN } = await import("./plan-fixture.js");
-    const { buildPipeline } = await import("../../src/init/pipeline.js");
+    const { repo, PROMPTS, BUDGETS, ANALYSIS, APPROVE_PLAN, planningPipeline } = await import("./plan-fixture.js");
     const { runInit } = await import("../../src/init/machine.js");
     const { MockBackend, okResult } = await import("../../src/sessions/mock.js");
     const { readTicket } = await import("../../src/kernel/tickets/readers.js");
@@ -220,7 +219,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
         return okResult();
       },
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** The planner never wrote this edge; the coupling did. */
     expect(readTicket(root, "t-s01-001").blockers).toEqual(["t-s01-002"]);

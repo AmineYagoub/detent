@@ -301,7 +301,7 @@ describe("PRDR-282: a pack's decision log is the founder's record already (C-2‚Å
     }
     const root = repo(files);
     const checker = checkPack(root, discoverDocs(root).docs, { greenfield: true });
-    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26" }));
+    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26", validated: true }));
     return root;
   }
 
@@ -321,7 +321,7 @@ describe("PRDR-282: a pack's decision log is the founder's record already (C-2‚Å
     expect(readProgressMark(root).spent, "a completed phase is a progress mark, sessions or none (C-2‚Å∂)").not.toBeNull();
   });
 
-  it("decides nothing on a changed pack either, and says that WRITE and VALIDATE are not built", async () => {
+  it("decides nothing on a changed pack either, and says its change is VALIDATE's, which is not built", async () => {
     const root = packRepo();
     const prd = readdirSync(path.join(root, "docs", "prd")).find((f) => f.endsWith(".md") && f !== "index.md") ?? "";
     writeFileSync(path.join(root, "docs", "prd", prd), `${readFileSync(path.join(root, "docs", "prd", prd), "utf8")}\n`);
@@ -330,7 +330,7 @@ describe("PRDR-282: a pack's decision log is the founder's record already (C-2‚Å
     await initThrough(root, stub, { notes });
     expect(stub.inputs).toEqual([]);
     expect(decideOutputs(root)["reason"]).toBe("changed");
-    expect(notes.join("\n")).toContain("Applying its change is WRITE's and checking it VALIDATE's, and this build has neither");
+    expect(notes.join("\n")).toContain("DECIDE: the documents are a changed pack, whose change is VALIDATE's to check, and this build has no VALIDATE");
   });
 });
 

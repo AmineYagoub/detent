@@ -371,6 +371,16 @@ function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p:
 /** S-1's read-only roles have no stop gate: they produce artifacts, not diffs. */
 export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit"]);
 
+/**
+ * S-1‴ (PRDR-283): roles that write documents and not code, which the
+ * product's gate does not judge either. `spec_write` was stop-gated from the
+ * day DECIDE launched it (PRDR-282): the live backend binds the project's test
+ * command, so a re-init of a bound project whose tests were red kept DECIDE's
+ * session from ending over code it cannot touch. WRITE's session, with Edit
+ * and Write on the pack's paths, would have been told to fix that code too.
+ */
+export const DOCUMENT_STAGES: ReadonlySet<string> = new Set(["spec_write"]);
+
 export interface StopGateInput {
   readonly stage: string;
   readonly gateCmd: string | null;
@@ -398,7 +408,7 @@ export async function stopGate(
   if (input.stopHookActive) {
     return { decision: "allow", reason: "stop-hook continuation already active; the kernel judges from here" };
   }
-  if (input.gateCmd === null || input.gateCmd.trim() === "" || READ_ONLY_STAGES.has(input.stage)) {
+  if (input.gateCmd === null || input.gateCmd.trim() === "" || READ_ONLY_STAGES.has(input.stage) || DOCUMENT_STAGES.has(input.stage)) {
     return { decision: "allow", reason: "no stop gate for this stage" };
   }
   const result = await runScopedGate(input.gateCmd, input.cwd);
@@ -433,11 +443,12 @@ export function researchTools(docsDomains: readonly string[]): string[] {
  * pinned versions included, and reaches the web under the research role's
  * network rules, so it gets the research role's surface.
  *
- * S-1‴ (PRDR-282): `spec_write` is not a read-only role, but DECIDE, the one
- * task of it built, writes its artifact alone, so it gets the read tools and
- * the one artifact rule every init session carries. The surface S-1‴ declares
- * for it, the decision log, the pack's paths and `archive/`, is WRITE's to
- * build (C-2⁶).
+ * S-1‴ (PRDR-282, PRDR-283): `spec_write` is not a read-only role, but what
+ * it writes is its task's, so the role's tools are the read tools. DECIDE's
+ * task writes its artifact alone, with the one artifact rule every init
+ * session carries. WRITE's declares the pack's paths as its surface and gets
+ * Edit and Write for them, which the hook confines (`InitSessionRequest`'s
+ * `surface`). `archive/` is in neither: code moves the originals (C-2¹³).
  */
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
   if (role === "research" || role === "audit") return researchTools(docsDomains);

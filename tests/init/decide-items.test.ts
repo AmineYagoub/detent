@@ -112,7 +112,7 @@ describe("PRDR-282: the spec_write role (S-1‴, S-5⁵)", () => {
     expect((DEFAULT_EFFORT_ROUTING as Readonly<Record<string, string>>)["spec_write"]).toBe("max");
   });
 
-  it("reads with the read-only tools, and writes only its artifact, which an init session's rule adds", () => {
+  it("has the read-only tools as its own, and what it writes is its task's: DECIDE's, its artifact alone, which an init session's rule adds", () => {
     expect((READ_ONLY_ROLES as ReadonlySet<string>).has("spec_write")).toBe(false);
     expect(toolsForRole("spec_write", ["docs.example.com"])).toEqual(["Read", "Grep", "Glob"]);
   });

@@ -283,13 +283,17 @@ export async function decideStage(deps: DecideStageDeps): Promise<PhaseOutcome> 
 }
 
 /**
- * The documents a planning phase reads: what DISCOVER found, and the decision
- * log where it exists, which DISCOVER does not list (C-2¹²). Read from disk, so
- * a digest taken before DECIDE runs, as the in-flight scan takes it, names the
- * same documents as one taken after; and each planning phase names the log's
- * contents in its own digest, which is how DECIDE, off the chain, re-plans.
+ * The documents a planning phase reads: WRITE's, the pack where it wrote one
+ * and the log among them (C-2¹³). Where WRITE is not in the pipeline, what
+ * DISCOVER found, and the decision log where it exists, which DISCOVER does not
+ * list (C-2¹²), read from disk, so a digest taken before DECIDE runs, as the
+ * in-flight scan takes it, names the same documents as one taken after. Each
+ * planning phase names the log's contents in its own digest, which is how
+ * DECIDE, off the chain, re-plans.
  */
 export function planningDocs(root: string, outputs: Readonly<Record<string, Record<string, unknown>>>): string[] {
+  const written = outputs["WRITE"]?.["docs"];
+  if (Array.isArray(written)) return [...(written as string[])];
   const docs = (outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
   return existsSync(decisionLogFile(root)) && !docs.includes(DECISION_LOG_PATH) ? [...docs, DECISION_LOG_PATH].sort() : [...docs];
 }
@@ -331,8 +335,10 @@ export function decidePhase(deps: PipelineDeps): PhaseHandler {
         deps.note?.(
           pack === "conforming"
             ? "DECIDE: the documents are a conforming pack, whose decision log is the founder's record already, so nothing is decided (C-2⁶)"
-            : "DECIDE: the documents are a changed pack. Applying its change is WRITE's and checking it VALIDATE's, and this " +
-              "build has neither, so nothing is decided (C-2¹²)",
+            : pack === "written"
+              ? "DECIDE: the documents are the pack WRITE wrote from what DECIDE decided, so nothing is decided again (C-2¹³)"
+              : "DECIDE: the documents are a changed pack, whose change is VALIDATE's to check, and this build has no VALIDATE, " +
+                "so nothing is decided (C-2¹²)",
         );
         noteUnitComplete(deps.root);
         return outputs(deps.root, { ran: false, reason: pack });

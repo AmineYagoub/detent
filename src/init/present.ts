@@ -167,7 +167,9 @@ export function presentInputsFromOutputs(
     <K extends string>(...keys: readonly K[]) =>
     (v: unknown): v is Record<K, string> =>
       typeof v === "object" && v !== null && keys.every((k) => typeof (v as Record<string, unknown>)[k] === "string");
-  const decisions = list<unknown>("DECIDE", "decisions").filter(isRow("id", "question"));
+  /* C-2¹³ (PRDR-283): the log as WRITE left it, defaults it added among them; DECIDE's where WRITE is not in the pipeline. */
+  const logged = Array.isArray(outputs["WRITE"]?.["defaults"]) ? "WRITE" : "DECIDE";
+  const decisions = list<unknown>(logged, "decisions").filter(isRow("id", "question"));
   const answeredByLog: { id: string; entry: string }[] = [];
   const seen = new Set<string>();
   const takenIds = new Set<string>();
@@ -207,7 +209,7 @@ export function presentInputsFromOutputs(
     slices,
     /* C-3‴ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
     questions: mergeSimilar(questions),
-    defaults: list<unknown>("DECIDE", "defaults").filter(isRow("id", "value", "reason")),
+    defaults: list<unknown>(logged, "defaults").filter(isRow("id", "value", "reason")),
     answeredByLog,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),

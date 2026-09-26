@@ -5,6 +5,8 @@ import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
 import { gitInit, removeTree, tmpTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import type { PhaseHandler } from "../../src/init/machine.js";
+import { buildPipeline, type PipelineDeps } from "../../src/init/pipeline.js";
 
 /** Shared init-test fixture: one planner mock, one repo shape, one budget set. */
 
@@ -83,6 +85,18 @@ export const decideDefaults =
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
+
+/**
+ * PRDR-283: WRITE rewrites a raw document set into the pack before anything
+ * plans. A test of the planning phases plans from its fixture's documents as
+ * written, which is the path planning takes wherever WRITE writes nothing (a
+ * pack, or `plan_docs`), so it leaves WRITE out, and the phases after it read
+ * DISCOVER's documents, as they do where WRITE is not in the pipeline. What
+ * they read from WRITE is `write-plan.test.ts`'s.
+ */
+export function planningPipeline(deps: PipelineDeps): PhaseHandler[] {
+  return buildPipeline(deps).filter((h) => h.phase !== "WRITE");
+}
 
 export const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 

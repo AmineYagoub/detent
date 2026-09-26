@@ -25,8 +25,10 @@ export interface LogView {
   /**
    * Every id in the first column of a `## Decisions` or `## Defaults` table, as
    * written: an entry is citable as settling an item even where the grammar
-   * refuses its id, since a founder's log is read as its founder wrote it:
-   * making it a pack is WRITE's (C-2⁶), which is not built.
+   * refuses its id, since a founder's log is read as its founder wrote it.
+   * WRITE only adds defaults to it (C-2¹³), so a row the grammar refuses leaves
+   * the checker red, which VALIDATE fixes first (C-2⁶), and VALIDATE is not
+   * built.
    */
   readonly ids: ReadonlySet<string>;
   readonly decisions: readonly { readonly id: string; readonly question: string; readonly answer: string; readonly reason: string }[];

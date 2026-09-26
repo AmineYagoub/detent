@@ -160,7 +160,7 @@ async function check(claim: Claim, hash: string, deps: CheckClaimsDeps, tally: T
 /**
  * Check each claim once, by its hash, in the survey's order, and record every
  * place the documents rely on it with that one verdict: a claim that is wrong
- * in two places is wrong in both, and WRITE will need each place.
+ * in two places is wrong in both, and WRITE is given each place (C-2¹³).
  */
 export async function checkClaims(
   claims: readonly Claim[],

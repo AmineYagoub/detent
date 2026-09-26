@@ -109,7 +109,12 @@ export interface Through {
   readonly script?: Readonly<Record<string, StageFn>>;
 }
 
-/** The real pipeline, stopped after DECIDE unless `all`. */
+/**
+ * The real pipeline, stopped after DECIDE unless `all`. With `all` it plans
+ * from the documents and DECIDE's log as written, WRITE left out as
+ * `planningPipeline` leaves it (PRDR-283): what planning reads from WRITE is
+ * `write-plan.test.ts`'s.
+ */
 export async function initThrough(root: string, stub: Decide, opts: Through = {}) {
   const handlers = buildPipeline({
     root,
@@ -119,7 +124,7 @@ export async function initThrough(root: string, stub: Decide, opts: Through = {}
     ...(opts.ask === undefined ? {} : { askDecisions: opts.ask }),
     note: (t) => opts.notes?.push(t),
     ...opts.more,
-  }).filter((h) => opts.all === true || THROUGH_DECIDE.has(h.phase));
+  }).filter((h) => (opts.all === true ? h.phase !== "WRITE" : THROUGH_DECIDE.has(h.phase)));
   return await runInit(root, handlers);
 }
 

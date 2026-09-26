@@ -17,6 +17,8 @@ export const INIT_PHASES = [
   "AUDIT",
   /** C-3⁗ (PRDR-282): what AUDIT left open is asked or settled, in the decision log, before anything plans. */
   "DECIDE",
+  /** C-2¹³ (PRDR-283): the documents are rewritten into the pack, and planning reads the pack. */
+  "WRITE",
   "ANALYZE",
   "DETERMINE_VERIFICATION",
   /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */

@@ -236,8 +236,21 @@ describe("PRDR-300: an older state is carried to the current version", () => {
     const root = tmpTree({ [CONFORMANCE_RECORD_PATH]: `${JSON.stringify({ schema_version: OLDER, hash: "0".repeat(64) }, null, 2)}\n` });
     cleanups.push(() => removeTree(root));
     expect(migrateState(root, DEPS)).toMatchObject({ kind: "migrated", files: [CONFORMANCE_RECORD_PATH] });
-    expect(JSON.parse(readFileSync(path.join(root, ...CONFORMANCE_RECORD_PATH.split("/")), "utf8"))).toEqual({ schema_version: SCHEMA_VERSION, hash: "0".repeat(64) });
+    /* PRDR-283: a record from before `validated` could only mean its pack was validated, and now says so. */
+    expect(JSON.parse(readFileSync(path.join(root, ...CONFORMANCE_RECORD_PATH.split("/")), "utf8"))).toEqual({
+      schema_version: SCHEMA_VERSION,
+      hash: "0".repeat(64),
+      validated: true,
+    });
     expect(existsSync(stateDir(root))).toBe(false);
+  });
+
+  it("PRDR-283: keeps what an older record already says about its validation", () => {
+    const record = { schema_version: OLDER, hash: "0".repeat(64), validated: false };
+    const root = tmpTree({ [CONFORMANCE_RECORD_PATH]: `${JSON.stringify(record, null, 2)}\n` });
+    cleanups.push(() => removeTree(root));
+    migrateState(root, DEPS);
+    expect(JSON.parse(readFileSync(path.join(root, ...CONFORMANCE_RECORD_PATH.split("/")), "utf8"))).toEqual({ ...record, schema_version: SCHEMA_VERSION });
   });
 
   it("does not follow a symbolic link out of `.detent/`", async () => {
@@ -362,7 +375,7 @@ describe("PRDR-300: what the migration keeps true", () => {
       writeTree(root, { [path.relative(fixture, abs).split(path.sep).join("/")]: readFileSync(abs, "utf8") });
     }
     const checker = checkPack(root, discoverDocs(root).docs, { greenfield: false });
-    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26" }));
+    writeConformanceRecord(root, conformanceRecord(root, { checker, rounds: [], date: "2026-09-26", validated: true }));
     expect(classifyPack(root, { greenfield: false }).kind).toBe("conforming");
     age(root);
     migrateState(root, DEPS);

@@ -3,7 +3,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
 import { runInit } from "../../src/init/machine.js";
-import { buildPipeline } from "../../src/init/pipeline.js";
 import { PLAN_REVIEW_SAMPLES, planReviewPath, type ReviewDeps } from "../../src/init/plan-review.js";
 import { FIRST_RESPONSE_WAIT_MS, sampleReviewPlan } from "../../src/init/plan-sample.js";
 import { launchInitSession, type InitSessionDeps } from "../../src/init/session.js";
@@ -11,7 +10,7 @@ import { RunJournal } from "../../src/kernel/journal.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -82,7 +81,7 @@ async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: stri
   const root = repo(LONE_CANDIDATE);
   const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: stage });
   const notes: string[] = [];
-  const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+  const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
   return { backend, notes, message: result.interrupt?.message ?? "" };
 }
 

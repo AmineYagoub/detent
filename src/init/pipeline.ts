@@ -16,7 +16,7 @@ import { readBindings } from "../adapter/drift.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
-import { awaitDocsMessage, discoverDocs, DOC_PATTERNS } from "./discover-docs.js";
+import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
 import { planningBriefSkeleton, questionHash, undecidableBriefSkeleton } from "./plan-research.js";
 import { previousAttemptInput } from "./retry.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
@@ -27,6 +27,7 @@ import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
 import { decidePhase, decidedStack, planningDocs, type DecideAsk } from "./decide.js";
+import { planningMarkers, writePhase } from "./write.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -89,6 +90,7 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
     discoverPhase(deps),
     auditPhase(deps),
     decidePhase(deps),
+    writePhase(deps),
     analyzePhase(deps),
     determinePhase(deps),
     slicePhase(deps),
@@ -108,7 +110,7 @@ export function pendingPhases(handlers: readonly PhaseHandler[]): InitPhase[] {
 
 /** PRDR-086: the configured slice scope, or the full C-2 family set. */
 function docPatterns(deps: PipelineDeps): readonly string[] {
-  return deps.planDocs !== undefined && deps.planDocs.length > 0 ? deps.planDocs : DOC_PATTERNS;
+  return docPatternsFor(deps.planDocs);
 }
 
 /**
@@ -170,10 +172,10 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
         };
       }
       /*
-       * C-2⁹ (PRDR-279): raw, conforming or changed, recorded for the phases
-       * after this one and said aloud when it is a pack. AUDIT and DECIDE route
-       * on it (C-2¹¹, C-2¹²); WRITE and VALIDATE, which C-2⁶ adds after them,
-       * are not built.
+       * C-2⁹ (PRDR-279): raw, written, conforming or changed, recorded for the
+       * phases after this one and said aloud when it is a pack. AUDIT, DECIDE
+       * and WRITE route on it (C-2¹¹, C-2¹², C-2¹³); VALIDATE, which C-2⁶ adds
+       * after WRITE, is not built.
        */
       const pack = classifyPack(deps.root, { greenfield: isGreenfield(stack.stack.markers) });
       const said = packNote(pack);
@@ -202,14 +204,15 @@ function analyzePhase(deps: PipelineDeps): PhaseHandler {
      * re-runs analysis.
      */
     digest: (ctx) => {
-      const docs = ctx.outputs["DISCOVER"] === undefined ? discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog) : planningDocs(deps.root, ctx.outputs);
+      const told = ctx.outputs["WRITE"] ?? ctx.outputs["DISCOVER"];
+      const docs = told === undefined ? discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog) : planningDocs(deps.root, ctx.outputs);
       /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
        * the phase reasons must invalidate it, exactly as an edited doc does. */
-      return `${contentsDigest(deps.root, docs)}|${valueDigest([ctx.outputs["DISCOVER"]?.["stack_markers"] ?? [], deps.prompts.hashes.planner])}`;
+      return `${contentsDigest(deps.root, docs)}|${valueDigest([planningMarkers(ctx.outputs), deps.prompts.hashes.planner])}`;
     },
     /* PRDR-203: one journal for the phase, handed to every launch it makes. */
     run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
-      const stackMarkers = (ctx.outputs["DISCOVER"]?.["stack_markers"] as string[] | undefined) ?? [];
+      const stackMarkers = planningMarkers(ctx.outputs);
       const decided = decidedStack(ctx.outputs);
       return await analyzeStage({
         root: deps.root,
@@ -281,7 +284,7 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
      * `scripts.test` must re-bind, which is the same region V-3 watches.
      */
     digest: (ctx) => {
-      const markers = (ctx.outputs["DISCOVER"]?.["stack_markers"] as string[] | undefined) ?? [];
+      const markers = planningMarkers(ctx.outputs);
       return `${contentsDigest(deps.root, markers)}|${valueDigest(ctx.outputs["ANALYZE"]?.["greenfield"] ?? null)}`;
     },
     run: async (ctx) =>

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { buildPipeline } from "../../src/init/pipeline.js";
 import { runInit } from "../../src/init/machine.js";
 import { DOC_PATTERNS } from "../../src/init/discover-docs.js";
 import { revisionOutcome } from "../../src/init/plan-signal.js";
@@ -14,7 +13,7 @@ import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
-import { CLEAN_AUDIT, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -131,7 +130,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         seen,
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     /** Every slice in turn, each reviewed as its own plan; then the whole; then only the faulted slice again; then the whole again. */
@@ -186,7 +185,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         log,
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.reachedPhase).toBe("PRESENT");
     expect(result.interrupt?.interrupt).toBe("AWAIT_INFO");
@@ -216,7 +215,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
       const root = repo(DOCS);
       const seen: Record<string, unknown>[] = [];
       const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [], seen) });
-      await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planBaseline: baseline }));
+      await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planBaseline: baseline }));
       const slice = seen.find((i) => i["stage"] === "SLICE")!;
       expect((slice["production_baseline"] as unknown[]).length).toBe(baseline === "production" ? PRODUCTION_BASELINE.length : 0);
     }
@@ -291,7 +290,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         [],
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** One slice means no whole-plan review, so the slice's own leftover is the ONLY finding there is. */
     expect(result.interrupt?.message).toContain("Review findings held after revision (1)");
@@ -326,7 +325,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         [],
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
     expect(notes.join("\n")).toContain("whole-plan review after revision: NO VERDICT");
     expect(notes.join("\n")).not.toContain("whole-plan review after revision: approve");
@@ -346,7 +345,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         [],
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(readTicket(root, "t-s01-001").blockers).toEqual([]);
     expect(result.interrupt?.message).toContain("dependency (t-s01-001)");
@@ -372,7 +371,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         seen,
       ),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
     expect(notes.join("\n")).toContain("docs/imagined.md was never discovered");
     expect(notes.join("\n")).toContain("it will plan from every discovered document");
@@ -413,7 +412,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         return okResult();
       },
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const message = result.interrupt?.message ?? "";
     /**
@@ -580,7 +579,7 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
         [],
       ),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
     /* Proved by code, and said so before any whole-plan session ran. */
     const joined = notes.join("\n");
@@ -623,7 +622,7 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
     });
     await runInit(
       root,
-      buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t), progress: (t) => progress.push(t) }),
+      planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t), progress: (t) => progress.push(t) }),
       { progress: (t) => progress.push(t) },
     );
 
@@ -680,7 +679,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
         [],
       ),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
     expect(whole).toBeGreaterThan(0);
     expect(notes.join("\n")).toMatch(/revision: \d+ resolved, \d+ survived, \d+ introduced/);
     /**
@@ -713,7 +712,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),
     });
-    const result = await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     const message = result.interrupt?.message ?? "";

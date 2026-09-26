@@ -83,17 +83,27 @@ function routeAdded(value: Json): Json {
 }
 
 /**
+ * C-2¹³ (PRDR-283): a record now says whether VALIDATE finished on its pack.
+ * An older one was written when a record could only mean that its pack was
+ * validated, so it says so; one that already says keeps what it says.
+ */
+function sayValidated(value: Json): Json {
+  return Object.hasOwn(value, "validated") ? value : { ...value, validated: true };
+}
+
+/**
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
  * a new one. The three prompts that named the version stopped naming it here,
  * and their hashes moved, which is the re-pin; `audit` joined the roles, which
- * is the routing (PRDR-281).
+ * is the routing (PRDR-281); the conformance record gained `validated`
+ * (PRDR-283).
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
     from: 1,
     name: "the 3.1.1 line",
-    transforms: { ".detent/agents/assignments.json": repin, ".detent/config.json": routeAdded },
+    transforms: { ".detent/agents/assignments.json": repin, ".detent/config.json": routeAdded, [CONFORMANCE_RECORD_PATH]: sayValidated },
   },
 ];
 

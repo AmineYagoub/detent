@@ -26,19 +26,19 @@ const ROUNDS = structuredClone(ORACLE_ROUNDS) as never;
 describe("PRDR-279: the conformance record", () => {
   it("holds the version, the hash of the pack's documents, the checker's result, every round and the date", () => {
     const root = packRepo();
-    const record = conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26" });
+    const record = conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26", validated: true });
     expect(record).toEqual(oracleRecord(root));
   });
 
   it("lives at docs/conformance.json and excludes itself from the hash", () => {
     const root = packRepo();
-    const record = conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26" });
+    const record = conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26", validated: true });
     writeConformanceRecord(root, record);
 
     expect(CONFORMANCE_RECORD_PATH).toBe("docs/conformance.json");
     expect(JSON.parse(readFileSync(path.join(root, "docs", "conformance.json"), "utf8"))).toEqual(record);
     expect(packDocuments(root)).not.toContain(CONFORMANCE_RECORD_PATH);
-    expect(conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26" })).toEqual(record);
+    expect(conformanceRecord(root, { checker: { green: true, findings: [] }, rounds: ROUNDS, date: "2026-09-26", validated: true })).toEqual(record);
     expect(readConformanceRecord(root)).toEqual(record);
   });
 

@@ -1,12 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildPipeline } from "../../src/init/pipeline.js";
 import { runInit } from "../../src/init/machine.js";
 import { PLAN_REVIEW_SAMPLES, planReviewPath } from "../../src/init/plan-review.js";
 import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
-import { CLEAN_AUDIT, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -80,7 +79,7 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: twoSliceDraft, review: stationaryReviewer() }, []),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
     const said = notes.join("\n");
 
     /** The round did real work: two complaints answered, two new ones raised. */
@@ -132,7 +131,7 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
         [],
       ),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
     expect(whole).toBe(2);
     /**
@@ -161,7 +160,7 @@ describe("PRDR-260 a slice's review evidence survives the next slice", () => {
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: recording(scriptedPlanner({ draft: twoSliceDraft, review: stationaryReviewer() }, []), specs),
     });
-    await runInit(root, buildPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
+    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const draw = (slice: string, n: number): string =>
       path.join(root, ".detent", "state", "slices", slice, "draws", String(n), "plan-review.json");

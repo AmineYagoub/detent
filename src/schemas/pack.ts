@@ -34,6 +34,13 @@ export const CONFORMANCE_RECORD_PATH = "docs/conformance.json";
 export const ARCHIVE_DIR = "archive";
 
 /**
+ * C-2¹³ (PRDR-283): the paths the pack's documents live at, as globs, and so
+ * the write surface WRITE's session declares. Not `archive/`: code moves the
+ * originals there, and a session that could write it could overwrite one.
+ */
+export const PACK_PATHS: readonly string[] = [DECISION_LOG_PATH, FACTS_PATH, "docs/design/*.md", "docs/adr/*.md", "docs/prd/*.md"];
+
+/**
  * Highest first. A disagreement between two documents is a defect in the
  * lower one, and the fix lands there.
  */
@@ -289,6 +296,13 @@ export const conformanceRecordSchema = z.strictObject({
     )
     .default([]),
   date: z.iso.date(),
+  /**
+   * C-2¹³ (PRDR-283): whether VALIDATE finished on the pack. WRITE writes the
+   * record with `false`, which DISCOVER reads as a pack written and not yet
+   * validated; VALIDATE is what will write `true`. Required: a record that did
+   * not say would be read as whichever a reader guessed.
+   */
+  validated: z.boolean(),
 });
 export type ConformanceRecord = z.infer<typeof conformanceRecordSchema>;
 
@@ -300,10 +314,16 @@ export type ConformanceRecord = z.infer<typeof conformanceRecordSchema>;
  * `changed` also covers unchanged documents a record no longer vouches for: a
  * red checker, or a break the schema finds now. `reasons` says which, and the
  * three lists say what moved. A changed pack is still a pack, never raw.
+ *
+ * `written` (C-2¹³, PRDR-283) is a pack WRITE wrote that nothing has
+ * validated, whatever changed in it since: VALIDATE's first run checks the
+ * whole pack, an edit included. `blocking` counts what the checker blocks on
+ * in it now.
  */
 export const packStatusSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("raw") }),
   z.strictObject({ kind: z.literal("conforming"), date: z.iso.date(), hash: sha256Hex }),
+  z.strictObject({ kind: z.literal("written"), date: z.iso.date(), blocking: z.number().int().nonnegative() }),
   z.strictObject({
     kind: z.literal("changed"),
     date: z.iso.date(),

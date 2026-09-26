@@ -32,12 +32,12 @@ Invoke the headless entry from the Detent checkout (this plugin's root):
 
 Pass through flags from $ARGUMENTS (for example `--replan`). Re-invoking is
 always safe: every phase checkpoints, and C-8 replays exactly what changed —
-editing PRD.md re-runs AUDIT and replays ANALYZE-forward; editing nothing
-replays nothing.
+editing a planning document replays ANALYZE-forward; editing nothing replays
+nothing.
 
-## The ten phases (C-4.1, in order)
+## The eleven phases (C-4.1, in order)
 
-`INIT_FS` → `DISCOVER` → `AUDIT` → `DECIDE` → `ANALYZE` →
+`INIT_FS` → `DISCOVER` → `AUDIT` → `DECIDE` → `WRITE` → `ANALYZE` →
 `DETERMINE_VERIFICATION` → `SLICE` → `PLAN` → `PREPARE_AGENTS` → `PRESENT`
 
 `AUDIT` (C-2⁶) reads the documents before anything plans from them: passages
@@ -59,7 +59,21 @@ recommended answer and writes it to the log as a vetoable default
 (specification decision 9); `PRESENT` lists every default, and the human vetoes
 one by editing its row and re-invoking. A question the log already answers is
 not asked again. An edit to the log re-runs `DECIDE` and the planning after
-it, never `DISCOVER` or `AUDIT`.
+it, never `AUDIT`.
+
+`WRITE` (C-2¹³) rewrites the audited and decided documents into the pack, the
+layout C-2⁷ fixes under `docs/`: the decision log, `research/verified-facts.md`,
+`design/`, `adr/` and `prd/`, where every requirement has an id, a milestone
+and MUST or SHOULD, and every decision and default it relies on is cited by
+id. It moves each original it rewrote to `archive/`, where no discovery
+pattern looks, and deletes nothing; a README or a runbook stays where it is,
+as context. It never stops for a human. The pack checker checks what it
+wrote, and its session is relaunched once on a blocking finding; the result,
+red or green, goes into `docs/conformance.json`, which says the pack is not
+validated: nothing reviews the pack yet, so the planning phases read it as
+`WRITE` left it. A conforming
+pack, a changed one, a pack `WRITE` already wrote, and documents `plan_docs`
+narrows are never rewritten.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first — and `PLAN` then plans every slice in turn, one
@@ -93,11 +107,11 @@ decision yourself.
    each with the assumption the plan proceeds on. It becomes `AWAIT_INFO` only
    when a question is blocking: no assumption could carry it. Channel: the
    answers go INTO the planning documents; the human edits (or dictates edits
-   they approve), then re-invoke — changed contents re-run AUDIT and replay
-   ANALYZE-forward (C-8), and only the slices whose inputs moved are
-   re-planned. Answers written to `docs/founder-decisions.md` re-run DECIDE and
-   the planning after it, never AUDIT: that file is the decision log, which
-   AUDIT's key and DISCOVER's listing leave out (C-2¹¹, C-2¹²).
+   they approve), then re-invoke — changed contents replay ANALYZE-forward
+   (C-8), and only the slices whose inputs moved are re-planned. Answers
+   written to `docs/founder-decisions.md` re-run DECIDE and the planning after
+   it, never AUDIT: that file is the decision log, which AUDIT's key leaves out
+   (C-2¹¹, C-2¹²).
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

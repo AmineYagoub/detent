@@ -200,6 +200,8 @@ export function oracleRecord(
     checker: { green: overrides.green ?? true, findings: [] },
     rounds: ORACLE_ROUNDS,
     date: overrides.date ?? "2026-09-26",
+    /* PRDR-283: VALIDATE finished; a pack WRITE wrote and nothing validated says false. */
+    validated: true,
   };
 }
 

@@ -47,3 +47,16 @@ writes the entry over the stack the session chose. Removing ANALYZE removes that
 `decided_stack` input and `stackInstruction`'s decided branch; DETERMINE_VERIFICATION then binds
 from the entry directly. `test_single` is in the entry and not in an analysis's `verification`,
 so binding from the entry gains it.
+
+## From PRDR-283
+
+WRITE hands the planning phases their documents and stack markers (C-2¹³): `planningDocs` in
+`src/init/decide.ts` returns WRITE's `docs`, the decision log among them, and `planningMarkers` in
+`src/init/write.ts` returns WRITE's `stack_markers`; ANALYZE and DETERMINE_VERIFICATION read the
+markers through it. With ANALYZE removed, DETERMINE_VERIFICATION keeps reading them there, or from
+whatever phase hands on after VALIDATE (PRDR-284). A planning digest that reads DISCOVER's outputs
+instead breaks C-8″'s scan: after WRITE's move DISCOVER re-runs, the scan cannot read its outputs,
+and every re-init reads as a re-plan. The planning suites leave WRITE out (`planningPipeline` in
+`tests/init/plan-fixture.ts`, and `initThrough`'s `all` in `tests/init/decide-fixture.ts`) and
+plan from raw documents; once SLICE and PLAN read the checker's parse, their fixtures need packs.
+

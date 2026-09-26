@@ -100,6 +100,13 @@ export interface InitSessionRequest {
   readonly batch?: LaunchBatch;
   /** PRDR-205: the artifact path the prompt names, when it is not `artifactOut`. See `SessionSpec.artifactTold`. */
   readonly artifactTold?: string;
+  /**
+   * S-1‴ (PRDR-283): the paths beyond its artifact the session may write, as
+   * globs, declared as an implement session's surface is. It gets Edit and
+   * Write for them, and the hook confines both to the surface. Absent, the
+   * session writes its artifact alone (S-1′).
+   */
+  readonly surface?: readonly string[];
 }
 
 /**
@@ -135,11 +142,14 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
      * S-1′ (PRDR-067): the read-only surface plus exactly one write rule —
      * the session's own artifact. Plan mode would deny the write the
      * C-3/A-contract demands; read-only-ness is the allowlist plus the hook.
+     * A session that declares a surface (S-1‴, PRDR-283: WRITE's) also gets
+     * Edit and Write, and the hook below confines them to it.
      */
     allowedTools: [
       ...(request.withWeb === true
         ? toolsForRole("research", deps.docsDomains ?? [])
         : toolsForRole(request.role, deps.docsDomains ?? [])),
+      ...(request.surface === undefined ? [] : ["Edit", "Write"]),
       artifactWriteRule(request.artifactOut),
     ],
     permissionMode: "",
@@ -166,7 +176,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
      * what S-1′ always claimed.
      */
     policy: {
-      surface: [path.relative(deps.root, request.artifactOut).split(path.sep).join("/")],
+      surface: [path.relative(deps.root, request.artifactOut).split(path.sep).join("/"), ...(request.surface ?? [])],
       /** SEC-3′ (PRDR-132): the same structural floor the run loop enforces, `.git/**` included. */
       protectedGlobs: [...STRUCTURAL_PROTECTED],
       workRoot: deps.root,

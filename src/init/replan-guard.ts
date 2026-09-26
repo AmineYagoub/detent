@@ -17,7 +17,9 @@ import type { InitResult, PhaseHandler } from "./machine.js";
  * Then, as each phase on the chain up to PLAN is about to run, it asks again
  * (PRDR-282): a standalone phase runs before the planning phases and can
  * change what they read, as DECIDE does when it writes the decision log, and
- * the scan could not see that coming.
+ * the scan could not see that coming. A phase before one that restarts the
+ * chain is not asked, since its re-run replays nothing past that phase
+ * (C-2¹³, PRDR-283).
  */
 
 /**
@@ -47,40 +49,56 @@ export function inFlightTickets(root: string): string[] {
   return found;
 }
 
-/** Whether a phase on the chain re-plans by running: PLAN, and every phase whose re-run replays into it. */
-export function replansAt(phase: InitPhase): boolean {
-  return INIT_PHASES.indexOf(phase) <= INIT_PHASES.indexOf("PLAN");
+/**
+ * Whether a phase on the chain re-plans by running: PLAN, and every phase whose
+ * re-run replays into it. A re-run stops replaying at a phase that restarts the
+ * chain (C-2¹³), so a phase before one re-plans nothing by running, and the
+ * phase that restarts it asks for itself.
+ */
+export function replansAt(phase: InitPhase, handlers: readonly PhaseHandler[]): boolean {
+  const at = INIT_PHASES.indexOf(phase);
+  const plan = INIT_PHASES.indexOf("PLAN");
+  if (at > plan) return false;
+  return !handlers.some((h) => h.restartsChain === true && INIT_PHASES.indexOf(h.phase) > at && INIT_PHASES.indexOf(h.phase) <= plan);
 }
 
 /**
  * Whether PLAN would re-execute on this invocation — i.e. whether some phase
  * at or before it has drifted. Digests are pure reads, so this costs nothing
- * and spends nothing; it is the same walk the driver does below, stopped at
- * the first miss.
+ * and spends nothing; it is the same walk the driver does below.
+ *
+ * A miss replays every phase after it, and none of them can be read, since
+ * the phase that missed left no outputs to digest them by (P9). The walk goes
+ * on past them to a phase that restarts the chain (C-2¹³), whose digest reads
+ * the disk alone: if its key stands, the chain resumes there.
  */
 export function wouldReplan(root: string, handlers: readonly PhaseHandler[], now: () => number): boolean {
   let carried = "";
+  let missed = false;
   const outputs: Record<string, Record<string, unknown>> = {};
   for (const phase of INIT_PHASES) {
     const handler = handlers.find((h) => h.phase === phase);
     if (handler === undefined) continue;
     /* C-2¹¹: a standalone phase re-runs no other, PLAN included, whatever its own checkpoint says. */
     if (handler.standalone === true) continue;
-    let hash: string;
-    try {
-      hash = createHash("sha256").update(`${carried}\0${phase}\0${handler.digest({ root, outputs, now })}`).digest("hex");
-    } catch {
-      /* A digest that cannot be computed is drift by definition. */
-      return true;
+    const restarts = handler.restartsChain === true;
+    if (!missed || restarts) {
+      let hash: string;
+      try {
+        hash = createHash("sha256").update(`${restarts ? "" : carried}\0${phase}\0${handler.digest({ root, outputs, now })}`).digest("hex");
+      } catch {
+        /* A digest that cannot be computed is drift by definition. */
+        return true;
+      }
+      carried = hash;
+      const read = readCheckpoint(root, phase, hash);
+      const fresh = read.status === "fresh" && handler.outputIntact?.({ root, outputs, now }) !== false;
+      if (fresh) outputs[phase] = { ...read.checkpoint.outputs };
+      missed = !fresh;
     }
-    carried = hash;
-    const read = readCheckpoint(root, phase, hash);
-    if (read.status !== "fresh") return true;
-    if (handler.outputIntact?.({ root, outputs, now }) === false) return true;
-    outputs[phase] = { ...read.checkpoint.outputs };
-    if (phase === "PLAN") return false;
+    if (phase === "PLAN") return missed;
   }
-  return false;
+  return missed;
 }
 
 /** What the run did before the refusal: nothing, at the first ask; at the second, what ran and what was reused. */

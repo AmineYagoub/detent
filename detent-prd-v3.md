@@ -439,6 +439,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   paths and `archive/`, declared.*
   *Amended by C-2¹² (PRDR-282): DECIDE's `spec_write` session keeps this one artifact; code
   writes the log.*
+  *Amended by C-2¹³ (PRDR-283): WRITE's `spec_write` session declares the pack's paths as its
+  surface, beside its artifact; `archive/` is code's to write.*
 
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
@@ -948,6 +950,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   re-planned slices' tickets.*
   *Amended by C-2¹² (PRDR-282): the refusal is asked again as each phase on the chain up to PLAN
   is about to run, since a standalone phase can change what planning reads.*
+  *Amended by C-2¹³ (PRDR-283): the scan goes past a miss to a phase that restarts the chain, and
+  the second ask is not made before the phases ahead of that phase.*
 
 - **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
   whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
@@ -965,6 +969,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   alone; AUDIT does.*
   *Amended by C-2¹² (PRDR-282): a phase that writes what its digest reads is keyed after it
   runs. DECIDE does, and stands outside the chain beside AUDIT.*
+  *Amended by C-2¹³ (PRDR-283): a phase may restart the chain: keyed by its own digest, looked up
+  while earlier phases replay, and the phases after it chain from its key. WRITE does.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1638,6 +1644,9 @@ the code does what the rules it amends describe, and each of those rules points 
   checkpoint stands outside C-8's chain.*
   *Amended by C-2¹² (PRDR-282): DECIDE is built, outside C-8's chain beside AUDIT. On a TTY its
   questions are asked inline, and AWAIT_INFO is raised there when the founder answers later.*
+  *Amended by C-2¹³ (PRDR-283): WRITE is built, and restarts C-8's chain. Until VALIDATE is built,
+  WRITE hands the pack to the phases after it, and a later `detent init` finds it at DISCOVER as
+  a pack WRITE wrote, not a conforming one.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1682,6 +1691,9 @@ the code does what the rules it amends describe, and each of those rules points 
   layout's paths is context, hashed with the pack and never parsed.*
   *Amended by C-2¹⁰ (PRDR-280): the checker is built; milestone order is checked between a
   criterion and the requirements it tests, and the heuristic reads requirements only.*
+  *Amended by C-2¹³ (PRDR-283): the record says whether VALIDATE finished on the pack
+  (`validated`), and WRITE writes it not validated. Until VALIDATE is built, a red checker blocks
+  nothing.*
 
 - **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
   one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
@@ -1941,6 +1953,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹² (PRDR-282): `spec_write` is built for DECIDE, and the migration writes its
   routing. DECIDE's session writes its artifact alone and code writes the log, so the declared
   surface is WRITE's to build (PRDR-283).*
+  *Amended by C-2¹³ (PRDR-283): the surface is built for WRITE's session, less `archive/`, which
+  code writes. `spec_write` is not stop-gated by the product's gate.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2051,6 +2065,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁰ (PRDR-280): conforming requires the checker green on the documents now, not
   the schema alone.*
   *Amended by C-2¹¹ (PRDR-281): AUDIT routes on the classification.*
+  *Amended by C-2¹³ (PRDR-283): a pack whose record is not validated is `written`, a fourth
+  kind, and DECIDE and WRITE route on the classification too.*
 
 - **C-2¹⁰ (3.1.1, PRDR-280).** The checker is built, in `src/init/pack-check.ts`: a TypeScript port
   of ksarjs's `check_pack.py`, generalized to C-2⁹'s grammar. This settles what C-2⁷ left to its
@@ -2236,6 +2252,90 @@ the code does what the rules it amends describe, and each of those rules points 
     rule every init session carries (S-1″). The surface S-1‴ declares for it is WRITE's to build
     (PRDR-283).
   - **Progress.** A completed DECIDE is a progress mark, with a session or none (X-1⁵).
+  *Amended by C-2¹³ (PRDR-283): WRITE is built. On a changed pack DECIDE says the change is
+  VALIDATE's to check and that this build has no VALIDATE, and the surface S-1‴ declares for
+  `spec_write` is built for WRITE's session, less `archive/`.*
+
+- **C-2¹³ (3.1.1, PRDR-283).** WRITE is built, in `src/init/write.ts` and the modules beside it,
+  directly after DECIDE. This settles what C-2⁶ and C-2⁹ left to WRITE's ticket, and amends
+  C-2⁶'s handoff, C-2⁷'s record, C-2⁹'s classification, C-8's chain, C-8″'s refusal and S-1‴'s
+  surface.
+  - **When it writes.** On a raw document set only. A conforming pack is never rewritten
+    (specification decision 6). A changed pack's change, and a pack WRITE wrote, are VALIDATE's,
+    which is not built, so WRITE writes nothing over either. `plan_docs` (PRDR-086) narrows
+    discovery to part of the set and a pack is written from the whole set, so on a narrowed set
+    WRITE writes nothing either, and planning reads the narrowed documents as they are. Each case
+    is said.
+  - **One session.** A `spec_write` session, told its task by its inputs (S-1‴), is given the
+    documents DISCOVER found, AUDIT's findings each with the log entry that settled it, the claims
+    AUDIT checked with their verdicts and corrections, the log's entries and the next free `X-n`.
+    It writes the pack at the pack's paths, and an artifact that lists, once each, the originals
+    that are not at one of them: rewritten into the pack, to be archived, or kept as context. An
+    original at one of the pack's paths is rewritten in place or left as it is. The session may
+    add defaults to the log for what the documents leave open that DECIDE was not shown, and
+    nothing else.
+  - **Checked by code.** Every original is placed once, in the list its kind allows: a planning
+    document by its name, any C-2 family but README's, is never context, and one at a path the
+    layout does not hold (C-2⁹) cannot stay. The log keeps every row and line it held, gains no
+    decision and keeps its stack; a rewrite that breaks this is undone, and the log restored as
+    DECIDE left it. Every entry that settled a finding, and every default the session added, is
+    cited by id in the pack's own documents. The pack holds a requirement, and the checker
+    (C-2¹⁰) is green on it as it will stand once the originals are archived. A first attempt with
+    anything wrong is relaunched with the list. The second keeps what stands: code archives a
+    planning document or an unplaceable one the session kept, leaves an original the session did
+    not place where it is, as context, says each cite still owed, and records a red checker as
+    red. A second attempt with no requirement or no usable artifact fails the phase, as a failed
+    session does; the pack's paths are then put back as they were, and nothing is archived.
+  - **The move.** Code moves each original the session rewrote to the root's `archive/`, at its
+    own path, byte for byte, and keeps there the original bytes of each pack document the session
+    rewrote in place. Nothing in `archive/` is overwritten: a second original of one name is kept
+    beside the first, as `name.2.ext`. The decision log is never archived.
+  - **The record.** WRITE writes the conformance record (C-2⁷) with the checker's result on the
+    pack, no rounds, the day, and `validated: false`. The record gains `validated`, required;
+    VALIDATE is what will write `true`. F-3″'s migration writes `true` into a record from before
+    the field, which could only mean its pack was validated. Until VALIDATE is built, a red
+    checker blocks nothing: the pack reaches planning, and its record says the checker was red.
+  - **Written, a fourth kind.** DISCOVER classifies a pack whose record is not validated as
+    `written`, whatever changed in it since, with the count of what the checker blocks on in it
+    now, and says that nothing validated it and that it goes to planning as WRITE left it. AUDIT
+    and DECIDE run no session on it: AUDIT read the documents it was written from, and DECIDE
+    decided what it cites. An edit to it since is VALIDATE's to check.
+  - **The handoff.** WRITE hands the phases after it what DISCOVER's patterns find once it is
+    done, the decision log among them, with the stack markers and the log's entries, whether it
+    wrote or not. ANALYZE, SLICE and PLAN read those documents, ANALYZE and DETERMINE_VERIFICATION
+    those markers, and PRESENT those entries, so a default WRITE added is listed, and vetoable,
+    beside DECIDE's. This is the handoff C-2⁶ gives VALIDATE's last step, made by the phase that
+    ends the specification phase in this build; handing planning the checker's parse of the pack
+    is D-10′'s (PRDR-290).
+  - **It restarts C-8's chain.** The move takes the originals out of discovery, so the next
+    `init` re-runs DISCOVER, and on the chain that re-ran every phase after it. WRITE's checkpoint
+    is keyed by its own digest alone, read from the disk: the documents and markers DISCOVER's
+    patterns find, the pack's contents and its record, and `plan_docs`. It is looked up even while
+    earlier phases replay, it is keyed after it runs as DECIDE is (C-2¹²), and the phases after it
+    chain from its key. So the next `init` re-runs DISCOVER, AUDIT and DECIDE, which write
+    nothing, and re-plans nothing, and an edit to the pack re-plans from WRITE. The key never
+    names the prompt: once the pack is written a new prompt writes nothing, and a key that named
+    it would re-plan every written pack on an upgrade. `--replan` does not force WRITE (C-8⁵).
+  - **The in-flight refusal.** C-8″'s scan goes past a miss to the phase that restarts the chain,
+    and resumes there when its key stands, so DISCOVER's re-run is no re-plan. The second ask is
+    not made before the phases ahead of WRITE, whose re-run replays nothing past it, and is made
+    before WRITE runs.
+  - **The session's surface.** WRITE's session declares the pack's paths as its write surface,
+    as an implement session's is declared: the decision log, the facts file, and the markdown
+    files directly under `docs/design/`, `docs/adr/` and `docs/prd/`, beside its artifact. It gets
+    Edit and Write, which the hook confines to that surface, and no Bash. `archive/` is not in it,
+    which narrows S-1‴: code moves the originals, and a session that could write `archive/` could
+    overwrite one. DECIDE's session, the same role, keeps its artifact alone.
+  - **No product gate.** `spec_write` writes documents, so the product's stop gate does not judge
+    it. The live backend binds the project's test command as every non-read-only session's stop
+    gate, and from PRDR-282 a re-init of a bound project whose tests were red kept DECIDE's
+    session from ending over code it cannot touch. Found here.
+  - **Routing and progress.** WRITE's session runs as `spec_write`, on `claude-opus-5-5` at `max`
+    (S-5⁵). A completed WRITE is a progress mark, written or not (X-1⁵).
+  - **Not built here.** VALIDATE, and the checker's parse reaching planning (PRDR-284,
+    PRDR-290). That the pack states nothing unbuilt in the present indicative is the session's
+    instruction and the checker's heuristic, which reports and never blocks (C-2¹⁰); MUST and
+    SHOULD are the schema's, which blocks.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

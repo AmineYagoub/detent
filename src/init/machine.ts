@@ -41,6 +41,13 @@ import { inFlightTickets, replanRefusal, replansAt, wouldReplan } from "./replan
  * DECIDE also writes what its digest reads, the decision log, so its
  * checkpoint is keyed after it runs: its own write does not re-run it, and an
  * edit by anyone else does (`keyedAfterRun`).
+ *
+ * WRITE, C-2¹³'s (PRDR-283), restarts the chain (`restartsChain`). It moves
+ * the originals it rewrote out of discovery, so the next `init` re-runs
+ * DISCOVER, and the phases after WRITE chain from WRITE's key, which names the
+ * pack, rather than from DISCOVER's: the move re-plans nothing, and an edit to
+ * the pack re-plans from WRITE. It writes what its digest reads, so it is keyed
+ * after it runs too.
  */
 
 export type PhaseOutcome =
@@ -103,15 +110,31 @@ export interface PhaseHandler {
    * takes it before they exist.
    */
   readonly keyedAfterRun?: boolean;
+  /**
+   * C-2¹³ (PRDR-283): the phase restarts the chain. Its checkpoint is keyed by
+   * its own digest alone and looked up even while the phases before it replay,
+   * and the phases after it chain from its key, so a re-run before it that
+   * leaves its key standing re-plans nothing.
+   *
+   * WRITE is the one. It moves the originals it rewrote out of every discovery
+   * glob, so the next `init` finds the pack where they were, and DISCOVER
+   * re-runs; on the chain, that re-run replayed every phase after it and
+   * re-planned a product WRITE's own move had not changed. Its digest must
+   * read the disk alone and name everything its outputs carry, since the
+   * in-flight scan takes it after a miss before it, when no earlier phase's
+   * outputs can be read (P9). Both forced replays, `--replan`'s and a stale
+   * approval's, start after it, so it never ends one.
+   */
+  readonly restartsChain?: boolean;
   run(ctx: InitContext): Promise<PhaseOutcome>;
 }
 
 /**
  * The first phase a `--replan` re-derives; INIT_FS and DISCOVER are cheap scans
- * whose own digests already catch new files. AUDIT and DECIDE, between DISCOVER
- * and this phase, are not forced either: C-8⁵ keeps `--replan` out of the
- * specification phase, and each one's key covers everything it reads, so it
- * re-runs when that moves and only then (C-2¹¹, C-2¹²).
+ * whose own digests already catch new files. AUDIT, DECIDE and WRITE, between
+ * DISCOVER and this phase, are not forced either: C-8⁵ keeps `--replan` out of
+ * the specification phase, and each one's key covers everything it reads, so
+ * it re-runs when that moves and only then (C-2¹¹, C-2¹², C-2¹³).
  */
 const REPLAN_FROM: InitPhase = "ANALYZE";
 
@@ -429,8 +452,10 @@ export async function runInit(
     const ctx: InitContext = { root, outputs, now };
     /* C-2¹¹: a standalone phase's key is its own digest, and the chain passes it by. */
     const standalone = handler.standalone === true;
+    /* C-2¹³: a phase that restarts the chain is keyed as a standalone one is, and the chain goes on from its key. */
+    const restarts = handler.restartsChain === true;
     const keyOf = (upstream: string): string =>
-      createHash("sha256").update(`${standalone ? "" : upstream}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
+      createHash("sha256").update(`${standalone || restarts ? "" : upstream}\0${phase}\0${handler.digest(ctx)}`).digest("hex");
     const upstream = carried;
     const hash = keyOf(upstream);
     if (!standalone) carried = hash;
@@ -441,11 +466,12 @@ export async function runInit(
       replayedFrom ??= phase;
     }
 
-    if (!replaying || standalone) {
+    if (!replaying || standalone || restarts) {
       const read = readCheckpoint(root, phase, hash);
       if (read.status === "fresh" && handler.outputIntact?.(ctx) !== false) {
         outputs[phase] = { ...read.checkpoint.outputs };
         reused.push(phase);
+        if (restarts) replaying = false;
         continue;
       }
       if (read.status === "fresh") messages.push(`${phase} is re-running: what it wrote is no longer on disk (C-8‴)`);
@@ -454,7 +480,7 @@ export async function runInit(
     }
 
     /* C-8″ (PRDR-282): what a standalone phase wrote this run can re-plan, which the scan above could not see. */
-    if (!standalone && replansAt(phase)) {
+    if (!standalone && replansAt(phase, handlers)) {
       const inFlight = inFlightTickets(root);
       if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true, { reachedPhase: phase, replayedFrom, executed, reused, outputs });
     }
@@ -497,6 +523,8 @@ export async function runInit(
     /* C-2¹²: what the phase wrote is now what its digest reads, and the chain goes on from there. */
     const key = handler.keyedAfterRun === true ? keyOf(upstream) : hash;
     if (!standalone) carried = key;
+    /* C-2¹³: the phases after it are looked up under the key it left, which is the one they chained from if it stands. */
+    if (restarts) replaying = false;
     outputs[phase] = outcome.outputs;
     writeCheckpoint(root, phase, key, outcome.outputs, { at: new Date(now()).toISOString() });
     executed.push(phase);
