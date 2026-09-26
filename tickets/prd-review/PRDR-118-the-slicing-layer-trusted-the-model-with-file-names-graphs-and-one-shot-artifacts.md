@@ -74,7 +74,7 @@ And PRDR-116 had already established the retry principle, one level too low:
 
 ## Resolution
 
-Eight amendments: F-1′ (a ticket id is a file name), A-1″ (the drafted graph is repaired —
+Eight amendments: F-1‴ (a ticket id is a file name), A-1″ (the drafted graph is repaired —
 renames, dropped edges, broken cycles — each repair a finding), C-2⁵ (an own edge does not
 stand in for slice order), C-8″ (the in-flight refusal belongs to re-planning, not the flag),
 C-8‴ (a phase may declare its output intact; slice keys narrowed to what determines the

@@ -37,7 +37,7 @@ import { scrub } from "../kernel/scrub.js";
 export const SETUP_REQUIRED_SLOTS: readonly GateSlot[] = ["test"];
 
 export interface DetermineDeps {
-  /** S-3′: optional symbol intelligence; absent or disabled, this phase ignores it. */
+  /** S-3⁸: optional symbol intelligence; absent or disabled, this phase ignores it. */
   readonly symbols?: SymbolsConfig;
   readonly root: string;
   /** C-4: greenfield binds provisional; brownfield binds approved. */
@@ -140,7 +140,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
   const at = deps.now?.() ?? new Date().toISOString();
 
   /**
-   * S-3′ (PRDR-121): tooling availability is this phase's question, and symbol
+   * S-3⁸ (PRDR-121): tooling availability is this phase's question, and symbol
    * intelligence is tooling. Configured and unrunnable is a stop, because the
    * operator asked for it and it is broken — but Detent names the command and
    * does not run it (D-4/F-2).

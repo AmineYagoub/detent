@@ -172,7 +172,7 @@ describe("T-041 oracle full ladder (test_ladder_exhausts_to_needs_human_with_dos
  * within-generation skip is B-5 working and must survive the fix.
  */
 /**
- * Phase-2 remediation: V-1″ (PRDR-135), X-1‴ (PRDR-147), S-4″ (PRDR-138).
+ * Phase-2 remediation: V-1″ (PRDR-135), X-1⁷ (PRDR-147), S-4″ (PRDR-138).
  */
 describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => {
   it("refuses at startup when no `test` gate is bound, rather than greening every gate", async () => {
@@ -190,7 +190,7 @@ describe("V-1″ a run with nothing bound verifies nothing, and refuses", () => 
 });
 
 /**
- * C-9′ (PRDR-139) / X-1⁗ (PRDR-140) / B-2″ (PRDR-145b) — phase 3.
+ * C-9‴ (PRDR-139) / X-1⁗ (PRDR-140) / B-2″ (PRDR-145b) — phase 3.
  */
 /**
  * PRDR-144 — an EMPTY diff reaching a reviewer.
@@ -235,7 +235,7 @@ describe("PRDR-144 a review handed an empty diff", () => {
   });
 });
 
-describe("C-9′ a run executes only the plan a human approved", () => {
+describe("C-9‴ a run executes only the plan a human approved", () => {
   it("refuses when a ticket's approved content changed after the approval", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
@@ -369,7 +369,7 @@ describe("X-1⁗ the wall clock is enforced where the work is launched", () => {
   });
 });
 
-describe("X-1‴ one run per root", () => {
+describe("X-1⁷ one run per root", () => {
   it("a second run against the same root refuses and names the holder", async () => {
     const root = await fixture();
     addTicket(root, { id: "t1" });
@@ -819,7 +819,7 @@ describe("T-041 stale claims never spin the loop (C-9/C-12)", () => {
     addTicket(root, { id: "t2" });
     /**
      * t1 sits mid-flight under ANOTHER LIVE worker's claim (this process's
-     * own pid — unambiguously alive on every OS). C-9′/PRDR-079: only a
+     * own pid — unambiguously alive on every OS). C-9⁗/PRDR-079: only a
      * verifiably DEAD owner's claim self-heals (tested in
      * claim-self-heal.test.ts); a live peer's claim is never guessed about.
      */

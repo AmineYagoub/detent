@@ -6,8 +6,8 @@ severity: critical
 category: defect
 labels: ["prd-review", "X-1⁵", "budgets", "breaker", "ledger", "gate-313"]
 surface: ["src/kernel/ledger.ts", "tests/kernel/ledger.test.ts", "detent-prd-v3.md"]
-prd_refs: ["X-1⁵", "X-1‴", "D-25", "P6", "V-6", "N-6", "PRDR-191", "PRDR-195", "PRDR-136"]
-acceptance_criteria: ["`assertLaunchAllowed` reads the progress mark from the FILE at every launch, exactly as it re-reads the ledger (X-1‴): a unit completed by `noteUnitComplete` between two launches moves the mark the breaker measures from, and the last unit's cost the threshold derives from. Observed FIRST (V-6): a ledger constructed once, rows recorded past the threshold, `noteUnitComplete(root)` called, then `assertLaunchAllowed()` — today it throws `NoProgressError`; on gate-313 it threw at 08:26:33 with `$52.76 spent without completing a unit` fourteen minutes after t-s01-001 reached DONE, because the run's ledger still held the mark init had left at row 86 ($228.51) and the file said $278.31.", "A run that keeps completing tickets never halts, end to end, when the ledger is constructed ONCE for the run — the shape `RefereeContext` has — not once per launch, the shape the existing test proved.", "The mark in memory never runs ahead of the file and never falls behind it: the file is the shared truth, and a file that cannot be read leaves the memory value in force."]
+prd_refs: ["X-1⁵", "X-1⁷", "D-25", "P6", "V-6", "N-6", "PRDR-191", "PRDR-195", "PRDR-136"]
+acceptance_criteria: ["`assertLaunchAllowed` reads the progress mark from the FILE at every launch, exactly as it re-reads the ledger (X-1⁷): a unit completed by `noteUnitComplete` between two launches moves the mark the breaker measures from, and the last unit's cost the threshold derives from. Observed FIRST (V-6): a ledger constructed once, rows recorded past the threshold, `noteUnitComplete(root)` called, then `assertLaunchAllowed()` — today it throws `NoProgressError`; on gate-313 it threw at 08:26:33 with `$52.76 spent without completing a unit` fourteen minutes after t-s01-001 reached DONE, because the run's ledger still held the mark init had left at row 86 ($228.51) and the file said $278.31.", "A run that keeps completing tickets never halts, end to end, when the ledger is constructed ONCE for the run — the shape `RefereeContext` has — not once per launch, the shape the existing test proved.", "The mark in memory never runs ahead of the file and never falls behind it: the file is the shared truth, and a file that cannot be read leaves the memory value in force."]
 non_goals: ["Does not change what a unit is (a ticket DONE, a slice planned) or how the threshold is derived.", "Does not make the total fatal again."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-191", "PRDR-195", "PRDR-136"]
@@ -47,14 +47,14 @@ exited 10 with $4.50 of real work done since the last unit.
 
 ## The shape
 
-The file is the shared truth, which is exactly what X-1‴ said of the ledger itself: re-read
+The file is the shared truth, which is exactly what X-1⁷ said of the ledger itself: re-read
 the mark at every launch, adopt it when it has moved, and derive the threshold from the unit
 cost it carries.
 
 ## What implementation changed
 
 **The mark is re-read at every launch.** `assertLaunchAllowed` already re-read the ledger file
-(X-1‴); it now re-reads `progress.json` beside it and, when the file's mark has moved past the
+(X-1⁷); it now re-reads `progress.json` beside it and, when the file's mark has moved past the
 one in memory, adopts both the mark and the unit cost it carries before measuring. A file that
 cannot be read, or one that has not moved, changes nothing — memory never runs ahead of the
 file. `noteProgress` and `noteUnitComplete` are untouched: the file was always right; the

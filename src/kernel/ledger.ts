@@ -400,7 +400,7 @@ export class SpendLedger {
   /**
    * D-25: evaluated at session launch, never mid-flight.
    *
-   * X-1‴ (PRDR-136): re-reads the FILE, because `accumulated` seeded once at
+   * X-1⁷ (PRDR-136): re-reads the FILE, because `accumulated` seeded once at
    * construction let two runs on one root each enforce the full ceiling and
    * jointly spend past it. The file is the shared truth and reading it is not
    * the expensive part of a session.
@@ -519,7 +519,7 @@ export function noteUnitComplete(root: string): void {
 /**
  * The whole file: cumulative across generations and resumed runs (X-8).
  *
- * X-1‴ (PRDR-136): every row is VALIDATED with the schema that wrote it. This
+ * X-1⁷ (PRDR-136): every row is VALIDATED with the schema that wrote it. This
  * was `JSON.parse(line) as { cost_estimate_usd?: number }` followed by
  * `?? 0` — so a string cost concatenated (`5, "5", 3` gives `"553"`, not 13),
  * a negative subtracted, and `1e999` became `Infinity` and refused every
@@ -618,7 +618,7 @@ export function readRecordedSpend(root: string): number {
        * The distinction that matters is not WHERE the damage is but WHAT it is:
        * text that is not JSON is a torn write; a well-formed object that is not
        * a ledger row is a shape the writer cannot produce. Only the second is
-       * worth halting for, and it is the one X-1‴ was actually about.
+       * worth halting for, and it is the one X-1⁷ was actually about.
        *
        * PRDR-249: what is skipped is the FRAGMENT, not the line. This block
        * claimed the loss was "at most the row glued to the torn one" and it was
@@ -629,7 +629,7 @@ export function readRecordedSpend(root: string): number {
        * bytes stopped mid-flight and whose cost is genuinely unknown, is lost.
        *
        * A recovered object that is not a ledger row is SKIPPED rather than
-       * throwing, unlike the intact-line case below. X-1‴ is that the ceiling
+       * throwing, unlike the intact-line case below. X-1⁷ is that the ceiling
        * cannot trust a shape its WRITER could not produce; an object dug out of
        * a damaged line is a crash artifact, and PRDR-151's lesson is that a
        * crash artifact must never brick a root.

@@ -159,7 +159,7 @@ export function writePlan(
     slices: slices.map((s) => ({ id: s.id, title: s.title, tickets: drafted.filter((t) => t.slice === s.id).map((t) => t.id) })),
   });
   /**
-   * C-9′ (PRDR-153): the live-claim check belongs HERE, before anything is
+   * C-9‴ (PRDR-153): the live-claim check belongs HERE, before anything is
    * written. PRDR-139 put it in the orphan sweep — after every ticket had
    * already been rewritten — so the throw left the directory reset, the orphans
    * present and `plan.json` stale: exactly the half-written state this file's

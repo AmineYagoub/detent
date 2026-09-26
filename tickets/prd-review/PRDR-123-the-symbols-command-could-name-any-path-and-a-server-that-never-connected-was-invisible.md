@@ -6,7 +6,7 @@ severity: normal
 category: security
 labels: ["prd-review", "found-by-audit"]
 surface: ["src/kernel/worstcase.ts", "src/adapter/symbols.ts", "src/sessions/sdk.ts", "src/sessions/backend.ts", "src/kernel/referee-session.ts", "detent-prd-v3.md"]
-prd_refs: ["S-3′", "D-4", "F-2", "SEC-3", "S-4", "V-1"]
+prd_refs: ["S-3⁸", "D-4", "F-2", "SEC-3", "S-4", "V-1"]
 acceptance_criteria: ["`symbols.command` is a bare executable name — no path separator, no `..`, no absolute path — refused when the config loads rather than when it runs, so a repository cannot choose which file on disk Detent executes.", "A session whose configured MCP server did not connect reports it: the status is read from the SDK's own init message, carried on the result, noted on the ticket and journalled, in the same shape as a model fallback.", "An absent or unrecognised init message is treated as no information, never as failure."]
 non_goals: ["Does not claim to make Detent safe against a hostile repository. Detent executes repo-defined verification commands by design; this restores parity with that boundary rather than inventing a new guarantee.", "Does not re-probe the command per ticket. Whether the binary exists is the wrong question — whether THIS session's server attached is the one that matters, and the init message answers it directly.", "Does not fail a session when a server did not connect. Symbol intelligence is optional; losing it degrades the session, and the operator is told."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }

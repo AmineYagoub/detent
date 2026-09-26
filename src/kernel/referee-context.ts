@@ -169,13 +169,13 @@ export class RefereeContext {
     this.baseRef = resolveBaseRef(opts.root, runBranch);
   }
 
-  /** S-3′ (PRDR-121): the symbol server a session may call, when one is configured and runnable. */
+  /** S-3⁸ (PRDR-121): the symbol server a session may call, when one is configured and runnable. */
   get symbols(): SymbolsConfig | undefined {
     return this.loaded.config.symbols;
   }
 
   /**
-   * S-3′: the read tools a session may call, probed once per referee. Absent,
+   * S-3⁸: the read tools a session may call, probed once per referee. Absent,
    * disabled or unrunnable all yield none, and every stage runs as before.
    */
   symbolTools(): string[] {

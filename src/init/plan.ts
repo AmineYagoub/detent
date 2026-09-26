@@ -194,7 +194,7 @@ export interface DraftScope {
   readonly findings?: PlanReview["findings"];
   /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
   readonly keepIds?: readonly string[];
-  /** C-3″ (PRDR-207): what earlier stages already asked, each with its assumption — not to be asked again. */
+  /** C-3‴ (PRDR-207): what earlier stages already asked, each with its assumption — not to be asked again. */
   readonly openQuestions?: readonly PlanQuestion[];
 }
 
@@ -229,7 +229,7 @@ export async function draftPlan(
     ...(scope.planIndex === undefined || scope.planIndex.length === 0 ? {} : { plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })) }),
     ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
     ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
-    /* C-3″ (PRDR-207): only when non-empty, so a root with no questions gets the bytes it always got (S-6). */
+    /* C-3‴ (PRDR-207): only when non-empty, so a root with no questions gets the bytes it always got (S-6). */
     ...openQuestionsInput(scope.openQuestions),
     ...previousAttemptInput(previous, "plan draft"),
     expected_output: planDraftSkeleton(),

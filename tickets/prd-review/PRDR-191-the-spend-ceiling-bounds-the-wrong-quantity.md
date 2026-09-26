@@ -6,7 +6,7 @@ severity: major
 category: design
 labels: ["prd-review", "found-by-live-run", "budgets", "operator-surface"]
 surface: ["detent-prd-v3.md", "src/kernel/ledger.ts", "src/init/pipeline.ts", "src/init/session.ts", "src/schemas/budgets.ts", "src/schemas/states.ts", "tests/oracle/budgets.test.ts"]
-prd_refs: ["X-1", "X-1′", "X-1‴", "X-8", "D-25", "C-8"]
+prd_refs: ["X-1", "X-1′", "X-1⁷", "X-8", "D-25", "C-8"]
 acceptance_criteria: ["`run_spend_usd` no longer halts a run. Spend is counted and reported; a total never terminates work.", "A no-progress breaker replaces it: the run halts when a configured amount accrues with NO unit of progress completing — a slice for `init`, a ticket reaching DONE for the loop.", "The breaker's default is derived from the observed cost of one unit of progress, not chosen as a constant.", "Spend is reported as it accrues, against the session estimate `slice.ts` already computes, so an operator sees the trajectory rather than discovering it at a wall.", "If an operator sets a total anyway, reaching it is SAID rather than acted on. AMENDED on implementation: an announcement, not AWAIT_SPEND_CONFIRM — see below.", "The breaker lands in the SAME change that removes the blocker. A release with neither is a regression, not a step."]
 non_goals: ["Does not touch the per-ticket ceilings (`blind_fix_attempts`, `informed_fix_attempts`, `research_sessions`, `hypotheses`). Those bound ATTEMPTS, not money, three of them are structural under D-24, and they are the controls that actually work.", "Does not remove the ledger or the accounting. The counting stays; the blocking goes.", "Does not claim the financial exposure is zero. It is accepted deliberately, and the breaker is what makes accepting it reasonable."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
@@ -52,7 +52,7 @@ that:
 - **D-25 evaluates it at session launch, never mid-flight** — so a run overshoots by up to a whole
   session's cost, whatever that session turns out to be.
 - Two runs on one root each enforced the full ceiling and jointly spent past it, reaching **$16
-  against a $10 ceiling with neither ever seeing `SpendExhaustedError`** (PRDR-147/168). X-1‴ closed
+  against a $10 ceiling with neither ever seeing `SpendExhaustedError`** (PRDR-147/168). X-1⁷ closed
   that with a lock, but the episode shows what the guarantee was worth.
 
 A control that cannot bound the thing it names is not made correct by keeping it.

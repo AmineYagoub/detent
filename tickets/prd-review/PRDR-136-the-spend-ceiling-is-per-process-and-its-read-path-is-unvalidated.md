@@ -6,7 +6,7 @@ severity: critical
 category: bug
 labels: ["prd-review", "found-by-audit", "budgets", "recovered"]
 surface: ["src/kernel/ledger.ts", "tests/kernel/ledger.test.ts"]
-prd_refs: ["X-1‴", "D-25"]
+prd_refs: ["X-1⁷", "D-25"]
 acceptance_criteria: ["The launch gate RE-READS the ledger file rather than trusting a figure seeded at construction.", "The file is validated with the schema that wrote it."]
 non_goals: ["Does not make concurrent runs safe; PRDR-147 makes them decline."]
 attempts: { fix: 1, hypothesis: 0, review: 0 }

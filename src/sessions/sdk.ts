@@ -161,7 +161,7 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
     /**
-     * S-3′ (PRDR-121): the optional symbol server, when the adapter granted
+     * S-3⁸ (PRDR-121): the optional symbol server, when the adapter granted
      * one. Its READ tools are in `allowedTools`; nothing else it exposes is
      * reachable, and `assertNoEditingTools` refuses an allowlist that tries.
      */

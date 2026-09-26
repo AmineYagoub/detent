@@ -1,12 +1,12 @@
 ---
 id: PRDR-152
-title: "C-9′'s approved-field projection listed a drafted ticket's field name, so it hashed a key that is always absent and ignored `blockers` and `waits_on` — a ticket's dependency edges could be rewritten after approval unnoticed"
+title: "C-9‴'s approved-field projection listed a drafted ticket's field name, so it hashed a key that is always absent and ignored `blockers` and `waits_on` — a ticket's dependency edges could be rewritten after approval unnoticed"
 state: DONE
 severity: major
 category: correctness
 labels: ["prd-review", "found-by-audit", "self-inflicted"]
 surface: ["src/init/machine.ts", "tests/kernel/run.test.ts"]
-prd_refs: ["C-9", "C-9′"]
+prd_refs: ["C-9", "C-9‴"]
 acceptance_criteria: ["`APPROVED_FIELDS` is typed `readonly (keyof Ticket)[]`, so a name that is not a ticket field cannot compile.", "`blockers`, `waits_on` and `links` are part of the approved projection.", "A test asserts the projection against the SCHEMA — every field on a real ticket either changes the hash or is a declared piece of run state — so a field added later cannot be silently omitted."]
 non_goals: ["Does not widen the projection to run state. `state`, `generations`, `notes` and `schema_version` change during a run by design and must not invalidate an approval."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }

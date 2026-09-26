@@ -93,7 +93,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
   }
 
   /**
-   * X-1‴ (PRDR-168): one pipeline per root, on the terms `run` already uses.
+   * X-1⁷ (PRDR-168): one pipeline per root, on the terms `run` already uses.
    *
    * `acquireRunLock` was built for PRDR-147 — "two runs on one root each
    * enforce the full ceiling and jointly spend past it" — and wired to `run`
@@ -121,7 +121,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
   }
   if (lock.brokeStale !== null) {
     process.stdout.write(
-      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1‴)\n`,
+      `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1⁷)\n`,
     );
   }
 
@@ -199,7 +199,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       }
       process.stdout.write(
         decided.enabled
-          ? `symbol intelligence enabled — \`${decided.command}\` is ready; sessions get its read tools (S-3′)\n`
+          ? `symbol intelligence enabled — \`${decided.command}\` is ready; sessions get its read tools (S-3⁸)\n`
           : "symbol intelligence declined — recorded in .detent/config.json, never mentioned again (S-3″)\n",
       );
       config = configFor(root);

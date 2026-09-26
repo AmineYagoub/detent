@@ -6,7 +6,7 @@ severity: major
 category: gap
 labels: ["prd-review", "found-by-live-run", "reliability", "observability"]
 surface: ["src/cli/index.ts", "src/init/pipeline.ts", "src/init/session.ts", "tests/init/stages.test.ts"]
-prd_refs: ["X-1‴", "C-8", "S-4", "PRDR-185", "PRDR-189"]
+prd_refs: ["X-1⁷", "C-8", "S-4", "PRDR-185", "PRDR-189"]
 acceptance_criteria: ["SIGTERM, SIGINT and SIGHUP write a terminal record before the process leaves, naming the signal and what was in flight. This is the criterion that would have closed the whole investigation below in one log line.", "Every exit path of `init` writes that record — including the path where `main` RETURNS rather than throws, which today writes nothing at all.", "A SIGKILL cannot be caught, so the record must ALSO be inferable: a liveness marker updated as the run advances, letting a later reader distinguish `died while planning s09` from `exited cleanly after s09`.", "The record lands where a reader already looks — the run log, and the run lock for the marker — not in a third artifact nobody thinks to open. AMENDED on implementation: NOT the ledger, for the reason recorded below.", "The clock behind any of it is an injectable seam, as AGENTS.md requires."]
 non_goals: ["Does not add a supervisor or auto-restart. That is a separate design question, and it is downstream of this one.", "Does not stop anyone running `killall node`. The machine is the operator's. The defect is that Detent cannot say what happened TO it."]
 attempts: { fix: 0, hypothesis: 1, review: 0 }
@@ -110,7 +110,7 @@ path a SIGTERM mid-slice, assert the record exists and names both the signal and
 
 Worth recording, because six deaths in three days reads like an unreliable tool and the opposite is
 true. Nothing in Detent failed here. The run lock released and broke cleanly under abnormal
-termination every time (X-1‴). Every completed slice survived and was reused for $0 on resume (C-8,
+termination every time (X-1⁷). Every completed slice survived and was reused for $0 on resume (C-8,
 now observed live under six separate signal deaths). The total loss across all of them was the
 work in flight at the moment of the kill. The tool was being shot, not falling over — and the one
 thing it could not do was say so.

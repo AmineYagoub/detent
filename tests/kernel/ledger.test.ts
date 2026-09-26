@@ -313,14 +313,14 @@ describe("T-048 field discipline (S-4, PRDR-052/053)", () => {
 });
 
 /**
- * X-1‴ (PRDR-136) — the READ path is as strict as the write.
+ * X-1⁷ (PRDR-136) — the READ path is as strict as the write.
  *
  * `readRecordedSpend` was `JSON.parse(line) as { cost_estimate_usd?: number }`
  * followed by `?? 0`, and it is the cross-generation financial backstop the
  * D-25 launch gate compares against. The existing test above covers `record`,
  * the write side, on files the code itself wrote.
  */
-describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () => {
+describe("X-1⁷ a spend total is only as trustworthy as the rows it sums", () => {
   const row = (over: Record<string, unknown>): string =>
     JSON.stringify({
       at: "2026-09-01T00:00:00.000Z",
@@ -406,7 +406,7 @@ describe("X-1‴ a spend total is only as trustworthy as the rows it sums", () =
 
   /**
    * PRDR-249: a recovered object that is not a ledger row is SKIPPED, not fatal.
-   * On an intact line a non-row still throws — that is X-1‴, the ceiling cannot
+   * On an intact line a non-row still throws — that is X-1⁷, the ceiling cannot
    * trust a shape its writer could not produce — but an object dug out of a
    * damaged line is itself a crash artifact, and PRDR-151's lesson is that a
    * crash artifact must never brick a root.

@@ -127,7 +127,7 @@ export class SessionArm {
         ? [...this.toolsFor(role), ...symbols, artifactWriteRule(artifactOut)]
         : [...this.toolsFor(role), ...symbols],
       /**
-       * S-3′ (PRDR-121): the optional symbol server, when one is configured
+       * S-3⁸ (PRDR-121): the optional symbol server, when one is configured
        * and runnable. Read tools only — its editing tools write from inside
        * the server process, where the D-21 hook below cannot see them.
        */

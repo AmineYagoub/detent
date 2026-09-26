@@ -4,11 +4,11 @@ title: "A project that genuinely builds on install has only a run-wide environme
 state: OPEN
 severity: minor
 category: hardening
-labels: ["prd-review", "SEC-5", "V-1⁵", "install", "operator", "design-panel"]
+labels: ["prd-review", "SEC-5", "V-1⁶", "install", "operator", "design-panel"]
 surface: ["src/adapter/discover/node.ts", "src/kernel/lifecycle.ts", "src/cli/verify-lifecycle.ts", "src/adapter/normalize.ts", "detent-prd-v3.md"]
-prd_refs: ["V-1⁵", "V-1⁗", "SEC-5", "D-4", "N-6", "PRDR-232"]
-acceptance_criteria: ["A project's declared lifecycle scripts are recorded with their bodies' hashes, and an operator approves them by name after seeing them — the approval is per project and per script body, so editing an approved script withdraws its approval until it is approved again.", "The install and the gates run with suppression lifted only for what is approved, and a work directory carrying an unapproved declared lifecycle script installs with suppression on and says so where the first red gate is read.", "The run-wide `DETENT_ALLOW_LIFECYCLE_SCRIPTS` switch V-1⁵ ships stays as the blunt instrument it is, and the finer verb supersedes it for projects that have one."]
-non_goals: ["Does not weaken V-1⁵'s default: suppression stays on until an operator lifts it.", "Does not extend to pnpm, yarn or bun, whose script and plugin surfaces are unmeasured (see PRDR-234 if one is filed)."]
+prd_refs: ["V-1⁶", "V-1⁗", "SEC-5", "D-4", "N-6", "PRDR-232"]
+acceptance_criteria: ["A project's declared lifecycle scripts are recorded with their bodies' hashes, and an operator approves them by name after seeing them — the approval is per project and per script body, so editing an approved script withdraws its approval until it is approved again.", "The install and the gates run with suppression lifted only for what is approved, and a work directory carrying an unapproved declared lifecycle script installs with suppression on and says so where the first red gate is read.", "The run-wide `DETENT_ALLOW_LIFECYCLE_SCRIPTS` switch V-1⁶ ships stays as the blunt instrument it is, and the finer verb supersedes it for projects that have one."]
+non_goals: ["Does not weaken V-1⁶'s default: suppression stays on until an operator lifts it.", "Does not extend to pnpm, yarn or bun, whose script and plugin surfaces are unmeasured (see PRDR-234 if one is filed)."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-232"]
 depends_on: ["PRDR-232"]
@@ -21,7 +21,7 @@ half of its recommendation deliberately not shipped
 
 ## Problem
 
-V-1⁵ suppresses a judged tree's lifecycle and `pre`/`post` scripts by default, which is right,
+V-1⁶ suppresses a judged tree's lifecycle and `pre`/`post` scripts by default, which is right,
 and gives the operator one run-wide switch to lift it. That switch is all-or-nothing: a project
 that needs `prepare` to build itself gets either every declared script, including any a session
 later adds, or none.

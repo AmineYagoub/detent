@@ -6,7 +6,7 @@ severity: critical
 category: bug
 labels: ["prd-review", "found-by-audit", "approval", "recovered"]
 surface: ["src/cli/run.ts", "src/init/machine.ts", "src/init/plan-write.ts", "src/kernel/run.ts"]
-prd_refs: ["C-9′"]
+prd_refs: ["C-9‴"]
 acceptance_criteria: ["`run` compares the approval's `plan_hash` against the plan it is about to execute.", "The hash covers each ticket's PLAN-DEFINING fields — what a human approved — not whole ticket files.", "An unreadable ticket is SKIPPED, not reported as an edit: damage is not an edit.", "`writePlan` breaks a claim only through `claimBreakable`."]
 non_goals: ["Does not change what approval means, only that it is checked."]
 attempts: { fix: 1, hypothesis: 0, review: 0 }

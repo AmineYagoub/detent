@@ -6,7 +6,7 @@ severity: critical
 category: bug
 labels: ["prd-review", "found-by-audit", "budgets", "recovered"]
 surface: ["src/kernel/run-lock.ts", "src/kernel/run.ts", "tests/kernel/run.test.ts"]
-prd_refs: ["X-1‴", "NG4"]
+prd_refs: ["X-1⁷", "NG4"]
 acceptance_criteria: ["A run takes an exclusive root lock on the O_EXCL primitive the claim mechanism already proves.", "The lock is breakable only on a dead pid on the same host."]
 non_goals: ["Does not make concurrent runs safe. NG4 stands: they are made to DECLINE, not to cooperate."]
 attempts: { fix: 1, hypothesis: 0, review: 0 }

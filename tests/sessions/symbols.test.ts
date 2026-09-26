@@ -42,7 +42,7 @@ async function captureFailures(messages: unknown[]): Promise<readonly { name: st
 import { contractEvidence, identifierOf, unverifiedProvides } from "../../src/kernel/contract-verify.js";
 
 /**
- * S-3′ / S-3″ (PRDR-121) — the adapter's safety properties.
+ * S-3⁸ / S-3″ (PRDR-121) — the adapter's safety properties.
  *
  * Two of these are the reason the ticket exists at all: an editing tool would
  * write from inside the MCP server, out of the D-21 hook's sight, and a
@@ -53,7 +53,7 @@ import { contractEvidence, identifierOf, unverifiedProvides } from "../../src/ke
 
 const CONFIG = { enabled: true, command: "serena-agent", pinned: "0.1.4" };
 
-describe("S-3′ symbol intelligence cannot become a containment hole", () => {
+describe("S-3⁸ symbol intelligence cannot become a containment hole", () => {
   it("grants read tools only, and every editing tool is named so the prohibition is testable", () => {
     expect(SYMBOL_READ_TOOLS).toEqual(["find_symbol", "find_referencing_symbols", "get_symbols_overview"]);
     for (const read of SYMBOL_READ_TOOLS) expect(SYMBOL_EDITING_TOOLS).not.toContain(read);

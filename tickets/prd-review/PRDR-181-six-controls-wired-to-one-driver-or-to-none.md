@@ -6,7 +6,7 @@ severity: critical
 category: defect
 labels: ["prd-review", "found-by-audit", "spend", "security", "arch-2"]
 surface: ["src/kernel/referee.ts", "src/cli/referee.ts", "src/init/machine.ts", "src/kernel/run.ts", "src/sessions/sdk.ts"]
-prd_refs: ["D-19", "ARCH-2", "C-9", "V-1″", "X-1‴", "S-4", "S-5"]
+prd_refs: ["D-19", "ARCH-2", "C-9", "V-1″", "X-1⁷", "S-4", "S-5"]
 acceptance_criteria: ["`attempt` launches only on a ticket this worker holds, and never on a terminal one.", "The plugin referee refuses a root another process holds, refuses to serve with no bound `test` gate, and reads an approval through the same schema `run` does.", "`run` verifies the pinned CLI version before it spends.", "A result message carrying a cost but no usage is not telemetry."]
 non_goals: ["Does not make `attempt` re-derive the ladder. Demanding `ticket.state === state` was wrong — the attempt EARNS the transition, it does not follow it — and the first version of this fix broke fifteen tests by asserting otherwise."]
 attempts: { fix: 1, hypothesis: 0, review: 0 }

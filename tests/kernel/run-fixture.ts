@@ -93,7 +93,7 @@ export function addTicket(root: string, input: Partial<NewTicket> & { readonly i
     ...input,
   });
   /**
-   * C-9′ (PRDR-139): re-approve the plan that now exists.
+   * C-9‴ (PRDR-139): re-approve the plan that now exists.
    *
    * The fixture used to write `plan_hash: sha256("fixture-plan")` once, before
    * any ticket existed — a value that could never equal `planHash(root)`. It
