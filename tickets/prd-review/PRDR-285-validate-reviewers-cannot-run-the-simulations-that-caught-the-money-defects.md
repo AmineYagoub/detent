@@ -352,7 +352,7 @@ in the second, and the three on the changed code.
 ## Recorded, not fixed
 
 - **No sandbox but macOS's.** Linux's bubblewrap is not wired, and Windows has none. CI and an
-  N-7 self-build on Linux simulate nothing, and each round says so.
+  N-7 self-build on Linux simulate nothing, and each round says so. Filed as PRDR-301.
 - **No memory or disk limit.** macOS enforces no memory limit on a process, and nothing limits what
   a script writes to its own directory, so a script can exhaust memory or fill the temporary
   volume until its time limit ends it.

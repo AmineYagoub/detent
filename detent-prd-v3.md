@@ -2538,8 +2538,8 @@ the code does what the rules it amends describe, and each of those rules points 
     and its `why` gives the seed, the sequence, the step that broke it, and how many sequences of how
     many did. Code cannot tell a simulated finding from a read one, and only VALIDATE's writer changes
     the pack.
-  - **Not built here.** A sandbox on any platform but macOS: Linux's bubblewrap is not wired, so a
-    self-build on CI and an N-7 run simulate nothing. A memory or disk limit: macOS enforces no memory
+  - **Not built here.** A sandbox on any platform but macOS: Linux's bubblewrap is not wired
+    (PRDR-301), so a self-build on CI and an N-7 run simulate nothing. A memory or disk limit: macOS enforces no memory
     limit on a process, and nothing bounds what a script writes to its own directory, so a script can
     exhaust memory or fill the temporary volume until its time limit ends it. A script that waits when
     Detent ends mid-run: the CPU limit ends only one that computes, so a waiting one lives on, confined,
