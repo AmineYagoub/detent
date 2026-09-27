@@ -98,7 +98,7 @@ describe("D-16 (PRDR-262) the pool is divided, not drained", () => {
     const { result, seen } = await drive(root(), THREE, 16, { brief: () => ({ malformed: true }) });
     expect(seen.offered, "each question gets an even cut of what is left, not everything that is left").toEqual([5, 5, 6]);
     expect(result.sessionsLaunched, "all three questions were researched — twice each, since PRDR-264 reshapes a refused brief once").toBe(6);
-    expect(result.unanswered, "no question may be starved by where ANALYZE listed it: all three were asked and all three refused").toEqual(THREE);
+    expect(result.unanswered, "no question may be starved by where it was listed: all three were asked and all three refused").toEqual(THREE);
     /**
      * PRDR-265 (D-18): this asserted 16 — "the pool is spent to its ceiling and
      * not past it" — because the charge was clamped to each question's share.

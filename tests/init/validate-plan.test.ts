@@ -36,7 +36,7 @@ import {
 const PROJECT = { ...LONE_CANDIDATE, ...RAW };
 const INDEX = "docs/prd/index.md";
 const PACK_DOCS = ["README.md", DECISION_LOG_PATH, LENDING_PRD, INDEX, "docs/research/verified-facts.md"];
-const PLANNING = ["ANALYZE", "DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"];
+const PLANNING = ["DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"];
 
 const LENDING_SLICE = {
   schema_version: SCHEMA_VERSION,
@@ -111,14 +111,14 @@ describe("PRDR-284: VALIDATE hands planning the pack (C-2â¶, F-4)", () => {
     const first = await init(root);
     expect(first.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     expect(new Set(first.executed).size, "each phase once (F-4)").toBe(first.executed.length);
-    expect(first.executed.slice(first.executed.indexOf("WRITE"), first.executed.indexOf("WRITE") + 3)).toEqual(["WRITE", "VALIDATE", "ANALYZE"]);
+    expect(first.executed.slice(first.executed.indexOf("WRITE"), first.executed.indexOf("WRITE") + 3)).toEqual(["WRITE", "VALIDATE", "DETERMINE_VERIFICATION"]);
     const outputs = validateOutputs(root);
     expect(outputs["docs"]).toEqual(PACK_DOCS);
     expect(outputs["stack_markers"]).toEqual(expect.arrayContaining(["package.json"]));
     expect((outputs["defaults"] as Json[]).map((d) => d["id"])).toEqual(["X-1", "X-2", "X-3"]);
     expect(((outputs["pack"] as Json)["requirements"] as Json[]).map((r) => r["id"])).toEqual(["LND-F-001", "LND-F-002", "LND-F-003"]);
     expect(outputs).toMatchObject({ ran: true, validated: true, rounds: 1, risks: [] });
-    expect(first.planned.find((i) => i["stage"] === undefined && i["expected_output"] !== undefined)?.["docs"]).toEqual(PACK_DOCS);
+    expect(first.planned.find((i) => i["stage"] === "SLICE")?.["docs"]).toEqual(PACK_DOCS);
   });
 
   it("runs no specification session on a conforming pack: VALIDATE's checker is DISCOVER's, and its risks are the record's (specification decision 6)", async () => {
@@ -184,7 +184,7 @@ describe("PRDR-284: a re-validation reads the change and whatever cites it (C-2â
     const r = clean();
     const edited = await init(root, { reviewers: r });
     expect(r.inputs.map((i) => [i["round"], i["task"], i["area"], i["documents"]])).toEqual([[1, "review", "foundations", [INDEX]]]);
-    expect(edited.executed).toEqual(expect.arrayContaining(["VALIDATE", "ANALYZE", "PLAN"]));
+    expect(edited.executed).toEqual(expect.arrayContaining(["VALIDATE", "SLICE", "PLAN"]));
     expect(record(root)).toMatchObject({ validated: true, rounds: [{ round: 1 }] });
   });
 

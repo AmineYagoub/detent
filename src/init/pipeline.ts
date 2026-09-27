@@ -4,7 +4,7 @@ import type { Budgets } from "../schemas/budgets.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { Sandbox } from "../sessions/sandbox.js";
-import { analysisFromOutputs, analysisPath, analyzeStage, isGreenfield } from "./analyze.js";
+import { isGreenfield } from "./greenfield.js";
 import { determineVerification } from "./bind.js";
 import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
@@ -18,16 +18,15 @@ import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
-import { planningBriefSkeleton, questionHash, undecidableBriefSkeleton } from "./plan-research.js";
-import { previousAttemptInput } from "./retry.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
-import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH } from "../schemas/pack.js";
+import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH, packSchema, type Pack } from "../schemas/pack.js";
 import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
-import { decidePhase, decidedStack, planningDocs, type DecideAsk } from "./decide.js";
+import { decidePhase, planningDocs, type DecideAsk } from "./decide.js";
+import { readDecisionLog, type DecidedStack } from "./decide-log.js";
 import { planningMarkers, writePhase } from "./write.js";
 import { validatePhase } from "./validate.js";
 
@@ -96,7 +95,6 @@ export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
     decidePhase(deps),
     writePhase(deps),
     validatePhase(deps),
-    analyzePhase(deps),
     determinePhase(deps),
     slicePhase(deps),
     planPhase(deps),
@@ -199,104 +197,57 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
-function analyzePhase(deps: PipelineDeps): PhaseHandler {
-  return {
-    phase: "ANALYZE",
-    /**
-     * The CONTENTS of the discovered docs: ANALYZE is what an edit invalidates
-     * (C-8's AC). Folded with DISCOVER's output so a newly-appearing doc also
-     * re-runs analysis.
-     */
-    digest: (ctx) => {
-      const told = ctx.outputs["VALIDATE"] ?? ctx.outputs["WRITE"] ?? ctx.outputs["DISCOVER"];
-      const docs = told === undefined ? discoverDocs(deps.root, docPatterns(deps)).docs.filter(notTheLog) : planningDocs(deps.root, ctx.outputs);
-      /* PRDR-082: the prompt is an input — a Detent upgrade that changes how
-       * the phase reasons must invalidate it, exactly as an edited doc does. */
-      return `${contentsDigest(deps.root, docs)}|${valueDigest([planningMarkers(ctx.outputs), deps.prompts.hashes.planner])}`;
-    },
-    /* PRDR-203: one journal for the phase, handed to every launch it makes. */
-    run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
-      const stackMarkers = planningMarkers(ctx.outputs);
-      const decided = decidedStack(ctx.outputs);
-      return await analyzeStage({
-        root: deps.root,
-        docs: planningDocs(deps.root, ctx.outputs),
-        stackMarkers,
-        ...(decided === null ? {} : { decided }),
-        ...(deps.note === undefined ? {} : { note: deps.note }),
-        launch: async (inputs) => {
-          await launchInitSession(
-            sessionDeps(deps, journal),
-            { role: "planner", inputs, artifactOut: analysisPath(deps.root) },
-          );
-        },
-        research: {
-          budget: deps.budgets.planning_research_tool_calls,
-          ...(deps.note === undefined ? {} : { note: deps.note }),
-          /**
-           * D-16: `tool_call_budget` is this question's SHARE of
-           * `planning_research_tool_calls`, not the whole init's pool.
-           * `plan-research` divides the pool and hands each session its cut;
-           * the input key was always named for one session's budget and is only
-           * now true of the number behind it, so it is not renamed.
-           */
-          researchOne: async (question, share, artifactOut, previous) => {
-            /*
-             * PRDR-264: the contract, which this caller never passed. Without an
-             * `expected_output` the session follows the only shape
-             * `prompts/research.md` names — the A-4 failure brief — and
-             * `planningBriefSchema` refuses it every time. Both skeletons go, so
-             * the session knows that settling a question is an outcome too.
-             */
-            const hash = questionHash(question);
-            const result = await launchInitSession(sessionDeps(deps, journal), {
-              role: "research",
-              inputs: {
-                question,
-                question_hash: hash,
-                tool_call_budget: share,
-                hierarchy: "X-6a: project docs → codebase → official docs → upstream issues → technical sources → general web",
-                expected_output: planningBriefSkeleton(question, hash),
-                expected_output_if_undecidable: undecidableBriefSkeleton(question, hash),
-                ...previousAttemptInput(previous, "planning brief"),
-              },
-              artifactOut,
-              withWeb: true,
-            });
-            /*
-             * Turns are the observable proxy for tool calls the backend reports;
-             * S-4's telemetry has no per-call counter, so a turn is one call's
-             * worth of budget. PRDR-264 (D-18): nothing here ENFORCES the share —
-             * the session is asked for it and spends what it spends, observed on
-             * the live run as 13 and 20 calls against a budget of 8. The pool is
-             * charged the share; `run_spend_usd` is what bounds the money.
-             */
-            return { toolCalls: Math.max(1, result.turns) };
-          },
-        },
-      });
-    }),
-  };
+type Outputs = Readonly<Record<string, Record<string, unknown>>>;
+
+/**
+ * D-10′ (PRDR-290): the checker's parse of the pack, as VALIDATE handed it on
+ * (C-2¹⁴), or null where WRITE wrote no pack. A parse that will not read FAILS
+ * the phase, as an unreadable SLICE checkpoint does: planning on nothing where
+ * a pack was validated would be the quiet failure.
+ */
+function planningPack(outputs: Outputs): Pack | null {
+  const raw = outputs["VALIDATE"]?.["pack"];
+  if (raw === undefined || raw === null) return null;
+  const parsed = packSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `the VALIDATE checkpoint's parse of the pack is unreadable (${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}) — ` +
+      "delete .detent/state/VALIDATE.json and re-run `detent init`",
+  );
 }
 
+/**
+ * D-10′ (PRDR-290): whether a stack must be decided, and the entry that
+ * decided it. `greenfield` is code's, from the stack markers the specification
+ * phase handed on (C-2¹³). In an existing project the stack is discovered, and
+ * there is no entry to plan on. In greenfield the stack is the decision log's
+ * entry: read from the parse where VALIDATE handed one, and from the log as it
+ * stands where WRITE wrote no pack, since DECIDE records it either way. Both
+ * are read from what the specification phase left, never from DECIDE's
+ * outputs, which the in-flight scan cannot read (C-8″).
+ */
+function planningStack(root: string, outputs: Outputs): { readonly greenfield: boolean; readonly stack: DecidedStack | null } {
+  const greenfield = isGreenfield(planningMarkers(outputs));
+  if (!greenfield) return { greenfield, stack: null };
+  const pack = planningPack(outputs);
+  return { greenfield, stack: pack === null ? readDecisionLog(root).stack : pack.stack };
+}
 
 function determinePhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "DETERMINE_VERIFICATION",
     /**
      * The CONTENTS of the files that define candidate commands: a changed
-     * `scripts.test` must re-bind, which is the same region V-3 watches.
+     * `scripts.test` must re-bind, which is the same region V-3 watches. In
+     * greenfield, the stack entry it binds from (D-10′).
      */
-    digest: (ctx) => {
-      const markers = planningMarkers(ctx.outputs);
-      return `${contentsDigest(deps.root, markers)}|${valueDigest(ctx.outputs["ANALYZE"]?.["greenfield"] ?? null)}`;
-    },
+    digest: (ctx) =>
+      `${contentsDigest(deps.root, planningMarkers(ctx.outputs))}|${valueDigest(planningStack(deps.root, ctx.outputs))}`,
     run: async (ctx) =>
       await determineVerification({
         root: deps.root,
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
-        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
-        analysis: analysisFromOutputs(ctx.outputs),
+        ...planningStack(deps.root, ctx.outputs),
         /**
          * PRDR-156: this was the one handler in this file that did not forward
          * `note`, so V-1‴'s vacuous-gate notice was emitted into an undefined
@@ -311,11 +262,11 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
 function slicePhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "SLICE",
-    /** The CONTENTS of every document, the analysis, the baseline and the prompt: any of them moving re-slices. */
+    /** The CONTENTS of every document, the stack, the baseline and the prompt: any of them moving re-slices. */
     digest: (ctx) => {
       const docs = planningDocs(deps.root, ctx.outputs);
       return `${contentsDigest(deps.root, docs)}|${valueDigest([
-        ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
+        planningStack(deps.root, ctx.outputs),
         deps.planBaseline ?? "production",
         baselineDigest(),
         /* C-2⁵′: re-cutting on a new band is the whole point of the knob. */
@@ -327,8 +278,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
       await withInitJournal(deps.root, async (journal) => await sliceStage({
         root: deps.root,
         docs: planningDocs(deps.root, ctx.outputs),
-        analysis: analysisFromOutputs(ctx.outputs),
-        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
+        ...planningStack(deps.root, ctx.outputs),
         baseline: deps.planBaseline ?? "production",
         sliceSize: deps.sliceSize ?? { min: 12, max: 18 },
         ...(deps.note === undefined ? {} : { note: deps.note }),
@@ -342,9 +292,9 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
 function planPhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "PLAN",
-    /* Chained: PLAN re-runs whenever analysis, the bindings or the slices moved; inside, unchanged slices are reused. */
+    /* Chained: PLAN re-runs whenever the stack, the bindings or the slices moved; inside, unchanged slices are reused. */
     digest: (ctx) =>
-      /* PRDR-082: the planner prompt joins the analysis and the bindings — the
+      /* PRDR-082: the planner prompt joins the stack and the bindings — the
        * inputs that actually determine this plan. */
       /**
        * C-8‴ (PRDR-118): PLAN's own OUTPUT joins its inputs. No phase digest
@@ -354,7 +304,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
        * so re-running PLAN after a deletion costs the write, not the planning.
        */
       `${valueDigest([
-        ctx.outputs["ANALYZE"]?.["analysis"] ?? null,
+        planningStack(deps.root, ctx.outputs),
         ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null,
         ctx.outputs["SLICE"]?.["slices"] ?? null,
         deps.prompts.hashes.planner,
@@ -365,8 +315,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
       const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
       return await planStage({
         root: deps.root,
-        greenfield: ctx.outputs["ANALYZE"]?.["greenfield"] === true,
-        analysis: analysisFromOutputs(ctx.outputs),
+        ...planningStack(deps.root, ctx.outputs),
         docs: planningDocs(deps.root, ctx.outputs),
         boundSlots: bindings.map((b) => b.slot),
         budgets: deps.budgets,

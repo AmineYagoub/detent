@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
 import { msUntilReset } from "../../src/init/session.js";
 import { MockBackend, outageResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
 
 /**
  * D-13 (PRDR-261) — the reset the backend actually states.
@@ -67,7 +67,7 @@ describe("D-13 a reset that states its hour and no minutes", () => {
     const flaky: StageFn = (spec) => {
       calls += 1;
       if (calls === 1) return outageResult(HOURLY);
-      return planner(ANALYSIS(null), DRAFT(["t-100"]))(spec);
+      return planner(DRAFT(["t-100"]))(spec);
     };
     const handlers = planningPipeline({
       root,

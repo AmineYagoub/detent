@@ -18,7 +18,7 @@ import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js"
 import { loadPromptSet, resolveAssignment } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { CLEAN_AUDIT, planningPipeline, decideDefaults } from "./plan-fixture.js";
+import { CLEAN_AUDIT, STACK, planningPipeline, decideDefaults } from "./plan-fixture.js";
 
 /**
  * T-064 (auto-binding), T-065 (setup consent + allowlist), T-066 (PLAN +
@@ -46,15 +46,6 @@ function repo(files: Record<string, string> = {}): string {
   return root;
 }
 
-const ANALYSIS = (stack: object | null) => ({
-  schema_version: SCHEMA_VERSION,
-  summary: "A service.",
-  stack,
-  questions: [],
-  assumptions: [],
-  docs_read: ["PRD.md"],
-});
-
 const DRAFT = (ids: string[]) => ({
   schema_version: SCHEMA_VERSION,
   tickets: ids.map((id, i) => ({
@@ -70,7 +61,7 @@ const DRAFT = (ids: string[]) => ({
   })),
 });
 
-/** The planner answers whichever artifact the spec asks for (four stages since C-2‴). */
+/** The planner answers whichever artifact the spec asks for: SLICE's, PLAN's or a review's (three stages since D-10′). */
 const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
 /** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
 const ONE_SLICE = {
@@ -80,7 +71,7 @@ const ONE_SLICE = {
 };
 
 const planner =
-  (analysis: object, draft: object, review: object = APPROVE_PLAN): StageFn =>
+  (draft: object, review: object = APPROVE_PLAN): StageFn =>
   (spec) => {
     const artifact = spec.artifactOut.endsWith("plan-draft.json")
       ? draft
@@ -88,7 +79,8 @@ const planner =
         ? review
         : spec.artifactOut.endsWith("slices.json")
           ? ONE_SLICE
-          : analysis;
+          : null;
+    if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -138,12 +130,14 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
 
   it("no candidate for a setup-required slot raises AWAIT_SETUP_CONSENT (C-3b's third case)", async () => {
     const root = repo({ "PRD.md": "# spec\n" });
-    const outcome = await determineVerification({ root, greenfield: true, timeoutMs: 30_000 });
+    /* D-10′ (PRDR-290): a stack the log records, with no gate command and no conventional one. A log with no stack asks for the stack instead. */
+    const outcome = await determineVerification({ root, greenfield: true, stack: STACK("brainfuck"), timeoutMs: 30_000 });
 
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
     expect(outcome.interrupt).toBe("AWAIT_SETUP_CONSENT");
     expect(outcome.items).toEqual(["test"]);
+    expect(outcome.message, "the command goes where the log's gates are read from").toContain("## Packages");
     expect(SETUP_REQUIRED_SLOTS).toEqual(["test"]);
   });
 
@@ -159,15 +153,15 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
   it("greenfield proposes from the CHOSEN STACK and never executes — provisional by construction (C-4)", async () => {
     /**
      * A real greenfield tree: no tooling exists yet, so there is nothing to
-     * execute. The bindings follow from ANALYZE's stack decision (D-10) and
-     * are provisional precisely because V-1's execution is deferred to
-     * bootstrap #1.
+     * execute. The bindings follow from the stack the decision log records
+     * (D-10′) and are provisional precisely because V-1's execution is
+     * deferred to bootstrap #1.
      */
     const root = repo({ "PRD.md": "# build it\n" });
     const outcome = await determineVerification({
       root,
       greenfield: true,
-      analysis: ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }) as never,
+      stack: STACK("typescript"),
     });
 
     if (outcome.kind !== "complete") throw new Error("expected completion");
@@ -183,7 +177,7 @@ describe("T-064 auto-binding (C-3b, D-10)", () => {
     const outcome = await determineVerification({
       root,
       greenfield: true,
-      analysis: ANALYSIS({ language: "brainfuck", runtime: "", test_framework: "", rationale: "why not" }) as never,
+      stack: STACK("brainfuck"),
     });
     expect(outcome.kind).toBe("interrupt");
     if (outcome.kind !== "interrupt") throw new Error("unreachable");
@@ -349,7 +343,7 @@ describe("T-065 setup consent (C-6, SEC-1)", () => {
 describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("brownfield: no bootstrap ticket, bindings approved at init", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100", "t-200"])) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** PRESENT defers approval with no `ask` — that is C-7, not a failure. */
@@ -364,7 +358,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("greenfield: bootstrap #1 exists, everything blocks on it, bindings provisional", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
-      planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }), DRAFT(["t-100", "t-200"])),
+      planner: planner(DRAFT(["t-100", "t-200"])),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -387,7 +381,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("bootstrap DONE flips provisional bindings to approved with baselines (C-4's other half)", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
-      planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }), DRAFT(["t-100"])),
+      planner: planner(DRAFT(["t-100"])),
     });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(readBindings(root).bindings.every((b) => b.status === "provisional")).toBe(true);
@@ -492,10 +486,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
   it("a planner that drafts the bootstrap ticket's id has it renamed and flagged — not a fatal, poisoned run (C-4)", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
-      planner: planner(
-        ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" }),
-        DRAFT([BOOTSTRAP_TICKET_ID, "t-100"]),
-      ),
+      planner: planner(DRAFT([BOOTSTRAP_TICKET_ID, "t-100"])),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
@@ -517,7 +508,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
 
   it("the A-2 plan records edges and the hashes of the docs it derived from (C-8)", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100", "t-200"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const plan = planSchema.parse(JSON.parse(readFileSync(planPath(root), "utf8")));
@@ -530,7 +521,7 @@ describe("T-066 PLAN + bootstrap lifecycle (C-4)", () => {
 describe("T-067 PREPARE_AGENTS (S-7)", () => {
   it("assigns from the vendored set only, as role@hash, and the file validates", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const file = assignmentsFileSchema.parse(
@@ -563,7 +554,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
   it("the presentation lists bindings with provenance, tickets, and the bootstrap explanation", async () => {
     const root = repo({ "PRD.md": "# build it\n", ...bareScripts() });
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(),
-      planner: planner(ANALYSIS({ language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD says TS" }), DRAFT(["t-100"])),
+      planner: planner(DRAFT(["t-100"])),
     });
     const printed: string[] = [];
     const result = await runInit(
@@ -582,7 +573,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
 
   it("approving inline records who/when/plan-hash and completes init", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     const result = await runInit(
       root,
       planningPipeline({
@@ -603,7 +594,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
 
   it("declining leaves the plan READY-unapproved — an interrupt, not an error (C-7)", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     const result = await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, askApproval: async () => ({ kind: "declined" }) }),
@@ -620,7 +611,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
 
   it("a non-TTY init defers, and persists the rendering `run` replays (C-7's dual exit)", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.message).toContain("deferred");
@@ -645,7 +636,7 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
 
   it("PRESENT is reached only after every earlier phase completed", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     const result = await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, askApproval: async () => ({ kind: "approved", by: "a" }) }),
@@ -655,7 +646,6 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
       "DISCOVER",
       "AUDIT",
       "DECIDE",
-      "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",
       "PLAN",

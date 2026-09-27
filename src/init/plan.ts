@@ -5,7 +5,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
-import { contractKey, planDraftSchema, type Analysis, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { contractKey, planDraftSchema, type PlanDraftTicket, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { sessionBudget } from "./plan-review.js";
 import { planSlices } from "./plan-slices.js";
 import { wholePlanReview } from "./plan-whole.js";
@@ -67,7 +67,7 @@ const DRAFT_MAPPING_IS_TOTAL: UnmappedDraftKeys extends never ? true : never = t
 void DRAFT_MAPPING_IS_TOTAL;
 
 export { BOOTSTRAP_TICKET_ID } from "./plan-write.js";
-import { BOOTSTRAP_TICKET_ID, bootstrapScaffold, writePlan, type DraftedTicket } from "./plan-write.js";
+import { BOOTSTRAP_TICKET_ID, bootstrapScaffold, writePlan, type DraftedTicket, type WriteDeps } from "./plan-write.js";
 
 export function planDraftPath(root: string): string {
   return path.join(stateDir(root), "state", "plan-draft.json");
@@ -80,7 +80,8 @@ export function planPath(root: string): string {
 export interface PlanDeps {
   readonly root: string;
   readonly greenfield: boolean;
-  readonly analysis: Analysis | null;
+  /** D-10′ (PRDR-290): in greenfield, the stack entry the decision log records, which PLAN hands the writer; null in an existing project. */
+  readonly stack: WriteDeps["stack"];
   /** Repo-relative docs the plan derives from — hashed into A-2 (C-8). */
   readonly docs: readonly string[];
   /** Slots that actually bound, for the bootstrap ticket's criteria. */
@@ -210,7 +211,7 @@ export async function draftPlan(
   const docs = slice !== undefined && slice.docs.length > 0 ? slice.docs : deps.docs;
   await deps.launch({
     stage: "PLAN",
-    analysis: deps.analysis,
+    stack: deps.stack,
     docs,
     greenfield: deps.greenfield,
     bound_slots: deps.boundSlots,
@@ -279,7 +280,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
    * redraft rewrites that text.
    */
   /* A-1⁵: the specs too, so coverage is decided here rather than read by the review. */
-  const early = applyContracts(planned.tickets, slices.map((s) => s.id), [], slices, bootstrapScaffold(deps.greenfield, deps.analysis));
+  const early = applyContracts(planned.tickets, slices.map((s) => s.id), [], slices, bootstrapScaffold(deps.greenfield, deps.stack));
   if (early.findings.length > 0) {
     deps.note?.(
       `contract checks before review: ${String(early.findings.length)} finding(s) proved by code, not paid for — ${early.findings.map((f) => f.tag).join(", ")}`,
@@ -298,7 +299,7 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const settledNames = allTickets(deps.root)
     .filter((t) => t.state === "DONE" && !inPlan.has(t.id))
     .flatMap((t) => t.provides.map((p) => contractKey(p)));
-  const contracts = applyContracts(reviewed.tickets, slices.map((s) => s.id), settledNames, slices, bootstrapScaffold(deps.greenfield, deps.analysis));
+  const contracts = applyContracts(reviewed.tickets, slices.map((s) => s.id), settledNames, slices, bootstrapScaffold(deps.greenfield, deps.stack));
   const drafted = contracts.tickets;
   for (const d of contracts.derived) {
     deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);

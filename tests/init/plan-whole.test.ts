@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
 import { okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, MockBackend, TWO_SLICES, ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -72,8 +72,7 @@ function planner(script: Script, log: string[]): StageFn {
         artifact = APPROVE_PLAN;
       }
     } else {
-      log.push("ANALYZE");
-      artifact = ANALYSIS(null);
+      throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     }
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();

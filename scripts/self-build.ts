@@ -106,7 +106,7 @@ export async function selfBuild(opts: {
   /*
    * Run-only resume (C-9): once a plan is approved, work resumes through
    * `run` alone — re-invoking init on a tree the build itself keeps changing
-   * would re-derive ANALYZE/PLAN every firing (C-8 doing its job, at a price
+   * would re-derive SLICE/PLAN every firing (C-8 doing its job, at a price
    * the resume path never pays).
    */
   const approved = existsSync(path.join(stateDir(dir), "plan", "approval.json"));

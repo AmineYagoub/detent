@@ -64,7 +64,7 @@ const pipeline = (root: string, log: string[], decide: PhaseHandler = writer(roo
   probe("INIT_FS", log),
   probe("DISCOVER", log),
   decide,
-  probe("ANALYZE", log),
+  probe("SLICE", log),
   probe("PLAN", log),
 ];
 
@@ -73,12 +73,12 @@ describe("PRDR-282: a phase keyed after it runs (C-2¹²)", () => {
     const root = repo();
     const log: string[] = [];
     await runInit(root, pipeline(root, log));
-    expect(log).toEqual(["INIT_FS", "DISCOVER", "DECIDE", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["INIT_FS", "DISCOVER", "DECIDE", "SLICE", "PLAN"]);
 
     log.length = 0;
     const again = await runInit(root, pipeline(root, log));
     expect(log, "its own write re-ran nothing").toEqual([]);
-    expect(again.reused).toEqual(["INIT_FS", "DISCOVER", "DECIDE", "ANALYZE", "PLAN"]);
+    expect(again.reused).toEqual(["INIT_FS", "DISCOVER", "DECIDE", "SLICE", "PLAN"]);
   });
 
   it("re-runs, and replays what follows, when anyone else edits what its digest reads", async () => {
@@ -89,7 +89,7 @@ describe("PRDR-282: a phase keyed after it runs (C-2¹²)", () => {
     log.length = 0;
     appendFileSync(path.join(root, "log.md"), "a veto\n");
     const vetoed = await runInit(root, pipeline(root, log));
-    expect(log).toEqual(["DECIDE", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["DECIDE", "SLICE", "PLAN"]);
     expect(vetoed.replayedFrom).toBe("DECIDE");
     expect(vetoed.reused).toEqual(["INIT_FS", "DISCOVER"]);
 
@@ -106,7 +106,7 @@ describe("PRDR-282: a phase keyed after it runs (C-2¹²)", () => {
 
     log.length = 0;
     await runInit(root, pipeline(root, log, unkeyed));
-    expect(log, "the defect this flag exists for: its own write re-ran it and everything after it").toEqual(["DECIDE", "ANALYZE", "PLAN"]);
+    expect(log, "the defect this flag exists for: its own write re-ran it and everything after it").toEqual(["DECIDE", "SLICE", "PLAN"]);
   });
 });
 
@@ -120,8 +120,8 @@ describe("PRDR-282: an interrupt is raised only where INTERRUPT_PHASE lists it (
   it("refuses AWAIT_INFO from a phase it does not list, as a defect in the build", async () => {
     const root = repo();
     const log: string[] = [];
-    await expect(runInit(root, [probe("INIT_FS", log), asking("ANALYZE")])).rejects.toThrow(
-      "ANALYZE raised AWAIT_INFO, which INTERRUPT_PHASE does not let it raise (C-5)",
+    await expect(runInit(root, [probe("INIT_FS", log), asking("SLICE")])).rejects.toThrow(
+      "SLICE raised AWAIT_INFO, which INTERRUPT_PHASE does not let it raise (C-5)",
     );
   });
 
@@ -154,7 +154,7 @@ describe("PRDR-282: an interrupt is raised only where INTERRUPT_PHASE lists it (
  * PRDR-282 — C-8″'s second ask. A standalone phase runs before the planning
  * phases and can change what they read, which the scan before the run cannot
  * see: here DECIDE re-runs for a reason of its own and writes the file
- * ANALYZE's digest reads.
+ * SLICE's digest reads.
  */
 describe("PRDR-282: a re-plan a standalone phase starts is refused while a ticket is in flight (C-8″)", () => {
   function handlers(root: string, log: string[], trigger: { value: string }): PhaseHandler[] {
@@ -162,7 +162,7 @@ describe("PRDR-282: a re-plan a standalone phase starts is refused while a ticke
       probe("INIT_FS", log),
       probe("DISCOVER", log),
       { ...writer(root, log), standalone: true, digest: () => listingDigest([trigger.value]) },
-      { ...probe("ANALYZE", log), digest: () => contentsDigest(root, ["log.md"]) },
+      { ...probe("SLICE", log), digest: () => contentsDigest(root, ["log.md"]) },
       probe("PLAN", log),
     ];
   }
@@ -179,7 +179,7 @@ describe("PRDR-282: a re-plan a standalone phase starts is refused while a ticke
     const refused = await runInit(root, handlers(root, log, trigger));
     expect(refused.exitCode).toBe(2);
     expect(refused.messages.join(" ")).toContain("re-planning refused: t-1 (IN_PROGRESS) still in flight");
-    expect(refused.reachedPhase).toBe("ANALYZE");
+    expect(refused.reachedPhase).toBe("SLICE");
     expect(refused.executed).toEqual(["DECIDE"]);
     expect(log, "nothing on the chain ran").toEqual(["DECIDE"]);
   });
@@ -193,6 +193,6 @@ describe("PRDR-282: a re-plan a standalone phase starts is refused while a ticke
     trigger.value = "b";
     const result = await runInit(root, handlers(root, log, trigger));
     expect(result.exitCode).toBe(0);
-    expect(log).toEqual(["DECIDE", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["DECIDE", "SLICE", "PLAN"]);
   });
 });

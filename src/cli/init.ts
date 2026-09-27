@@ -145,8 +145,8 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
 
   try {
     /**
-     * `init` cannot run against the mock: ANALYZE and PLAN are session outputs,
-     * and a mock that writes nothing produces no analysis. Unlike `run`, which
+     * `init` cannot run against the mock: SLICE and PLAN are session outputs,
+     * and a mock that writes nothing produces no plan. Unlike `run`, which
      * has a genuine fixture path, init needs a live backend — so say so plainly
      * rather than failing three phases later with a confusing artifact error.
      * T-140 broadened the transports: a subscription login or an OAuth token is
@@ -154,7 +154,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
      */
     if (!hasLiveBackendAuth()) {
       process.stderr.write(
-        "`detent init` needs a live backend: ANALYZE and PLAN are session outputs.\n" +
+        "`detent init` needs a live backend: SLICE and PLAN are session outputs.\n" +
           `To fix, ${LIVE_AUTH_HINT}\n(\`detent run\` has a mock path for fixtures; init does not.)\n`,
       );
       return EXIT_NOT_READY;

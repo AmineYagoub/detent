@@ -355,9 +355,10 @@ export function namedRequirements(text: string): string[] {
 /**
  * The ids of `ids` the pack does not define as a requirement or a criterion,
  * in their order. Traceability (C-2⁷): a ticket's `requirement_ids` must
- * resolve here. No planning stage calls this yet, because SLICE and PLAN do
- * not read the pack (C-2⁸, C-4⁵); it is here so that "resolves in the pack"
- * has one definition before they do.
+ * resolve here. No planning stage calls this yet: SLICE and PLAN read only the
+ * stack entry from the parse (D-10′), and their reads of its requirements are
+ * C-2⁸'s and C-4⁵'s to build. It is here so that "resolves in the pack" has one
+ * definition before they do.
  */
 export function unresolvedIds(pack: Pack, ids: readonly string[]): string[] {
   const known = new Set([...pack.requirements.map((r) => r.id), ...pack.criteria.map((c) => c.id)]);

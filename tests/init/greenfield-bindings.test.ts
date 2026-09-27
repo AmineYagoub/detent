@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { readBindings } from "../../src/adapter/drift.js";
 import { determineVerification, languageKey } from "../../src/init/bind.js";
-import { ANALYSIS, repo } from "./plan-fixture.js";
+import { STACK, repo } from "./plan-fixture.js";
 
 /**
  * PRDR-115 — greenfield init refused a Go project whose documents named all
  * three canonical gates: the planner wrote `stack.language` as a sentence and
  * the exact-match table lookup found nothing. The documents win now, and a
- * known language named anywhere in the string still finds its row.
+ * known language named anywhere in the string still finds its row. Since D-10′
+ * (PRDR-290) the stack is the decision log's entry, whose gates are the
+ * documented commands by slot, where ANALYZE's session copied them out.
  */
 describe("PRDR-115 greenfield bindings come from the documents first", () => {
   it("a prose language string still resolves to its table row", () => {
@@ -22,13 +24,11 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
     const outcome = await determineVerification({
       root,
       greenfield: true,
-      analysis: ANALYSIS({
-        language: "Go 1.27 (multi-module monorepo under a committed root go.work; NATS JetStream; containerd)",
-        runtime: "static Go binaries",
-        test_framework: "Go standard-library testing",
-        rationale: "D44",
-        verification: { test: "go test ./...", lint: "go vet ./...", build: "go build ./..." },
-      }) as never,
+      stack: STACK("Go 1.27 (multi-module monorepo under a committed root go.work; NATS JetStream; containerd)", {
+        test: "go test ./...",
+        lint: "go vet ./...",
+        build: "go build ./...",
+      }),
     });
     if (outcome.kind !== "complete") throw new Error(`expected completion, got ${outcome.kind}: ${outcome.message}`);
     const bindings = readBindings(root).bindings;
@@ -45,13 +45,7 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
     const outcome = await determineVerification({
       root,
       greenfield: true,
-      analysis: ANALYSIS({
-        language: "TypeScript",
-        runtime: "node",
-        test_framework: "vitest",
-        rationale: "PRD",
-        verification: { test: "pnpm test", lint: "pnpm lint" },
-      }) as never,
+      stack: STACK("TypeScript", { test: "pnpm test", lint: "pnpm lint" }),
     });
     expect(outcome.kind).toBe("complete");
     const bindings = readBindings(root).bindings;
@@ -66,7 +60,7 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
     const ok = await determineVerification({
       root: bound,
       greenfield: true,
-      analysis: ANALYSIS({ language: "Zig", runtime: "", test_framework: "", rationale: "", verification: { test: "zig build test" } }) as never,
+      stack: STACK("Zig", { test: "zig build test" }),
     });
     expect(ok.kind).toBe("complete");
     expect(readBindings(bound).bindings.find((b) => b.slot === "test")?.adapter).toBe("greenfield:documented");
@@ -75,7 +69,7 @@ describe("PRDR-115 greenfield bindings come from the documents first", () => {
     const asks = await determineVerification({
       root: unbound,
       greenfield: true,
-      analysis: ANALYSIS({ language: "Zig", runtime: "", test_framework: "", rationale: "" }) as never,
+      stack: STACK("Zig"),
     });
     expect(asks.kind).toBe("interrupt");
     if (asks.kind === "interrupt") expect(asks.interrupt).toBe("AWAIT_SETUP_CONSENT");

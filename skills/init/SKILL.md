@@ -20,7 +20,7 @@ Arguments passed by the user: $ARGUMENTS
   and never fabricate discoveries, analyses, bindings, tickets, or approval
   records. You drive the pipeline by invoking it and by relaying answers only
   a human gave.
-- **Live backend required.** ANALYZE and PLAN are session outputs; the
+- **Live backend required.** SLICE and PLAN are session outputs; the
   pipeline needs `ANTHROPIC_API_KEY` in the environment and says so itself if
   it is missing — report that message verbatim and stop.
 
@@ -32,14 +32,13 @@ Invoke the headless entry from the Detent checkout (this plugin's root):
 
 Pass through flags from $ARGUMENTS (for example `--replan`). Re-invoking is
 always safe: every phase checkpoints, and C-8 replays exactly what changed —
-editing a planning document replays ANALYZE-forward; editing nothing replays
-nothing.
+editing a planning document replays the phases that read it, and the planning
+after them; editing nothing replays nothing.
 
-## The twelve phases (C-4.1, in order)
+## The eleven phases (C-4.1, in order)
 
 `INIT_FS` → `DISCOVER` → `AUDIT` → `DECIDE` → `WRITE` → `VALIDATE` →
-`ANALYZE` → `DETERMINE_VERIFICATION` → `SLICE` → `PLAN` → `PREPARE_AGENTS` →
-`PRESENT`
+`DETERMINE_VERIFICATION` → `SLICE` → `PLAN` → `PREPARE_AGENTS` → `PRESENT`
 
 `AUDIT` (C-2⁶) reads the documents before anything plans from them: passages
 that contradict each other, gaps, and, in an existing project, what the
@@ -86,6 +85,11 @@ for the human to settle. Every round is recorded in `docs/conformance.json`, so
 re-invoking carries on from the last. A conforming pack runs the checker
 alone; an edited one is re-validated for the edit and whatever cites it.
 
+`DETERMINE_VERIFICATION` binds the project's gate commands. In an existing
+project it discovers them and runs each before binding it; in a new one,
+where nothing can run yet, it proposes the commands the decision log's stack
+entry records (D-10′), and the bootstrap ticket proves them.
+
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first — and `PLAN` then plans every slice in turn, one
 session-sized ticket set per slice, reviews each, reviews the whole plan for
@@ -120,12 +124,12 @@ decision yourself.
    `VALIDATE` runs the checker again, and carries on from the round it stopped
    at. At `PRESENT` (C-3′), the whole
    plan is written first, and every question planning could not answer — from
-   analysis, slicing, and each slice's drafting — is presented ONCE with it,
+   slicing and each slice's drafting — is presented ONCE with it,
    each with the assumption the plan proceeds on. It becomes `AWAIT_INFO` only
    when a question is blocking: no assumption could carry it. Channel: the
    answers go INTO the planning documents; the human edits (or dictates edits
-   they approve), then re-invoke — changed contents replay ANALYZE-forward
-   (C-8), and only the slices whose inputs moved are re-planned. Answers
+   they approve), then re-invoke — changed contents replay the phases that read
+   them (C-8), and only the slices whose inputs moved are re-planned. Answers
    written to `docs/founder-decisions.md` re-run DECIDE and the planning after
    it, never AUDIT: that file is the decision log, which AUDIT's key leaves out
    (C-2¹¹, C-2¹²).

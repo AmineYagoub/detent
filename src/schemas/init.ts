@@ -21,7 +21,11 @@ export const INIT_PHASES = [
   "WRITE",
   /** C-2¹⁴ (PRDR-284): the pack is checked and reviewed in rounds, and fixed, before anything plans from it. */
   "VALIDATE",
-  "ANALYZE",
+  /**
+   * D-10′ (PRDR-290): ANALYZE stood here, and is folded into DECIDE. Nothing
+   * binds before a stack exists, and the stack exists after DECIDE, which
+   * records it in greenfield; the pack's parse replaces the analysis.
+   */
   "DETERMINE_VERIFICATION",
   /** C-2‴ (PRDR-117): the whole pack is cut into ordered increments before any ticket is drafted. */
   "SLICE",
@@ -76,14 +80,9 @@ export const INTERRUPT_PHASE = {
 
 /*
  * ---------------------------------------------------------------------------
- * ANALYZE's artifact (C-3)
+ * The planning stages' questions (C-3′)
  */
 
-/**
- * What ANALYZE produces. In greenfield the chosen `stack` is an ANALYZE
- * output, which is precisely why D-10 puts analysis before verification
- * determination — there is nothing to bind against until the stack exists.
- */
 /**
  * C-3′ (PRDR-117): a question the documents cannot answer no longer stops
  * planning. It carries the ASSUMPTION the plan proceeds on, is batched with
@@ -98,50 +97,6 @@ export const planQuestionSchema = z.strictObject({
   assumption: z.string().default(""),
 });
 export type PlanQuestion = z.infer<typeof planQuestionSchema>;
-
-export const analysisSchema = z.strictObject({
-  schema_version: z.literal(SCHEMA_VERSION),
-  summary: nonEmptyString,
-  /** `null` in brownfield: the stack is discovered, not chosen. */
-  stack: z
-    .strictObject({
-      language: nonEmptyString,
-      runtime: z.string().default(""),
-      test_framework: z.string().default(""),
-      rationale: z.string().default(""),
-      /**
-       * A-1⁶ (PRDR-206): the files the chosen stack's scaffold creates that
-       * later tickets lean on — the manifest, the compiler and test
-       * configuration. The bootstrap ticket PROVIDES each as a `file`
-       * contract, so a ticket consuming `package.json` resolves to it instead
-       * of being reported as consuming a file no ticket creates. Additive and
-       * defaulted: an analysis written before the field reads with none, and
-       * nothing is ever inferred from a file's name.
-       */
-      scaffold_files: z.array(nonEmptyString).default([]),
-      /**
-       * PRDR-115: the verification commands the DOCUMENTS name, exactly as
-       * written. When present they are the provisional bindings; the stack
-       * table is only the fallback for documents that name none.
-       */
-      verification: z
-        .strictObject({
-          test: nonEmptyString.optional(),
-          lint: nonEmptyString.optional(),
-          typecheck: nonEmptyString.optional(),
-          build: nonEmptyString.optional(),
-          e2e: nonEmptyString.optional(),
-        })
-        .optional(),
-    })
-    .nullable(),
-  /** C-3: un-implementable specs become a BATCH of questions, never a drip. */
-  questions: z.array(planQuestionSchema).default([]),
-  assumptions: z.array(z.strictObject({ claim: nonEmptyString, evidence: z.string().default("") })).default([]),
-  /** Repo-relative POSIX paths ANALYZE actually read. */
-  docs_read: z.array(nonEmptyString).default([]),
-});
-export type Analysis = z.infer<typeof analysisSchema>;
 
 /*
  * ---------------------------------------------------------------------------

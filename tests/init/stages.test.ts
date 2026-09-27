@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
-import { analysisPath, analysisSkeleton, analyzeStage, isGreenfield } from "../../src/init/analyze.js";
+import { isGreenfield } from "../../src/init/greenfield.js";
 import { planDraftSkeleton } from "../../src/init/plan.js";
 import { presentStage } from "../../src/init/present.js";
-import { analysisSchema, planDraftSchema } from "../../src/schemas/init.js";
+import { planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { msUntilReset } from "../../src/init/session.js";
@@ -19,7 +19,7 @@ import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { CLEAN_AUDIT, planningPipeline } from "./plan-fixture.js";
 
-/** T-061 (doc discovery), T-062 (ANALYZE), T-063 (planning research). */
+/** T-061 (doc discovery), T-062 (ANALYZE, folded into DECIDE by D-10′), T-063 (planning research). */
 
 const PROMPTS = loadPromptSet();
 const BUDGETS = Object.fromEntries(
@@ -87,10 +87,9 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
     /**
      * The live ANALYZE session followed its prompt into a plan-shaped
      * mega-document the strict validator refused. The skeletons ARE the
-     * contract the session sees; these parses pin them to the schemas.
+     * contract the session sees; these parses pin them to the schemas. ANALYZE's
+     * went with ANALYZE (D-10′), and SLICE's is pinned in `slicing.test.ts`.
      */
-    expect(analysisSchema.parse(analysisSkeleton(true)).stack?.language).toBeTruthy();
-    expect(analysisSchema.parse(analysisSkeleton(false)).stack).toBeNull();
     expect(planDraftSchema.parse(planDraftSkeleton()).tickets).toHaveLength(1);
   });
 
@@ -125,15 +124,6 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
  * T-062
  */
 
-const ANALYSIS_BROWNFIELD = {
-  schema_version: SCHEMA_VERSION,
-  summary: "An existing TypeScript service with vitest already wired.",
-  stack: null,
-  questions: [],
-  assumptions: [{ claim: "tests live under tests/", evidence: "tests/ exists" }],
-  docs_read: ["PRD.md"],
-};
-
 /** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
 const ONE_SLICE = {
   schema_version: SCHEMA_VERSION,
@@ -142,14 +132,15 @@ const ONE_SLICE = {
 };
 
 /**
- * The planner serves several phases (ANALYZE, SLICE, PLAN); which artifact it
- * must write is named in the spec, so the fixture answers the request rather
- * than guessing from call order.
+ * The planner serves several phases (SLICE, PLAN); which artifact it must write
+ * is named in the spec, so the fixture answers the request rather than guessing
+ * from call order.
  */
 const plannerStage =
-  (analysis: object, draft: object): StageFn =>
+  (draft: object): StageFn =>
   (spec) => {
-    const payload = spec.artifactOut.endsWith("plan-draft.json") ? draft : spec.artifactOut.endsWith("slices.json") ? ONE_SLICE : analysis;
+    if (!spec.artifactOut.endsWith("plan-draft.json") && !spec.artifactOut.endsWith("slices.json")) throw new Error(`no scripted artifact for ${spec.artifactOut}`);
+    const payload = spec.artifactOut.endsWith("plan-draft.json") ? draft : ONE_SLICE;
     writeFileSync(spec.artifactOut, `${JSON.stringify(payload)}\n`);
     return okResult();
   };
@@ -171,111 +162,11 @@ const DRAFT = {
   ],
 };
 
-describe("T-062 ANALYZE (C-3, D-10)", () => {
-  it("greenfield is the absence of stack markers, and the planner must choose a stack", async () => {
-    const root = repo({ "PRD.md": "# build a thing\n" });
+describe("T-062 the planning sessions (C-3, D-10′)", () => {
+  it("greenfield is the absence of stack markers", () => {
+    /** D-10′ (PRDR-290): no planning session chooses the stack now; DECIDE records it as a decision. */
     expect(isGreenfield([])).toBe(true);
-
-    let sawInputs: Record<string, unknown> | null = null;
-    const outcome = await analyzeStage({
-      root,
-      docs: ["PRD.md"],
-      stackMarkers: [],
-      launch: async (inputs) => {
-        sawInputs = inputs;
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({
-            ...ANALYSIS_BROWNFIELD,
-            stack: { language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD says TS" },
-          }),
-        );
-      },
-    });
-
-    expect(outcome.kind).toBe("complete");
-    if (outcome.kind !== "complete") throw new Error("unreachable");
-    expect(sawInputs!["greenfield"]).toBe(true);
-    /** D-10: the stack decision is an ANALYZE output that T-064 consumes. */
-    expect((outcome.outputs["analysis"] as { stack: { language: string } }).stack.language).toBe("typescript");
-    expect(outcome.outputs["greenfield"]).toBe(true);
-  });
-
-  it("a greenfield analysis with no stack fails the phase — D-10 has nothing to bind", async () => {
-    const root = repo({ "PRD.md": "# thing\n" });
-    await expect(
-      analyzeStage({
-        root,
-        docs: ["PRD.md"],
-        stackMarkers: [],
-        launch: async () => {
-          /** stack: null */
-          writeFileSync(analysisPath(root), JSON.stringify(ANALYSIS_BROWNFIELD));
-        },
-      }),
-    ).rejects.toThrow(/without choosing a stack/);
-  });
-
-  it("brownfield keeps stack null — the stack is discovered, not chosen", async () => {
-    const root = repo({ "PRD.md": "# thing\n", "package.json": "{}\n" });
-    const outcome = await analyzeStage({
-      root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
-      launch: async () => {
-        writeFileSync(analysisPath(root), JSON.stringify(ANALYSIS_BROWNFIELD));
-      },
-    });
-    expect(outcome.kind).toBe("complete");
     expect(isGreenfield(["package.json"])).toBe(false);
-  });
-
-  it("missing info no longer stops ANALYZE: every open question rides to PRESENT with its assumption (C-3′, PRDR-117)", async () => {
-    const root = repo({ "PRD.md": "# vague\n" });
-    const notes: string[] = [];
-    const outcome = await analyzeStage({
-      root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
-      note: (t) => notes.push(t),
-      launch: async () => {
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({
-            ...ANALYSIS_BROWNFIELD,
-            questions: [
-              { id: "q1", question: "Which database backs the ledger?", blocking: true },
-              { id: "q2", question: "Is multi-tenancy in scope for v1?", blocking: false, assumption: "single tenant" },
-              { id: "q3", question: "Preferred log format?", blocking: false, assumption: "JSON lines" },
-            ],
-          }),
-        );
-      },
-    });
-
-    /** C-3′: the phase completes; the batch is asked once, with the whole plan, at PRESENT. */
-    expect(outcome.kind).toBe("complete");
-    if (outcome.kind !== "complete") throw new Error("unreachable");
-    const open = outcome.outputs["open_questions"] as { id: string; blocking: boolean; assumption: string }[];
-    expect(open.map((q) => q.id)).toEqual(["q1", "q2", "q3"]);
-    expect(open.filter((q) => q.blocking).map((q) => q.id)).toEqual(["q1"]);
-    expect(open[1]!.assumption).toBe("single tenant");
-    expect(notes.join(" ")).toContain("carried to PRESENT");
-    expect(notes.join(" ")).toContain("blocking");
-  });
-
-  it("an invalid analysis fails the phase rather than becoming a user question (P2)", async () => {
-    const root = repo({ "PRD.md": "# thing\n" });
-    await expect(
-      analyzeStage({
-        root,
-        docs: ["PRD.md"],
-        stackMarkers: ["package.json"],
-        launch: async () => {
-          writeFileSync(analysisPath(root), JSON.stringify({ schema_version: SCHEMA_VERSION, summary: "" }));
-        },
-      }),
-    ).rejects.toThrow(/invalid analysis|no analysis artifact/);
   });
 
   /**
@@ -296,7 +187,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
       "package.json": '{"scripts":{"test":"vitest run"}}\n',
       "AGENTS.md": `# Rules\n\n- ${marker}\n`,
     });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -310,7 +201,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
    * SEC-3 (PRDR-184) — the init session may write its artifact, judged by the
    * REAL guard against the REAL policy.
    *
-   * `analysisPath` is `.detent/state/analysis.json`; PRDR-149 added
+   * ANALYZE's artifact was `.detent/state/analysis.json`; PRDR-149 added
    * `.detent/state/**` to the structural floor, correctly — it holds the
    * checkpoints and the run lock. Protected globs are consulted before the
    * surface, so from that commit every init session was denied the one write it
@@ -320,7 +211,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
    */
   it("an init session can write its own artifact and nothing else under the floor (PRDR-184)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -345,7 +236,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
 
   it("the planner session gets the read-only surface plus ONE scoped write — its artifact (S-1′, PRDR-067)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(ANALYSIS_BROWNFIELD, DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -368,7 +259,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
      * draft as `<slice>-part1.json` and `-part2.json` instead, and the phase
      * found nothing where it was told to look.
      */
-    expect(call!.spec.policy?.surface).toEqual([".detent/state/analysis.json"]);
+    expect(call!.spec.policy?.surface, "SLICE is the first planner session since D-10′").toEqual([".detent/state/slices.json"]);
     expect(call!.spec.policy?.workRoot).toBe(root);
     for (const shut of [".detent/plan/**", ".detent/config.json", ".detent/bindings.json"]) {
       expect(call!.spec.policy?.protectedGlobs).toContain(shut);
@@ -377,7 +268,7 @@ describe("T-062 ANALYZE (C-3, D-10)", () => {
 
     expect(writeRules).toHaveLength(1);
     expect(writeRules[0]).toBe(`Write(/${call!.spec.artifactOut})`);
-    expect(writeRules[0]).toContain(".detent/state/analysis.json");
+    expect(writeRules[0]).toContain(".detent/state/slices.json");
   });
 });
 
@@ -537,29 +428,6 @@ describe("T-063 planning research (C-3a, D-11)", () => {
     expect(CEILINGS.failure_research_tool_calls.scope).toBe("research-session");
   });
 
-  it("research answers a blocking question so ANALYZE completes without interrupting", async () => {
-    const root = repo({ "PRD.md": "# uses an unfamiliar API\n" });
-    const question = "Does the v3 API still accept callbacks?";
-    const outcome = await analyzeStage({
-      root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
-      launch: async () => {
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({ ...ANALYSIS_BROWNFIELD, questions: [{ id: "q1", question, blocking: true }] }),
-        );
-      },
-      research: { budget: 16, researchOne: writes(VALID_BRIEF, 2) },
-    });
-
-    /** The question was researched, not asked: no interrupt at all. */
-    expect(outcome.kind).toBe("complete");
-    if (outcome.kind !== "complete") throw new Error("unreachable");
-    expect(outcome.outputs["research_tool_calls"]).toBe(2);
-    expect((outcome.outputs["research_briefs"] as string[])[0]).toBe(questionHash(question));
-  });
-
   it("briefs live in the committed research/planning tree (F-1, P8)", async () => {
     const root = repo();
     const question = "shared knowledge?";
@@ -594,7 +462,7 @@ describe("PRDR-185 init waits out a backend outage", () => {
       calls += 1;
       /* PRDR-188: DERIVED from the SDK shape, not hand-built — the gap PRDR-187 lived in. */
       if (calls === 1) return outageResult(limit);
-      return plannerStage(ANALYSIS_BROWNFIELD, DRAFT)(spec);
+      return plannerStage(DRAFT)(spec);
     };
     const notes: string[] = [];
     const handlers = planningPipeline({
@@ -693,7 +561,7 @@ describe("PRDR-189 the wait honours the reset the limit states", () => {
     const flaky: StageFn = (spec) => {
       calls += 1;
       if (calls === 1) return outageResult(LIVE);
-      return plannerStage(ANALYSIS_BROWNFIELD, DRAFT)(spec);
+      return plannerStage(DRAFT)(spec);
     };
     const handlers = planningPipeline({
       root,

@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { okResult } from "../../src/sessions/mock.js";
 import { DOCS, MockBackend, R, TWO_SLICES, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 
@@ -27,7 +27,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
     expect(existsSync(path.join(sliceCacheDir(root), "s01.json"))).toBe(true);
 
     /** Only the billing document changes: s01 read nothing that moved. */
@@ -35,13 +35,13 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     log.splice(0);
     notes.splice(0);
     await runInit(root, handlers);
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
     expect(notes.join("\n")).toContain("s01 skeleton: reused — nothing it read has changed (C-8)");
 
     /** C-8′: a replan is a fresh planning session — the cache is wiped, every slice drafted again. */
     log.splice(0);
     await runInit(root, handlers, { replan: true });
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
   });
 
   /**
@@ -167,9 +167,8 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     await expect(runInit(root, handlers())).resolves.toBeDefined();
   });
 
-  it("C-8‴: a re-analysis does not re-plan slices whose own documents never moved", async () => {
+  it("C-8‴: an edit to one slice's document re-plans that slice alone", async () => {
     const root = repo(DOCS);
-    let summary = "the first analysis";
     const log: string[] = [];
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
@@ -180,7 +179,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
           log.push(`PLAN:${sliceOf(inputs)}`);
           artifact = twoSliceDraft(inputs);
         } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = APPROVE_PLAN;
-        else artifact = { ...ANALYSIS(null), summary };
+        else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
       },
@@ -190,12 +189,13 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     expect(log).toEqual(["PLAN:s01", "PLAN:s02"]);
 
     /**
-     * Editing one slice's document re-runs ANALYZE, and ANALYZE is a model act
-     * — its prose differs every time. While the whole analysis was in every
-     * slice's cache key, that drift re-planned the entire product for a typo.
+     * PRDR-118 pinned this on ANALYZE, a model act whose prose differed every
+     * time: while the whole analysis was in every slice's cache key, that drift
+     * re-planned the entire product for a typo. PRDR-290 folded ANALYZE into
+     * DECIDE, so nothing between the documents and the keys drifts but SLICE,
+     * which this planner writes the same way twice.
      */
     log.splice(0);
-    summary = "the second analysis, worded differently";
     writeFileSync(path.join(root, "prd-billing.md"), "# billing, revised\n");
     await runInit(root, handlers());
     expect(log).toEqual(["PLAN:s02"]);

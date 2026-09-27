@@ -6,7 +6,7 @@ import { PACK_PATHS, isModulePrd, type ConformanceRecord, type PackFinding } fro
 import type { ReviewFinding } from "../schemas/validate.js";
 import type { Sandbox } from "../sessions/sandbox.js";
 import { probeSandbox } from "../sessions/sandbox-probe.js";
-import { isGreenfield } from "./analyze.js";
+import { isGreenfield } from "./greenfield.js";
 import { docPatternsFor } from "./discover-docs.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
 import { at } from "./pack-check-rules.js";
@@ -267,7 +267,8 @@ function conclude(deps: ValidateStageDeps, rounds: readonly Round[]): PhaseOutco
 /**
  * The loop is over: the record says so, and the pack and its risks go to
  * planning. The checker's parse of the pack is handed on beside them, as C-2⁶
- * says, and no planning phase reads it yet: D-10′ gives it its reader.
+ * says: DETERMINE_VERIFICATION binds, and SLICE and PLAN plan, on the stack
+ * entry they read from it (D-10′, PRDR-290).
  */
 function finished(deps: ValidateStageDeps, rounds: readonly Round[], run: { readonly ran: boolean; readonly reason?: string }): PhaseOutcome {
   const docs = packDocuments(deps.root);

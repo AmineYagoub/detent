@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
-import { ANALYSIS, LONE_CANDIDATE } from "./plan-fixture.js";
+import { LONE_CANDIDATE } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -48,7 +48,6 @@ export const inputsOf = (spec: SessionSpec): Record<string, unknown> =>
 export const sliceOf = (inputs: Record<string, unknown>): string => (inputs["slice"] as { id: string }).id;
 
 export interface Script {
-  readonly analysis?: object;
   readonly slices?: object;
   readonly draft: (inputs: Record<string, unknown>) => object;
   readonly review: (inputs: Record<string, unknown>) => object;
@@ -70,8 +69,7 @@ export function scriptedPlanner(script: Script, log: string[], seen: Record<stri
       log.push(`REVIEW:${String(inputs["scope"])}${inputs["scope"] === "slice" ? `:${sliceOf(inputs)}` : ""}`);
       artifact = script.review(inputs);
     } else {
-      log.push("ANALYZE");
-      artifact = script.analysis ?? ANALYSIS(null);
+      throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     }
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();

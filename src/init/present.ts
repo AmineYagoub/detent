@@ -177,7 +177,6 @@ export function presentInputsFromOutputs(
   const takenIds = new Set<string>();
   const questions: PlanQuestion[] = [];
   for (const q of [
-    ...list<PlanQuestion>("ANALYZE", "open_questions"),
     ...list<PlanQuestion>("SLICE", "questions"),
     ...list<PlanQuestion>("PLAN", "questions"),
   ].filter(isQuestion)) {
@@ -190,7 +189,7 @@ export function presentInputsFromOutputs(
       continue;
     }
     /**
-     * PRDR-119: three stages number their questions independently, so the
+     * PRDR-119: the stages number their questions independently, so the
      * batch could show the same id twice. The id is what a human writes down
      * when answering, so it has to mean one question.
      */
@@ -357,7 +356,7 @@ export function renderPresentation(input: PresentInput): string {
  *
  * "Answer them in the planning documents" was the whole instruction, and it is
  * unfollowable: a `planning-answers.md` at the root matches none of DISCOVER's
- * globs, so the file is never read, ANALYZE re-derives, and the same question
+ * globs, so the file is never read, planning re-derives, and the same question
  * returns with nothing to distinguish it from an answer judged inadequate.
  */
 export function answerInstruction(patterns: readonly string[]): string {

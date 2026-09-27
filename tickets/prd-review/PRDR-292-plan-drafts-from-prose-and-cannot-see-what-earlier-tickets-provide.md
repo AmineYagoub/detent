@@ -37,3 +37,11 @@ and anything the pack leaves unsettled is a defect in the pack, not a question f
 The redesign plan's §5. Criteria copied verbatim give PRDR-293's coverage check something to
 count, and the run phase something to test. Catalogue ids give contracts one spelling. A spec defect
 is routed like any other amendment.
+
+## From PRDR-290
+
+ANALYZE is gone (D-10″). A draft is handed `stack`, the entry the decision log records in
+greenfield and null otherwise, where it was handed `analysis`, and no other part of the checker's
+parse. The parse is VALIDATE's `pack` output; `planningPack` in `src/init/pipeline.ts` reads it and
+returns null where VALIDATE handed none, which is where the records this ticket drafts from do not
+exist.

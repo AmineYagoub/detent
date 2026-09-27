@@ -13,7 +13,7 @@ import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -56,7 +56,6 @@ const inputsOf = (spec: SessionSpec): Record<string, unknown> =>
 const sliceOf = (inputs: Record<string, unknown>): string => (inputs["slice"] as { id: string }).id;
 
 interface Script {
-  readonly analysis?: object;
   readonly slices?: object;
   readonly draft: (inputs: Record<string, unknown>) => object;
   readonly review: (inputs: Record<string, unknown>) => object;
@@ -77,10 +76,7 @@ function scriptedPlanner(script: Script, log: string[], seen: Record<string, unk
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
       log.push(`REVIEW:${String(inputs["scope"])}${inputs["scope"] === "slice" ? `:${sliceOf(inputs)}` : ""}`);
       artifact = script.review(inputs);
-    } else {
-      log.push("ANALYZE");
-      artifact = script.analysis ?? ANALYSIS(null);
-    }
+    } else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -134,7 +130,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     /** Every slice in turn, each reviewed as its own plan; then the whole; then only the faulted slice again; then the whole again. */
-    expect(log).toEqual(["ANALYZE", "SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole", "PLAN:s02", "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole", "PLAN:s02", "REVIEW:whole"]);
     /** The later slice drafts with the earlier slice's tickets in view, and the slice review with the same index. */
     const s02Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s02")!;
     expect(s02Draft["plan_index"]).toEqual([
@@ -178,7 +174,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
-          analysis: { ...ANALYSIS(null), questions: [{ id: "q1", question: "Which payment provider?", blocking: true, assumption: "" }] },
+          slices: { ...TWO_SLICES, questions: [{ id: "q1", question: "Which payment provider?", blocking: true, assumption: "" }] },
           draft: twoSliceDraft,
           review: () => APPROVE_PLAN,
         },
@@ -190,8 +186,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(result.reachedPhase).toBe("PRESENT");
     expect(result.interrupt?.interrupt).toBe("AWAIT_INFO");
     expect(result.interrupt?.items).toEqual(["Which payment provider?"]);
-    /** ANALYZE, SLICE and PLAN all completed first: the plan exists on disk before anyone is asked anything. */
-    expect(result.executed).toEqual(expect.arrayContaining(["ANALYZE", "SLICE", "PLAN", "PREPARE_AGENTS"]));
+    /** SLICE and PLAN both completed first: the plan exists on disk before anyone is asked anything. */
+    expect(result.executed).toEqual(expect.arrayContaining(["SLICE", "PLAN", "PREPARE_AGENTS"]));
     expect(allTickets(root)).toHaveLength(4);
     expect(result.interrupt?.message).toContain("[BLOCKING] q1: Which payment provider?");
     expect(result.interrupt?.message).toContain("1 blocking question(s) need an answer");
@@ -405,9 +401,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         } else if (spec.artifactOut.endsWith("plan-review.json")) {
           /** The first review asks for a revision, so the slice drafts twice. */
           artifact = drafts === 1 ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] } : APPROVE_PLAN;
-        } else {
-          artifact = { ...ANALYSIS(null), questions: [{ id: "s01-q1", question: "What is the apps domain?", blocking: false, assumption: "ksarapp.dev" }] };
-        }
+        } else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
       },
@@ -424,7 +418,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
      */
     const block = message.split("Open questions (")[1]?.split("\n\n")[0] ?? "";
     const ids = [...block.matchAll(/^ {2}(?:\[BLOCKING\] )?(\S+): /gm)].map((m) => m[1] as string);
-    expect(ids.length, "four questions from three stages, all shown").toBe(4);
+    expect(ids.length, "three questions from two stages, all shown").toBe(3);
     expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(ids.length);
     /** Both of the slice's drafts contributed, and neither was lost to the other's id. */
     expect(message).toContain("Which payment rail serves the USD tier?");
@@ -465,8 +459,10 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
    * `presentInputsFromOutputs` never reads — so its one wrong-type case was
    * structurally equivalent to `{}`, and the five others were shapes the
    * function already tolerated before the commit that introduced them. The
-   * keys below are the three question sources it does read, and the shapes are
-   * the ones that were observed to throw.
+   * keys below are the question sources it does read, and the shapes are the
+   * ones that were observed to throw. There were three sources until PRDR-290
+   * folded ANALYZE into DECIDE; its `open_questions` cases moved to SLICE's
+   * `questions`, so they still reach a key the builder reads.
    */
   const FOREIGN: Record<string, Record<string, unknown>>[] = [
     {},
@@ -474,11 +470,10 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
     { PLAN: { plan: null } },
     { PLAN: { plan: { slices: "not an array" } } },
     { SLICE: { slices: [] }, PLAN: { plan: { slices: [] } } },
-    { ANALYZE: { open_questions: "not an array" } },
     { SLICE: { questions: "not an array" } },
     { PLAN: { questions: "not an array" } },
-    { ANALYZE: { open_questions: [null] } },
-    { ANALYZE: { open_questions: [{}] } },
+    { SLICE: { questions: [null] } },
+    { SLICE: { questions: [{}] } },
     { PLAN: { review_findings: "not an array", derived_edges: 7 } },
     /**
      * PRDR-164: ELEMENT shapes for the other two fields. The first pass

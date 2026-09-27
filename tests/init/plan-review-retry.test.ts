@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
 import { normaliseVerdict } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -18,7 +18,7 @@ const FINDING = { tag: "sizing", finding: "t-100 is three tickets", ticket: "t-1
 function scriptedPlanner(reviews: readonly (object | null)[]): { stage: StageFn; reviewInputs: Record<string, unknown>[] } {
   let n = 0;
   const reviewInputs: Record<string, unknown>[] = [];
-  const base = planner(ANALYSIS(null), DRAFT(["t-100"]));
+  const base = planner(DRAFT(["t-100"]));
   const stage: StageFn = (spec) => {
     if (!spec.artifactOut.endsWith("plan-review.json")) return base(spec);
     reviewInputs.push((JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs);

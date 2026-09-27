@@ -340,7 +340,7 @@ describe("C-9‴ a run executes only the plan a human approved", () => {
       },
     ];
     expect(() =>
-      writePlan({ root, greenfield: false, analysis: null, docs: [], boundSlots: [] }, replacement, []),
+      writePlan({ root, greenfield: false, stack: null, docs: [], boundSlots: [] }, replacement, []),
     ).toThrow(/claimed by a live process/);
     expect(existsSync(path.join(root, ".detent/plan/t1.json")), "the ticket must survive").toBe(true);
   });

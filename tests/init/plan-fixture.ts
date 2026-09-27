@@ -7,6 +7,7 @@ import { gitInit, removeTree, tmpTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { buildPipeline, type PipelineDeps } from "../../src/init/pipeline.js";
+import type { DecidedStack } from "../../src/init/decide-log.js";
 
 /** Shared init-test fixture: one planner mock, one repo shape, one budget set. */
 
@@ -27,13 +28,17 @@ export function repo(files: Record<string, string> = {}): string {
   return root;
 }
 
-export const ANALYSIS = (stack: object | null): object => ({
-  schema_version: SCHEMA_VERSION,
-  summary: "s",
-  stack,
-  questions: [],
-  assumptions: [],
-  docs_read: ["PRD.md"],
+/**
+ * D-10′ (PRDR-290): a stack entry as the decision log records it and the
+ * pack's parse carries it, the gates by slot; DETERMINE_VERIFICATION binds
+ * from it in greenfield.
+ */
+export const STACK = (language: string, gates: Readonly<Record<string, string>> = {}): DecidedStack => ({
+  decision: "X-1",
+  language,
+  toolchain: "the documents' toolchain",
+  scaffold_files: [],
+  gates,
 });
 
 export const DRAFT = (ids: string[]): object => ({
@@ -110,9 +115,9 @@ export const ONE_SLICE = {
   questions: [],
 };
 
-/** The planner answers whichever artifact the spec asks for (four stages since C-2‴). */
+/** The planner answers whichever artifact the spec asks for: SLICE's, PLAN's or a review's (three stages since D-10′). */
 export const planner =
-  (analysis: object, draft: object, review: object = APPROVE_PLAN, slices: object = ONE_SLICE): StageFn =>
+  (draft: object, review: object = APPROVE_PLAN, slices: object = ONE_SLICE): StageFn =>
   (spec) => {
     const artifact = spec.artifactOut.endsWith("plan-draft.json")
       ? draft
@@ -120,7 +125,8 @@ export const planner =
         ? review
         : spec.artifactOut.endsWith("slices.json")
           ? slices
-          : analysis;
+          : null;
+    if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };

@@ -6,9 +6,10 @@ import type { Binding } from "../schemas/records.js";
 import type { GateSlot } from "../schemas/gates.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { createHash } from "node:crypto";
-import type { Analysis } from "../schemas/init.js";
+import type { DecidedStack } from "./decide-log.js";
 import type { PhaseOutcome } from "./machine.js";
 import { scrub } from "../kernel/scrub.js";
+import { DECISION_LOG_PATH } from "../schemas/pack.js";
 
 /**
  * T-064 — DETERMINE_VERIFICATION and auto-binding (C-3b, D-10, V-1).
@@ -42,8 +43,12 @@ export interface DetermineDeps {
   readonly root: string;
   /** C-4: greenfield binds provisional; brownfield binds approved. */
   readonly greenfield: boolean;
-  /** D-10: greenfield's stack decision — the only thing there is to bind to. */
-  readonly analysis?: Analysis | null;
+  /**
+   * D-10′ (PRDR-290): greenfield's stack, the entry the decision log records
+   * and the pack carries: the only thing there is to bind to. Null where the
+   * log records none.
+   */
+  readonly stack?: DecidedStack | null;
   readonly timeoutMs?: number;
   readonly acknowledgedBy?: string;
   readonly now?: () => string;
@@ -53,8 +58,9 @@ export interface DetermineDeps {
 
 /**
  * Conventional gate commands per chosen stack. Used ONLY in greenfield, where
- * there is no tooling to discover yet — the stack was decided at ANALYZE, so
- * the bindings follow from that decision and bootstrap #1 proves them.
+ * there is no tooling to discover yet — the stack was decided at DECIDE
+ * (D-10′), so the bindings follow from that decision and bootstrap #1 proves
+ * them.
  *
  * Stack strings belong at this layer, not in the kernel: `init` is where a
  * stack is chosen, exactly as V-4 puts invocation knowledge in the adapter.
@@ -105,16 +111,18 @@ export function languageKey(raw: string): string | null {
   return null;
 }
 
-function provisionalBindingsFor(analysis: Analysis | null, at: string): Binding[] {
-  const stack = analysis?.stack ?? null;
-  if (stack === null) return [];
+function provisionalBindingsFor(stack: DecidedStack, at: string): Binding[] {
   const key = languageKey(stack.language);
   /*
    * PRDR-115: commands the documents name are the bindings — the table is
    * only for documents that name none. A stack table cannot know a project's
    * own gates; ksar's D44 named all three and init still refused them.
+   *
+   * D-10′ (PRDR-290): the entry holds them by slot, as the root package's
+   * rows under `## Packages`, where ANALYZE copied five slots out of prose;
+   * `test_single` is one of the entry's, so it binds too.
    */
-  const documented = Object.entries(stack.verification ?? {}).filter((e): e is [GateSlot, string] => typeof e[1] === "string" && e[1] !== "");
+  const documented = Object.entries(stack.gates).filter((e): e is [GateSlot, string] => typeof e[1] === "string" && e[1] !== "");
   const commands: [GateSlot, string][] =
     documented.some(([slot]) => slot === "test")
       ? documented
@@ -157,7 +165,22 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
 
   /** ---- greenfield: propose from the chosen stack, do not execute (C-4) ---- */
   if (deps.greenfield) {
-    const bindings = provisionalBindingsFor(deps.analysis ?? null, at);
+    const stack = deps.stack ?? null;
+    if (stack === null) {
+      return {
+        kind: "interrupt",
+        interrupt: "AWAIT_SETUP_CONSENT",
+        message: [
+          "In a new project the stack is a decision, and the decision log records none (D-10′),",
+          "so there is nothing to bind a gate to.",
+          "",
+          `Record it under \`## Stack\` in ${DECISION_LOG_PATH}, with the root package's gate commands`,
+          "under `## Packages`, and re-run `detent init`.",
+        ].join("\n"),
+        items: ["stack"],
+      };
+    }
+    const bindings = provisionalBindingsFor(stack, at);
     if (bindings.length === 0) {
       return {
         kind: "interrupt",
@@ -166,7 +189,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
           "No conventional verification commands are known for the chosen stack,",
           "so Detent cannot propose even provisional bindings.",
           "",
-          "Name the stack's test command in the planning documents and re-run `detent init`.",
+          `Record the root package's \`test\` command under \`## Packages\` in ${DECISION_LOG_PATH} and re-run \`detent init\`.`,
         ].join("\n"),
         items: ["test"],
       };

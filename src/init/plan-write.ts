@@ -7,7 +7,8 @@ import { claimBreakable, pidAlive, readClaim } from "../kernel/tickets/mutations
 import { hostname } from "node:os";
 import { claimPath, ticketPath } from "../kernel/tickets/paths.js";
 import { allTickets } from "../kernel/tickets/readers.js";
-import type { Analysis, PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
+import type { PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
+import type { DecidedStack } from "./decide-log.js";
 import { planSchema, type Plan } from "../schemas/records.js";
 import { scrubJson } from "../kernel/scrub.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -28,7 +29,8 @@ export type DraftedTicket = PlanDraftTicket & { readonly slice: string };
 export interface WriteDeps {
   readonly root: string;
   readonly greenfield: boolean;
-  readonly analysis: Analysis | null;
+  /** D-10′ (PRDR-290): in greenfield, the stack entry the decision log records; null in an existing project. */
+  readonly stack: DecidedStack | null;
   readonly docs: readonly string[];
   readonly boundSlots: readonly string[];
   readonly note?: (text: string) => void;
@@ -220,9 +222,10 @@ export function writePlan(
 }
 
 /**
- * A-1⁶ (PRDR-206): what the bootstrap will provide — the scaffold files ANALYZE
- * named — for the contract check, which runs over drafted tickets before the
- * bootstrap exists. Undefined in brownfield: there is no bootstrap.
+ * A-1⁶ (PRDR-206): what the bootstrap will provide — the scaffold files the
+ * stack entry names (D-10′, PRDR-290), where ANALYZE's session named them — for
+ * the contract check, which runs over drafted tickets before the bootstrap
+ * exists. Undefined in brownfield: there is no bootstrap.
  */
 /**
  * C-8‴ (PRDR-118): whether what `writePlan` wrote is still on disk: the plan
@@ -247,10 +250,10 @@ export function planOutputIntact(root: string): boolean {
 
 export function bootstrapScaffold(
   greenfield: boolean,
-  analysis: Analysis | null,
+  stack: DecidedStack | null,
 ): { readonly owner: string; readonly files: readonly string[] } | undefined {
   if (!greenfield) return undefined;
-  return { owner: BOOTSTRAP_TICKET_ID, files: analysis?.stack?.scaffold_files ?? [] };
+  return { owner: BOOTSTRAP_TICKET_ID, files: stack?.scaffold_files ?? [] };
 }
 
 /**
@@ -260,7 +263,7 @@ export function bootstrapScaffold(
  * working it cannot mistake `.detent/` for a place project config may live.
  */
 function bootstrapTicket(deps: WriteDeps): Ticket {
-  const stack = deps.analysis?.stack;
+  const stack = deps.stack;
   const slots = deps.boundSlots.length > 0 ? deps.boundSlots : ["test"];
   return buildTicket({
     id: BOOTSTRAP_TICKET_ID,
@@ -268,10 +271,7 @@ function bootstrapTicket(deps: WriteDeps): Ticket {
     title: "Bootstrap: project scaffolding and native verification tooling",
     description: [
       "Create the project scaffolding and establish its native verification tooling.",
-      stack === undefined || stack === null
-        ? ""
-        : `Stack chosen at ANALYZE: ${stack.language}${stack.runtime === "" ? "" : ` on ${stack.runtime}`}` +
-          `${stack.test_framework === "" ? "" : `, tested with ${stack.test_framework}`}. ${stack.rationale}`,
+      stack === null ? "" : `The decision log settles the stack, as ${stack.decision}: ${stack.language}, on ${stack.toolchain}.`,
       "",
       "Configuration you create here is ticket work product, reviewed as code (C-4) — it lives in project files, never in `.detent/` (F-2).",
       "Dependencies: Detent installs what the manifest declares before every gate run (V-1⁗) — write the manifest and its configuration; the package manager is not among your tools.",
@@ -293,7 +293,7 @@ function bootstrapTicket(deps: WriteDeps): Ticket {
     priority: 100,
     /**
      * A-1⁶ (PRDR-206): the ground it lays, declared. Each scaffold file the
-     * analysis named is a `file` contract the bootstrap provides, so a later
+     * stack entry names (D-10′) is a `file` contract the bootstrap provides, so a later
      * ticket consuming `package.json` resolves here instead of being reported
      * — and handed to the review as proved — as consuming a file no ticket
      * creates.

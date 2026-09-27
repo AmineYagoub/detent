@@ -6,7 +6,7 @@ import { runInit } from "../../src/init/machine.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -40,7 +40,7 @@ const SLICES = Array.from({ length: N_SLICES }, (_, i) => ({
 function scaledPlanner(seen: { stage: string; kb: number }[]) {
   return (spec: SessionSpec) => {
     const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
-    const stage = String(inputs["stage"] ?? "ANALYZE");
+    const stage = String(inputs["stage"]);
     seen.push({ stage: stage === "REVIEW_PLAN" ? `REVIEW:${String(inputs["scope"])}` : stage, kb: spec.promptVariable.length / 1024 });
 
     let artifact: object;
@@ -84,7 +84,7 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
         questions: [],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
-    else artifact = ANALYSIS(null);
+    else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
 
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
@@ -120,7 +120,7 @@ function fragilePlanner(drafted: string[], dieOn: string | null) {
         questions: [],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
-    else artifact = ANALYSIS(null);
+    else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -174,7 +174,7 @@ describe("C-2‴ at product scale", () => {
     /**
      * The session count and the input growth are the run's real cost, so they
      * are asserted rather than left to be discovered on a paid run: one
-     * ANALYZE, one SLICE, one draft and one review per slice, one whole review.
+     * SLICE, one draft and one review per slice, one whole review.
      */
     const count = (stage: string): number => seen.filter((s) => s.stage === stage).length;
     expect(count("PLAN")).toBe(N_SLICES);
@@ -184,13 +184,13 @@ describe("C-2‴ at product scale", () => {
     /**
      * C-4⁗″ (PRDR-200): the price, in one number.
      *
-     * ANALYZE + SLICE + (PLAN + k reviews) per slice + the whole-plan review.
-     * At twenty-five slices sampling takes init from 53 sessions to 103 — a
+     * SLICE + (PLAN + k reviews) per slice + the whole-plan review.
+     * At twenty-five slices sampling takes init from 52 sessions to 102 — a
      * slice that needs no revision now costs four sessions where it cost two.
      * That is the cost of not handing the reviser findings no second read saw,
      * and it belongs in the test that exists to price product scale.
      */
-    expect(seen).toHaveLength(2 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES) + 1);
+    expect(seen).toHaveLength(1 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES) + 1);
 
     /**
      * The whole-plan review carries every ticket, so its input grows with the
@@ -204,7 +204,6 @@ describe("C-2‴ at product scale", () => {
      * recorded from nothing reproducible and were wrong by a third.
      *
      *   stage          this fixture   prior shape   bound   % of bound
-     *   ANALYZE            1.51 KB       1.51 KB      —         —
      *   SLICE              8.00 KB       8.00 KB    < 50       16%
      *   PLAN             106.64 KB     106.64 KB   < 150     71.1%
      *   REVIEW:slice     125.39 KB     116.25 KB   < 200     62.7%

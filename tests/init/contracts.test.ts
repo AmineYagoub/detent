@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
 import { BOOTSTRAP_TICKET_ID } from "../../src/init/plan-write.js";
-import { analysisSchema } from "../../src/schemas/init.js";
+import { stackEntrySchema } from "../../src/schemas/decide.js";
 import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
@@ -190,7 +190,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
   });
 
   it("end to end: the derived edge reaches the written plan and the presentation says Detent added it", async () => {
-    const { repo, PROMPTS, BUDGETS, ANALYSIS, APPROVE_PLAN, planningPipeline } = await import("./plan-fixture.js");
+    const { repo, PROMPTS, BUDGETS, APPROVE_PLAN, planningPipeline } = await import("./plan-fixture.js");
     const { runInit } = await import("../../src/init/machine.js");
     const { MockBackend, okResult } = await import("../../src/sessions/mock.js");
     const { readTicket } = await import("../../src/kernel/tickets/readers.js");
@@ -214,7 +214,8 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
             ? APPROVE_PLAN
             : spec.artifactOut.endsWith("slices.json")
               ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 2, rationale: "" }], questions: [] }
-              : ANALYSIS(null);
+              : null;
+        if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
       },
@@ -447,15 +448,8 @@ describe("A-1⁶ a scaffold file the bootstrap creates is provided, not unowned"
     expect(result.findings[0]?.finding).toContain("src/never-made.ts");
   });
 
-  it("an analysis written before the field reads with no scaffold files (F-3)", () => {
-    const parsed = analysisSchema.parse({
-      schema_version: SCHEMA_VERSION,
-      summary: "s",
-      stack: { language: "TypeScript", runtime: "", test_framework: "", rationale: "" },
-      questions: [],
-      assumptions: [],
-      docs_read: [],
-    });
-    expect(parsed.stack?.scaffold_files).toEqual([]);
+  it("a stack entry DECIDE's session writes without scaffold files gives the bootstrap none (D-10′, PRDR-290)", () => {
+    const parsed = stackEntrySchema.parse({ language: "TypeScript", toolchain: "Node.js 22" });
+    expect(parsed.scaffold_files).toEqual([]);
   });
 });

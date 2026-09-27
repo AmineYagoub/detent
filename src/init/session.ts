@@ -32,7 +32,7 @@ const INIT_TICKET = "init";
  *
  * PRDR-088: what it ALSO keeps is the money. An earlier note here claimed
  * there was "nothing to charge" — false, and the hole it left was real:
- * ANALYZE, PLAN, REVIEW_PLAN and planning research are billable sessions, so
+ * ANALYZE, PLAN, REVIEW_PLAN and planning research were billable sessions, so
  * leaving them off the ledger meant `run_spend_usd` did not bound them (P6)
  * and a failed phase left nothing to diagnose. Every launch now passes the
  * D-25 gate, records an S-4 row, and journals its start and end.
@@ -196,7 +196,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
        * SEC-3 (PRDR-184): the session's own artifact, exempt from the floor
        * that would otherwise refuse it.
        *
-       * `analysisPath` is `.detent/state/analysis.json`, and PRDR-149 added
+       * ANALYZE's artifact was `.detent/state/analysis.json`, and PRDR-149 added
        * `.detent/state/**` to `STRUCTURAL_PROTECTED` — correctly, it holds the
        * checkpoints and the run lock. Protected globs are consulted before the
        * surface, so from that moment every init session was DENIED the one

@@ -54,12 +54,11 @@ async function init(root: string, stub: Write, notes: string[] = []): Promise<Aw
 const sessions = (seen: Seen): string[] => seen.backend.current?.rolesLaunched() ?? [];
 
 describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
-  it("hands ANALYZE and SLICE the pack and its context documents, never an original it archived", async () => {
+  it("hands SLICE the pack and its context documents, never an original it archived", async () => {
     const root = repo(PROJECT);
     const first = await init(root, writesPack());
     expect(first.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
-    const analyze = first.planned.find((i) => i["stage"] === undefined && i["expected_output"] !== undefined);
-    expect(analyze?.["docs"]).toEqual(PACK_DOCS);
+    expect(first.planned.every((i) => i["stage"] !== undefined), "D-10′ (PRDR-290): no planner session reads the documents for a stack before SLICE").toBe(true);
     expect(first.planned.find((i) => i["stage"] === "SLICE")?.["docs"]).toEqual(PACK_DOCS);
     const drafted = first.planned.find((i) => i["stage"] === "PLAN");
     expect(drafted?.["docs"]).toEqual(["docs/prd/01-lending.md", DECISION_LOG_PATH]);
@@ -73,7 +72,7 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     const again = await init(root, writesPack(), notes);
     expect(again.executed).toEqual(["DISCOVER", "AUDIT", "DECIDE", "WRITE"]);
     expect(again.reachedPhase, "PRESENT asks for the approval the first run deferred").toBe("PRESENT");
-    expect(again.reused).toEqual(expect.arrayContaining(["VALIDATE", "ANALYZE", "DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"]));
+    expect(again.reused).toEqual(expect.arrayContaining(["VALIDATE", "DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"]));
     expect(sessions(again), "no session of any role").toEqual([]);
     const said = notes.join("\n");
     expect(said).toMatch(/the documents are a conforming pack: they match their conformance record of \d{4}-\d{2}-\d{2}/u);
@@ -91,7 +90,7 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     await init(root, writesPack());
     appendFileSync(path.join(root, "docs", "prd", "01-lending.md"), "- **LND-AC-04** [M1] Given a loan, when it starts, then its tool is named (LND-F-001).\n");
     const edited = await init(root, writesPack());
-    expect(edited.executed).toEqual(expect.arrayContaining(["WRITE", "VALIDATE", "ANALYZE", "SLICE", "PLAN"]));
+    expect(edited.executed).toEqual(expect.arrayContaining(["WRITE", "VALIDATE", "SLICE", "PLAN"]));
     expect(sessions(edited).filter((r) => r === "spec_write"), "WRITE writes nothing over a pack, and VALIDATE's reviewers found nothing to fix").toEqual([]);
     expect(sessions(edited)).toContain("spec_review");
     expect(edited.replayedFrom).toBe("DISCOVER");
@@ -102,7 +101,7 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     await init(root, writesPack());
     writeFileSync(path.join(root, "tsconfig.json"), "{}\n");
     const again = await init(root, writesPack());
-    expect(again.executed).toEqual(expect.arrayContaining(["WRITE", "ANALYZE", "DETERMINE_VERIFICATION"]));
+    expect(again.executed).toEqual(expect.arrayContaining(["WRITE", "DETERMINE_VERIFICATION"]));
     expect(writeOutputs(root)["stack_markers"]).toContain("tsconfig.json");
   });
 

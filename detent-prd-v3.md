@@ -1194,6 +1194,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   beginning "Which …", which do not.
   *Amended by C-3⁗ (PRDR-278): no planning stage asks, so the decision log keeps a question to one
   asking, and `open_questions` goes.*
+  *Amended by D-10″ (PRDR-290): ANALYZE is gone, so `open_questions` carries what the slices before
+  a draft asked, and SLICE is handed none.*
 
 - **S-3⁵ (3.1.1, PRDR-213).** A write session has **three** git verbs: `git add`, `git rm`
   and `git commit`. Nothing a session had removed a file — Write and Edit create and change,
@@ -1768,6 +1770,52 @@ the code does what the rules it amends describe, and each of those rules points 
   session chose.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE hands the checker's parse to the phases after it, and
   nothing reads it until PRDR-290: SLICE and PLAN still receive ANALYZE's analysis.*
+  *Amended by D-10″ (PRDR-290): built. SLICE and PLAN are handed the parse's stack entry, not the
+  whole parse: SLICE's seed from it is C-2⁸'s, and PLAN's records from it C-4⁵'s.*
+
+- **D-10″ (3.1.1, PRDR-290).** D-10′ is built. ANALYZE is gone from `INIT_PHASES`, which holds
+  eleven phases, and `src/init/analyze.ts` with it. This settles what D-10′ left to its ticket,
+  builds C-8⁵'s `--replan`, and amends C-3‴'s `open_questions`, C-2¹¹'s pool, C-2¹²'s route to
+  the bindings, C-2¹³'s and C-2¹⁴'s handoffs, and C-8's AC.
+  - **`greenfield`** is code's: `isGreenfield`, in `src/init/greenfield.ts`, is true where no
+    stack marker is handed on to planning (C-2¹³). DETERMINE_VERIFICATION, SLICE and PLAN each
+    compute it, and no session is asked.
+  - **The stack entry**, in greenfield, is read from the checker's parse VALIDATE hands on, or from
+    the decision log on disk where VALIDATE hands none, as when WRITE wrote no pack. An existing
+    project has none: its stack is still found in the repository, and SLICE and PLAN are handed
+    `stack: null`. The entry is in the keys of DETERMINE_VERIFICATION, SLICE, PLAN and each slice's
+    cache, so a veto of it re-binds and re-plans. No key reads DECIDE's outputs for it, which
+    C-8″'s scan cannot read (C-2¹²).
+  - **The bindings.** DETERMINE_VERIFICATION binds, provisionally, the gate commands the entry
+    names, which are the root package's rows under `## Packages`: each of the six slots the log
+    names, `test_single` among them, where ANALYZE copied five slots out of prose. An entry that
+    names no `test` command takes its language's conventional commands, as V-1′'s fallback did,
+    and one with neither stops for `test` with AWAIT_SETUP_CONSENT, naming `## Packages`. A new
+    project whose log records no stack stops for it with AWAIT_SETUP_CONSENT, naming `## Stack`:
+    nothing binds before a stack exists (D-10).
+  - **The bootstrap** provides the entry's scaffold files, and its description names the entry
+    that settled the stack (A-1⁶).
+  - **SLICE and PLAN** are handed the entry where they were handed `analysis`, and read the pack's
+    documents themselves, as they did. The rest of the parse is not handed to them: SLICE's seed
+    from it is C-2⁸'s (PRDR-291), and PLAN's records from it C-4⁵'s (PRDR-292). The planner's
+    prompt names three stages, and in greenfield tells the planner the stack is decided.
+  - **Questions and research.** ANALYZE's questions went with it. C-3‴'s `open_questions` carries
+    what the slices before a draft asked, SLICE is handed none, and PRESENT lists none of
+    ANALYZE's. ANALYZE was planning research's one caller, so no phase launches a research
+    session: AUDIT alone counts its calls against `planning_research_tool_calls`, and X-1's site
+    map names `init/audit` for it. `src/init/plan-research.ts` has no caller in `src/`, and stays
+    until PRDR-298 deletes it.
+  - **`--replan`** enters at DETERMINE_VERIFICATION (C-8⁵), so it never re-runs the specification
+    phase.
+  - **An older state.** An ANALYZE checkpoint an earlier build left is F-3's case, and needs no
+    migration step: states at schema version 2 written before this build hold it too, and no
+    migration runs on them. `init` says why and runs DECIDE whatever DECIDE's own checkpoint says;
+    the phases after it re-run only where their keys moved. The checkpoint and ANALYZE's artifact
+    are removed once DECIDE completes. Until then they are kept, and the next `init` says why
+    again. A DECIDE with nothing open still runs no session (C-2¹²).
+  - **C-8's AC**, inherited from v2, names ANALYZE as the phase an edited PRD.md replays from. An
+    edit replays from the first phase on the chain whose key it moves, the standalone phases
+    aside, and editing nothing re-executes nothing.
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -1912,6 +1960,7 @@ the code does what the rules it amends describe, and each of those rules points 
     enters at DETERMINE_VERIFICATION, where it entered at ANALYZE (D-10′), and never re-runs the
     specification phase: the pack is the founder's record, and a changed pack is re-validated by
     content (C-2⁷).
+  *Amended by D-10″ (PRDR-290): `--replan`'s entry at DETERMINE_VERIFICATION is built.*
 
 - **X-3′ (3.1.1, PRDR-278).** X-3's table admits PREMISE_FALSIFIED from BLIND_FIX, INFORMED_FIX and
   REVIEW_FIX, each with IN_PROGRESS's outcome: hypotheses++, then a bug returns to DIAGNOSED, or
@@ -2229,6 +2278,8 @@ the code does what the rules it amends describe, and each of those rules points 
   the decision log, and DECIDE is a second standalone phase.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE re-validates a changed pack's change, so it no longer
   reaches planning unchecked.*
+  *Amended by D-10″ (PRDR-290): ANALYZE is gone, so AUDIT alone reports against
+  `planning_research_tool_calls`, and X-1's site map names `init/audit` for it.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -2310,6 +2361,9 @@ the code does what the rules it amends describe, and each of those rules points 
   `spec_write` is built for WRITE's session, less `archive/`.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built: `INTERRUPT_PHASE` lists it for AWAIT_INFO, and
   DECIDE's note on a changed pack says VALIDATE re-validates the change.*
+  *Amended by D-10″ (PRDR-290): ANALYZE is gone. SLICE and every slice PLAN drafts read the log, and
+  the stack entry reaches the bindings and the bootstrap directly, with no session's stack to
+  write it over.*
 
 - **C-2¹³ (3.1.1, PRDR-283).** WRITE is built, in `src/init/write.ts` and the modules beside it,
   directly after DECIDE. This settles what C-2⁶ and C-2⁹ left to WRITE's ticket, and amends
@@ -2394,6 +2448,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built. It hands the pack to planning in WRITE's
   place, restarts the chain after WRITE, whose key then reaches nothing, and a red checker it
   cannot make green blocks planning.*
+  *Amended by D-10″ (PRDR-290): ANALYZE is gone. SLICE and PLAN read the documents, and
+  DETERMINE_VERIFICATION, SLICE and PLAN the markers.*
 
 - **C-2¹⁴ (3.1.1, PRDR-284).** VALIDATE is built, in `src/init/validate.ts` and the modules
   beside it, directly after WRITE. This settles what C-2⁶ and C-2⁷ left to VALIDATE's ticket, and
@@ -2509,6 +2565,8 @@ the code does what the rules it amends describe, and each of those rules points 
     reports: their sessions are on the ledger against ticket `init`, as every init session is.
   *Amended by S-1⁗ (PRDR-285): its reviewers may simulate where the machine has a sandbox, and each
   round without one says why; VALIDATE no longer says once per run that none can.*
+  *Amended by D-10″ (PRDR-290): DETERMINE_VERIFICATION, SLICE and PLAN read the stack entry from
+  the parse, and nothing else in it is read yet (C-2⁸, C-4⁵).*
 
 - **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
   throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past

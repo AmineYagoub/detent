@@ -99,7 +99,6 @@ describe("T-060 C-5: the interrupt set is closed", () => {
       "DECIDE",
       "WRITE",
       "VALIDATE",
-      "ANALYZE",
       "DETERMINE_VERIFICATION",
       "SLICE",
       "PLAN",
@@ -110,35 +109,35 @@ describe("T-060 C-5: the interrupt set is closed", () => {
 });
 
 describe("T-060 C-8: replay from the first drifted checkpoint", () => {
-  it("editing a doc re-executes ANALYZE forward only — DISCOVER is reused", async () => {
+  it("editing a doc re-executes SLICE forward only — DISCOVER is reused", async () => {
     const root = repo({ "PRD.md": "# v1\n" });
     const log: string[] = [];
     const handlers = (): PhaseHandler[] => [
       probe("INIT_FS", () => listingDigest([".detent"]), log),
       /** DISCOVER reads the LISTING: which docs exist. */
       probe("DISCOVER", () => listingDigest(["PRD.md"]), log),
-      /** ANALYZE reads the CONTENTS: what they say. */
-      probe("ANALYZE", () => contentsDigest(root, ["PRD.md"]), log),
+      /** SLICE reads the CONTENTS: what they say. */
+      probe("SLICE", () => contentsDigest(root, ["PRD.md"]), log),
       probe("PLAN", () => listingDigest(["plan"]), log),
     ];
 
     const first = await runInit(root, handlers());
     expect(first.exitCode).toBe(0);
-    expect(log).toEqual(["INIT_FS", "DISCOVER", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["INIT_FS", "DISCOVER", "SLICE", "PLAN"]);
 
     /* Editing nothing re-executes nothing (C-8's AC, second half). */
     log.length = 0;
     const unchanged = await runInit(root, handlers());
     expect(log).toEqual([]);
     expect(unchanged.replayedFrom).toBeNull();
-    expect(unchanged.reused).toEqual(["INIT_FS", "DISCOVER", "ANALYZE", "PLAN"]);
+    expect(unchanged.reused).toEqual(["INIT_FS", "DISCOVER", "SLICE", "PLAN"]);
 
-    /* Editing PRD.md re-executes ANALYZE forward — and NOT discovery. */
+    /* Editing PRD.md re-executes SLICE forward — and NOT discovery. */
     log.length = 0;
     writeTree(root, { "PRD.md": "# v2 — now with more spec\n" });
     const edited = await runInit(root, handlers());
-    expect(log).toEqual(["ANALYZE", "PLAN"]);
-    expect(edited.replayedFrom).toBe("ANALYZE");
+    expect(log).toEqual(["SLICE", "PLAN"]);
+    expect(edited.replayedFrom).toBe("SLICE");
     expect(edited.reused).toEqual(["INIT_FS", "DISCOVER"]);
   });
 
@@ -148,7 +147,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     const handlers = (docs: string[]): PhaseHandler[] => [
       probe("INIT_FS", () => listingDigest([".detent"]), log),
       probe("DISCOVER", () => listingDigest(docs), log),
-      probe("ANALYZE", () => contentsDigest(root, docs), log),
+      probe("SLICE", () => contentsDigest(root, docs), log),
     ];
 
     await runInit(root, handlers(["PRD.md"]));
@@ -156,7 +155,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     writeTree(root, { "SRS.md": "# also\n" });
     const result = await runInit(root, handlers(["PRD.md", "SRS.md"]));
     expect(result.replayedFrom).toBe("DISCOVER");
-    expect(log).toEqual(["DISCOVER", "ANALYZE"]);
+    expect(log).toEqual(["DISCOVER", "SLICE"]);
   });
 
   it("an interrupted phase is not checkpointed — a re-run resumes exactly there", async () => {
@@ -175,7 +174,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
             : { kind: "complete", outputs: {} };
         },
       },
-      probe("ANALYZE", () => contentsDigest(root, ["PRD.md"]), log),
+      probe("SLICE", () => contentsDigest(root, ["PRD.md"]), log),
     ];
 
     const stopped = await runInit(root, handlers);
@@ -191,7 +190,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
     interrupts = false;
     const resumed = await runInit(root, handlers);
     expect(resumed.exitCode).toBe(0);
-    expect(log).toEqual(["DISCOVER", "ANALYZE"]);
+    expect(log).toEqual(["DISCOVER", "SLICE"]);
   });
 
   it("outputs flow forward on the bus — a later phase reads an earlier one's", async () => {
@@ -204,7 +203,7 @@ describe("T-060 C-8: replay from the first drifted checkpoint", () => {
         run: async () => ({ kind: "complete", outputs: { docs: ["PRD.md"] } }),
       },
       {
-        phase: "ANALYZE",
+        phase: "SLICE",
         digest: () => listingDigest(["x"]),
         run: async (ctx) => {
           seen.push(ctx.outputs["DISCOVER"]?.["docs"]);
@@ -361,7 +360,7 @@ describe("PRDR-166 a repeated AWAIT_INFO says whether the documents changed", ()
     const handlers = (): PhaseHandler[] => [
       probe("INIT_FS", () => listingDigest([".detent"]), log),
       probe("DISCOVER", () => listingDigest(["PRD.md"]), log),
-      /* PRDR-282: PRESENT, where C-3′'s questions are asked; the machine refuses AWAIT_INFO from ANALYZE. */
+      /* PRDR-282: PRESENT, where C-3′'s questions are asked; the machine refuses AWAIT_INFO from a phase INTERRUPT_PHASE does not list. */
       asking("PRESENT", () => contentsDigest(root, ["PRD.md"])),
     ];
 

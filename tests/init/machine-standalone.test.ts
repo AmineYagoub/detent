@@ -41,7 +41,7 @@ function pipeline(digests: Record<string, string>, log: string[]): PhaseHandler[
       return { kind: "complete", outputs: { ran: phase } };
     },
   });
-  return [probe("INIT_FS"), probe("DISCOVER"), probe("AUDIT", true), probe("ANALYZE"), probe("PLAN")];
+  return [probe("INIT_FS"), probe("DISCOVER"), probe("AUDIT", true), probe("DETERMINE_VERIFICATION"), probe("PLAN")];
 }
 
 describe("PRDR-281: a standalone phase stands outside the chain", () => {
@@ -50,12 +50,12 @@ describe("PRDR-281: a standalone phase stands outside the chain", () => {
     const digests: Record<string, string> = { DISCOVER: "PRD.md", AUDIT: "a" };
     const log: string[] = [];
     await runInit(root, pipeline(digests, log));
-    expect(log).toEqual(["INIT_FS", "DISCOVER", "AUDIT", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["INIT_FS", "DISCOVER", "AUDIT", "DETERMINE_VERIFICATION", "PLAN"]);
 
     log.length = 0;
     digests["DISCOVER"] = "PRD.md docs/founder-decisions.md";
     const again = await runInit(root, pipeline(digests, log));
-    expect(log, "everything after DISCOVER replays, AUDIT aside").toEqual(["DISCOVER", "ANALYZE", "PLAN"]);
+    expect(log, "everything after DISCOVER replays, AUDIT aside").toEqual(["DISCOVER", "DETERMINE_VERIFICATION", "PLAN"]);
     expect(again.reused).toEqual(["INIT_FS", "AUDIT"]);
     expect(again.replayedFrom).toBe("DISCOVER");
   });
@@ -70,20 +70,20 @@ describe("PRDR-281: a standalone phase stands outside the chain", () => {
     digests["AUDIT"] = "b";
     const again = await runInit(root, pipeline(digests, log));
     expect(log).toEqual(["AUDIT"]);
-    expect(again.reused).toEqual(["INIT_FS", "DISCOVER", "ANALYZE", "PLAN"]);
+    expect(again.reused).toEqual(["INIT_FS", "DISCOVER", "DETERMINE_VERIFICATION", "PLAN"]);
     expect(again.replayedFrom, "the first phase that had to run").toBe("AUDIT");
 
     log.length = 0;
     digests["AUDIT"] = "c";
-    digests["ANALYZE"] = "edited";
+    digests["DETERMINE_VERIFICATION"] = "edited";
     const both = await runInit(root, pipeline(digests, log));
-    expect(log).toEqual(["AUDIT", "ANALYZE", "PLAN"]);
-    expect(both.replayedFrom, "still the first, though the chain replays from ANALYZE").toBe("AUDIT");
+    expect(log).toEqual(["AUDIT", "DETERMINE_VERIFICATION", "PLAN"]);
+    expect(both.replayedFrom, "still the first, though the chain replays from DETERMINE_VERIFICATION").toBe("AUDIT");
 
     log.length = 0;
     digests["AUDIT"] = "d";
     const replan = await runInit(root, pipeline(digests, log), { replan: true });
-    expect(log).toEqual(["AUDIT", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["AUDIT", "DETERMINE_VERIFICATION", "PLAN"]);
     expect(replan.replayedFrom, "a forced replay does not rename the first").toBe("AUDIT");
   });
 
@@ -94,7 +94,7 @@ describe("PRDR-281: a standalone phase stands outside the chain", () => {
     await runInit(root, pipeline(digests, log));
     log.length = 0;
     const replan = await runInit(root, pipeline(digests, log), { replan: true });
-    expect(log).toEqual(["ANALYZE", "PLAN"]);
+    expect(log).toEqual(["DETERMINE_VERIFICATION", "PLAN"]);
     expect(replan.reused).toEqual(["INIT_FS", "DISCOVER", "AUDIT"]);
   });
 

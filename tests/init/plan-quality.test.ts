@@ -7,7 +7,7 @@ import { runInit } from "../../src/init/machine.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, planner, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -20,7 +20,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 describe("PRDR-081 the planner sizes against the budget that will execute it", () => {
   it("PLAN receives session_budget: the implement turns, wall clock, and generation ceiling", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const planCall = backend.calls.find((c) => {
@@ -52,7 +52,7 @@ describe("PRDR-101 the drafted non_goals reach the written ticket", () => {
     const root = repo(LONE_CANDIDATE);
     const draft = DRAFT(["t-100"]) as { tickets: { non_goals: string[] }[] };
     draft.tickets[0]!.non_goals = ["not the CLI wiring — that is t-101", "no persistence"];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), draft) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(draft) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(readTicket(root, "t-100").non_goals).toEqual([
@@ -63,7 +63,7 @@ describe("PRDR-101 the drafted non_goals reach the written ticket", () => {
 
   it("an honestly empty non_goals stays empty, not undefined", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(readTicket(root, "t-100").non_goals).toEqual([]);
   });
@@ -75,7 +75,6 @@ describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () 
     const backend = new MockBackend({ audit: CLEAN_AUDIT, });
     const ctx = {
       outputs: {
-        ANALYZE: { analysis: { summary: "s" } },
         DETERMINE_VERIFICATION: { bindings: [{ slot: "test", resolved: "npm test" }] },
       },
     };
@@ -105,7 +104,7 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
 
   it("a drafted plan is reviewed by a fresh session against the closed criteria", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const reviews = inputsOf(backend, "plan-review.json");
@@ -118,7 +117,7 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
 
   it("approve writes the draft as-is — exactly one drafting session", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100", "t-200"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(inputsOf(backend, "plan-draft.json")).toHaveLength(1);
@@ -132,7 +131,7 @@ describe("PRDR-084 the plan gets its own D-6 review", () => {
       verdict: "changes",
       findings: [{ tag: "sizing", finding: "t-100 spans three subsystems", ticket: "t-100" }],
     };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"]), changes) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"]), changes) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const drafts = inputsOf(backend, "plan-draft.json");
@@ -155,11 +154,11 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
 
   it("every init session writes an S-4 ledger row against the run ceiling", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const ledger = rows(root);
-    /** ANALYZE, PLAN and REVIEW_PLAN all bill; none of them used to. */
+    /** SLICE, PLAN and REVIEW_PLAN all bill; none of them used to. */
     expect(ledger.length, "init spend must reach the ledger").toBe(backend.calls.length);
     expect(ledger.every((r) => r["ticket"] === "init")).toBe(true);
     expect(ledger.map((r) => r["role"])).toContain("planner");
@@ -194,7 +193,7 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
    */
   it("a total already consumed no longer gates init (X-1⁵)", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     mkdirSync(stateDir(root), { recursive: true });
     writeFileSync(
       path.join(stateDir(root), "ledger.jsonl"),
@@ -215,7 +214,7 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
    */
   it("spend with no slice completing is announced, and init runs on (X-1⁵)", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     /*
      * A floor below one mock session's own $0.001 estimate. PRDR-281: AUDIT's
      * completion is the first unit, so what follows it is measured against its
@@ -240,9 +239,9 @@ describe("PRDR-088 init sessions are metered and leave a trail", () => {
 });
 
 describe("PRDR-087 a stale approval re-presents; it does not re-plan", () => {
-  it("hand-edited tickets re-run PRESENT only — ANALYZE and PLAN are reused", async () => {
+  it("hand-edited tickets re-run PRESENT only — SLICE and PLAN are reused", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     const deps = { root, backend, prompts: PROMPTS, budgets: BUDGETS };
 
     await runInit(root, planningPipeline(deps));
@@ -260,7 +259,7 @@ describe("PRDR-087 a stale approval re-presents; it does not re-plan", () => {
      * a new plan — and no model session may run here at all.
      */
     expect(backend.calls.length, "no planner session may re-run").toBe(before);
-    expect(again.reused).toEqual(expect.arrayContaining(["ANALYZE", "PLAN"]));
+    expect(again.reused).toEqual(expect.arrayContaining(["SLICE", "PLAN"]));
     /* PRESENT ran and interrupted at AWAIT_APPROVAL — an interrupted phase is
      * deliberately not checkpointed, so it reports as the replay point rather
      * than as executed. */
@@ -277,7 +276,7 @@ describe("PRDR-086 plan_docs scopes planning to the increment", () => {
       "docs/design/adr-001.md": "# a decision\n",
       "docs/slices/slice-01.md": "# just this slice\n",
     });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planDocs: ["docs/slices/*.md"] }),
@@ -291,7 +290,7 @@ describe("PRDR-086 plan_docs scopes planning to the increment", () => {
 
   it("empty plan_docs keeps the full C-2 discovery", async () => {
     const root = repo({ ...LONE_CANDIDATE, "docs/prd/01-everything.md": "# the whole product\n" });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     const analyze = backend.calls
@@ -304,7 +303,7 @@ describe("PRDR-086 plan_docs scopes planning to the increment", () => {
 describe("PRDR-085 --replan means a fresh planning session", () => {
   it("DONE tickets are preserved, and tickets the new plan drops are removed", async () => {
     const root = repo(LONE_CANDIDATE);
-    const first = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-200", "t-300"])) });
+    const first = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100", "t-200", "t-300"])) });
     await runInit(root, planningPipeline({ root, backend: first, prompts: PROMPTS, budgets: BUDGETS }));
     expect(allTickets(root).map((t) => t.id).sort()).toEqual(["t-100", "t-200", "t-300"]);
 
@@ -312,7 +311,7 @@ describe("PRDR-085 --replan means a fresh planning session", () => {
     writeTicket(root, { ...readTicket(root, "t-100"), state: "DONE" });
 
     /* A replan that no longer contains t-200/t-300 — and re-drafts t-100. */
-    const second = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100", "t-400"])) });
+    const second = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100", "t-400"])) });
     await runInit(root, planningPipeline({ root, backend: second, prompts: PROMPTS, budgets: BUDGETS }), { replan: true });
 
     const after = allTickets(root);
@@ -323,11 +322,11 @@ describe("PRDR-085 --replan means a fresh planning session", () => {
 
   it("refuses while a ticket is in flight, before spending anything", async () => {
     const root = repo(LONE_CANDIDATE);
-    const first = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const first = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend: first, prompts: PROMPTS, budgets: BUDGETS }));
     writeTicket(root, { ...readTicket(root, "t-100"), state: "IN_PROGRESS" });
 
-    const second = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-999"])) });
+    const second = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-999"])) });
     const result = await runInit(root, planningPipeline({ root, backend: second, prompts: PROMPTS, budgets: BUDGETS }), {
       replan: true,
     });
@@ -351,7 +350,7 @@ describe("PRDR-085 --replan means a fresh planning session", () => {
 describe("PRDR-197 init routes effort to its own sessions", () => {
   it("carries the routed effort onto the planner's session spec", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, effortRouting: { planner: "xhigh" } }),
@@ -363,7 +362,7 @@ describe("PRDR-197 init routes effort to its own sessions", () => {
 
   it("carries none when the role is not routed, so the default stays invisible", async () => {
     const root = repo(LONE_CANDIDATE);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(ANALYSIS(null), DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(backend.calls[0]?.spec.effort).toBeUndefined();
   });
@@ -403,7 +402,7 @@ describe("PRDR-268 a revision round sees what the round before it left", () => {
             : (afterSample[nth - 1] ?? APPROVE_PLAN);
       } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
       else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
-      else artifact = ANALYSIS(null);
+      else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
       writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
       return okResult();
     };
@@ -482,7 +481,7 @@ describe("PRDR-269 what survived a revision is told apart from what the revision
             : { schema_version: SCHEMA_VERSION, verdict: "changes", findings: perDraw[nth - 1] ?? [] };
       } else if (spec.artifactOut.endsWith("plan-draft.json")) artifact = DRAFT(["t-100"]);
       else if (spec.artifactOut.endsWith("slices.json")) artifact = ONE_SLICE;
-      else artifact = ANALYSIS(null);
+      else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
       writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
       return okResult();
     };

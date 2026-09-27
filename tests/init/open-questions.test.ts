@@ -4,7 +4,7 @@ import { runInit } from "../../src/init/machine.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { DOCS, TWO_SLICES, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -39,18 +39,18 @@ describe("C-3‴ PRESENT merges a question asked twice in two stages' words", ()
 
   it("the batch carries the first, names the other id on it, and the human answers once", () => {
     const built = presentInputsFromOutputs({
-      ANALYZE: { open_questions: [q("q-analyze-1", Q1), q("q-analyze-2", Q2)] },
+      SLICE: { questions: [q("sq1", Q1), q("sq2", Q2)] },
       PLAN: { questions: [q("s14-q1", S14Q1), q("s14-q2", S14Q2)] },
     });
     /* Before PRDR-207: four questions, two of them one question. */
-    expect(built.questions?.map((x) => x.id)).toEqual(["q-analyze-1", "q-analyze-2", "s14-q1"]);
+    expect(built.questions?.map((x) => x.id)).toEqual(["sq1", "sq2", "s14-q1"]);
     expect(built.questions?.[0]?.also).toEqual(["s14-q2"]);
     const text = renderPresentation({ root: "/tmp/x", tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, ...built });
     expect(text).toContain("also asked as s14-q2");
   });
 });
 
-/** A planner that raises a question at ANALYZE and another in s01's draft, and records every input it is handed. */
+/** A planner that raises a question in s01's draft, and records every input it is handed. */
 function planner(seen: Record<string, unknown>[], raise: boolean): StageFn {
   return (spec) => {
     const inputs = inputsOf(spec);
@@ -65,7 +65,7 @@ function planner(seen: Record<string, unknown>[], raise: boolean): StageFn {
         questions: raise && slice === "s01" ? [{ id: "q1", question: "Which registry mirror does the build pull from?", blocking: false, assumption: "the public one" }] : [],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = APPROVE_PLAN;
-    else artifact = { ...ANALYSIS(null), questions: raise ? [q("q-analyze-1", Q1)] : [] };
+    else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -75,15 +75,15 @@ const drafts = (seen: Record<string, unknown>[], slice: string) => seen.filter((
 const ids = (i: Record<string, unknown> | undefined) => ((i?.["open_questions"] as { id: string }[] | undefined) ?? []).map((x) => x.id);
 
 describe("C-3‴ the drafting stages are handed what was already asked", () => {
-  it("SLICE and every PLAN draft see ANALYZE's questions, and a later slice sees the earlier slice's too", async () => {
+  it("a later slice's draft sees what the slices before it asked, and nothing is asked before SLICE (D-10′)", async () => {
     const root = repo(DOCS);
     const seen: Record<string, unknown>[] = [];
     await runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(seen, true) }), prompts: PROMPTS, budgets: BUDGETS }));
     const slice = seen.find((i) => i["__artifact"] === "slices.json");
     /* Before PRDR-207 no stage was told: `open_questions` absent everywhere, and s14 asked ANALYZE's question again. */
-    expect(ids(slice), "SLICE sees ANALYZE's").toEqual(["q-analyze-1"]);
-    expect(ids(drafts(seen, "s01")[0]), "s01 sees ANALYZE's").toEqual(["q-analyze-1"]);
-    expect(ids(drafts(seen, "s02")[0]), "s02 sees ANALYZE's and s01's, numbered as PRESENT numbers them").toEqual(["q-analyze-1", "s01-q1"]);
+    expect(slice !== undefined && "open_questions" in slice, "PRDR-290 folded ANALYZE, the one stage that asked before SLICE, into DECIDE").toBe(false);
+    expect(ids(drafts(seen, "s01")[0]), "nothing was asked before s01").toEqual([]);
+    expect(ids(drafts(seen, "s02")[0]), "s02 sees s01's, numbered as PRESENT numbers them").toEqual(["s01-q1"]);
   });
 
   it("with nothing asked, no stage is handed an empty list — the prompts are byte-for-byte what they were", async () => {
@@ -98,10 +98,10 @@ describe("C-3‴ the drafting stages are handed what was already asked", () => {
 describe("audit of PRDR-207", () => {
   it("a kept question inherits `blocking` from the twin it absorbed — AWAIT_INFO still fires", () => {
     const built = presentInputsFromOutputs({
-      ANALYZE: { open_questions: [q("q-analyze-1", Q1)] },
+      SLICE: { questions: [q("sq1", Q1)] },
       PLAN: { questions: [{ ...q("s14-q2", S14Q2), blocking: true }] },
     });
-    expect(built.questions?.map((x) => x.id)).toEqual(["q-analyze-1"]);
+    expect(built.questions?.map((x) => x.id)).toEqual(["sq1"]);
     expect(built.questions?.[0]?.blocking, "the absorbed question was blocking; the merged one is").toBe(true);
   });
 });

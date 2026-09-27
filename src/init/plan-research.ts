@@ -31,6 +31,11 @@ import { withOneRelaunch } from "./retry.js";
  * returned nothing `parseArtifact` would take, and the two questions a web
  * search might plausibly have settled never got a session. Which questions
  * research reaches was decided by the order ANALYZE happened to list them in.
+ *
+ * D-10′ (PRDR-290): no phase calls it now. ANALYZE, its one caller, is folded
+ * into DECIDE, which owns the founder's questions, and AUDIT checks the
+ * documents' claims with sessions of its own (C-2¹¹). It stays, with its tests,
+ * until the planning redesign's deletions (D-32) remove it.
  */
 
 export function questionHash(question: string): string {

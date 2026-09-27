@@ -78,8 +78,12 @@ export const ENFORCEMENT_SITES = {
    * `budgets.planning_research_tool_calls` is read and passed in, so it is the
    * site whose drift would break enforcement. Found once the parity test
    * stopped letting a log string vouch for code.
+   *
+   * D-10′ (PRDR-290): `init/audit`. The pipeline read it for ANALYZE's research
+   * launcher, and ANALYZE is folded into DECIDE, so no phase launches planning
+   * research. AUDIT reads it and counts its claim checks against it (C-2¹¹).
    */
-  planning_research_tool_calls: "init/pipeline",
+  planning_research_tool_calls: "init/audit",
   /** C-2¹⁴ (PRDR-284): the loop that counts its rounds against it, and stops there. */
   spec_validation_rounds: "init/validate",
   flake_reruns: "kernel/flake",

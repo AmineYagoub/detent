@@ -75,7 +75,7 @@ const pipeline = (root: string, log: string[], restarts = true): PhaseHandler[] 
   probe("INIT_FS", log),
   discover(root, log),
   writer(root, log, restarts),
-  probe("ANALYZE", log),
+  probe("DETERMINE_VERIFICATION", log),
   probe("PLAN", log),
 ];
 
@@ -84,12 +84,12 @@ describe("PRDR-283: a phase that restarts the chain (C-2¹³)", () => {
     const root = repo();
     const log: string[] = [];
     await runInit(root, pipeline(root, log));
-    expect(log).toEqual(["INIT_FS", "DISCOVER", "WRITE", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["INIT_FS", "DISCOVER", "WRITE", "DETERMINE_VERIFICATION", "PLAN"]);
 
     log.length = 0;
     const again = await runInit(root, pipeline(root, log));
     expect(log, "DISCOVER finds the pack where the original was, and nothing re-plans").toEqual(["DISCOVER"]);
-    expect(again.reused).toEqual(["INIT_FS", "WRITE", "ANALYZE", "PLAN"]);
+    expect(again.reused).toEqual(["INIT_FS", "WRITE", "DETERMINE_VERIFICATION", "PLAN"]);
     expect(again.replayedFrom).toBe("DISCOVER");
   });
 
@@ -99,7 +99,7 @@ describe("PRDR-283: a phase that restarts the chain (C-2¹³)", () => {
     await runInit(root, pipeline(root, log, false));
     log.length = 0;
     await runInit(root, pipeline(root, log, false));
-    expect(log, "the defect this flag exists for: the move re-planned the product").toEqual(["DISCOVER", "WRITE", "ANALYZE", "PLAN"]);
+    expect(log, "the defect this flag exists for: the move re-planned the product").toEqual(["DISCOVER", "WRITE", "DETERMINE_VERIFICATION", "PLAN"]);
   });
 
   it("re-runs when its checkpoint is gone, and the phases after it are reused when the key it leaves is the one they chained from", async () => {
@@ -120,18 +120,18 @@ describe("PRDR-283: a phase that restarts the chain (C-2¹³)", () => {
     writeFileSync(path.join(root, "docs", "pack.md"), "# the pack, edited\n");
     log.length = 0;
     const edited = await runInit(root, pipeline(root, log));
-    expect(log).toEqual(["WRITE", "ANALYZE", "PLAN"]);
+    expect(log).toEqual(["WRITE", "DETERMINE_VERIFICATION", "PLAN"]);
     expect(edited.replayedFrom).toBe("WRITE");
   });
 
-  it("leaves a --replan to re-derive from ANALYZE, which comes after it (C-8′)", async () => {
+  it("leaves a --replan to re-derive from DETERMINE_VERIFICATION, which comes after it (C-8′)", async () => {
     const root = repo();
     const log: string[] = [];
     await runInit(root, pipeline(root, log));
     await runInit(root, pipeline(root, log));
     log.length = 0;
     const replanned = await runInit(root, pipeline(root, log), { replan: true });
-    expect(log).toEqual(["ANALYZE", "PLAN"]);
+    expect(log).toEqual(["DETERMINE_VERIFICATION", "PLAN"]);
     expect(replanned.reused).toEqual(["INIT_FS", "DISCOVER", "WRITE"]);
   });
 

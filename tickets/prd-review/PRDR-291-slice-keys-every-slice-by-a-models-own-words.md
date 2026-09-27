@@ -46,3 +46,18 @@ each slice that names its own documents, and a slice with none plans from every 
 log among them. So a veto, which edits one row, re-plans every slice. Keying a slice by its
 requirement ids would let a veto re-plan only the slices whose requirements the edited entry
 settles, which is what C-3⁗ promises.
+
+## From PRDR-290
+
+ANALYZE is gone (D-10″). SLICE is handed `greenfield` and, in greenfield, `stack`, the entry the
+decision log records, where it was handed `analysis`; it is handed no `open_questions`. The parse
+this ticket seeds from is VALIDATE's `pack` output: `planningPack` in `src/init/pipeline.ts` reads
+it, fails the phase when it will not read, and returns null where VALIDATE handed none. VALIDATE
+hands none when there is no conformance record, as when `plan_docs` narrows a raw document set and
+WRITE writes nothing (C-2¹³). That path has no parse to seed from, and what SLICE does there is
+this ticket's to decide. SLICE's digest and each slice's cache key already read the entry
+(`planningStack` in `src/init/pipeline.ts`, `sliceKey` in `src/init/plan-slices.ts`).
+
+`tests/init/plan-cache.test.ts`'s C-8‴ case held ANALYZE's prose drift. It now pins that an edit to
+one slice's document re-plans that slice alone, with SLICE's output still held constant, so the
+last criterion above is still this ticket's.

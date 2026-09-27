@@ -143,13 +143,14 @@ function readCache(root: string, sliceId: string): SliceCache | null {
  *
  * C-8‴ (PRDR-118): this used to hash the whole ANALYZE artifact and the ids of
  * every ticket planned before it, which made the module's own promise false.
- * ANALYZE re-runs on any document edit and is a model act, so its prose drifts
+ * ANALYZE re-ran on any document edit and was a model act, so its prose drifted
  * every time — and with it every slice's key, so a typo in slice twelve's
  * document re-planned all twenty. The ids did the same thing transitively:
  * re-planning slice two changed slice three's key, and so on to the end.
  *
  * What actually determines a slice's plan is its own documents, its own spec,
- * the STACK the analysis settled on, the bindings, the budgets and the prompt.
+ * the STACK the decision log settles (D-10′), the bindings, the budgets and the
+ * prompt.
  * The earlier index matters only where this slice reached into it, and that is
  * checked separately as `external_deps` — precisely, and without cascading.
  */
@@ -161,7 +162,7 @@ export function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly Draft
       JSON.stringify([
         slice,
         contentsDigest(deps.root, docs),
-        deps.analysis?.stack ?? null,
+        deps.stack,
         deps.greenfield,
         deps.baseline ?? "production",
         deps.boundSlots,
@@ -366,7 +367,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
 
     deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
-    let drafted = await draftAndRead(deps, { slice, planIndex: index, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
+    let drafted = await draftAndRead(deps, { slice, planIndex: index, openQuestions: [...questions] });
     let normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
     /** A question the first draft raised is not answered by redrafting it — both drafts' questions are the human's. */
     const asked: PlanQuestion[] = [...drafted.questions];
@@ -402,7 +403,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
        */
       let outstanding: PlanReview["findings"] = review.findings;
       for (let round = 0; round < (deps.revisionRounds ?? PLAN_REVISIONS); round += 1) {
-        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding, openQuestions: [...(deps.analysis?.questions ?? []), ...questions] });
+        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding, openQuestions: [...questions] });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
         for (const q of drafted.questions) if (!asked.some((a) => a.question.trim().toLowerCase() === q.question.trim().toLowerCase())) asked.push(q);
         after = await sampleReviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index, revised: true });

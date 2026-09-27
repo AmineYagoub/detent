@@ -15,11 +15,12 @@ import { ROLE_IDS } from "../../src/schemas/roles.js";
  * folder with no `.git` is "mode 1", and mode-1 bootstrap is a stub that just
  * prints a note and returns 2. Detent deliberately separates the two questions
  * the oracle conflates — C-1 requires a git root, and greenfield (D-10) is the
- * absence of *stack markers* inside a repo, decided later in ANALYZE. But the
- * behaviour this test guards survives the split intact: a PRD-only, non-git
- * folder is detected as not-a-runnable-project and `detent init` returns
- * EXIT_NOT_READY (2) rather than pretending it can build — exactly as the
- * oracle's mode 1 returned 2, and needing no live backend to say so.
+ * absence of *stack markers* inside a repo, which code reads from DISCOVER's
+ * findings (D-10′). But the behaviour this test guards survives the split
+ * intact: a PRD-only, non-git folder is detected as not-a-runnable-project and
+ * `detent init` returns EXIT_NOT_READY (2) rather than pretending it can
+ * build — exactly as the oracle's mode 1 returned 2, and needing no live
+ * backend to say so.
  */
 
 const roots: string[] = [];

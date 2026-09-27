@@ -10,7 +10,7 @@ import { RunJournal } from "../../src/kernel/journal.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, DRAFT, LONE_CANDIDATE, ONE_SLICE, PROMPTS, repo } from "./plan-fixture.js";
 import { ticket } from "./slicing-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -69,7 +69,7 @@ function scripted(reads: readonly (readonly object[])[]): {
     } else if (spec.artifactOut.endsWith("slices.json")) {
       artifact = ONE_SLICE;
     } else {
-      artifact = ANALYSIS(null);
+      throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     }
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();

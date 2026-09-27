@@ -2,7 +2,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { initLayout } from "../../src/fs/layout.js";
-import { analysisPath, analyzeStage } from "../../src/init/analyze.js";
 import { planResearch, questionHash } from "../../src/init/plan-research.js";
 import { SCHEMA_VERSION, parseArtifact } from "../../src/schemas/common.js";
 import { planningBriefSchema } from "../../src/schemas/init.js";
@@ -17,8 +16,13 @@ import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
  * reached, which is a ceiling to raise or a question to drop. A live init
  * carried three and reported one number. `T-063` in `tests/init/stages.test.ts`
  * covers the pool, the cache and the X-6a validator; this file covers the
- * distinction ANALYZE now draws across them, and it lives apart because that
+ * distinction `planResearch` draws across them, and it lives apart because that
  * file is at its 600-line ceiling.
+ *
+ * D-10′ (PRDR-290) folded ANALYZE, research's one caller, into DECIDE. The
+ * breakdown ANALYZE printed went with it, and so did the case that pinned its
+ * wording for an init with research switched off; what `planResearch` itself
+ * returns and says is pinned here directly until D-32 removes it.
  */
 
 const roots: string[] = [];
@@ -37,15 +41,6 @@ function repo(files: Record<string, string> = {}): string {
   initLayout(root);
   return root;
 }
-
-const ANALYSIS_BROWNFIELD = {
-  schema_version: SCHEMA_VERSION,
-  summary: "An existing TypeScript service with vitest already wired.",
-  stack: null,
-  questions: [],
-  assumptions: [{ claim: "tests live under tests/", evidence: "tests/ exists" }],
-  docs_read: ["PRD.md"],
-};
 
 /**
  * A brief that genuinely satisfies `planningBriefSchema`, mirroring the fixture
@@ -151,45 +146,20 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
   it("researches every question on a pool too small for them, and says what that cost", async () => {
     const root = repo({ "PRD.md": "# vague\n" });
     const notes: string[] = [];
-    const outcome = await analyzeStage({
+    const result = await planResearch(["q one?", "q two?", "q three?"], {
       root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
+      budget: 2,
       note: (t) => notes.push(t),
-      launch: async () => {
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({
-            ...ANALYSIS_BROWNFIELD,
-            questions: [
-              { id: "q1", question: "q one?", blocking: false, assumption: "a" },
-              { id: "q2", question: "q two?", blocking: false, assumption: "b" },
-              { id: "q3", question: "q three?", blocking: false, assumption: "c" },
-            ],
-          }),
-        );
-      },
-      research: {
-        budget: 2,
-        /** As `pipeline.ts` wires it: planning research's notes reach the same operator sink ANALYZE's do. */
-        note: (t) => notes.push(t),
-        researchOne: async (question, _share, artifactOut) => {
-          writeBrief(artifactOut, BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
-          return { toolCalls: 16 };
-        },
+      researchOne: async (question, _share, artifactOut) => {
+        writeBrief(artifactOut, BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
+        return { toolCalls: 16 };
       },
     });
 
-    expect(outcome.kind).toBe("complete");
-    expect(notes.join(" ")).toContain("3 question(s) carried to PRESENT");
-    expect(notes.join(" "), "no question is reported as one a bigger ceiling would have reached").toContain(
-      "0 settled as undecidable (only a human can answer), 3 researched without a usable answer",
-    );
+    expect(result.unanswered, "no question is left unasked for want of budget").toEqual(["q one?", "q two?", "q three?"]);
+    expect(result.sessionsLaunched, "each question's session, and its one reshape (PRDR-264)").toBe(6);
+    expect(result.toolCallsUsed, "three questions, two attempts each (PRDR-264), 16 calls a session: 96 against a stated pool of 2").toBe(96);
     expect(notes.join(" "), "and the breakdown no longer offers a lever that does nothing").not.toContain("never researched");
-    expect(
-      outcome.kind === "complete" ? outcome.outputs["research_tool_calls"] : 0,
-      "three questions, two attempts each (PRDR-264), 16 calls a session: 96 against a stated pool of 2",
-    ).toBe(96);
     /**
      * PRDR-264: the note used to say "no valid brief" and cite nothing. The
      * refusal is the operator's only handle on WHY research came back empty,
@@ -217,36 +187,6 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
   });
 
   /**
-   * The third population, which the breakdown above would otherwise absorb: an
-   * init with no research configured reaches the same line with every question
-   * unanswered. "Never researched" is literally true there and misleading — it
-   * reads as a ceiling that was hit. It is named for what it is instead.
-   */
-  it("does not report an init with research switched off as one that ran out of budget", async () => {
-    const root = repo({ "PRD.md": "# vague\n" });
-    const notes: string[] = [];
-    await analyzeStage({
-      root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
-      note: (t) => notes.push(t),
-      launch: async () => {
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({
-            ...ANALYSIS_BROWNFIELD,
-            questions: [{ id: "q1", question: "which database?", blocking: true, assumption: "postgres" }],
-          }),
-        );
-      },
-    });
-
-    const said = notes.join(" ");
-    expect(said).toContain("1 question(s) carried to PRESENT");
-    expect(said).toContain("planning research did not run for this init");
-    expect(said).not.toContain("never researched");
-  });
-  /**
    * PRDR-264: the breakdown's fourth population, and the one that changes the
    * advice attached to it. A question research SETTLED still rides to PRESENT
    * — the plan proceeds on its assumption exactly as before — but no ceiling
@@ -257,43 +197,19 @@ describe("C-3′ the batch is one batch, and it says which half was tried", () =
     const root = repo({ "PRD.md": "# vague\n" });
     const notes: string[] = [];
     const settled = "what is the price ladder?";
-    const outcome = await analyzeStage({
+    const result = await planResearch([settled, "q two?"], {
       root,
-      docs: ["PRD.md"],
-      stackMarkers: ["package.json"],
+      budget: 16,
       note: (t) => notes.push(t),
-      launch: async () => {
-        writeFileSync(
-          analysisPath(root),
-          JSON.stringify({
-            ...ANALYSIS_BROWNFIELD,
-            questions: [
-              { id: "q1", question: settled, blocking: false, assumption: "flat pricing" },
-              { id: "q2", question: "q two?", blocking: false, assumption: "b" },
-            ],
-          }),
-        );
-      },
-      research: {
-        budget: 16,
-        note: (t) => notes.push(t),
-        researchOne: async (question, _share, artifactOut) => {
-          writeBrief(artifactOut, question === settled ? SETTLED_BRIEF(question) : BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
-          return { toolCalls: 1 };
-        },
+      researchOne: async (question, _share, artifactOut) => {
+        writeBrief(artifactOut, question === settled ? SETTLED_BRIEF(question) : BRIEF_REFUSED_FOR_EMPTY_LOCAL_SEARCH(question));
+        return { toolCalls: 1 };
       },
     });
 
-    expect(outcome.kind).toBe("complete");
-    const said = notes.join(" ");
-    expect(said, "a settled question is still carried — the human has to answer it").toContain("2 question(s) carried to PRESENT");
-    expect(said, "and it is counted as settled, not as a ceiling to raise").toContain(
-      "1 settled as undecidable (only a human can answer), 1 researched without a usable answer",
-    );
-    expect(said, "the note names who decides it, because that is the only way it gets answered").toContain("the founder");
-    expect(
-      outcome.kind === "complete" ? (outcome.outputs["open_questions"] as { question: string }[]).map((q) => q.question) : [],
-      "both questions reach PRESENT with their assumptions (C-3′)",
-    ).toEqual([settled, "q two?"]);
+    expect(result.undecidable, "it is counted as settled, not as a ceiling to raise").toEqual([settled]);
+    expect(result.unanswered).toEqual(["q two?"]);
+    expect(result.briefs, "a settled question is no answer").toEqual([]);
+    expect(notes.join(" "), "the note names who decides it, because that is the only way it gets answered").toContain("the founder decides it");
   });
 });

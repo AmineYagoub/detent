@@ -71,8 +71,8 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
     await sliceStage({
       root,
       docs: ["PRD.md"],
-      analysis: null,
       greenfield: true,
+      stack: null,
       baseline: "none",
       sliceSize: { min: 9, max: 13 },
       launch: async (inputs) => {

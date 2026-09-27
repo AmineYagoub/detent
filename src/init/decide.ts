@@ -6,7 +6,7 @@ import { noteUnitComplete } from "../kernel/ledger.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { decideArtifactSchema, decideRecordSchema, type DecideArtifact, type DecideQuestion, type DecideRecord } from "../schemas/decide.js";
 import { DECISION_LOG_PATH } from "../schemas/pack.js";
-import { isGreenfield } from "./analyze.js";
+import { isGreenfield } from "./greenfield.js";
 import { checkDecide, openItems, type DecideCheck, type Item } from "./decide-items.js";
 import { appendToDecisionLog, decisionLogFile, nextId, readDecisionLog, type DecidedStack, type LogAdditions, type LogView } from "./decide-log.js";
 import { decideNotes, deferredMessage } from "./decide-notes.js";
@@ -296,12 +296,6 @@ export function planningDocs(root: string, outputs: Readonly<Record<string, Reco
   if (Array.isArray(written)) return [...(written as string[])];
   const docs = (outputs["DISCOVER"]?.["docs"] as string[] | undefined) ?? [];
   return existsSync(decisionLogFile(root)) && !docs.includes(DECISION_LOG_PATH) ? [...docs, DECISION_LOG_PATH].sort() : [...docs];
-}
-
-/** D-10′: the stack DECIDE recorded, or null; in greenfield it is the stack ANALYZE plans on. */
-export function decidedStack(outputs: Readonly<Record<string, Record<string, unknown>>>): DecidedStack | null {
-  const stack = outputs["DECIDE"]?.["stack"];
-  return typeof stack === "object" && stack !== null ? (stack as DecidedStack) : null;
 }
 
 export function decidePhase(deps: PipelineDeps): PhaseHandler {

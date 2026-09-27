@@ -41,3 +41,10 @@ upgrade, as D-5 said it would.
 Lifting a limit v1 set on purpose is the operator's call, and it was made knowingly. The operator
 chose per-package gates before anyone noticed that D-5 makes root-only binding deliberate; told so
 on 2026-09-26, the operator kept the decision, in this redesign.
+
+## From PRDR-290
+
+In greenfield, DETERMINE_VERIFICATION binds from the stack entry (`provisionalBindingsFor` in
+`src/init/bind.ts`), whose `gates` are the root package's rows under `## Packages` and no other
+package's. The checker's parse carries every declared package with its gates (`packages`), and
+`planningPack` in `src/init/pipeline.ts` reads the parse VALIDATE hands on.

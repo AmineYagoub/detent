@@ -10,7 +10,7 @@ import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { BOOTSTRAP_TICKET_ID, capstoneBlockers } from "../../src/init/plan-write.js";
 import { normaliseDraft } from "../../src/init/plan-slices.js";
 import type { SliceSpec } from "../../src/schemas/init.js";
-import { CLEAN_AUDIT, planningPipeline, ANALYSIS, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, decideDefaults, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, decideDefaults, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -54,9 +54,7 @@ const SLICE = (id: string, dependsOn: string[] = []): SliceSpec => ({
 const ONE_SLICE = { schema_version: SCHEMA_VERSION, slices: [SLICE("s01")], questions: [] };
 
 /** A planner whose PLAN draft is supplied per call, so a test can hand it a hostile one. */
-const GREENFIELD_STACK = { language: "typescript", runtime: "node", test_framework: "vitest", rationale: "PRD" };
-
-function plannerWith(draft: object, slices: object = ONE_SLICE, stack: object | null = null): StageFn {
+function plannerWith(draft: object, slices: object = ONE_SLICE): StageFn {
   return (spec: SessionSpec) => {
     const artifact = spec.artifactOut.endsWith("plan-draft.json")
       ? draft
@@ -64,7 +62,8 @@ function plannerWith(draft: object, slices: object = ONE_SLICE, stack: object | 
         ? APPROVE_PLAN
         : spec.artifactOut.endsWith("slices.json")
           ? slices
-          : ANALYSIS(stack);
+          : null;
+    if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
     return okResult();
   };
@@ -199,7 +198,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   it("a DONE bootstrap is preserved, and a stale blocker it carries is dropped rather than crashing the write", async () => {
     const root = repo({ "PRD.md": "# build it\n" });
     const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(first, ONE_SLICE, GREENFIELD_STACK) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(first) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     /** Finish the scaffolding and one ticket, as a real run would. */
@@ -211,7 +210,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
     /** The new plan drops t-s01-001, which the DONE t-s01-002 still names as a blocker. */
     const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-002"), ticket("t-s01-003")], questions: [] };
-    const backend2 = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(second, ONE_SLICE, GREENFIELD_STACK) });
+    const backend2 = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(second) });
     const again = await runInit(root, planningPipeline({ root, backend: backend2, prompts: PROMPTS, budgets: BUDGETS }), { replan: true });
 
     expect(again.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -244,12 +243,12 @@ describe("PRDR-118 re-planning does not destroy work", () => {
   });
 });
 
-/** A-1⁶ (PRDR-206): the analysis names the scaffold; the bootstrap provides it; the check resolves it. */
-describe("A-1⁶ the bootstrap ticket provides the scaffold files the analysis names", () => {
+/** A-1⁶ (PRDR-206): the stack entry names the scaffold (D-10′, PRDR-290); the bootstrap provides it; the check resolves it. */
+describe("A-1⁶ the bootstrap ticket provides the scaffold files the stack entry names", () => {
   it("provides each as a file contract, and a ticket consuming one is no longer a finding at PRESENT", async () => {
-    /* Greenfield: a document and nothing else, so ANALYZE chooses the stack and C-4 constructs the bootstrap. */
+    /* Greenfield: a document and nothing else, so DECIDE records the stack and C-4 constructs the bootstrap. */
     const root = repo({ "PRD.md": "# build it\n" });
-    const stack = { language: "TypeScript", runtime: "Node.js 22", test_framework: "vitest", rationale: "", scaffold_files: ["package.json", "tsconfig.json"] };
+    const stack = { language: "TypeScript", toolchain: "Node.js 22", scaffold_files: ["package.json", "tsconfig.json"] };
     const draft = {
       schema_version: SCHEMA_VERSION,
       tickets: [
@@ -258,7 +257,7 @@ describe("A-1⁶ the bootstrap ticket provides the scaffold files the analysis n
       ],
       questions: [],
     };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(draft, ONE_SLICE, stack) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(stack), planner: plannerWith(draft) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
 

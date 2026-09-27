@@ -44,6 +44,13 @@ function repoWithVacuousTest(script: string): string {
   return root;
 }
 
+/**
+ * What DISCOVER hands on for these repos. DETERMINE_VERIFICATION reads whether
+ * the project is new from the stack markers (D-10′, PRDR-290), where it read
+ * ANALYZE's flag before, so a handler run with no markers binds a new project.
+ */
+const DISCOVERED = { DISCOVER: { stack_markers: ["package.json"] } };
+
 /** Run the real DETERMINE_VERIFICATION handler and collect what the operator was told. */
 async function noticesShownTo(root: string): Promise<string[]> {
   const shown: string[] = [];
@@ -56,7 +63,7 @@ async function noticesShownTo(root: string): Promise<string[]> {
   });
   const determine = handlers.find((h) => h.phase === "DETERMINE_VERIFICATION");
   if (determine === undefined) throw new Error("no DETERMINE_VERIFICATION handler");
-  await determine.run({ root, outputs: {}, now: () => 0 });
+  await determine.run({ root, outputs: DISCOVERED, now: () => 0 });
   return shown;
 }
 
@@ -130,7 +137,7 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
     const determine = handlers.find((h) => h.phase === "DETERMINE_VERIFICATION");
     const present = handlers.find((h) => h.phase === "PRESENT");
     if (determine === undefined || present === undefined) throw new Error("missing handler");
-    const determined = await determine.run({ root, outputs: {}, now: () => 0 });
+    const determined = await determine.run({ root, outputs: DISCOVERED, now: () => 0 });
     if (determined.kind !== "complete") throw new Error(`DETERMINE_VERIFICATION did not complete: ${determined.kind}`);
     await present.run({ root, outputs: { DETERMINE_VERIFICATION: determined.outputs }, now: () => 0 });
     expect(shown, "the summary the operator approves must carry the warning").toContain("may verify nothing");

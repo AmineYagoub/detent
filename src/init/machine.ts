@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Ticket } from "../schemas/ticket.js";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
-import { readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
+import { checkpointPath, readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import { git } from "../kernel/git.js";
 import { NON_TICKET_FILES } from "../kernel/tickets/readers.js";
@@ -22,10 +22,13 @@ import { inFlightTickets, replanRefusal, replansAt, wouldReplan } from "./replan
  *
  * The distinction that makes C-8's AC true — "editing PRD.md re-executes
  * ANALYZE forward; editing nothing re-executes nothing" — is that DISCOVER
- * reads the *listing* (which files exist) while ANALYZE reads the *contents*.
- * Editing a doc changes what ANALYZE saw without changing what DISCOVER found,
- * so discovery is reused and analysis re-runs. That is a modelling choice the
- * checkpoint layer cannot make for us, which is why the digests live here.
+ * reads the *listing* (which files exist) while the phases after it read the
+ * *contents*. Editing a doc changes what they saw without changing what
+ * DISCOVER found, so discovery is reused and they re-run. That is a modelling
+ * choice the checkpoint layer cannot make for us, which is why the digests
+ * live here. ANALYZE, the first to read the contents then, is folded into
+ * DECIDE (D-10′, PRDR-290): the specification phase reads them now, and
+ * planning from DETERMINE_VERIFICATION on.
  *
  * One exception, C-2⁹'s (PRDR-279): where a conformance record exists,
  * DISCOVER also says whether the pack is still the one validated, so it reads
@@ -142,19 +145,52 @@ export interface PhaseHandler {
  * VALIDATE, between DISCOVER and this phase, are not forced either: C-8⁵ keeps
  * `--replan` out of the specification phase, and each one's key covers
  * everything it reads, so it re-runs when that moves and only then (C-2¹¹,
- * C-2¹², C-2¹³, C-2¹⁴).
+ * C-2¹², C-2¹³, C-2¹⁴). It entered at ANALYZE until D-10′ folded that into
+ * DECIDE (PRDR-290): planning begins here, where the stack DECIDE recorded is
+ * bound.
  */
-const REPLAN_FROM: InitPhase = "ANALYZE";
+const REPLAN_FROM: InitPhase = "DETERMINE_VERIFICATION";
 
 /**
  * PRDR-087: a stale approval means the PRESENTATION is out of date, not the
  * plan. Re-deriving from phase one would hand the human a plan they never
  * reviewed — the approval gate's whole job is that you approve what you were
- * shown — and would re-run ANALYZE and PLAN, whose digests are fresh, at full
- * model cost. Forcing PRESENT alone re-presents the diff, which is what C-8
+ * shown — and would re-run the planning sessions, whose digests are fresh, at
+ * full model cost. Forcing PRESENT alone re-presents the diff, which is what C-8
  * says and what the old comment claimed to do.
  */
 const STALE_APPROVAL_FROM: InitPhase = "PRESENT";
+
+/**
+ * D-10′ (PRDR-290): a phase an older build ran and this one does not, with the
+ * phase that took over its job. The phase list is persisted in the
+ * checkpoints' names, so removing a phase is an F-3 event. Nothing reads the
+ * retired checkpoint, since the walk names this build's phases alone; the
+ * phase that took over is re-run once, whatever its own checkpoint says, and
+ * the init says why. The checkpoint and the artifact beside it go when that
+ * phase completes, so an init that stops before then says it again.
+ */
+interface Retired {
+  readonly phase: string;
+  readonly by: InitPhase;
+  /** Under `.detent/state/`: the checkpoint, and the artifact its session wrote. */
+  readonly files: readonly string[];
+  readonly why: string;
+}
+
+const RETIRED: readonly Retired[] = [
+  {
+    phase: "ANALYZE",
+    by: "DECIDE",
+    files: ["ANALYZE.json", "analysis.json"],
+    why:
+      "ANALYZE's checkpoint is from an older build. This one folds ANALYZE into DECIDE, which records the stack as a decision, " +
+      "and planning reads that entry where it read ANALYZE's analysis (D-10′). Nothing reads that checkpoint, and this init " +
+      "re-runs from DECIDE (F-3).",
+  },
+];
+
+const retiredIn = (root: string): Retired[] => RETIRED.filter((r) => existsSync(checkpointPath(root, r.phase)));
 
 export interface InitOptions {
   /** PRDR-194: called as each phase begins, so a killed run can name the phase. */
@@ -425,8 +461,8 @@ export async function runInit(
    * C-8″ (PRDR-118): this guarded `--replan` only, and every other route to a
    * re-plan was unguarded — including the one PRESENT itself recommends.
    * Answer a question in a planning document while a run is executing, re-run
-   * `detent init` with no flag, and the content digest replays ANALYZE-forward
-   * into PLAN, which resets the claimed ticket a session is working in. The
+   * `detent init` with no flag, and the content digest replays the planning
+   * phases into PLAN, which resets the claimed ticket a session is working in. The
    * guard belongs to re-planning, not to the flag.
    */
   if (opts.replan === true || wouldReplan(root, handlers, now)) {
@@ -437,6 +473,8 @@ export async function runInit(
     /* Hand-edited tickets invalidate the approval; PRESENT re-presents the diff. */
     messages.push("tickets were edited after approval — approval invalidated, re-presenting (C-8)");
   }
+  const retired = retiredIn(root);
+  for (const r of retired) messages.push(r.why);
   /* C-8′: a replan is a fresh planning session — every slice is drafted again (C-2‴). */
   if (opts.replan === true) rmSync(sliceCacheDir(root), { recursive: true, force: true });
 
@@ -474,7 +512,12 @@ export async function runInit(
       replayedFrom ??= phase;
     }
 
-    if (!replaying || standalone || restarts) {
+    /* D-10′ (PRDR-290): the phase that took over a retired one's job re-runs, whatever its own checkpoint says. */
+    const takesOver = retired.filter((r) => r.by === phase);
+    if (takesOver.length > 0) {
+      replayedFrom ??= phase;
+      if (!standalone) replaying = true;
+    } else if (!replaying || standalone || restarts) {
       const read = readCheckpoint(root, phase, hash);
       if (read.status === "fresh" && handler.outputIntact?.(ctx) !== false) {
         outputs[phase] = { ...read.checkpoint.outputs };
@@ -501,9 +544,9 @@ export async function runInit(
       /**
        * PRDR-166: a repeated question says whether anything new was read.
        *
-       * An answer written where DISCOVER does not look is never read, ANALYZE
+       * An answer written where DISCOVER does not look is never read, planning
        * re-derives, and the identical question returns — indistinguishable from
-       * an answer the planner judged inadequate, at the cost of a full ANALYZE
+       * an answer the planner judged inadequate, at the cost of a full planning
        * round per wrong guess. The machine already knows: a reused DISCOVER
        * means the document set did not change. It simply never said so.
        *
@@ -536,6 +579,7 @@ export async function runInit(
     outputs[phase] = outcome.outputs;
     writeCheckpoint(root, phase, key, outcome.outputs, { at: new Date(now()).toISOString() });
     executed.push(phase);
+    for (const r of takesOver) for (const file of r.files) rmSync(path.join(stateDir(root), "state", file), { force: true });
   }
 
   return {

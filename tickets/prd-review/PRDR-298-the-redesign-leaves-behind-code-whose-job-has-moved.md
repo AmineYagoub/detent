@@ -48,3 +48,13 @@ DECIDE and PRESENT use `similarQuestions` from `src/init/questions.ts`: DECIDE r
 the log's decisions already answer, and PRESENT names each planning question the log answers
 (`answeredByLog`) rather than asking it. Removing the question machinery keeps that function or
 moves it; the rest of `questions.ts` is this ticket's to remove.
+
+## From PRDR-290
+
+ANALYZE was planning research's one caller, so since PRDR-290 no phase launches a research
+session, and `src/init/plan-research.ts` has no caller in `src/`: the first criterion's second
+half holds, and the file is this ticket's to delete. Its tests drive it directly: the T-063 cases
+in `tests/init/stages.test.ts`, `research-batch.test.ts`, `research-contract.test.ts`,
+`research-share.test.ts` and the planning half of `tests/kernel/x1-counting.test.ts`. X-1's site
+map names `init/audit` for `planning_research_tool_calls`. SLICE no longer takes `open_questions`;
+PLAN's drafts still do, from the slices before them.

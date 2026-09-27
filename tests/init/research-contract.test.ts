@@ -7,14 +7,10 @@ import {
   planningBriefPath,
   planningBriefSkeleton,
   questionHash,
-  undecidableBriefSkeleton,
 } from "../../src/init/plan-research.js";
-import { runInit } from "../../src/init/machine.js";
 import { SCHEMA_VERSION, parseArtifact } from "../../src/schemas/common.js";
 import { planningBriefSchema } from "../../src/schemas/init.js";
-import { MockBackend, type RecordedCall } from "../../src/sessions/mock.js";
 import { removeTree, tmpTree } from "../helpers.js";
-import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo as fixtureRepo } from "./plan-fixture.js";
 
 /**
  * PRDR-264 — the contract planning research was never handed.
@@ -306,88 +302,6 @@ describe("PRDR-264 a refused brief buys one reshape relaunch", () => {
     const { result, seen } = await drive(root(), [Q], 8, () => ({ malformed: true }));
     expect(seen.artifactOuts.length, "one attempt and one relaunch — P2 fails the phase after that").toBe(2);
     expect(result.unanswered).toEqual([Q]);
-  });
-});
-
-/**
- * PRDR-264 — D-17 itself, asserted where it lived.
- *
- * Everything above this line drives `planResearch` with an injected launcher,
- * and every one of those tests passed on HEAD's pipeline: the skeleton was
- * correct, the schema was correct, and the defect was that the CALL SITE never
- * handed the one to a session judged by the other. A contract that exists and
- * is not passed is the same as no contract, and only a test that runs the real
- * `buildPipeline` can tell the two apart.
- */
-describe("PRDR-264 the pipeline hands planning research its contract (D-17)", () => {
-  const ASKED = "does the v3 API still accept callbacks?";
-
-  /**
-   * The research role is unscripted, so the mock succeeds without writing an
-   * artifact: every attempt is refused for "the session wrote no artifact", and
-   * both the first launch and its reshape relaunch are recorded.
-   */
-  async function researchCalls(): Promise<{ readonly calls: readonly RecordedCall[]; readonly root: string }> {
-    const root = fixtureRepo(LONE_CANDIDATE);
-    const analysis = {
-      schema_version: SCHEMA_VERSION,
-      summary: "s",
-      stack: null,
-      questions: [{ id: "q1", question: ASKED, blocking: false, assumption: "callbacks still work" }],
-      assumptions: [],
-      docs_read: ["PRD.md"],
-    };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(analysis, DRAFT(["t-100"])) });
-    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
-    const calls = backend.calls.filter((c) => c.role === "research");
-    expect(calls[0], "ANALYZE raised a question and no research session was launched at all").toBeDefined();
-    return { calls, root };
-  }
-
-  function inputsOf(call: RecordedCall): Record<string, unknown> {
-    return (JSON.parse(call.spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
-  }
-
-  it("passes both expected_output arms, so the session is not left to guess at prompts/research.md", async () => {
-    const { calls } = await researchCalls();
-    const inputs = inputsOf(calls[0]!);
-    const hash = questionHash(ASKED);
-    expect(inputs["expected_output"], "the shape planningBriefSchema actually accepts").toEqual(planningBriefSkeleton(ASKED, hash));
-    expect(inputs["expected_output_if_undecidable"], "and the arm that settles a question without answering it").toEqual(
-      undecidableBriefSkeleton(ASKED, hash),
-    );
-  });
-
-  it("binds the session to its question by hash and by artifact path (D-19)", async () => {
-    const { calls, root } = await researchCalls();
-    const inputs = inputsOf(calls[0]!);
-    const hash = questionHash(ASKED);
-    expect(inputs["question"]).toBe(ASKED);
-    expect(inputs["question_hash"], "the session echoes this; it is what proves the brief answers THIS question").toBe(hash);
-    expect(calls[0]!.spec.artifactOut, "one fixed path for every question is how a stale brief became an answer").toBe(
-      planningArtifactPath(root, hash),
-    );
-  });
-
-  it("hands the session its SHARE of the pool under the key the prompt reads", async () => {
-    const { calls } = await researchCalls();
-    const inputs = inputsOf(calls[0]!);
-    expect(inputs["tool_call_budget"], "a lone question is offered the whole pool (D-16)").toBe(
-      BUDGETS.planning_research_tool_calls,
-    );
-  });
-  /**
-   * The relaunch exists to tell the session what the validator refused. Nothing
-   * pinned that it reaches the session — `previousAttemptInput` is asserted at
-   * the plan-review call site and this one merely spreads it, which is the same
-   * "the mechanism exists, the call site does not use it" shape as D-17.
-   */
-  it("tells the reshape relaunch what the validator refused, and the first attempt nothing", async () => {
-    const { calls } = await researchCalls();
-    expect(calls.length, "one attempt and one reshape relaunch").toBe(2);
-    expect(inputsOf(calls[0]!)["previous_attempt"], "there is nothing to tell a first attempt").toBeUndefined();
-    const carried = inputsOf(calls[1]!)["previous_attempt"] as { issue: string } | undefined;
-    expect(carried?.issue, "the relaunch is told why, in the validator's own words").toBe("the session wrote no artifact");
   });
 });
 

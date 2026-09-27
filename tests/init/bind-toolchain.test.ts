@@ -3,7 +3,7 @@ import { readBindings } from "../../src/adapter/drift.js";
 import { determineVerification } from "../../src/init/bind.js";
 import { GREENFIELD_COMMANDS } from "../../src/init/bind.js";
 import { TOOLCHAINS, currentPlatform, headExecutable, probeExecutable, toolchainFor } from "../../src/adapter/toolchain.js";
-import { ANALYSIS, repo } from "./plan-fixture.js";
+import { STACK, repo } from "./plan-fixture.js";
 
 /**
  * PRDR-273 — greenfield proposed `go test ./...` on a machine with no Go and
@@ -13,13 +13,11 @@ import { ANALYSIS, repo } from "./plan-fixture.js";
  * reads, and the phase's promise to bind without looking.
  */
 describe("PRDR-276 greenfield binds provisional whatever the host has", () => {
-  const GO = {
-    language: "Go 1.27 (multi-module monorepo under a committed root go.work)",
-    runtime: "static Go binaries",
-    test_framework: "Go standard-library testing",
-    rationale: "D44",
-    verification: { test: "go test ./...", lint: "go vet ./...", build: "go build ./..." },
-  };
+  const GO = STACK("Go 1.27 (multi-module monorepo under a committed root go.work)", {
+    test: "go test ./...",
+    lint: "go vet ./...",
+    build: "go build ./...",
+  });
 
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -35,7 +33,7 @@ describe("PRDR-276 greenfield binds provisional whatever the host has", () => {
   it("a machine with no Go still binds the documented Go gates, provisional", async () => {
     const root = repo({ "PRD.md": "# build it\n" });
     noToolchains();
-    const outcome = await determineVerification({ root, greenfield: true, analysis: ANALYSIS(GO) as never });
+    const outcome = await determineVerification({ root, greenfield: true, stack: GO });
     if (outcome.kind !== "complete") throw new Error(`expected completion, got ${outcome.kind}: ${outcome.message}`);
     const bindings = readBindings(root).bindings;
     expect(bindings.map((b) => b.slot).sort()).toEqual(["build", "lint", "test"]);
@@ -48,13 +46,7 @@ describe("PRDR-276 greenfield binds provisional whatever the host has", () => {
     const outcome = await determineVerification({
       root,
       greenfield: true,
-      analysis: ANALYSIS({
-        language: "Zig",
-        runtime: "",
-        test_framework: "",
-        rationale: "",
-        verification: { test: "zig build test" },
-      }) as never,
+      stack: STACK("Zig", { test: "zig build test" }),
     });
     expect(outcome.kind).toBe("complete");
     expect(readBindings(root).bindings.find((b) => b.slot === "test")?.resolved).toBe("zig build test");

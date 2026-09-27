@@ -97,13 +97,18 @@ function sayValidated(value: Json): Json {
  * a new one. The three prompts that named the version stopped naming it here,
  * and their hashes moved, which is the re-pin; `audit`, `spec_write` and
  * `spec_review` joined the roles, which is the routing (PRDR-281, PRDR-282,
- * PRDR-284); the conformance record gained `validated` (PRDR-283). Two
+ * PRDR-284); the conformance record gained `validated` (PRDR-283). Three
  * shapes need no step. C-2⁶'s rounds key, `spec_validation_rounds`: a
  * config's budgets take the default of every key they omit, and `init` writes
- * one key alone. And the record's rounds, whose open findings gained an id and
+ * one key alone. The record's rounds, whose open findings gained an id and
  * why each is open (PRDR-284): no build wrote a round before them, so only a
  * record written by hand holds the older shape, and its reader refuses it by
- * name (C-2⁹).
+ * name (C-2⁹). And D-10′'s phase list, which lost ANALYZE (PRDR-290): its
+ * checkpoint is carried like any other file, and `init`, which alone reads
+ * checkpoints, reads it as the sign to re-run from DECIDE, and says so. That
+ * reading is `init`'s, not this step's, because a state written by a 3.1.1
+ * build before PRDR-290 holds the same checkpoint at this version, and no
+ * migration runs on it.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {

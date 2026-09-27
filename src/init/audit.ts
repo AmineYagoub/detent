@@ -4,7 +4,7 @@ import { stateDir } from "../fs/layout.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
 import { auditSurveySchema } from "../schemas/audit.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
-import { isGreenfield } from "./analyze.js";
+import { isGreenfield } from "./greenfield.js";
 import { checkClaims, claimBriefSkeletons, type AuditResearch, type CheckedClaim } from "./audit-claims.js";
 import { auditedDocuments, auditKey } from "./audit-key.js";
 import { checkSurvey, type Dropped, type SurveyCheck } from "./audit-passages.js";
@@ -18,7 +18,7 @@ import { launchInitSession, withInitJournal } from "./session.js";
  * C-2⁶, C-2¹¹ (PRDR-281) — AUDIT: the documents are judged before anything
  * plans from them.
  *
- * ANALYZE reads the documents to plan from them, not to doubt them, so a
+ * ANALYZE read the documents to plan from them, not to doubt them, so a
  * contradiction became an assumption and an external claim was taken as
  * written, both met again only by the session that built on them. AUDIT reads
  * them first, in two steps under one role and one prompt: a survey that finds

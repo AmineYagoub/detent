@@ -51,7 +51,7 @@ Two commands. That is the whole public workflow.
 detent init
 ```
 
-`init` runs twelve phases, in order. On a terminal it asks you DECIDE's questions as it goes, and otherwise it stops between them only where VALIDATE cannot go on without you:
+`init` runs eleven phases, in order. On a terminal it asks you DECIDE's questions as it goes, and otherwise it stops between them only where VALIDATE cannot go on without you:
 
 - **INIT_FS**: checks you're at a git root and scaffolds `.detent/`.
 - **DISCOVER**: finds your planning documents and candidate verification commands.
@@ -59,8 +59,7 @@ detent init
 - **DECIDE**: settles what AUDIT left open before anything plans from it. A decision counted in money or contracts is asked, in screens of at most four, the recommended answer first and each option with what choosing it means; everything else is settled as a default you can veto. Both go into `docs/founder-decisions.md`, the decision log, which every later phase reads, and a question the log already answers is not asked again. Off a terminal it takes each recommended answer and says so. In a new project it also decides the stack.
 - **WRITE**: rewrites the documents into the pack, a fixed layout under `docs/` in which every requirement has an id, a milestone and MUST or SHOULD, every acceptance criterion states Given, When and Then, and every decision and default the pack relies on is cited by id. It moves each original it rewrote to `archive/` and deletes nothing; a README stays where it is. The pack checker checks what it wrote, its session is relaunched once on a blocking finding, and the result, red or green, goes into `docs/conformance.json`, which says the pack is not validated yet.
 - **VALIDATE**: validates the pack before anything plans from it. A red pack checker is fixed first. Then each round runs one reviewer per area of the pack, the areas your index names, and each finding comes with its severity, blocker, major or minor, its `file:line`, a quote and the exact fix; a writer applies them, and the next round checks those fixes and what they broke. A round with no blocker and no major ends it, its minor findings fixed. `spec_validation_rounds` (default 8) is the ceiling: there, the majors left go to PRESENT as risks and planning goes on, and a blocker stops `init` for you to settle, after which `detent init` carries on where it stopped. A checker it cannot make green stops `init` too. Every round's counts and what it left open go into `docs/conformance.json`. An edit to a validated pack is re-validated for the edit and whatever cites it. The phases after it plan from the pack.
-- **ANALYZE**: reads the documents and summarizes what's being built; every question they can't answer is noted with the assumption planning proceeds on.
-- **DETERMINE_VERIFICATION**: probes candidate test/lint/build commands and binds the ones that actually run.
+- **DETERMINE_VERIFICATION**: probes candidate test/lint/build commands and binds the ones that actually run. In a new project there is nothing to run yet, so it proposes the gate commands the decision log's stack entry records, and the bootstrap ticket proves them.
 - **SLICE**: cuts the whole product into ordered increments — walking skeleton first — and places a production baseline (secrets, auth, backups, health checks, CI gates, …) in the slice where each item belongs, whether or not your documents asked for it.
 - **PLAN**: plans every slice in turn into tickets with acceptance criteria, surfaces, and dependencies; each slice is reviewed as its own plan, then the whole plan is reviewed for coherence against your documents.
 - **PREPARE_AGENTS**: assigns roles and, where configured, models per ticket.
