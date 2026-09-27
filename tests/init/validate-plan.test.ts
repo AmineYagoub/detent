@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { stateDir } from "../../src/fs/layout.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -135,6 +136,39 @@ describe("PRDR-284: VALIDATE hands planning the pack (C-2⁶, F-4)", () => {
       risks: [{ id: "R2-2", where: "docs/prd/01-catalog.md:8", fix: major.fix, left: "unverified", reason: major.reason }],
     });
     expect(Object.keys(CONFORMING_PACK)).toContain("docs/prd/01-catalog.md");
+  });
+});
+
+/**
+ * PRDR-296 (C-7‴): PRESENT says what each specification phase and planning
+ * cost. Every session this pipeline launches writes a ledger row naming the
+ * phase that launched it, and PRESENT sums them by phase, never capped.
+ */
+describe("PRDR-296: each specification phase's spend reaches PRESENT beside planning's (decision 16)", () => {
+  it("names the phase on every init session's row, and lists each phase's sessions", async () => {
+    const root = repo(PROJECT);
+    const first = await init(root, { reviewers: byRound((round, area) => (round === 1 && area === "Lending" ? [finding()] : [])), writer: appliesAll() });
+    expect(first.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
+    const rows = readFileSync(path.join(stateDir(root), "ledger.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { role: string; phase?: string });
+    expect([...new Set(rows.map((r) => `${r.role}@${String(r.phase)}`))]).toEqual([
+      "audit@AUDIT",
+      "spec_write@DECIDE",
+      "spec_write@WRITE",
+      "spec_review@VALIDATE",
+      "spec_write@VALIDATE",
+      "planner@SLICE",
+      "planner@PLAN",
+      "plan_review@PLAN",
+    ]);
+    const count = (phase: string): number => rows.filter((r) => r.phase === phase).length;
+    const shown = first.interrupt?.message ?? "";
+    for (const phase of ["AUDIT", "DECIDE", "WRITE", "VALIDATE"]) {
+      expect(shown).toMatch(new RegExp(`^ {2}${phase} +\\$\\d+\\.\\d{4} +${String(count(phase))} sessions?$`, "mu"));
+    }
+    expect(shown).toMatch(new RegExp(`^ {2}planning +\\$\\d+\\.\\d{4} +${String(count("SLICE") + count("PLAN"))} sessions$`, "mu"));
   });
 });
 

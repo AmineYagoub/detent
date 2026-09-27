@@ -572,23 +572,30 @@ export async function runInit(
         throw new Error(`${phase} raised ${outcome.interrupt}, which INTERRUPT_PHASE does not let it raise (C-5)`);
       }
       /**
-       * PRDR-166: a repeated question says whether anything new was read.
+       * PRDR-166: a repeated AWAIT_INFO says whether anything new was read.
        *
        * An answer written where DISCOVER does not look is never read, planning
-       * re-derives, and the identical question returns — indistinguishable from
-       * an answer the planner judged inadequate, at the cost of a full planning
-       * round per wrong guess. The machine already knows: a reused DISCOVER
-       * means the document set did not change. It simply never said so.
+       * re-derives, and the identical interrupt returns — indistinguishable
+       * from an answer judged inadequate, at the cost of a planning round per
+       * wrong guess. The machine already knows: a reused DISCOVER means no new
+       * planning document was found. It simply never said so.
        *
        * PRESENT's alone (PRDR-282): DECIDE reads the decision log itself, and
        * DISCOVER no longer lists it, so an answer written there is read whatever
-       * DISCOVER did.
+       * DISCOVER did. PRESENT asks no question since C-7‴ (PRDR-296): its
+       * AWAIT_INFO is a spec defect or a check that still fails, which an
+       * amendment answers, so the note speaks of an amendment.
        */
       const message =
         outcome.interrupt === "AWAIT_INFO" && phase === "PRESENT" && reused.includes("DISCOVER")
-          ? `${outcome.message}\n\nThe document set is unchanged since the last run — no new planning document was read, so if you answered this already, the answer is somewhere DISCOVER does not look.`
+          ? `${outcome.message}\n\nThe document set is unchanged since the last run: DISCOVER found no new planning document, so an amendment written to a new file was not read.`
           : outcome.message;
-      /* Not checkpointed: the phase did not complete, so a re-run resumes here. */
+      /*
+       * Not checkpointed: the phase did not complete, so a re-run resumes here.
+       * C-7‴ (PRDR-296): the message is the interrupt's alone. `cli/init.ts`
+       * prints the messages and then the interrupt, so a copy among the
+       * messages printed it twice, and PRESENT's carries the whole plan.
+       */
       return {
         exitCode: 2,
         reachedPhase: phase,
@@ -596,7 +603,7 @@ export async function runInit(
         replayedFrom,
         executed,
         reused,
-        messages: [...messages, message],
+        messages,
         outputs,
       };
     }

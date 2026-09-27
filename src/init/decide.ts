@@ -348,7 +348,7 @@ export function decidePhase(deps: PipelineDeps): PhaseHandler {
             ...(deps.askDecisions === undefined ? {} : { ask: deps.askDecisions }),
             ...(deps.note === undefined ? {} : { note: deps.note }),
             launch: async (inputs, artifactOut) => {
-              await launchInitSession(sessionDeps(deps, journal), { role: "spec_write", inputs, artifactOut });
+              await launchInitSession(sessionDeps(deps, journal, "DECIDE"), { role: "spec_write", inputs, artifactOut });
             },
           }),
       );

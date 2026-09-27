@@ -38,7 +38,7 @@ describe("PRDR-282: PRESENT lists every vetoable default (C-3⁗)", () => {
     });
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     const shown = result.interrupt?.message ?? "";
-    expect(shown).toContain("Defaults (3) — the plan follows each; to veto one, edit its row in docs/founder-decisions.md");
+    expect(shown).toContain("Defaults (3), each vetoable — the plan follows each; to veto one, edit its row in docs/founder-decisions.md");
     expect(shown).toContain(`  X-1: ${LATE.value}\n      because: ${LATE.reason}`);
     expect(shown).toContain(`  X-2: ${REFUND.value}`);
     expect(shown).toContain("  X-3: Free in the MVP");
@@ -46,19 +46,20 @@ describe("PRDR-282: PRESENT lists every vetoable default (C-3⁗)", () => {
     expect(shown).not.toContain("Open questions");
   });
 
-  it("names a question the log answers rather than asking it, keeps one it does not, and lists no defaults when the log holds none", () => {
+  it("lists the log's decisions, asks nothing an older build's planning left, and lists no defaults when the log holds none", () => {
     const outputs = {
       DECIDE: { decisions: [{ id: "D-1", question: "Which region hosts the data?", answer: "**eu-west-1**", reason: "r" }], defaults: [null, { id: "X-1" }] },
       SLICE: { questions: [{ id: "sq1", question: "Which payment provider do we use?", blocking: false, assumption: "Stripe" }] },
       PLAN: { questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }] },
     };
     const inputs = presentInputsFromOutputs(outputs);
-    expect(inputs.questions?.map((q) => q.id)).toEqual(["sq1"]);
-    expect(inputs.answeredByLog).toEqual([{ id: "pq1", entry: "D-1" }]);
+    expect(inputs.decisions).toEqual([{ id: "D-1", question: "Which region hosts the data?", answer: "**eu-west-1**" }]);
     expect(inputs.defaults, "a row without its fields is not shown").toEqual([]);
     const text = renderPresentation({ root: "/nowhere", tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, ...inputs });
     expect(text).not.toContain("Defaults (");
-    expect(text).toContain("Not asked again (1) — the decision log already answers: pq1 by D-1 (C-3‴).");
+    expect(text).toContain("  D-1: Which region hosts the data? → **eu-west-1**");
+    expect(text, "C-7‴ (PRDR-296): no planning question is listed, answered or not").not.toContain("Which payment provider");
+    expect(text).not.toContain("Not asked again");
   });
 });
 

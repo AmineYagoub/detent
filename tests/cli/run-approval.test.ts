@@ -154,42 +154,6 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
     expect(launched, "nothing is spent behind a refusal").toBe(0);
   }, 60_000);
 
-  it("a plan with a blocking question is presented but not approvable", async () => {
-    const { root } = await makeRunRepo();
-    roots.push(root);
-    addTicket(root, { id: "t-100" });
-    rmSync(approvalPath(root), { force: true });
-    const stored = readBindings(root);
-    /**
-     * C-3′: `init` returns AWAIT_INFO here rather than offering approval, so the
-     * second exit must not become the way around the first one's gate. The
-     * blocking count travels with the rendering for exactly this check.
-     */
-    const outcome = await presentStage({
-      root,
-      tickets: allTickets(root),
-      bindings: stored.bindings,
-      skips: stored.skips as never[],
-      bootstrap: null,
-      assignments: {},
-      questions: [{ id: "q-1", question: "which database?", assumption: "postgres", blocking: true }],
-    });
-    expect(outcome.kind, "a blocking question interrupts before any approval is offered").toBe("interrupt");
-
-    let asked = 0;
-    const said = await runWith(root, {
-      approve: async () => {
-        asked += 1;
-        return { kind: "approved", by: "should-never-be-asked" };
-      },
-    });
-
-    expect(asked, "`run` does not offer what `init` refused to offer").toBe(0);
-    expect(said.code).toBe(2);
-    expect(said.out, "and it says which gate stopped it").toContain("blocking question");
-    expect(existsSync(approvalPath(root))).toBe(false);
-  }, 60_000);
-
   /**
    * PRDR-292 (C-4⁵, C-7″): a spec defect planning found holds approval until
    * the pack is amended, on this exit as on `init`'s.
@@ -226,22 +190,21 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
   }, 60_000);
 
   /**
-   * F-3: the migration leaves a presentation as it was, and one PRESENT wrote
-   * before PRDR-292 counts no spec defect, nor, before PRDR-293, a failing
-   * check. PRDR-295's count of ungated paths, which PRDR-293 folded into the
-   * checks, was written only by a build of the unreleased 3.1.1 line; a
-   * presentation holding it does not parse, and `run` refuses it and sends the
-   * operator to `detent init`, as for any record it cannot read.
+   * F-3: the migration leaves a presentation as it was. Every build that wrote
+   * one before PRDR-296 counted its blocking questions in `blocking`, which
+   * this build does not write, so such a record does not parse: `run` refuses
+   * it as it refuses any record it cannot read, and sends the operator to
+   * `detent init`, which presents the plan again. PRDR-295's count of ungated
+   * paths, which PRDR-293 folded into the checks, is refused the same way. No
+   * released build wrote a presentation: the record came with PRDR-255.
    */
-  it("a presentation written before spec defects or check failures were counted is approvable, as it was", async () => {
+  it("a presentation an earlier build wrote, which counts questions, is refused, and the operator is sent to `detent init`", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     await deferred(root);
     const file = path.join(stateDir(root), "plan", "presentation.json");
     const older = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-    delete older["spec_defects"];
-    delete older["check_failures"];
-    writeFileSync(file, `${JSON.stringify(older)}\n`);
+    writeFileSync(file, `${JSON.stringify({ ...older, blocking: 0 })}\n`);
 
     let asked = 0;
     const said = await runWith(root, {
@@ -251,9 +214,10 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
       },
     });
 
-    expect(asked).toBe(1);
-    expect(said.code).toBe(0);
-    expect(existsSync(approvalPath(root))).toBe(true);
+    expect(asked, "nothing is offered from a record this build cannot read").toBe(0);
+    expect(said.code).toBe(2);
+    expect(said.out).toContain("re-run `detent init` to draft and present it");
+    expect(existsSync(approvalPath(root))).toBe(false);
   }, 60_000);
 
   it("the asker is never consulted for a plan that is already approved (the control)", async () => {

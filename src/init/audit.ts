@@ -240,7 +240,7 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
             pool: deps.budgets.planning_research_tool_calls,
             ...(deps.note === undefined ? {} : { note: deps.note }),
             launch: async (inputs, artifactOut) => {
-              const result = await launchInitSession(sessionDeps(deps, journal), { role: "audit", inputs, artifactOut });
+              const result = await launchInitSession(sessionDeps(deps, journal, "AUDIT"), { role: "audit", inputs, artifactOut });
               /* C-3a's proxy: a turn is one call's worth, as S-4 has no per-call counter. */
               return { toolCalls: Math.max(1, result.turns) };
             },

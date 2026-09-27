@@ -13,8 +13,18 @@ import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { CheckFailure, PlanFinding, PlanRisk, UnreviewedSlice } from "../schemas/init.js";
 import { reviewLines } from "./present-review.js";
-import type { PresentQuestion } from "./questions.js";
-import { defectInterrupt, defectLines, specLines, type PresentedDefault, type PresentedDefect, type PresentedRisk } from "./present-spec.js";
+import {
+  decisionLines,
+  defectInterrupt,
+  defectLines,
+  riskLines,
+  type PresentedDecision,
+  type PresentedDefault,
+  type PresentedDefect,
+  type PresentedRisk,
+} from "./present-spec.js";
+import { planLines, type PlannedSlice } from "./present-plan.js";
+import { spendLines, type PhaseSpend } from "./phase-spend.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -40,6 +50,12 @@ import type { PhaseOutcome } from "./machine.js";
  * present indicative and `run` refused with a string pointing back at `init`;
  * the rendering is now persisted here (`presentation.json`) and replayed there,
  * which is what makes "the same summary" a fact rather than an intention.
+ *
+ * C-7‴ (PRDR-296): what the summary holds is what an operator decides on: the
+ * slices, tickets and milestones, the decision log with each default marked
+ * vetoable, the checks that still fail, the spec defects planning found, the
+ * risks VALIDATE and the plan's review left, and what each specification phase
+ * and planning cost. It is printed once, and it is the text persisted.
  */
 
 export function approvalPath(root: string): string {
@@ -74,34 +90,24 @@ export interface PresentInput {
   readonly failures?: readonly CheckFailure[];
   readonly bootstrap: string | null;
   readonly assignments: Readonly<Record<string, string>>;
-  /** C-2‴: the increments the plan was planned in. */
-  readonly slices?: readonly { readonly id: string; readonly title: string; readonly tickets: readonly string[] }[];
-  /** C-3′: every question planning could not answer, each with the assumption the plan proceeds on; C-3‴ merges near-duplicates. */
-  readonly questions?: readonly PresentQuestion[];
-  /** C-3⁗ (PRDR-282): every vetoable default the decision log holds, with its reason, listed beside the assumptions. */
+  /** C-2‴: the increments the plan was planned in, listed with their milestones (C-7‴). */
+  readonly slices?: readonly PlannedSlice[];
+  /** C-7‴ (PRDR-296): every decision the log holds, as the founder answered it. */
+  readonly decisions?: readonly PresentedDecision[];
+  /** C-3⁗ (PRDR-282): every default the decision log holds, with its reason, each marked vetoable (C-7‴). */
   readonly defaults?: readonly PresentedDefault[];
   /** C-2¹⁴ (PRDR-284): the majors VALIDATE's last round left open, listed beside the defaults. */
   readonly risks?: readonly PresentedRisk[];
   /** C-4⁵ (PRDR-292): what PLAN found the pack leaves unsettled; while one is open, approval is not offered. */
   readonly specDefects?: readonly PresentedDefect[];
-  /** C-3‴ (PRDR-282): planning questions the log's decisions already answer, by id, so they are named and not asked again. */
-  readonly answeredByLog?: readonly { readonly id: string; readonly entry: string }[];
   /** C-4⁸ (PRDR-294): what PLAN recorded on its tickets: the review's minors, which PRESENT counts, and A-1″'s repairs, which it lists. */
   readonly findings?: readonly PlanFinding[];
   /** C-4⁸: the blockers and majors each slice's one revision was sent, shown as risks. */
   readonly reviewRisks?: readonly PlanRisk[];
   /** C-4⁸: the slices no review read, and why. */
   readonly unreviewed?: readonly UnreviewedSlice[];
-  /**
-   * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
-   * be put where the next run will read it.
-   *
-   * Carried from `DISCOVER.json`'s recorded `patterns_searched` rather than
-   * imported from `DOC_PATTERNS`: a second copy in the message would drift from
-   * the one that did the searching, and the operator would be told to satisfy
-   * the wrong list.
-   */
-  readonly docPatterns?: readonly string[];
+  /** C-7‴ (PRDR-296): what `init` has spent on the root, by phase; reported, never capped (decision 16). */
+  readonly spend?: readonly PhaseSpend[];
   /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
   readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
   /**
@@ -138,17 +144,8 @@ export function renderPresentation(input: PresentInput): string {
     "Verification bindings:",
     bindingTable(input.bindings, input.skips, input.packages),
     "",
-    `Tickets (${input.tickets.length}):`,
-    ...input.tickets.map((t) => {
-      const blocked = t.blockers.length === 0 ? "" : `  ← blocked on ${t.blockers.join(", ")}`;
-      const role = input.assignments[t.id];
-      return `  ${t.id}  ${t.title}${blocked}${role === undefined ? "" : `  [${role.split("@")[0]}]`}`;
-    }),
+    ...planLines(input.tickets, input.slices ?? [], input.assignments, input.checks),
   ];
-  if (input.slices !== undefined && input.slices.length > 1) {
-    lines.push("", `Slices (${input.slices.length}, in order — a slice cannot start before the ones it thickens are DONE):`);
-    for (const s of input.slices) lines.push(`  ${s.id}  ${s.title}  — ${s.tickets.length} ticket(s)`);
-  }
   const gateNotices = input.gateNotices ?? [];
   if (gateNotices.length > 0) {
     lines.push("", `Gates that may verify nothing (${gateNotices.length}) — evidence, not a refusal (V-1‴):`);
@@ -161,28 +158,12 @@ export function renderPresentation(input: PresentInput): string {
       "Its gates passing is what promotes the provisional bindings above to approved (C-4).",
     );
   }
-  const questions = input.questions ?? [];
-  if (questions.length > 0) {
-    lines.push(
-      "",
-      `Open questions (${questions.length}) — the plan proceeds on the assumption stated; to change one, answer it in the planning documents and re-run \`detent init\` (C-3′/C-8):`,
-    );
-    for (const q of questions) {
-      lines.push(`  ${q.blocking ? "[BLOCKING] " : ""}${q.id}: ${q.question}`);
-      if (q.assumption !== "") lines.push(`      assumed: ${q.assumption}`);
-      /* C-3‴: one answer covers both; the other id is named so its own assumption can be found. */
-      if (q.also !== undefined && q.also.length > 0) lines.push(`      also asked as ${q.also.join(", ")} — the same question in another stage's words; one answer covers both (C-3‴)`);
-    }
-  }
-  const answered = input.answeredByLog ?? [];
-  if (answered.length > 0) {
-    lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
-  }
   const findings = input.findings ?? [];
   lines.push(
+    ...decisionLines(input.decisions ?? [], input.defaults ?? []),
     ...defectLines(defects),
     ...failureLines(failures),
-    ...specLines(input.defaults ?? [], input.risks ?? []),
+    ...riskLines(input.risks ?? []),
     ...reviewLines(input.reviewRisks ?? [], input.unreviewed ?? [], findings),
   );
   const edges = input.derivedEdges ?? [];
@@ -193,31 +174,12 @@ export function renderPresentation(input: PresentInput): string {
     );
     for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
   }
+  lines.push(...spendLines(input.spend ?? []));
   lines.push("", "Bindings and tickets are overridable — edit them and re-run `detent init` (C-3b/C-8).");
   /** S-3″ (PRDR-121): shown only when this run produced evidence it would have helped. */
   const reminder = symbolReminder(input.symbols, [...findings, ...(input.reviewRisks ?? [])]);
   if (reminder !== null) lines.push(reminder);
   return lines.join("\n");
-}
-
-/**
- * PRDR-166: where the answer goes, in terms the next run will honour.
- *
- * "Answer them in the planning documents" was the whole instruction, and it is
- * unfollowable: a `planning-answers.md` at the root matches none of DISCOVER's
- * globs, so the file is never read, planning re-derives, and the same question
- * returns with nothing to distinguish it from an answer judged inadequate.
- */
-export function answerInstruction(patterns: readonly string[]): string {
-  const base =
-    "Answer them in a planning document and re-run `detent init` — only the slices whose inputs changed are re-planned (C-8).";
-  if (patterns.length === 0) return base;
-  return [
-    base,
-    "",
-    "A planning document is a file matching one of the globs DISCOVER searched — an answer written anywhere else is not read:",
-    ...patterns.map((p) => `  ${p}`),
-  ].join("\n");
 }
 
 export type ApprovalDecision =
@@ -232,6 +194,7 @@ export interface PresentDeps extends PresentInput {
    * own (PRDR-255). Absent must never mean approved — see `RunOptions.approve`.
    */
   readonly ask?: (presentation: string) => Promise<ApprovalDecision>;
+  /** C-7‴ (PRDR-296): shows the presentation before `ask` is put; nothing else prints it here. */
   readonly print?: (text: string) => void;
   readonly now?: () => number;
 }
@@ -240,7 +203,6 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   /* A-1⁷ (PRDR-293): the checks, on the tickets and the bindings as they stand. */
   const failures = presentFailures(deps.tickets, deps.slices ?? [], deps.checks, { bindings: deps.bindings, packages: deps.packages ?? [ROOT_PACKAGE] });
   const presentation = renderPresentation({ ...deps, failures });
-  deps.print?.(presentation);
 
   /**
    * C-7 (PRDR-255): the rendering is kept, so the second exit can replay it.
@@ -255,7 +217,6 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     schema_version: SCHEMA_VERSION,
     presentation,
     plan_hash: planHash(deps.root),
-    blocking: (deps.questions ?? []).filter((q) => q.blocking).length,
     spec_defects: (deps.specDefects ?? []).length,
     check_failures: failures.length,
   } satisfies Presentation);
@@ -267,28 +228,15 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   const failing = failureInterrupt(presentation, failures);
   if (failing !== null) return failing;
 
-  /**
-   * C-3′ (PRDR-117): the whole plan is written and shown FIRST; a question no
-   * assumption could carry makes this AWAIT_INFO — one batch, asked once, at
-   * the end — rather than a stop somewhere in the middle of planning.
+  /*
+   * C-7‴ (PRDR-296): the presentation reaches the operator once. Where
+   * approval is asked, it is printed before the question and the answer's
+   * interrupt does not repeat it; anywhere else the interrupt carries it, as
+   * the two above do. It used to print here and again twice from the CLI,
+   * among the machine's messages and as the interrupt.
    */
-  const blocking = (deps.questions ?? []).filter((q) => q.blocking);
-  if (blocking.length > 0) {
-    return {
-      kind: "interrupt",
-      interrupt: "AWAIT_INFO",
-      message: [
-        presentation,
-        "",
-        `${String(blocking.length)} blocking question(s) need an answer before this plan can be approved:`,
-        blocking.map((q, i) => `  ${String(i + 1)}. ${q.question}`).join("\n"),
-        "",
-        answerInstruction(deps.docPatterns ?? []),
-      ].join("\n"),
-      items: blocking.map((q) => q.question),
-    };
-  }
-
+  const shown = deps.ask !== undefined && deps.print !== undefined;
+  if (shown) deps.print?.(presentation);
   const decision: ApprovalDecision = deps.ask === undefined ? { kind: "deferred" } : await deps.ask(presentation);
 
   if (decision.kind === "approved") {
@@ -301,13 +249,14 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
    * is an error, and the first `run` presents the same summary either way —
    * the rendering persisted above is the one it replays (PRDR-255).
    */
+  const outcome =
+    decision.kind === "declined"
+      ? "Approval declined — the plan is ready but unapproved. Re-run `detent init` after editing, or approve at the start of `detent run`."
+      : "Approval deferred — `detent run` will present this plan before executing (C-7).";
   return {
     kind: "interrupt",
     interrupt: "AWAIT_APPROVAL",
-    message:
-      decision.kind === "declined"
-        ? `${presentation}\n\nApproval declined — the plan is ready but unapproved. Re-run \`detent init\` after editing, or approve at the start of \`detent run\`.`
-        : `${presentation}\n\nApproval deferred — \`detent run\` will present this plan before executing (C-7).`,
+    message: shown ? outcome : `${presentation}\n\n${outcome}`,
     items: deps.tickets.map((t) => t.id),
   };
 }

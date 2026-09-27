@@ -5,7 +5,7 @@ import { CEILINGS, type Budgets } from "../schemas/budgets.js";
 import { ledgerRowSchema, type LedgerRow } from "../schemas/records.js";
 import type { SessionResult } from "../sessions/backend.js";
 import type { RunJournal } from "./journal.js";
-import { recoverObjects } from "./jsonl-recover.js";
+import { readLedgerRows } from "./ledger-rows.js";
 
 /**
  * T-048 — the ledger, and what it counts (S-4, X-8, D-25).
@@ -461,9 +461,11 @@ export class SpendLedger {
    * Record one session. Field discipline per S-4 (PRDR-052/053): the
    * per-model breakdown is the token source of record when present; a crashed
    * result's zeroed figures are recorded as a flagged lower bound, never
-   * dropped and never treated as the absent-telemetry breaker.
+   * dropped and never treated as the absent-telemetry breaker. An `init`
+   * session's row names the phase that launched it, which PRESENT sums by
+   * (C-7‴, PRDR-296).
    */
-  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string): LedgerRow {
+  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string, phase?: string): LedgerRow {
     const perModel = Object.values(result.perModel ?? {});
     const fromBreakdown = perModel.length > 0;
     const sum = (pick: (u: (typeof perModel)[number]) => number): number => perModel.reduce((a, u) => a + pick(u), 0);
@@ -482,6 +484,7 @@ export class SpendLedger {
       /* PRDR-095: the breakdown's keys ARE the model names — record them. */
       models: Object.keys(result.perModel ?? {}).sort(),
       ...(result.crashed === true ? { partial: "crash" as const } : {}),
+      ...(phase === undefined ? {} : { phase }),
     });
     this.journal.appendLedger(row);
     this.accumulated += row.cost_estimate_usd;
@@ -597,59 +600,7 @@ export function sessionCostEvidence(root: string): SessionCostEvidence {
   return { mean: sessions === 0 ? 0 : total / sessions, sessions };
 }
 
+/** X-1: what the ledger records as spent, every row summed; `ledger-rows.ts` reads them, torn lines and all. */
 export function readRecordedSpend(root: string): number {
-  const file = path.join(stateDir(root), "ledger.jsonl");
-  if (!existsSync(file)) return 0;
-  const lines = readFileSync(file, "utf8").split("\n");
-  let total = 0;
-  for (const [index, line] of lines.entries()) {
-    if (line.trim() === "") continue;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      /**
-       * PRDR-151: unparseable TEXT is a crash artifact, at any position, and is
-       * skipped. The first version of this refused any torn line that was not
-       * last — which sounds right and bricks a root: `appendLedger` writes
-       * `JSON.stringify(row) + "\n"`, so a line torn mid-append has no trailing
-       * newline and the NEXT append concatenates onto it. One `kill -9` then
-       * cost a run its next session's spend silently, and the run after that
-       * refused at startup forever, with no repair instruction. Reproduced.
-       *
-       * The distinction that matters is not WHERE the damage is but WHAT it is:
-       * text that is not JSON is a torn write; a well-formed object that is not
-       * a ledger row is a shape the writer cannot produce. Only the second is
-       * worth halting for, and it is the one X-1⁷ was actually about.
-       *
-       * PRDR-249: what is skipped is the FRAGMENT, not the line. This block
-       * claimed the loss was "at most the row glued to the torn one" and it was
-       * larger — a tear at the record separator leaves two COMPLETE rows on one
-       * line and `JSON.parse` rejects the pair for trailing content, so 10/100/1
-       * torn after the first row's closing brace read back 1. `recoverObjects`
-       * digs out every object that was fully written; only the fragment, whose
-       * bytes stopped mid-flight and whose cost is genuinely unknown, is lost.
-       *
-       * A recovered object that is not a ledger row is SKIPPED rather than
-       * throwing, unlike the intact-line case below. X-1⁷ is that the ceiling
-       * cannot trust a shape its WRITER could not produce; an object dug out of
-       * a damaged line is a crash artifact, and PRDR-151's lesson is that a
-       * crash artifact must never brick a root.
-       */
-      for (const recovered of recoverObjects(line)) {
-        const recoveredRow = ledgerRowSchema.safeParse(recovered);
-        if (recoveredRow.success) total += recoveredRow.data.cost_estimate_usd;
-      }
-      continue;
-    }
-    const parsed = ledgerRowSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error(
-        `.detent/ledger.jsonl line ${index + 1} is well-formed JSON but not a ledger row (${parsed.error.issues[0]?.message ?? "invalid"}) — ` +
-          "the spend ceiling is enforced against this file and cannot trust a shape it did not write (X-1).",
-      );
-    }
-    total += parsed.data.cost_estimate_usd;
-  }
-  return total;
+  return readLedgerRows(root).reduce((total, row) => total + row.cost_estimate_usd, 0);
 }

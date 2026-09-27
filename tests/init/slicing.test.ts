@@ -131,7 +131,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
 
     const message = result.interrupt?.message ?? "";
     expect(message).toContain("Slices (2");
-    expect(message).toContain("s02  billing  — 2 ticket(s)");
+    expect(message).toContain("s02  billing  — 2 tickets");
     /** C-3⁗, C-4⁵: no planning stage asks, so nothing reaches PRESENT as a question. */
     expect(message).not.toContain("Open questions");
   });
@@ -364,22 +364,6 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
     { PLAN: { spec_defects: "not an array" } },
     { PLAN: { spec_defects: [null, 7, { slice: "s01" }, { slice: "s01", kind: "gap", defect: "d", passages: [null] }] } },
   ];
-
-  /**
-   * PRDR-119, on the builder alone. No planning stage asks since C-4⁵, so no
-   * pipeline reaches it any more; what PRESENT still reads of `questions` is
-   * held to what it did while one could.
-   */
-  it("two stages that number their questions alike reach the human under distinct ids", () => {
-    const q = (id: string, question: string) => ({ id, question, blocking: false, assumption: "" });
-    const built = presentInputsFromOutputs({
-      SLICE: { questions: [q("s01-q1", "Which Cloudflare zone?")] },
-      PLAN: { questions: [q("s01-q1", "Which payment rail serves the USD tier?"), q("s01-q1", "What is the trial credit amount?")] },
-    });
-    const ids = (built.questions ?? []).map((x) => x.id);
-    expect(ids).toHaveLength(3);
-    expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(3);
-  });
 
   it("survives outputs that are missing, empty, or the wrong shape", () => {
     for (const outputs of FOREIGN) {

@@ -85,8 +85,8 @@ export function failureLine(f: CheckFailure): string {
   return `${f.check}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`;
 }
 
-/** The live requirement ids of a pack, each with its milestone. */
-function milestones(pack: Pack): ReadonlyMap<string, number> {
+/** The live requirement ids of a pack, each with its milestone; PRESENT shows them on slices and tickets (C-7‴). */
+export function requirementMilestones(pack: Pack): ReadonlyMap<string, number> {
   return new Map(pack.requirements.flatMap((r) => (r.withdrawn || r.milestone === null ? [] : [[r.id, r.milestone] as const])));
 }
 
@@ -98,7 +98,7 @@ function milestones(pack: Pack): ReadonlyMap<string, number> {
  */
 function criterionFailures(tickets: readonly DraftedTicket[], slices: readonly SliceSpec[], pack: Pack | null): CheckFailure[] {
   if (pack === null) return [];
-  const live = milestones(pack);
+  const live = requirementMilestones(pack);
   const planned = new Set(tickets.map((t) => t.slice));
   const carried = new Set(tickets.flatMap((t) => t.criterion_ids));
   const out: CheckFailure[] = [];
@@ -152,7 +152,7 @@ function foreignFailures(tickets: readonly DraftedTicket[], slices: readonly Sli
  */
 function milestoneFailures(tickets: readonly DraftedTicket[], pack: Pack | null): CheckFailure[] {
   if (pack === null) return [];
-  const live = milestones(pack);
+  const live = requirementMilestones(pack);
   const byId = new Map(tickets.map((t) => [t.id, t]));
   const delivered = (t: DraftedTicket): (readonly [string, number])[] =>
     t.requirement_ids.flatMap((id) => (live.has(id) ? [[id, live.get(id) as number] as const] : []));

@@ -169,6 +169,14 @@ export const ledgerRowSchema = z.strictObject({
    * enum because the rows already written must still parse.
    */
   partial: z.enum(["crash", "turns_breach"]).optional(),
+  /**
+   * C-7‴ (PRDR-296): the `init` phase that launched the session, which PRESENT
+   * sums by (decision 16). A string, not the phase enum: a row outlives the
+   * build that wrote it, and a phase a later build renames must not make X-1's
+   * reader refuse the file. Absent on a run's rows, and on an init row written
+   * before the field.
+   */
+  phase: nonEmptyString.optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 
@@ -240,23 +248,28 @@ export type Approval = z.infer<typeof approvalSchema>;
  * produced (PRDR-087: ANALYZE and PLAN re-ran and a DIFFERENT plan reached
  * approval).
  *
- * `blocking` travels with it because `presentStage` refuses to offer approval
- * while a question blocks (C-3′), and the second exit must not become the way
- * around the first's gate.
+ * The counts travel with it because `presentStage` refuses to offer approval
+ * while any is not zero, and the second exit must not become the way around
+ * the first's gate. PRDR-296 removed `blocking`, the count of questions no
+ * assumption could carry: no planning stage asks since C-3⁗, and PRESENT
+ * lists no question (C-7‴). Every record an earlier build wrote carries it
+ * and does not parse, so `run` refuses one as it refuses any record it cannot
+ * read, and `detent init` presents the plan again. The two counts below are
+ * required for the same reason: a record without them was written before
+ * them, and so with `blocking`.
  */
 export const presentationSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   presentation: nonEmptyString,
   plan_hash: sha256Hex,
-  blocking: z.number().int().nonnegative(),
-  /** C-4⁵ (PRDR-292): the spec defects PRESENT listed; while any is open, neither exit offers approval. Absent before them, and so none. */
-  spec_defects: z.number().int().nonnegative().default(0),
+  /** C-4⁵ (PRDR-292): the spec defects PRESENT listed; while any is open, neither exit offers approval. */
+  spec_defects: z.number().int().nonnegative(),
   /**
    * A-1⁷ (PRDR-293): the checks PRESENT named as failing on the tickets as they
    * stood, a path no gate can fail among them (V-5′); while any does, neither
-   * exit offers approval. Absent before the checks, and so none.
+   * exit offers approval.
    */
-  check_failures: z.number().int().nonnegative().default(0),
+  check_failures: z.number().int().nonnegative(),
 });
 export type Presentation = z.infer<typeof presentationSchema>;
 

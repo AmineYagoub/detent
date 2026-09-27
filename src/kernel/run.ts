@@ -421,17 +421,11 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
   }
   opts.announce?.(shown.presentation);
   /**
-   * C-3′: `init` refuses to OFFER approval while a question blocks. The second
-   * exit must not become the way around the first one's gate, so it presents
-   * and stops rather than asking.
+   * C-4⁵ (PRDR-292): `init` refuses to OFFER approval while a spec defect is
+   * open. The second exit must not become the way around the first one's
+   * gate, so it presents and stops rather than asking. A blocking question
+   * held it the same way until PRDR-296: no planning stage asks since C-3⁗.
    */
-  if (shown.blocking > 0) {
-    return notReady(
-      `${String(shown.blocking)} blocking question(s) must be answered before this plan can be approved — ` +
-        "answer them and re-run `detent init` (C-3′).",
-    );
-  }
-  /* C-4⁵ (PRDR-292): the same for a spec defect, which holds approval until the pack is amended. */
   if (shown.spec_defects > 0) {
     return notReady(
       `${String(shown.spec_defects)} spec defect(s) planning found in the pack hold approval of this plan — ` +

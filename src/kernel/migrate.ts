@@ -196,6 +196,13 @@ const packaged: Transform = (value) => ({
  * drift of a ticket, whose hashes a root gate keys by its slot as before, and
  * a package's as `package:slot`. And the approvals log, which is history: a
  * row without a package is read as the root's.
+ *
+ * PRESENT's record lost its count of blocking questions and requires its two
+ * others (PRDR-296, C-7‴). It needs no step: it came with PRDR-255 on this
+ * line, so only a build of the line wrote one, and a record such a build
+ * wrote does not parse, which `run` refuses and `detent init` answers by
+ * presenting the plan again. A ledger row gained the phase that launched an
+ * `init` session, and needs none either: a row without one reads as before.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {

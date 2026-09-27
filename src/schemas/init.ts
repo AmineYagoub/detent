@@ -69,34 +69,15 @@ export const INTERRUPT_PHASE = {
   /**
    * C-3⁗ (PRDR-282): at DECIDE, on a terminal, for the questions a founder
    * defers; at VALIDATE, for a blocker left at its ceiling or a pack checker
-   * its writer could not make green (C-2¹⁴, PRDR-284); and at PRESENT, where
-   * C-3′ (PRDR-117) asks what planning could not settle.
+   * its writer could not make green (C-2¹⁴, PRDR-284); and at PRESENT, for a
+   * spec defect planning found or a check that still fails (C-4⁵, A-1⁷). No
+   * question is asked there since C-7‴ (PRDR-296).
    */
   AWAIT_INFO: ["DECIDE", "VALIDATE", "PRESENT"],
   AWAIT_BINDING_CHOICE: ["DETERMINE_VERIFICATION"],
   AWAIT_SETUP_CONSENT: ["DETERMINE_VERIFICATION"],
   AWAIT_APPROVAL: ["PRESENT"],
 } as const satisfies Record<Interrupt, readonly InitPhase[]>;
-
-/*
- * ---------------------------------------------------------------------------
- * The planning stages' questions (C-3′)
- */
-
-/**
- * C-3′ (PRDR-117): a question the documents cannot answer no longer stops
- * planning. It carries the ASSUMPTION the plan proceeds on, is batched with
- * every other planning stage's questions, and is asked once — with the whole
- * plan, at PRESENT. `blocking` is reserved for a question no assumption can
- * carry; it turns the final presentation into AWAIT_INFO instead of approval.
- */
-export const planQuestionSchema = z.strictObject({
-  id: nonEmptyString,
-  question: nonEmptyString,
-  blocking: z.boolean().default(false),
-  assumption: z.string().default(""),
-});
-export type PlanQuestion = z.infer<typeof planQuestionSchema>;
 
 /*
  * ---------------------------------------------------------------------------

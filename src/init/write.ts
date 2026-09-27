@@ -321,7 +321,7 @@ export function writePhase(deps: PipelineDeps): PhaseHandler {
             today: (deps.now?.() ?? new Date()).toISOString().slice(0, 10),
             ...(deps.note === undefined ? {} : { note: deps.note }),
             launch: async (inputs, artifactOut) => {
-              await launchInitSession(sessionDeps(deps, journal), { role: "spec_write", inputs, artifactOut, surface: PACK_PATHS });
+              await launchInitSession(sessionDeps(deps, journal, "WRITE"), { role: "spec_write", inputs, artifactOut, surface: PACK_PATHS });
             },
           }),
       );

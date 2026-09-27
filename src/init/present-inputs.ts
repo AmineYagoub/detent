@@ -1,7 +1,6 @@
-import { REVIEW_SEVERITIES, type PlanFinding, type PlanQuestion, type PlanRisk } from "../schemas/init.js";
+import { REVIEW_SEVERITIES, type PlanFinding, type PlanRisk } from "../schemas/init.js";
 import type { PresentInput } from "./present.js";
 import { isPresentedDefect } from "./present-spec.js";
-import { mergeSimilar, similarQuestions } from "./questions.js";
 
 /**
  * What PRESENT shows beyond the tickets, read from what every planning phase
@@ -9,14 +8,18 @@ import { mergeSimilar, similarQuestions } from "./questions.js";
  * wrote, older ones included, so every value here is `unknown` until a guard
  * says otherwise, and what is returned is renderable or absent (PRDR-157,
  * PRDR-164).
+ *
+ * C-7‴ (PRDR-296): no planning stage asks since C-3⁗, so nothing here gathers
+ * a question. An older build's outputs may still hold SLICE's or PLAN's
+ * `questions`; they are not read, and PRESENT lists none.
  */
 
-/** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
+/** C-2‴, C-7‴: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
 ): Pick<
   PresentInput,
-  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "reviewRisks" | "unreviewed" | "derivedEdges" | "gateNotices"
+  "slices" | "decisions" | "defaults" | "risks" | "specDefects" | "findings" | "reviewRisks" | "unreviewed" | "derivedEdges" | "gateNotices"
 > {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
@@ -28,15 +31,12 @@ export function presentInputsFromOutputs(
     const value = outputs[phase]?.[key];
     return Array.isArray(value) ? (value as T[]) : [];
   };
-  /** A question a person can actually be shown: both fields present and stringy. */
-  const isQuestion = (q: unknown): q is PlanQuestion =>
-    typeof q === "object" && q !== null && typeof (q as PlanQuestion).question === "string" && typeof (q as PlanQuestion).id === "string";
   const isSlice = (s: unknown): s is NonNullable<PresentInput["slices"]>[number] =>
     typeof s === "object" && s !== null && typeof (s as { id?: unknown }).id === "string" && Array.isArray((s as { tickets?: unknown }).tickets);
   /**
    * PRDR-164: the other two fields.
    *
-   * The first pass filtered the ELEMENTS of `questions` and `slices` and
+   * The first pass filtered the ELEMENTS of the questions and `slices` and
    * checked only the container type for these — so `review_findings: [null]`
    * survived the builder and `renderPresentation` died on `f.tag`, and
    * `symbol-reminder.ts` iterates the same array. "Returns something
@@ -57,33 +57,6 @@ export function presentInputsFromOutputs(
       typeof v === "object" && v !== null && keys.every((k) => typeof (v as Record<string, unknown>)[k] === "string");
   /* C-2¹³, C-2¹⁴: the log as the specification phase left it, defaults its writers added among them: VALIDATE's, else WRITE's, else DECIDE's. */
   const logged = ["VALIDATE", "WRITE"].find((phase) => Array.isArray(outputs[phase]?.["defaults"])) ?? "DECIDE";
-  const decisions = list<unknown>(logged, "decisions").filter(isRow("id", "question"));
-  const answeredByLog: { id: string; entry: string }[] = [];
-  const seen = new Set<string>();
-  const takenIds = new Set<string>();
-  const questions: PlanQuestion[] = [];
-  for (const q of [
-    ...list<PlanQuestion>("SLICE", "questions"),
-    ...list<PlanQuestion>("PLAN", "questions"),
-  ].filter(isQuestion)) {
-    const key = q.question.trim().toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const answered = decisions.find((d) => similarQuestions(d.question, q.question));
-    if (answered !== undefined) {
-      answeredByLog.push({ id: q.id, entry: answered.id });
-      continue;
-    }
-    /**
-     * PRDR-119: the stages number their questions independently, so the
-     * batch could show the same id twice. The id is what a human writes down
-     * when answering, so it has to mean one question.
-     */
-    let id = q.id;
-    for (let n = 2; takenIds.has(id); n += 1) id = `${q.id}-${n}`;
-    takenIds.add(id);
-    questions.push({ ...q, id });
-  }
   const plan = outputs["PLAN"]?.["plan"] as { slices?: unknown } | undefined;
   /**
    * PRDR-157: `slices: "not an array"` used to pass straight through, and
@@ -94,12 +67,13 @@ export function presentInputsFromOutputs(
   const slices = (Array.isArray(plan?.slices) ? plan.slices : []).filter(isSlice);
   return {
     slices,
-    /* C-3‴ (PRDR-207): the exact-text pass above, then the near-duplicate backstop — one entry, both ids. */
-    questions: mergeSimilar(questions),
+    /* C-7‴ (PRDR-296): every D-n, as the founder answered it; only the three fields shown are kept. */
+    decisions: list<unknown>(logged, "decisions")
+      .filter(isRow("id", "question", "answer"))
+      .map((d) => ({ id: d.id, question: d.question, answer: d.answer })),
     defaults: list<unknown>(logged, "defaults").filter(isRow("id", "value", "reason")),
     risks: list<unknown>("VALIDATE", "risks").filter(isRow("id", "where", "fix", "left", "reason")),
     specDefects: list<unknown>("PLAN", "spec_defects").filter(isPresentedDefect),
-    answeredByLog,
     findings: list<PlanFinding>("PLAN", "review_findings").filter(isFinding),
     /* C-4⁸ (PRDR-294): a risk renders its severity's rank, so one naming another severity is not one this build wrote. */
     reviewRisks: list<unknown>("PLAN", "review_risks")

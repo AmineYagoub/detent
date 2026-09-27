@@ -147,6 +147,8 @@ describe("PRDR-282: an interrupt is raised only where INTERRUPT_PHASE lists it (
     await runInit(root, handlers());
     const again = await runInit(root, handlers());
     expect(again.interrupt?.message).toContain("The document set is unchanged");
+    /* C-7‴ (PRDR-296): PRESENT asks no question, so the note speaks of an amendment. */
+    expect(again.interrupt?.message).toContain("an amendment written to a new file was not read");
   });
 });
 

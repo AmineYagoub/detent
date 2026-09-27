@@ -82,3 +82,17 @@ caller, and VALIDATE's reviewers launch one after another. So the fourth criteri
   `src/sessions/mock.ts` (S-6′, C-4⁗⁵). No `init` or `run` session sets either field.
 - `scripts/plan-corpus.ts` keeps `readLedger` and `ledgerSpend` only to feed `readPlannedRoot`,
   now that `scripts/null-review.ts` is deleted.
+
+## From PRDR-296
+
+PRESENT lists no question (C-7‴). Its question list is gone, with the renumbering, `mergeSimilar`,
+`PresentQuestion`, `answeredByLog`, `answerInstruction` and `planQuestionSchema`, and so is the
+AWAIT_INFO a blocking question raised, with `presentation.json`'s `blocking`. What is left of the
+second criterion:
+- `src/init/questions.ts` holds `similarQuestions` and its two helpers alone, which DECIDE uses
+  (`src/init/decide-items.ts`). Moving them beside DECIDE deletes the file.
+- DISCOVER still writes `patterns_searched` to its outputs, and nothing reads it: PRESENT's answer
+  instruction was its one reader.
+- `planningBriefSchema`'s doc-block in `src/schemas/init.ts` says C-3′ carries an undecidable
+  question to PRESENT on its assumption. Nothing does. The schema's one reader is
+  `src/init/plan-research.ts`.

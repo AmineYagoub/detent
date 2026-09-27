@@ -34,7 +34,7 @@ function root(): string {
   return dir;
 }
 
-const base = (dir: string): PresentInput => ({ root: dir, tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, slices: [], questions: [], derivedEdges: [], gateNotices: [] });
+const base = (dir: string): PresentInput => ({ root: dir, tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, slices: [], derivedEdges: [], gateNotices: [] });
 
 const risk = (slice: string, ticket: string, severity: PlanRisk["severity"], finding: string): PlanRisk => ({
   slice,

@@ -35,3 +35,18 @@ cannot be attributed to any one of them.
 The redesign plan's §10. The operator's decision 3 makes run-time outcomes the bar. `run` already
 records every event the figures need, so this ticket aggregates and attributes; it measures nothing
 new.
+
+## From PRDR-296
+
+PRESENT shows what each specification phase and planning cost (C-7‴), and the last criterion can
+read the same figures:
+- Every ledger row an `init` session writes names the phase that launched it, in `phase`, a string.
+  A run's rows name none.
+- `phaseSpend(root)` in `src/init/phase-spend.ts` sums `init`'s rows by phase: AUDIT, DECIDE, WRITE
+  and VALIDATE apiece, SLICE and PLAN as planning, then any other phase by its name, then the rows
+  that name none, as earlier. `readLedgerRows(root)` in `src/kernel/ledger-rows.ts` is X-1's reader,
+  returning the rows that `readRecordedSpend` sums.
+- `detent status` shows none of it yet.
+
+C-7″'s mixed builds are left to this ticket's fourth criterion: no checkpoint records its build,
+and PRESENT names none.

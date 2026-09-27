@@ -1243,6 +1243,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   asking, and `open_questions` goes.*
   *Amended by D-10″ (PRDR-290): ANALYZE is gone, so `open_questions` carries what the slices before
   a draft asked, and SLICE is handed none.*
+  *Amended by C-7‴ (PRDR-296): PRESENT's backstop is gone with its question list. The threshold
+  stays, DECIDE's, which refuses a question the log already answers.*
   *Amended by C-4⁷ (PRDR-292): no stage is handed `open_questions`, since none asks.*
 
 - **S-3⁵ (3.1.1, PRDR-213).** A write session has **three** git verbs: `git add`, `git rm`
@@ -1613,6 +1615,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   be raised at DECIDE and at VALIDATE; init's research is AUDIT's (C-2⁶).*
   *Amended by C-4⁷ (PRDR-292): SLICE's and PLAN's artifacts have no questions, so none reaches
   PRESENT.*
+  *Amended by C-7‴ (PRDR-296): PRESENT lists no question and raises AWAIT_INFO for none; the
+  `blocking` count is gone from `presentation.json`.*
 
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
@@ -1797,6 +1801,8 @@ the code does what the rules it amends describe, and each of those rules points 
   ceiling and for a pack checker VALIDATE's writer cannot make green.*
   *Amended by C-2¹⁵ (PRDR-291): on a pack a veto re-plans the slices whose requirements cite the
   entry it edits, and every slice where it edits the stack's entry.*
+  *Amended by C-7‴ (PRDR-296): PRESENT's merge of near-duplicate questions is gone, with its
+  question list, and PRESENT lists every `D-n` before the `X-n`.*
 
 - **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
   named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
@@ -2284,6 +2290,46 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-4⁸ (PRDR-294): the review's risks are each blocker and major a slice's read found,
   with its fix, since no review reads the revision. PRESENT names the slices no review read,
   lists the repairs code made and counts the minors.*
+  *Amended by C-7‴ (PRDR-296): built, but for the mixed builds, which PRDR-297 builds with N-5′'s
+  record of the build that wrote each checkpoint.*
+
+- **C-7‴ (3.1.1, PRDR-296).** C-7″ is built, in `src/init/present.ts`, `src/init/present-plan.ts`,
+  `src/init/present-spec.ts`, `src/init/phase-spend.ts` and `src/kernel/ledger-rows.ts`, but for
+  its mixed builds, which are PRDR-297's. This settles what C-7″ left to its ticket, and amends
+  C-3′'s batch, C-3‴'s merge, C-3⁗'s vetoes, C-2¹²'s PRESENT, PRDR-166's note, PRDR-255's replay
+  and S-4's ledger row.
+  - **The plan.** The slices are listed in order, however many there are, before the tickets.
+    Each slice shows the milestones of the requirements SLICE assigned it, and each ticket the
+    milestone of what it delivers, the earliest of its requirements', as A-1⁷'s milestone check
+    reads it. The bootstrap delivers none and shows none, and without a pack nothing does.
+  - **The decision log.** Every `D-n`, with its question and its answer, then every `X-n`, with
+    its value and its reason, marked vetoable; each block says where an entry is changed. Both
+    are read from the phase that left the log, as the defaults were (C-2¹²).
+  - **The cost.** Each ledger row an `init` session writes names the phase that launched it, as a
+    string, so a phase a later build renames cannot make X-1's reader refuse the file. PRESENT
+    sums `init`'s rows by phase: AUDIT, DECIDE, WRITE and VALIDATE apiece, SLICE and PLAN as
+    planning, each with its sessions, then the total. The ledger is cumulative, so the figures
+    cover every `init` on the root, and a row written before the field is counted apart, as
+    earlier. Nothing caps or stops on them (specification decision 16); X-1's `run_spend_usd`
+    counts the same rows and only announces (PRDR-265). They are read when PRESENT runs and are
+    not in its key, since every session moves them.
+  - **Gone.** The question list, its merge and its renumbering (C-3‴), the note of questions the
+    log answered (C-3⁗), the instruction that named DISCOVER's globs (PRDR-166), and the
+    AWAIT_INFO a blocking question raised (C-3′), with `presentation.json`'s `blocking` and
+    `run`'s refusal on it. `questions.ts` keeps the similarity DECIDE uses. PRESENT raises
+    AWAIT_INFO for a spec defect and for a check that still fails, as before (C-4⁷, A-1⁸), and
+    PRDR-166's note on a reused DISCOVER speaks of an amendment written to a new file.
+  - **Printed once.** Where approval is asked, on a terminal or by a relayed flag, the
+    presentation is printed before the question, and the answer's interrupt does not repeat it.
+    Anywhere else the interrupt carries it. The machine no longer copies an interrupt's message
+    into the messages `init` prints before the interrupt. `presentation.json` holds the text
+    printed, and `run` replays it (PRDR-255).
+  - **Migration.** None. `presentation.json` came with PRDR-255 on this line, so no released
+    build wrote one. One an earlier build of this line wrote carries `blocking` and does not
+    parse: `run` refuses it as it refuses a plan with no presentation, and `detent init` presents
+    the plan again. `spec_defects` and `check_failures` are required, since a record without
+    them was written before them, and so with `blocking`. A ledger row without `phase` reads as
+    before.
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2500,6 +2546,8 @@ the code does what the rules it amends describe, and each of those rules points 
     no draft is redrafted for it.
     *Amended by A-1⁸ (PRDR-293): a failing slice is redrafted for it, and its count is part of
     `check_failures`.*
+    *Amended by C-7‴ (PRDR-296): a presentation written before the count carries `blocking` and
+    does not parse; `run` refuses it, and `detent init` presents the plan again.*
   - **Migration.** F-3″'s event carries `.detent/bindings.json` to packages: each binding and skip
     gains `package: "."`, and the file `packages: ["."]`. The approvals ledger, a ticket's accepted
     hashes and DETERMINE_VERIFICATION's checkpoint need no step, since what each held before
@@ -2786,6 +2834,8 @@ the code does what the rules it amends describe, and each of those rules points 
   write it over.*
   *Amended by C-2¹⁵ (PRDR-291): on a pack every slice still reads the log, and is keyed by the
   entries its requirements cite, so a veto re-plans those slices alone.*
+  *Amended by C-7‴ (PRDR-296): PRESENT lists every `D-n` and every `X-n`, the `X-n` marked
+  vetoable, and no planning question.*
 
 - **C-2¹³ (3.1.1, PRDR-283).** WRITE is built, in `src/init/write.ts` and the modules beside it,
   directly after DECIDE. This settles what C-2⁶ and C-2⁹ left to WRITE's ticket, and amends

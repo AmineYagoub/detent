@@ -1,5 +1,6 @@
 import { readRules } from "../kernel/rules.js";
 import type { RunJournal } from "../kernel/journal.js";
+import type { InitPhase } from "../schemas/init.js";
 import type { InitSessionDeps } from "./session.js";
 import type { PipelineDeps } from "./pipeline.js";
 
@@ -14,10 +15,14 @@ import type { PipelineDeps } from "./pipeline.js";
  * separate tickets added a field here in one day (PRDR-166, PRDR-191,
  * PRDR-194, PRDR-197), which is what a distinct responsibility looks like when
  * it is still living inside another module.
+ *
+ * C-7‴ (PRDR-296): and which phase launches it, so its ledger row says whose
+ * spend it is.
  */
-export function sessionDeps(deps: PipelineDeps, journal: RunJournal): InitSessionDeps {
+export function sessionDeps(deps: PipelineDeps, journal: RunJournal, phase: InitPhase): InitSessionDeps {
   return {
     root: deps.root,
+    phase,
     backend: deps.backend,
     prompts: deps.prompts,
     /* PRDR-203: the phase's journal, one for every launch the phase makes. */

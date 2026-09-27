@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { renderPresentation } from "../../src/init/present.js";
-import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
 
 /**
@@ -13,8 +11,10 @@ import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.
  *
  * C-3⁗, C-4⁵ (PRDR-292): no planning stage asks now, so no draft is handed
  * what was asked, and a draft or a slicing that asks is refused
- * (`plan-inputs.test.ts`). PRESENT's merge is what is left, held here to what
- * it did.
+ * (`plan-inputs.test.ts`). C-7‴ (PRDR-296): PRESENT lists no question, and
+ * its merge went with the list (`present-rebuilt.test.ts`). The similarity
+ * is what is left: DECIDE refuses a question the decision log already
+ * answers by it (`decide-items.ts`), held here to gate-313's pair.
  */
 
 /* gate-313's pair, verbatim. */
@@ -27,37 +27,11 @@ const S14Q1 =
 const S14Q2 =
   "Which npm identity publishes the headless driver, and which repository hosts the marketplace listing? Specifically: the package name (unscoped `detent` or a scope such as `@<org>/detent`), the npm account or organization that owns it, and whether the marketplace entry is listed from this repository or another one the founder controls. v2 records that the previous product name was abandoned because it was taken on npm, so registry availability is a fact about accounts rather than an engineering choice, and it lands in this slice because these are the two tickets that publish.";
 
-const q = (id: string, question: string) => ({ id, question, blocking: false, assumption: "proceeds on the founder's own account" });
-
-describe("C-3‴ PRESENT merges a question asked twice in two stages' words", () => {
-  it("gate-313's pair merges; the two other `Which …` questions do not", () => {
+describe("C-3‴ a question asked twice in two stages' words is one question", () => {
+  it("gate-313's pair is similar; the two other `Which …` questions are not", () => {
     expect(similarQuestions(Q1, S14Q2), "same question, two drafts").toBe(true);
     expect(similarQuestions(Q1, Q2), "two different founder questions").toBe(false);
     expect(similarQuestions(S14Q1, S14Q2)).toBe(false);
     expect(QUESTION_SIMILARITY).toBeGreaterThan(0);
-  });
-
-  it("the batch carries the first, names the other id on it, and the human answers once", () => {
-    const built = presentInputsFromOutputs({
-      SLICE: { questions: [q("sq1", Q1), q("sq2", Q2)] },
-      PLAN: { questions: [q("s14-q1", S14Q1), q("s14-q2", S14Q2)] },
-    });
-    /* Before PRDR-207: four questions, two of them one question. */
-    expect(built.questions?.map((x) => x.id)).toEqual(["sq1", "sq2", "s14-q1"]);
-    expect(built.questions?.[0]?.also).toEqual(["s14-q2"]);
-    const text = renderPresentation({ root: "/tmp/x", tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, ...built });
-    expect(text).toContain("also asked as s14-q2");
-  });
-});
-
-/** Audit of PRDR-207: a merge must not lose the `blocking` flag the absorbed question carried. */
-describe("audit of PRDR-207", () => {
-  it("a kept question inherits `blocking` from the twin it absorbed — AWAIT_INFO still fires", () => {
-    const built = presentInputsFromOutputs({
-      SLICE: { questions: [q("sq1", Q1)] },
-      PLAN: { questions: [{ ...q("s14-q2", S14Q2), blocking: true }] },
-    });
-    expect(built.questions?.map((x) => x.id)).toEqual(["sq1"]);
-    expect(built.questions?.[0]?.blocking, "the absorbed question was blocking; the merged one is").toBe(true);
   });
 });

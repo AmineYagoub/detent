@@ -18,6 +18,7 @@ import { readBindings } from "../adapter/drift.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
 import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
+import { phaseSpend } from "./phase-spend.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
@@ -81,6 +82,7 @@ export interface PipelineDeps {
   readonly askDecisions?: DecideAsk;
   /** S-1⁗ (PRDR-285): the sandbox VALIDATE's reviewers simulate in, asked when a round first runs; absent, this machine is probed. */
   readonly sandbox?: () => Promise<Sandbox>;
+  /** C-7‴ (PRDR-296): shows PRESENT's rendering before `askApproval` is put; nothing else prints it. */
   readonly print?: (text: string) => void;
 }
 
@@ -282,7 +284,7 @@ function slicePhase(deps: PipelineDeps): PhaseHandler {
         sliceSize: deps.sliceSize ?? { min: 12, max: 18 },
         ...(deps.note === undefined ? {} : { note: deps.note }),
         launch: async (inputs, artifactOut) => {
-          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut });
+          await launchInitSession(sessionDeps(deps, journal, "SLICE"), { role: "planner", inputs, artifactOut });
         },
       })),
   };
@@ -337,11 +339,11 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices and the redrafts the checks send. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),
         launch: async (inputs: Record<string, unknown>) => {
-          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
+          await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
         },
         /* C-4⁸ (PRDR-294): the review runs on a role of its own, with its own prompt, model and effort. */
         launchReview: async (inputs: Record<string, unknown>, artifactOut: string) => {
-          await launchInitSession(sessionDeps(deps, journal), { role: "plan_review", inputs, artifactOut });
+          await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "plan_review", inputs, artifactOut });
         },
       });
     }),
@@ -394,8 +396,8 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
         ...presentInputsFromOutputs(ctx.outputs),
-        /* PRDR-166: the globs DISCOVER recorded, not a second copy. */
-        docPatterns: (ctx.outputs["DISCOVER"]?.["patterns_searched"] as string[] | undefined) ?? [],
+        /* C-7‴ (PRDR-296): read when PRESENT runs, and not in its digest, since every session moves it. */
+        spend: phaseSpend(deps.root),
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
         ...(deps.print === undefined ? {} : { print: deps.print }),

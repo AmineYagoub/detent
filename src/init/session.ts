@@ -12,6 +12,7 @@ import {
 } from "../sessions/backend.js";
 import { toolsForRole } from "../sessions/guard.js";
 import { SCRATCH_TOOL, type ScratchGrant } from "../sessions/sandbox.js";
+import type { InitPhase } from "../schemas/init.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
@@ -19,7 +20,7 @@ import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 import { scrub } from "../kernel/scrub.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
-const INIT_TICKET = "init";
+export const INIT_TICKET = "init";
 
 /**
  * Session launching for the `init` pipeline.
@@ -85,6 +86,13 @@ export interface InitSessionDeps {
    * with a new name.
    */
   readonly journal: RunJournal;
+  /**
+   * C-7‴ (PRDR-296): the phase whose sessions these are, recorded on each
+   * one's ledger row so PRESENT can say what every specification phase and
+   * planning cost (decision 16). `sessionDeps` sets it for every phase that
+   * launches one.
+   */
+  readonly phase?: InitPhase;
 }
 
 export interface InitSessionRequest {
@@ -377,7 +385,7 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
   ledger.recordLaunch();
   journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
   const result = await deps.backend.run(initSessionSpec(deps, request));
-  ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString());
+  ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString(), deps.phase);
   journal.appendTicketEvent(INIT_TICKET, {
     stage: request.role,
     event: "end",

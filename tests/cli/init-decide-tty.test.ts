@@ -67,8 +67,8 @@ async function init(onTerminal: boolean, answers: string[]): Promise<string> {
 
 describe("PRDR-282 a terminal is asked DECIDE's questions, by the asker that reads a line", () => {
   it("records the founder's answer as a decision", async () => {
-    /* DECIDE's one question, then PRESENT's approval, deferred. */
-    const root = await init(true, ["2", "l"]);
+    /* DECIDE's one question. The fixture scripts DECIDE's session and not WRITE's, so nothing after DECIDE runs. */
+    const root = await init(true, ["2"]);
     expect(reader.asked[0]).toBe("\n1: [1-2], your own answer, or [l]ater ");
     expect(readDecisionLog(root).decisions.map((d) => [d.id, d.answer])).toEqual([["D-1", "**Two dollars a day**"]]);
   }, 60_000);

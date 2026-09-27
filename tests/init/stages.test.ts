@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initLayout, stateDir } from "../../src/fs/layout.js";
 import { isGreenfield } from "../../src/init/greenfield.js";
 import { planDraftSkeleton } from "../../src/init/plan.js";
-import { presentStage } from "../../src/init/present.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
 import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
@@ -581,56 +580,3 @@ describe("PRDR-189 the wait honours the reset the limit states", () => {
   }, 30_000);
 });
 
-/**
- * PRDR-166 — an instruction the reader can act on, and a signal when they could not.
- *
- * `init` halted at AWAIT_INFO saying "Answer them in the planning documents and
- * re-run". Following that literally — `planning-answers.md` at the root — changed
- * nothing: DISCOVER matches `PRD*.md`, a docs-tree glob and twelve more, and
- * that file matches none. ANALYZE re-derived, the same question came back, and the
- * failure was indistinguishable from an answer judged inadequate. The cost is a
- * full ANALYZE round per wrong guess.
- */
-describe("PRDR-166 AWAIT_INFO says where an answer goes, and when one was missed", () => {
-  const blocking = [{ id: "q1", question: "which npm account publishes this?", blocking: true, assumption: "none" }];
-
-  it("names the patterns DISCOVER actually searched, rather than a second copy", async () => {
-    const outcome = await presentStage({
-      root: "/tmp/x",
-      tickets: [],
-      bindings: [],
-      skips: [],
-      bootstrap: null,
-      assignments: {},
-      slices: [],
-      questions: blocking,
-      findings: [],
-      derivedEdges: [],
-      gateNotices: [],
-      docPatterns: ["PRD*.md", "docs/**/*.md"],
-    });
-    expect(outcome.kind).toBe("interrupt");
-    const message = outcome.kind === "interrupt" ? outcome.message : "";
-    expect(message).toContain("PRD*.md");
-    expect(message).toContain("docs/**/*.md");
-  });
-
-  it("still asks the question when it does not know the patterns", async () => {
-    const outcome = await presentStage({
-      root: "/tmp/x",
-      tickets: [],
-      bindings: [],
-      skips: [],
-      bootstrap: null,
-      assignments: {},
-      slices: [],
-      questions: blocking,
-      findings: [],
-      derivedEdges: [],
-      gateNotices: [],
-    });
-    expect(outcome.kind).toBe("interrupt");
-    const message = outcome.kind === "interrupt" ? outcome.message : "";
-    expect(message).toContain("which npm account");
-  });
-});

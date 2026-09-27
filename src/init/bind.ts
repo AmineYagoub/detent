@@ -356,15 +356,18 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
 /**
  * The PRESENT summary's binding table — provenance per slot (C-3b's AC). V-5′
  * (PRDR-295): a package's gates are named `package:slot`, the root's by slot
- * alone, and a package with no gate is listed as having none.
+ * alone, and a package with no gate is listed as having none. Each column is
+ * as wide as its longest entry, so a package's label does not push its row
+ * out of line (PRDR-296).
  */
 export function bindingTable(bindings: readonly Binding[], skips: readonly Skip[], packages: readonly string[] = [ROOT_PACKAGE]): string {
+  const ungated = packages.filter((pkg) => pkg !== ROOT_PACKAGE && !bindings.some((b) => b.package === pkg));
+  const label = Math.max(12, ...[...bindings, ...skips].map((g) => gateLabel(g).length), ...ungated.map((pkg) => pkg.length));
+  const command = Math.max(34, ...bindings.map((b) => b.resolved.length));
   const rows = [
-    ...bindings.map((b) => `  ${gateLabel(b).padEnd(12)} ${b.resolved.padEnd(34)} ${b.status}, approved_by: ${b.approved_by}`),
-    ...skips.map((s) => `  ${gateLabel(s).padEnd(12)} ${"(skipped)".padEnd(34)} acknowledged_by: ${s.acknowledged_by}`),
-    ...packages
-      .filter((pkg) => pkg !== ROOT_PACKAGE && !bindings.some((b) => b.package === pkg))
-      .map((pkg) => `  ${pkg.padEnd(12)} (no gates: a ticket writing here cannot be approved)`),
+    ...bindings.map((b) => `  ${gateLabel(b).padEnd(label)} ${b.resolved.padEnd(command)} ${b.status}, approved_by: ${b.approved_by}`),
+    ...skips.map((s) => `  ${gateLabel(s).padEnd(label)} ${"(skipped)".padEnd(command)} acknowledged_by: ${s.acknowledged_by}`),
+    ...ungated.map((pkg) => `  ${pkg.padEnd(label)} (no gates: a ticket writing here cannot be approved)`),
   ];
   return rows.length === 0 ? "  (no verification bindings)" : rows.join("\n");
 }

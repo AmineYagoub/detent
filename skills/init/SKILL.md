@@ -170,14 +170,18 @@ decision yourself.
    consent logged (C-6a, SEC-1). Channel: the human establishes the tooling —
    themselves, or by consenting to the proposal — then re-invoke.
 5. **`AWAIT_APPROVAL`** — raised at `PRESENT` (C-7): the plan's dual-exit
-   approval. Present the plan summary verbatim. It lists each blocker and
-   major a slice's review found (C-4⁸), with its fix, since no review read
-   the revision it bought: the human reads the tickets each one names before
-   answering. The human answers approve, decline, or defer. Relay it on the
-   re-invocation with exactly one flag: `--approve --by "<their name>"`,
-   `--decline`, or `--defer`. Approval is recorded with
+   approval. Present the plan summary verbatim, once (C-7‴): the slices,
+   tickets and milestones, the decision log with each default marked
+   vetoable, the risks, and what each specification phase and planning cost,
+   reported and never capped. It lists each blocker and major a slice's
+   review found (C-4⁸), with its fix, since no review read the revision it
+   bought: the human reads the tickets each one names before answering. The
+   human answers approve, decline, or defer. Relay it on the re-invocation
+   with exactly one flag: `--approve --by "<their name>"`, `--decline`, or
+   `--defer`. Approval is recorded with
    who, when, and the hash of what was approved; a decline leaves the plan
-   READY-unapproved; a deferral hands presentation to the first `run` (C-7).
+   READY-unapproved; a deferral hands presentation to the first `run`, which
+   shows the same text (C-7).
 
 ## Outcome
 

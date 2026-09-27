@@ -561,7 +561,9 @@ describe("T-068 PRESENT + dual-exit approval (C-7)", () => {
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, print: (t) => printed.push(t) }),
     );
 
-    const text = printed.join("\n");
+    /* C-7‴ (PRDR-296): nothing asks, so nothing is printed; the interrupt carries the summary, once. */
+    expect(printed).toEqual([]);
+    const text = result.interrupt?.message ?? "";
     /** C-3b: auto bindings are visible */
     expect(text).toContain("approved_by: auto");
     expect(text).toContain(BOOTSTRAP_TICKET_ID);

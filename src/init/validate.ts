@@ -298,7 +298,7 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
     digest: () => packDigest(deps.root, patterns, deps.planDocs),
     run: async () =>
       await withInitJournal(deps.root, async (journal) => {
-        const launch = sessionDeps(deps, journal);
+        const launch = sessionDeps(deps, journal, "VALIDATE");
         return await validateStage({
           root: deps.root,
           greenfield: isGreenfield(discoverStack(deps.root).stack.markers),

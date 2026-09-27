@@ -125,22 +125,15 @@ describe("V-1‴ the vacuous-gate notice reaches the operator", () => {
    */
   it("carries the notice through the PRESENT pipeline hop, not just the builder", async () => {
     const root = repoWithVacuousTest("echo 'no tests here'");
-    let shown = "";
-    const handlers = buildPipeline({
-      root,
-      backend: new MockBackend(),
-      prompts: PROMPTS,
-      budgets: BUDGETS,
-      print: (text) => {
-        shown += text;
-      },
-    });
+    const handlers = buildPipeline({ root, backend: new MockBackend(), prompts: PROMPTS, budgets: BUDGETS });
     const determine = handlers.find((h) => h.phase === "DETERMINE_VERIFICATION");
     const present = handlers.find((h) => h.phase === "PRESENT");
     if (determine === undefined || present === undefined) throw new Error("missing handler");
     const determined = await determine.run({ root, outputs: DISCOVERED, now: () => 0 });
     if (determined.kind !== "complete") throw new Error(`DETERMINE_VERIFICATION did not complete: ${determined.kind}`);
-    await present.run({ root, outputs: { DETERMINE_VERIFICATION: determined.outputs }, now: () => 0 });
+    /* C-7‴ (PRDR-296): with nothing to ask, the interrupt is what shows the summary. */
+    const presented = await present.run({ root, outputs: { DETERMINE_VERIFICATION: determined.outputs }, now: () => 0 });
+    const shown = presented.kind === "interrupt" ? presented.message : "";
     expect(shown, "the summary the operator approves must carry the warning").toContain("may verify nothing");
   }, 20_000);
 
