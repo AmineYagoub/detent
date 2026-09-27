@@ -7,7 +7,7 @@ import { conformanceRecord, writeConformanceRecord } from "../../src/init/pack.j
 import { discoverDocs } from "../../src/init/discover-docs.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
-import { auditBriefPath, claimArtifactPath, claimHash } from "../../src/init/audit-claims.js";
+import { AUDIT_CLAIM_BATCH, auditBriefPath, claimArtifactPath, claimHash } from "../../src/init/audit-claims.js";
 import { surveyPath } from "../../src/init/audit.js";
 import { readProgressMark } from "../../src/kernel/ledger.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -332,7 +332,8 @@ describe("PRDR-281: AUDIT's sessions (S-1‴, S-5⁵, C-2⁶)", () => {
 
   it("marks progress for each brief it writes, as PLAN does for each slice (C-2¹¹)", async () => {
     const root = repo(DOCS);
-    const claims = [CLAIM, { claim: "Stripe pays out daily in the US.", subject: "Stripe API", passage: { file: "PRD.md", line: 5, quote: "Payments use the Stripe API" } }];
+    /* PRDR-304: one claim more than a batch holds, so the last check starts only once an earlier one has ended (C-2¹⁶). */
+    const claims = Array.from({ length: AUDIT_CLAIM_BATCH + 1 }, (_, n) => ({ claim: `Stripe fact ${String(n)}.`, subject: "Stripe API", passage: { file: "PRD.md", line: 5, quote: "Payments use the Stripe API" } }));
     const marks: (number | null)[] = [];
     const stub = audit({
       survey: () => survey({ claims }),
@@ -342,8 +343,8 @@ describe("PRDR-281: AUDIT's sessions (S-1‴, S-5⁵, C-2⁶)", () => {
       },
     });
     await initThroughAudit(root, stub);
-    expect(marks).toHaveLength(2);
-    expect(marks[1], "the second check starts from the first one's brief").toBeGreaterThan(marks[0] ?? 0);
+    expect(marks).toHaveLength(AUDIT_CLAIM_BATCH + 1);
+    expect(marks.at(-1), "the check after a whole batch starts from a brief an earlier one wrote").toBeGreaterThan(marks[0] ?? 0);
   });
 
   it("says nothing of research when there was no claim to check", async () => {

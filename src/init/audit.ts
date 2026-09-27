@@ -23,8 +23,9 @@ import { launchInitSession, withInitJournal } from "./session.js";
  * written, both met again only by the session that built on them. AUDIT reads
  * them first, in two steps under one role and one prompt: a survey that finds
  * contradictions, gaps, drift from the code, and the external claims, and then
- * a session per claim that checks it against a primary source. Code checks
- * every passage and every source the sessions cite (C-2¹¹).
+ * a session per claim, four at a time (C-2¹⁶), that checks it against a
+ * primary source. Code checks every passage and every source the sessions
+ * cite (C-2¹¹).
  *
  * It runs on a raw document set only. A conforming pack's checker stands for
  * it (specification decision 6). A changed pack is never audited as a raw

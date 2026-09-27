@@ -1110,6 +1110,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   batch, bounded by that batch's own size.*
   *Amended by C-4⁸ (PRDR-294): built. No launch is batched: VALIDATE's reviewers run one after
   another (C-2¹⁴).*
+  *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are a batch, four at a time, and this bounds
+  them.*
 
 - **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
   independent by construction — that independence is what the threshold rests on — and they ran
@@ -1149,6 +1151,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   *Amended by C-4⁸ (PRDR-294): no session is told another's path, since no launch is batched. The
   backend's support has no caller, and PRDR-298 deletes it.*
   *Amended by C-3⁵ (PRDR-298): the backend's support is deleted.*
+  *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are batched, and each is told its own path.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -1166,6 +1169,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   batched. The backend's streaming signal has no caller, and PRDR-298 deletes it.*
   *Amended by C-3⁵ (PRDR-298): the streaming signal is deleted, and no session asks for the
   event stream.*
+  *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are batched, and none waits on another's
+  first response.*
 
 - **V-1⁗ (3.1.1, PRDR-211).** Before a bound gate runs, the adapter **installs what the work
   directory's manifest declares** — `npm install` for a `package.json` whose install mark is
@@ -2956,6 +2961,7 @@ the code does what the rules it amends describe, and each of those rules points 
   `planning_research_tool_calls`, and X-1's site map names `init/audit` for it.*
   *Amended by C-3⁵ (PRDR-298): planning research is deleted, and `research/planning` leaves the
   layout, so AUDIT's briefs are the only research `init` commits.*
+  *Amended by C-2¹⁶ (PRDR-304): the claims are checked four at a time.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -3334,6 +3340,25 @@ the code does what the rules it amends describe, and each of those rules points 
   symbol server where the adapter granted one (S-3⁸) and a VALIDATE reviewer's scratch tool (S-1⁗).
   The plugin driver is unchanged: it runs inside the operator's own Claude Code, where D-29 makes
   the hook authoritative.
+
+- **C-2¹⁶ (3.1.1, PRDR-304).** AUDIT checks its claims four at a time. C-2¹¹ gave each claim a
+  session of its own and checked them one after another, so the phase took the sum of every
+  check: on tabachir's first live `init` the survey found 132 claims, and each check took about six
+  minutes on the `audit` role's routing, some thirteen hours before DECIDE could ask anything. The
+  claims are independent. Each session is given one claim and writes one brief, to its own file
+  under its own surface (S-1″), and a phase's launches share its one journal (PRDR-203), so
+  `AUDIT_CLAIM_BATCH` checks run at once and the next starts as each ends. A claim the documents
+  rely on in more than one place is still checked once, as its first place states it, and every
+  place is recorded with its verdict in the survey's order, whatever order the checks end in. A
+  cached brief still answers without a session, and a brief refused twice still leaves its claim
+  unverified and unchecked. A relaunch runs in its own claim's place, so no more than four claim
+  sessions are in flight at once. A session that fails still fails the phase: the checks not yet
+  started stay unstarted, the ones in flight end, each committing its brief and recording its
+  spend, and then the failure is raised, so a re-run pays for none of them again. Spend is read at
+  each launch (D-25), and what a batch can run past a reading is one batch, the bound D-28′ states
+  for any batch. The size is a constant, not a config key, until a run-time outcome asks for
+  another (D-33). No other phase's sessions are batched: VALIDATE's reviewers still run one after
+  another (C-2¹⁴).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

@@ -158,25 +158,62 @@ async function check(claim: Claim, hash: string, deps: CheckClaimsDeps, tally: T
 }
 
 /**
- * Check each claim once, by its hash, in the survey's order, and record every
- * place the documents rely on it with that one verdict: a claim that is wrong
- * in two places is wrong in both, and WRITE is given each place (C-2¹³).
+ * C-2¹⁶ (PRDR-304): how many claims AUDIT checks at once. The claims are
+ * independent, each session writes its own brief under its own surface
+ * (S-1″), and a phase's launches share its one journal (PRDR-203), so a batch
+ * shortens the phase and changes nothing a check is given. Spend is still
+ * read at each launch (D-25), and what the batch can run past a reading is
+ * one batch (D-28′).
+ */
+export const AUDIT_CLAIM_BATCH = 4;
+
+/**
+ * `work` on each item, up to `size` at once, the next starting as one ends. A
+ * failure stops the taking and lets what is in flight end, so a check that
+ * finishes still commits its brief and records its spend; then the first
+ * failure is thrown, as a check in sequence threw it.
+ */
+async function inBatches<T>(items: readonly T[], size: number, work: (item: T) => Promise<void>): Promise<void> {
+  const queue = [...items];
+  const failed: { error?: unknown } = {};
+  const worker = async (): Promise<void> => {
+    for (let item = queue.shift(); item !== undefined && !("error" in failed); item = queue.shift()) {
+      try {
+        await work(item);
+      } catch (error) {
+        if (!("error" in failed)) failed.error = error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: size }, worker));
+  if ("error" in failed) throw failed.error;
+}
+
+/**
+ * Check each claim once, by its hash, and record every place the documents
+ * rely on it with that one verdict: a claim that is wrong in two places is
+ * wrong in both, and WRITE is given each place (C-2¹³). The checks run in
+ * batches (C-2¹⁶), and the verdicts are recorded in the survey's order
+ * whatever order they end in, so neither the checkpoint nor WRITE depends on
+ * scheduling.
  */
 export async function checkClaims(
   claims: readonly Claim[],
   deps: CheckClaimsDeps,
 ): Promise<{ readonly claims: readonly CheckedClaim[]; readonly research: AuditResearch }> {
   const tally: Tally = { sessions: 0, cache_hits: 0, tool_calls: 0 };
-  const verdicts = new Map<string, Verdict>();
-  const out: CheckedClaim[] = [];
-  for (const claim of claims) {
+  /* Each claim is checked as its first place states it, as the checks in sequence did. */
+  const groups = new Map<string, { readonly first: Claim; readonly places: [number, Claim][] }>();
+  claims.forEach((claim, index) => {
     const hash = claimHash(claim.claim, claim.subject);
-    let verdict = verdicts.get(hash);
-    if (verdict === undefined) {
-      verdict = await check(claim, hash, deps, tally);
-      verdicts.set(hash, verdict);
-    }
-    out.push({ ...claim, ...verdict });
-  }
+    const group = groups.get(hash) ?? { first: claim, places: [] };
+    group.places.push([index, claim]);
+    groups.set(hash, group);
+  });
+  const out: CheckedClaim[] = [];
+  await inBatches([...groups], AUDIT_CLAIM_BATCH, async ([hash, { first, places }]) => {
+    const verdict = await check(first, hash, deps, tally);
+    for (const [index, claim] of places) out[index] = { ...claim, ...verdict };
+  });
   return { claims: out, research: tally };
 }
