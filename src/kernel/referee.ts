@@ -278,11 +278,18 @@ export class RefereeCore {
     }
     const workDir = this.ctx.workDirFor(id);
     await this.sessions.launch(ticket, state, this.sessions.attemptInputs(ticket, state, workDir), workDir);
+    /**
+     * X-3′ (PRDR-289): read after every attempt, since each of the four
+     * states admits the signal. The three fix prompts described it while the
+     * referee read it after IN_PROGRESS alone, so a fix session's signal was
+     * written, ignored, and deleted at the next launch.
+     * X-4′ (PRDR-111): a dependency when the missing paths resolve, the X-4
+     * stop when they do not.
+     */
+    const falsified = this.sessions.consumeFalsifiedSignal(id);
+    if (falsified !== null) return { falsifiedRef: this.mintFor(id, resolveFalsification(this.root, id, falsified, this.ctx.iso())) };
+    /** X-4″ (PRDR-102): larger than one session — a human's, with the proposal attached. An implementer's finding alone. */
     if (state === "IN_PROGRESS") {
-      const falsified = this.sessions.consumeFalsifiedSignal(id);
-      /** X-4′ (PRDR-111): a dependency when the missing paths resolve, the X-4 stop when they do not. */
-      if (falsified !== null) return { falsifiedRef: this.mintFor(id, resolveFalsification(this.root, id, falsified, this.ctx.iso())) };
-      /** X-4″ (PRDR-102): larger than one session — a human's, with the proposal attached. */
       const oversized = this.sessions.consumeOversizedSignal(id);
       if (oversized !== null) return { oversizedRef: this.mintFor(id, ticketOversized(oversized.note, oversized.split)) };
     }

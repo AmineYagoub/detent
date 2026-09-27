@@ -244,20 +244,20 @@ export class Driver {
 
   private async stage(id: string, state: State): Promise<State> {
     switch (state) {
-      case "IN_PROGRESS": {
-        const result = await this.tool<{ falsified_ref?: string; oversized_ref?: string }>("attempt", { ticket_id: id, state });
-        /* X-4 / X-4′ / X-4″: a signal ref is the session's own finding; the transition it admits decides where it goes. */
-        const signal = result.falsified_ref ?? result.oversized_ref;
-        if (signal !== undefined) return await this.transition(id, signal);
-        return await this.gateTo(id);
-      }
+      case "IN_PROGRESS":
       case "BLIND_FIX":
       case "REVIEW_FIX":
-        await this.tool("attempt", { ticket_id: id, state });
+      case "INFORMED_FIX": {
+        const result = await this.tool<{ falsified_ref?: string; oversized_ref?: string }>("attempt", { ticket_id: id, state });
+        /*
+         * X-4 / X-4′ / X-4″, and X-3′ (PRDR-289) after a fix: a signal ref is
+         * the session's own finding; the transition it admits decides where it goes.
+         */
+        const signal = result.falsified_ref ?? result.oversized_ref;
+        if (signal !== undefined) return await this.transition(id, signal);
+        if (state === "INFORMED_FIX") return await this.gateTo(id, { escalate_reason: "informed fix failed — the ladder cannot reopen (D-13)" });
         return await this.gateTo(id);
-      case "INFORMED_FIX":
-        await this.tool("attempt", { ticket_id: id, state });
-        return await this.gateTo(id, { escalate_reason: "informed fix failed — the ladder cannot reopen (D-13)" });
+      }
       case "RESEARCH":
         return await this.stageRecord(id, "research");
       case "IN_REVIEW":

@@ -93,10 +93,21 @@ const rows: ReadonlyArray<readonly [State, Event, Row]> = [
   ["DIAGNOSED", "REPRO_WRONG", guard("reproWrong")],
   ["IN_PROGRESS", "PREMISE_FALSIFIED", guard("premiseFalsified")],
   /*
+   * X-3′ (PRDR-289): a fix session may find the premise false as an
+   * implementer may, and it means the same there. Review, diagnose and
+   * research stay read-only (specification decision 12).
+   */
+  ["BLIND_FIX", "PREMISE_FALSIFIED", guard("premiseFalsified")],
+  ["INFORMED_FIX", "PREMISE_FALSIFIED", guard("premiseFalsified")],
+  ["REVIEW_FIX", "PREMISE_FALSIFIED", guard("premiseFalsified")],
+  /*
    * X-4′ (PRDR-111): a falsification naming a path another ticket owns is a
    * dependency, not a stop — the ticket returns to the pool and waits for it.
    */
   ["IN_PROGRESS", "DEPENDENCY_DISCOVERED", to("READY")],
+  ["BLIND_FIX", "DEPENDENCY_DISCOVERED", to("READY")],
+  ["INFORMED_FIX", "DEPENDENCY_DISCOVERED", to("READY")],
+  ["REVIEW_FIX", "DEPENDENCY_DISCOVERED", to("READY")],
   /*
    * X-4″ (PRDR-102): a ticket the session judged larger than one session is a
    * plan-level finding, like a false premise — a human's, with the proposal

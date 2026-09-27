@@ -193,9 +193,10 @@ export class SessionArm {
     /*
      * PRDR-225: the signals a session writes and the referee consumes are
      * cleared here too, or a stale one impersonates this session — gate-313's
-     * t-s01-004 review-fix wrote `falsified.json` (a stage that never consumes
-     * one), it survived a requeue, and the next generation's implementer, which
-     * wrote nothing, was falsified against it. `oversized.json` is NOT cleared:
+     * t-s01-004 review-fix wrote `falsified.json` when the referee read one
+     * after IN_PROGRESS alone (it reads one after every fix since PRDR-289), it
+     * survived a requeue, and the next generation's implementer, which wrote
+     * nothing, was falsified against it. `oversized.json` is NOT cleared:
      * it is cross-run evidence sizing-evidence reads for a later PLAN (X-4″).
      * The crash-resume skip returns above, so a genuinely in-flight session's
      * signal is kept for B-5, exactly as its artifact is.

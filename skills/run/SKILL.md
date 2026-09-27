@@ -46,21 +46,24 @@ Repeat until the pool is empty or the user quits:
    implementing, fixing, researching the failure, fixing with research
    applied, addressing review findings, in review, verifying).
 4. Drive stages by the ticket's current state until it reaches a terminal
-   state (`DONE`, `NEEDS_HUMAN`, `BLOCKED`):
+   state (`DONE`, `NEEDS_HUMAN`, `BLOCKED`) or `READY`:
    - `IN_PROGRESS` — call `attempt` `{ticket_id, state}`. If the result has
      `falsified_ref` or `oversized_ref`, `transition` with it. Otherwise call `gate`
-     If that transition lands on `READY`, the referee found the path the session named in
-     another ticket's surface and re-queued this one behind it (X-4′): `release` the claim
-     and call `next`.
      `{ticket_id}` and `transition` with the returned `ref`.
-   - `BLIND_FIX`, `REVIEW_FIX` — `attempt`, then `gate` + `transition`.
-   - `INFORMED_FIX` — `attempt`, then `gate` with
+   - `BLIND_FIX`, `REVIEW_FIX` — `attempt`. If the result has `falsified_ref`,
+     `transition` with it (X-3′). Otherwise `gate` + `transition`.
+   - `INFORMED_FIX` — `attempt`. If the result has `falsified_ref`, `transition`
+     with it (X-3′). Otherwise `gate` with
      `{escalate_reason: "informed fix failed — the ladder cannot reopen (D-13)"}`
      and `transition`.
    - `RESEARCH` — `record` `{kind: "stage", stage: "research"}` + `transition`.
    - `IN_REVIEW` — `record` `{kind: "stage", stage: "review"}` + `transition`.
    - `DIAGNOSED` — `record` `{kind: "stage", stage: "diagnose"}` + `transition`.
    - `APPROVED` — `gate` with `{close_check: true}` + `transition`.
+
+   A `falsified_ref`'s transition that lands on `READY` means the referee found the path
+   the session named in another ticket's surface and re-queued this one behind it (X-4′):
+   `release` the claim and call `next`.
 5. Structured errors are routes, not failures:
    - `BREACH` — a budget ceiling: call `record` `{kind: "breach", reason}`
      with the message, `transition` with the ref, then handle the terminal

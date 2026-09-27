@@ -78,12 +78,16 @@ export async function skillDriver(core: RefereeCore): Promise<SkillDriverOutcome
         return await gateTo(id);
       }
       case "BLIND_FIX":
-      case "REVIEW_FIX":
-        await call("attempt", { ticket_id: id, state });
+      case "REVIEW_FIX": {
+        const signal = (await call("attempt", { ticket_id: id, state }))["falsified_ref"] as string | undefined;
+        if (signal !== undefined) return await transition(id, signal);
         return await gateTo(id);
-      case "INFORMED_FIX":
-        await call("attempt", { ticket_id: id, state });
+      }
+      case "INFORMED_FIX": {
+        const signal = (await call("attempt", { ticket_id: id, state }))["falsified_ref"] as string | undefined;
+        if (signal !== undefined) return await transition(id, signal);
         return await gateTo(id, { escalate_reason: "informed fix failed — the ladder cannot reopen (D-13)" });
+      }
       case "RESEARCH":
         return await stageRecord(id, "research");
       case "IN_REVIEW":

@@ -1925,6 +1925,28 @@ the code does what the rules it amends describe, and each of those rules points 
   X-4⁴, while the referee read it after IN_PROGRESS alone, so a fix session's signal was written,
   ignored and deleted at the next launch; PRDR-289 builds the rows. X-4⁵'s clearing stands: every
   launch removes a signal an earlier session left. X-4″'s oversized signal stays IN_PROGRESS's.
+  *Amended by X-3″ (PRDR-289): the rows are built, the referee reads the signal after each fix
+  session, and both drivers transition with it.*
+
+- **X-3″ (3.1.1, PRDR-289).** X-3′ is built. What building it settled:
+  - **Every attempt reads the signal.** `attempt` launches a session in the four states alone, so
+    the referee reads `falsified.json` after each attempt, and `oversized.json` after one in
+    IN_PROGRESS alone.
+  - **Both drivers transition with it.** After a fix attempt the headless driver and the run
+    skill transition with `falsified_ref` before any gate, as after IN_PROGRESS. D-13's reason
+    stays with the informed fix's red gate (ARCH-2).
+  - **The note keeps its words.** The note the referee writes still begins "falsified
+    mid-implementation", which X-4⁶ selects on, so a fix session's false premise is re-tested
+    after a toolchain install as an implementer's is.
+  - **The prompts.** Each fix prompt gives the signal's three shapes, `note`, `missing` and
+    `retracted`, and tells the session to end once it writes one. `blind_fix.md` calls a failure
+    record that contradicts the hypothesis a false premise, where it said to write that in the
+    commit message. `review_fix.md` calls a finding that can be fixed only by breaking a
+    criterion one. `informed_fix.md` keeps its instruction for a brief whose falsifying condition
+    holds: that is the brief's premise, not the ticket's, and its red gate goes to a human.
+  - **The worst case does not move.** X-1's walk still computes 24 sessions for a bug and 19 for
+    a feature. A fix session's false premise spends a hypothesis as an implementer's does, and
+    the rungs spent before it stay spent.
 
 - **X-4⁷ (3.1.1, PRDR-278).** A session that proves the specification wrong files an amendment, and
   the pack is fixed before the tickets built on it are (specification decision 8).

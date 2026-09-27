@@ -9,10 +9,10 @@ import { runWithConfig } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
 import { TOOL_NAMES } from "../../src/referee/registry.js";
-import { MockBackend } from "../../src/sessions/mock.js";
+import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
-import { addTicket, implementGreen, implementRed, makeRunRepo, noopFix, researchValid, reviewApprove } from "../kernel/run-fixture.js";
+import { addTicket, implementGreen, implementRed, makeRunRepo, noopFix, researchValid, reviewApprove, reviewChanges } from "../kernel/run-fixture.js";
 import { SKILL_TABLE_STATES, skillDriver } from "./skill-driver.js";
 import { EXIT_HUMAN_GATED } from "../../src/kernel/run.js";
 
@@ -265,4 +265,67 @@ describe("PRDR-175 cross-driver parity on the paths that fail (ARCH-2)", () => {
     expect(modelJournal.length).toBeGreaterThan(0);
     expect(modelJournal, "and both drivers must record the episode identically").toBe(journalBytes(headless.root));
   }, 120_000);
+});
+
+/**
+ * PRDR-289 — X-3′: a fix session's false premise, through both drivers.
+ *
+ * The skill's fix bullets said `attempt`, then `gate`, so a model driving it
+ * would have gated past a signal the referee had just read and noted. Both
+ * drivers now transition with `falsified_ref` after a fix attempt as after
+ * IN_PROGRESS, and their journals must agree, as on every other path.
+ */
+describe("PRDR-289 a fix session's false premise, through both drivers (ARCH-2)", () => {
+  const falsifying: StageFn = (spec) => {
+    const { falsified_out: out } = JSON.parse(spec.promptVariable) as { falsified_out: string };
+    writeFileSync(out, JSON.stringify({ note: "the criterion cannot be met as specified" }));
+    return noopFix(spec);
+  };
+  const SCRIPTS: Readonly<Record<string, () => ConstructorParameters<typeof MockBackend>[0]>> = {
+    BLIND_FIX: () => ({ implement: implementRed, blind_fix: falsifying, research: researchValid, informed_fix: noopFix }),
+    INFORMED_FIX: () => ({ implement: implementRed, blind_fix: noopFix, research: researchValid, informed_fix: falsifying }),
+    REVIEW_FIX: () => ({ implement: implementGreen, "review:0": reviewChanges, "review:1": reviewApprove, review_fix: falsifying }),
+  };
+
+  for (const [state, script] of Object.entries(SCRIPTS)) {
+    it(`${state}: both drivers admit PREMISE_FALSIFIED, and their journals are byte-identical`, async () => {
+      const model = await makeRunRepo();
+      const headless = await makeRunRepo();
+      cleanups.push(() => removeTree(model.root));
+      cleanups.push(() => removeTree(headless.root));
+      for (const root of [model.root, headless.root]) addTicket(root, { id: "t-1" });
+
+      await modelDrive(model.root, script());
+      const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(headless.root), "config.json"), "utf8")));
+      await runWithConfig(
+        {
+          root: headless.root,
+          backend: new MockBackend(script()),
+          prompts: loadPromptSet(),
+          now: () => NOW,
+          runId: "parity",
+          worker: "w1",
+        },
+        loaded,
+      );
+
+      const modelJournal = journalBytes(model.root);
+      const admitted = modelJournal
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line) as { from: string; event: string });
+      expect(admitted.at(-1), "the model driver transitioned with the signal's ref").toMatchObject({ from: state, event: "PREMISE_FALSIFIED" });
+      expect(modelJournal, "and the headless driver did the same").toBe(journalBytes(headless.root));
+    }, 120_000);
+  }
+
+  it("the skill's fix bullets transition with `falsified_ref` before they gate", () => {
+    /* The scripted driver implements the skill; this is what keeps the skill's own words saying the same. */
+    const body = readFileSync(path.join(import.meta.dirname, "..", "..", "skills", "run", "SKILL.md"), "utf8");
+    const bullets = body.split("\n   - ");
+    for (const state of ["BLIND_FIX", "INFORMED_FIX", "REVIEW_FIX"]) {
+      const bullet = bullets.find((b) => (b.split(" — ")[0] ?? "").includes(`\`${state}\``));
+      expect(bullet, state).toContain("falsified_ref");
+    }
+  });
 });
