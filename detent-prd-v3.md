@@ -3324,6 +3324,17 @@ the code does what the rules it amends describe, and each of those rules points 
   import rule forced and which had lost S-3⁵'s `git rm`. A write role keeps the mode's approval of a
   read-only command, since its git verbs are Bash.
 
+- **D-22′ (3.1.1, PRDR-303).** A headless session's MCP servers are the ones Detent passes it. D-22
+  emptied `settingSources` so that no user, project or local settings file contributes anything to a
+  Detent session, and a project's `.mcp.json` stays out with them (probed: a planted stdio server
+  was neither listed nor run). The account a session runs on is no settings file: a session on a
+  claude.ai login was connected to that account's connectors, and tabachir's AUDIT survey was handed
+  Claude Docs' create, update and delete tools beside its Read, Grep and Glob. It called none. Every
+  session is now built with `strictMcpConfig`, so its servers are the ones `mcpServers` passes: the
+  symbol server where the adapter granted one (S-3⁸) and a VALIDATE reviewer's scratch tool (S-1⁗).
+  The plugin driver is unchanged: it runs inside the operator's own Claude Code, where D-29 makes
+  the hook authoritative.
+
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
 - **C-1′** `init` and `run` are the plugin's two commands (`/detent:init`, `/detent:run`), and Detent registers skills so the model invokes the right phase from natural intent ("plan this repo", "keep going"). The headless driver exposes the same two as the retained CLI verbs. C-1's git-root rule and the five C-5 interrupts are unchanged; interrupts are surfaced as the plugin's **presented decisions**, still a closed set of five.
@@ -3377,6 +3388,7 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   predicate serves the pool and every plumbing verb.
 - **S-3′** Per-role tool allowlists define the role surface; containment is the hook, never the allowlist (unchanged from PRDR-050).
 - **D-22/D-29** Setting-source isolation splits by driver: `settingSources: []` retained headless; on the plugin the hook is authoritative over loaded settings, and referee legality never consults repo settings.
+  *Amended by D-22′ (PRDR-303): headless, `strictMcpConfig` too, so an account's claude.ai connectors stay out.*
 
 ## 11. Security & Supply Chain (SEC, v3)
 SEC-1…SEC-5 inherited. v3 adds the in-session threat answer:

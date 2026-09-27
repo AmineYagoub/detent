@@ -136,13 +136,15 @@ function serversOf(spec: SessionSpec): Pick<Options, "mcpServers"> {
 }
 
 /**
- * The full option set for one session. Two lines are load-bearing security
+ * The full option set for one session. Three lines are load-bearing security
  * decisions with their own regression tests:
  *
  * - `settingSources: []` (D-22/PRDR-051): the SDK's default enables project
  *   scope, which resolves against the repository under work — a committed
  *   settings file could add allow rules. Empty means no user, project, or
  *   local settings file contributes anything to a Detent session.
+ * - `strictMcpConfig: true` (D-22′/PRDR-303): the MCP servers `mcpServers`
+ *   passes and no others, so an account's claude.ai connectors stay out.
  * - `hooks.PreToolUse` (D-21/PRDR-050): containment that allow rules cannot
  *   shadow.
  */
@@ -160,6 +162,13 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
   return {
     cwd: spec.cwd,
     settingSources: [],
+    /**
+     * D-22′ (PRDR-303): and no MCP server but the ones `mcpServers` below
+     * passes. The empty setting sources keep out a project's `.mcp.json`, and
+     * not the claude.ai connectors of the account a session runs on: tabachir's
+     * AUDIT survey was handed Claude Docs' create, update and delete tools.
+     */
+    strictMcpConfig: true,
     /**
      * SEC-4′ (PRDR-133): the allowlist is APPLIED here, and this line is the
      * whole control. `buildSessionEnv` existed, was tested and was green, and
