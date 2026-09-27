@@ -18,6 +18,7 @@ import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 import { scrub } from "../kernel/scrub.js";
+import { effortDowngrade, modelFallback, settledLevels } from "../kernel/session-effort.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
 export const INIT_TICKET = "init";
@@ -370,6 +371,26 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
   }
 }
 
+/**
+ * S-4⁵ (PRDR-299): the effort a session ran at, and the model it ran on,
+ * against what it was routed to, recorded as a kernel session's are (S-4⁗,
+ * PRDR-114). `init` has no ticket to note, so a disagreement is said through
+ * its note seam. Recorded before a failed session fails its phase, since the
+ * turns it ran were run at a level.
+ */
+function recordRan(deps: InitSessionDeps, role: string, routed: string, result: SessionResult): void {
+  const at = new Date().toISOString();
+  deps.journal.appendTicketEvent(INIT_TICKET, { stage: role, event: "effort_settled", at, ...settledLevels(routed, result.effort) });
+  const downgrade = effortDowngrade(role, routed, result.effort);
+  if (downgrade !== null) deps.note?.(downgrade);
+  if (result.modelFallback === undefined) return;
+  const { requested } = result.modelFallback;
+  /* SEC-4 (PRDR-169): a runtime string, echoed to the operator and the journal. */
+  const reason = scrub(result.modelFallback.reason);
+  deps.journal.appendTicketEvent(INIT_TICKET, { stage: role, event: "model_fallback", at, requested, reason });
+  deps.note?.(modelFallback(role, requested, reason));
+}
+
 async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   mkdirSync(path.dirname(request.artifactOut), { recursive: true });
 
@@ -381,8 +402,11 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
       : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
   /* D-25: spend is read here, at launch and never mid-flight; the advisory total and the breaker only announce (PRDR-265). */
   ledger.recordLaunch();
-  journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
+  /* S-4⁵ (PRDR-299): the level this session is routed to, `"default"` where none is, as the kernel's `start` names it (S-4‴). */
+  const routed = deps.effortRouting?.[request.role] ?? "default";
+  journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString(), effort: routed });
   const result = await deps.backend.run(initSessionSpec(deps, request));
+  recordRan(deps, request.role, routed, result);
   ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString(), deps.phase);
   journal.appendTicketEvent(INIT_TICKET, {
     stage: request.role,

@@ -2,7 +2,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run, type RunOptions } from "../../src/kernel/run.js";
-import { MockBackend } from "../../src/sessions/mock.js";
+import { readTicket } from "../../src/kernel/tickets/readers.js";
+import type { SessionResult } from "../../src/sessions/backend.js";
+import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree } from "../helpers.js";
 import { addTicket, implementGreen, makeRunRepo, reviewApprove } from "./run-fixture.js";
@@ -91,5 +93,32 @@ describe("PRDR-235 the journal records the effort a run and a session were given
     const review = events.find((e) => e["event"] === "start" && e["stage"] === "review");
     expect(review).toBeDefined();
     expect(review!["effort"]).toBe("default");
+  });
+
+  /**
+   * PRDR-237's half, which no test held until PRDR-299 moved its words into
+   * the module both drivers take them from (S-4⁵): the settled level beside
+   * the routed one, and a note when they disagree.
+   */
+  it("a session that ran below its routed level records both and notes the ticket", async () => {
+    const root = await fixture();
+    addTicket(root, { id: "t1" });
+    withEffort(root, { implement: "max", review: "high" });
+    const lower: StageFn = (spec) => ({ ...(implementGreen(spec) as SessionResult), effort: "high" });
+
+    await run(opts(root, new MockBackend({ implement: lower, review: (spec) => ({ ...(reviewApprove(spec) as SessionResult), effort: "high" }) })));
+
+    const settled = readFileSync(path.join(root, ".detent/runs/t1/journal.jsonl"), "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((e) => e["event"] === "effort_settled");
+    expect(settled).toEqual([
+      expect.objectContaining({ stage: "implement", generation: 0, routed: "max", active: "high" }),
+      expect.objectContaining({ stage: "review", generation: 0, routed: "high", active: "high" }),
+    ]);
+    expect(readTicket(root, "t1").notes.map((n) => n.text).filter((t) => t.startsWith("effort downgraded"))).toEqual([
+      "effort downgraded (PRDR-237): implement is routed to max, and the model ran the turns at high — the SDK downgrades silently for a model that cannot serve a level",
+    ]);
   });
 });

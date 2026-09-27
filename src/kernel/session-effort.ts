@@ -11,7 +11,9 @@ import { appendNote } from "./tickets/mutations.js";
  *
  * Its own module because `referee-session.ts` is at its line ceiling and this
  * is one self-contained fact about a finished session — the same reason the
- * stage, sweep and context arms live beside it rather than inside it.
+ * stage, sweep and context arms live beside it rather than inside it. S-4⁵
+ * (PRDR-299): `init`'s sessions record the same event and say the same words,
+ * from here (`src/init/session.ts`), so the two drivers cannot drift apart.
  */
 
 export interface EffortJournal {
@@ -47,19 +49,34 @@ export function recordEffort(
   routed: string,
   settled: string | undefined,
 ): void {
-  journal.appendTicketEvent(id, {
-    stage: role,
-    event: "effort_settled",
-    at,
-    generation,
-    routed,
-    active: settled ?? "unobserved",
-  });
-  if (settled === undefined || routed === "default" || settled === routed) return;
-  appendNote(root, id, {
-    author: "kernel",
-    text:
-      `effort downgraded (PRDR-237): ${role} is routed to ${routed}, and the model ran the turns at ` +
-      `${settled} — the SDK downgrades silently for a model that cannot serve a level`,
-  });
+  journal.appendTicketEvent(id, { stage: role, event: "effort_settled", at, generation, ...settledLevels(routed, settled) });
+  const downgrade = effortDowngrade(role, routed, settled);
+  if (downgrade !== null) appendNote(root, id, { author: "kernel", text: downgrade });
+}
+
+/**
+ * S-4⁵ (PRDR-299): what both drivers record of a finished session's effort,
+ * `init` through its note seam since it has no ticket to note (ARCH-2). The
+ * level asked for and the level run, with an unobserved one named as such.
+ */
+export function settledLevels(routed: string, settled: string | undefined): { readonly routed: string; readonly active: string } {
+  return { routed, active: settled ?? "unobserved" };
+}
+
+/**
+ * PRDR-114's other half, said the same way by both drivers (S-4⁵): the routed
+ * model the runtime could not serve. `reason` is a runtime string, scrubbed by
+ * the caller (SEC-4); the ledger row's `models` says what ran instead.
+ */
+export function modelFallback(role: string, requested: string, reason: string): string {
+  return `model fallback (PRDR-114): ${role} is routed to ${requested}, unavailable on this runtime (${reason}) — ran on the runtime default`;
+}
+
+/** What is said when the levels disagree, and null under the three suppressors above. */
+export function effortDowngrade(role: string, routed: string, settled: string | undefined): string | null {
+  if (settled === undefined || routed === "default" || settled === routed) return null;
+  return (
+    `effort downgraded (PRDR-237): ${role} is routed to ${routed}, and the model ran the turns at ` +
+    `${settled} — the SDK downgrades silently for a model that cannot serve a level`
+  );
 }

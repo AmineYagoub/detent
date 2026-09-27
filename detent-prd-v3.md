@@ -813,6 +813,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   as `effort.level`, and deliberately not this one. Noted while amending: effort routing appears in
   neither PRD, so PRDR-197 shipped an operator-facing knob with no PRD entry at all; this is the
   first, and it covers only the recording.
+  *Amended by S-4⁵ (PRDR-299): built for `init`'s sessions too; until then only the kernel's
+  `start` named a level.*
 
 - **C-12″ (3.1.1, PRDR-236).** Requeue guidance reaches the SESSION, not only the judge of it.
   C-12's one lever over a stopped ticket is a requeue carrying guidance; `requeueTicket` records it
@@ -874,6 +876,23 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   exists to prevent. Found when gate-313's first `max` session came in 10% above the baseline mean in
   output tokens and 2% in cost, with no way to say whether that was a small real effect or a level
   that never took.
+  *Amended by S-4⁵ (PRDR-299): built for `init`'s sessions too, which say a disagreement through
+  init's note seam.*
+
+- **S-4⁵ (3.1.1, PRDR-299).** `init`'s sessions record the effort they were routed to and the one
+  they ran at, as the kernel's have since S-4‴ and S-4⁗, and the model they fell back from, as
+  PRDR-114's have. `init` routed every session a level and journaled a bare `start`; the level the
+  containment hook observed reached the result and was dropped; and a routed model the runtime could
+  not serve left the ledger row's `models` as the only trace. S-5⁵ puts the planner, `plan_review`
+  and all three specification roles at `max`, and the SDK downgrades silently, so a planner that ran
+  lower left a journal identical to one that ran at `max`, and an experiment on effort (D-33) could
+  not be told from one that did not happen. Each init session's `start` now names its routed level,
+  `"default"` where none is; `effort_settled` follows it with the routed and the active level,
+  `unobserved` when no tool call reported one; a routed model the runtime could not serve is
+  journaled as `model_fallback`. With no ticket to note, a downgrade and a fallback are said through
+  init's note seam, in the kernel's words, which both drivers take from one module (ARCH-2). Neither
+  refuses nor retries the session, as PRDR-114 set, and a failed session records its level before
+  its phase fails. The prompt hash the kernel's `start` carries is still not on init's.
 
 - **C-14″ (3.1.1, PRDR-129).** The porcelain runs LIVE. `detent run` defaulted to the fixture
   backend while `detent referee` defaulted to the live one and `detent init` refused the fixture

@@ -14,7 +14,7 @@ import { readTicket } from "./tickets/readers.js";
 import { appendNote, writeTicket } from "./tickets/mutations.js";
 import { assertTicketWallClock } from "./ticket-clock.js";
 import { scrub } from "./scrub.js";
-import { recordEffort } from "./session-effort.js";
+import { modelFallback, recordEffort } from "./session-effort.js";
 import { attemptInputs } from "./session-inputs.js";
 import { fileSignalled } from "./amendment-file.js";
 
@@ -238,10 +238,7 @@ export class SessionArm {
       const { requested } = result.modelFallback;
       /* SEC-4 (PRDR-169): a runtime string echoed into a committed note and the journal. */
       const reason = scrub(result.modelFallback.reason);
-      appendNote(ctx.root, id, {
-        author: "kernel",
-        text: `model fallback (PRDR-114): ${role} is routed to ${requested}, unavailable on this runtime (${reason}) — ran on the runtime default`,
-      });
+      appendNote(ctx.root, id, { author: "kernel", text: modelFallback(role, requested, reason) });
       ctx.journal.appendTicketEvent(id, { stage: role, event: "model_fallback", at: ctx.iso(), requested, reason });
     }
     if (result.mcpFailures !== undefined && result.mcpFailures.length > 0) {

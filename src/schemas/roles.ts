@@ -71,15 +71,17 @@ export function promptOf(role: RoleId, stage: unknown): PromptId {
  * rather than accepted and silently ignored.
  *
  * `xhigh` and `max` are not served by every model. The SDK downgrades silently
- * for a model that cannot serve one, which is why a KERNEL-launched session
- * records both the level it was routed to (`start.effort`, S-4‴) and the level
- * it settled at (`effort_settled`, S-4⁗). Init sessions are routed a level and
- * record neither — ARCH-2 parity is owed there and is not paid.
+ * for a model that cannot serve one, which is why every session records both
+ * the level it was routed to (`start.effort`, S-4‴) and the level it settled at
+ * (`effort_settled`, S-4⁗): a kernel session notes its ticket when they
+ * disagree, and an `init` session says so through init's note seam (S-4⁵).
  *
  * This sentence claimed the recording for every session from PRDR-197, which
  * shipped the routing alone; the routed half arrived at PRDR-235 and the
- * settled half at PRDR-237. It described a mechanism that did not yet exist,
- * and read as finished throughout.
+ * settled half at PRDR-237, for kernel sessions only, and `init`'s sessions,
+ * the planner and the specification roles S-5⁵ puts at `max`, recorded neither
+ * until PRDR-299. It described a mechanism that did not yet exist, and read as
+ * finished throughout.
  */
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 
