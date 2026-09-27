@@ -20,7 +20,8 @@ import type { Binding } from "../schemas/records.js";
 import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
 import { phaseSpend } from "./phase-spend.js";
 import { planBuilds } from "./plan-builds.js";
-import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
+import { contentsDigest, listingDigest, valueDigest, type PhaseHandler, type PhaseOutcome } from "./machine.js";
+import { settleAmendments } from "./amendment-replan.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { classifyPack, hasConformanceRecord, packDocuments, packNote, readConformanceRecord } from "./pack.js";
 import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH } from "../schemas/pack.js";
@@ -314,40 +315,49 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
       ])}`,
     /** C-8‴: the tickets and the plan artifact are PLAN's output; if they are gone, plan again. */
     outputIntact: () => planOutputIntact(deps.root),
-    run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
-      /* A checkpoint written before packages holds bindings with none, which were the root's. */
-      const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as (Omit<Binding, "package"> & { readonly package?: string })[] | undefined) ?? [];
-      return await planStage({
-        root: deps.root,
-        ...planningStack(deps.root, ctx.outputs),
-        docs: planningDocs(deps.root, ctx.outputs),
-        /**
-         * V-5′ (PRDR-295): each gate by its label, the root's by slot alone as
-         * before packages and a package's as `package:slot`, so a project with
-         * one package keys its plan as it did, and the bootstrap ticket proves
-         * every package's gates.
-         */
-        boundSlots: bindings.map((b) => gateLabel({ package: b.package ?? ROOT_PACKAGE, slot: b.slot })),
-        budgets: deps.budgets,
-        slices: slicesFromOutputs(ctx.outputs),
-        baseline: deps.planBaseline ?? "production",
-        promptHash: planPrompts(deps),
-        pack: draftingPack(deps.root, ctx.outputs),
-        /* A-1⁷ (PRDR-293): the gates check reads what PRESENT reads. */
-        gates: readBindings(deps.root),
-        ...(deps.note === undefined ? {} : { note: deps.note }),
-        /* PRDR-194: PLAN is the stage whose work has names worth recording — slices and the redrafts the checks send. */
-        ...(deps.progress === undefined ? {} : { progress: deps.progress }),
-        launch: async (inputs: Record<string, unknown>) => {
-          await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
-        },
-        /* C-4⁸ (PRDR-294): the review runs on a role of its own, with its own prompt, model and effort. */
-        launchReview: async (inputs: Record<string, unknown>, artifactOut: string) => {
-          await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "plan_review", inputs, artifactOut });
-        },
-      });
-    }),
+    run: async (ctx) => {
+      const outcome = await planWithJournal(deps, ctx);
+      /* X-4⁸ (PRDR-286): outside PLAN's journal, since a requeue journals its own transition. */
+      if (outcome.kind === "complete") settleAmendments(deps.root, (outcome.outputs["replanned"] as string[] | undefined) ?? [], deps.note);
+      return outcome;
+    },
   };
+}
+
+async function planWithJournal(deps: PipelineDeps, ctx: Parameters<PhaseHandler["run"]>[0]): Promise<PhaseOutcome> {
+  return await withInitJournal(deps.root, async (journal) => {
+    /* A checkpoint written before packages holds bindings with none, which were the root's. */
+    const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as (Omit<Binding, "package"> & { readonly package?: string })[] | undefined) ?? [];
+    return await planStage({
+      root: deps.root,
+      ...planningStack(deps.root, ctx.outputs),
+      docs: planningDocs(deps.root, ctx.outputs),
+      /**
+       * V-5′ (PRDR-295): each gate by its label, the root's by slot alone as
+       * before packages and a package's as `package:slot`, so a project with
+       * one package keys its plan as it did, and the bootstrap ticket proves
+       * every package's gates.
+       */
+      boundSlots: bindings.map((b) => gateLabel({ package: b.package ?? ROOT_PACKAGE, slot: b.slot })),
+      budgets: deps.budgets,
+      slices: slicesFromOutputs(ctx.outputs),
+      baseline: deps.planBaseline ?? "production",
+      promptHash: planPrompts(deps),
+      pack: draftingPack(deps.root, ctx.outputs),
+      /* A-1⁷ (PRDR-293): the gates check reads what PRESENT reads. */
+      gates: readBindings(deps.root),
+      ...(deps.note === undefined ? {} : { note: deps.note }),
+      /* PRDR-194: PLAN is the stage whose work has names worth recording — slices and the redrafts the checks send. */
+      ...(deps.progress === undefined ? {} : { progress: deps.progress }),
+      launch: async (inputs: Record<string, unknown>) => {
+        await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
+      },
+      /* C-4⁸ (PRDR-294): the review runs on a role of its own, with its own prompt, model and effort. */
+      launchReview: async (inputs: Record<string, unknown>, artifactOut: string) => {
+        await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "plan_review", inputs, artifactOut });
+      },
+    });
+  });
 }
 
 function prepareAgentsPhase(deps: PipelineDeps): PhaseHandler {

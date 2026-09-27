@@ -5,6 +5,8 @@ import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { approvalSchema } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
+import type { AmendmentRecord } from "../schemas/amendment.js";
+import type { AmendDecision } from "./amendment-decide.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
 import { gateLabel } from "../adapter/packages.js";
@@ -112,13 +114,16 @@ export interface EscalationInput {
   readonly ticket: Ticket;
   readonly reason: string;
   readonly summary: string;
+  /** X-4⁸ (PRDR-286): the open amendment the ticket filed. Its escalation decides the amendment, and offers no ticket act. */
+  readonly amendment?: AmendmentRecord;
 }
 
 export type EscalationAction =
   | { readonly kind: "approve"; readonly by: string }
   | { readonly kind: "requeue"; readonly by: string; readonly guidance: string }
   | { readonly kind: "skip"; readonly by: string }
-  | { readonly kind: "quit" };
+  | { readonly kind: "quit" }
+  | { readonly kind: "amend"; readonly by: string; readonly decision: AmendDecision };
 
 
 export interface RunOutcome {

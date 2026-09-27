@@ -59,6 +59,8 @@ export const LAYOUT: readonly LayoutEntry[] = [
    * briefs there stay committed, read by nothing.
    */
   { rel: "research/audit", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
+  /** X-4⁷ (PRDR-286): each amendment a session filed against the pack, and what the operator decided, beside the pack it changes. */
+  { rel: "amendments", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: "agents", kind: "dir", tracking: "committed", ownership: "repository", stamped: true },
   { rel: ".gitignore", kind: "file", tracking: "committed", ownership: "repository", stamped: false },
 

@@ -33,6 +33,8 @@ import { healStaleClaims } from "./plumbing.js";
 import type { LoadedConfig } from "./worstcase.js";
 import { TERMINAL_STATES } from "../schemas/states.js";
 import { noteUnitComplete } from "./ledger.js";
+import { decideAmendment, type AmendDecision, type AmendOutcome } from "./amendment-decide.js";
+import { heldEntries } from "./amendment-store.js";
 
 /**
  * T-100…T-105 — the REFEREE core (R-1…R-4, D-27, ARCH-1/ARCH-2).
@@ -50,11 +52,7 @@ import { noteUnitComplete } from "./ledger.js";
  */
 
 export { TransitionError } from "./machine.js";
-export {
-  ATTEMPT_STATES,
-  Breach,
-  EscrowError,
-  type CoreOptions, SessionRefusal } from "./referee-context.js";
+export { ATTEMPT_STATES, Breach, EscrowError, type CoreOptions, SessionRefusal } from "./referee-context.js";
 export { DriftHaltSignal } from "./referee-gate.js";
 
 export interface AcquireResult {
@@ -313,16 +311,18 @@ export class RefereeCore {
   }
 
   /** C-10/X-8: a human act is its own evidence; who and how are recorded. */
-  recordHuman(
-    id: string,
-    action: { kind: "approve"; by: string } | { kind: "requeue"; by: string; guidance: string },
-  ): { ref: string } {
+  recordHuman(id: string, action: { kind: "approve"; by: string } | { kind: "requeue"; by: string; guidance: string }): { ref: string } {
     if (action.kind === "approve") {
       appendNote(this.root, id, { author: action.by, text: `human-approved: by ${action.by} at escalation (C-10)` });
       return { ref: this.mintFor(id, humanApproved(`approved in-run by ${action.by} (C-10)`)) };
     }
     appendNote(this.root, id, { author: action.by, text: `requeued with guidance (C-10): ${action.guidance}` });
     return { ref: this.mintFor(id, humanRequeue(`requeue by ${action.by}: ${action.guidance}`)) };
+  }
+
+  /** X-4⁸ (PRDR-286): the operator's decision on an amendment. It moves no ticket, so it mints nothing. */
+  decideAmendment(id: string, by: string, decision: AmendDecision): AmendOutcome {
+    return decideAmendment(this.root, id, by, decision, this.ctx.iso());
   }
 
   /* ------------------------------------------------- lifecycle bookkeeping */
@@ -450,12 +450,18 @@ export class RefereeCore {
 
   /* ------------------------------------------------------------- reads */
 
+  /**
+   * X-4⁸ (PRDR-286): a READY ticket an amendment holds is pending too. It waits
+   * on the operator's decision or on the re-plan, so a run that leaves only
+   * held work exits 10 and names the amendment, where it exited 0.
+   */
   statusData(): { pending: PendingEntry[]; states: { id: string; state: State }[] } {
     const tickets = allTickets(this.root);
     return {
-      pending: tickets
-        .filter((t) => t.state === "NEEDS_HUMAN" || t.state === "BLOCKED")
-        .map((t) => ({ id: t.id, state: t.state, reason: lastNote(t) })),
+      pending: [
+        ...tickets.filter((t) => t.state === "NEEDS_HUMAN" || t.state === "BLOCKED").map((t) => ({ id: t.id, state: t.state, reason: lastNote(t) })),
+        ...heldEntries(this.root, tickets),
+      ],
       states: tickets.map((t) => ({ id: t.id, state: t.state })),
     };
   }

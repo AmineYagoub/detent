@@ -16,6 +16,7 @@ import { assertTicketWallClock } from "./ticket-clock.js";
 import { scrub } from "./scrub.js";
 import { recordEffort } from "./session-effort.js";
 import { attemptInputs } from "./session-inputs.js";
+import { fileSignalled } from "./amendment-file.js";
 
 /**
  * T-104 — the session arm (R-4, S-2…S-6, D-25, B-3/P7, SEC-3).
@@ -489,8 +490,9 @@ export class SessionArm {
     let note = "premise falsified";
     let missing: string[] = [];
     let retracted = false;
+    let amendment: unknown;
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown; retracted?: unknown };
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { note?: unknown; missing?: unknown; retracted?: unknown; amendment?: unknown };
       /* SEC-4 (PRDR-169): the session wrote this file; its free text is scrubbed before a note or journal event carries it. */
       if (typeof parsed.note === "string" && parsed.note !== "") note = scrub(parsed.note);
       if (Array.isArray(parsed.missing)) {
@@ -498,6 +500,7 @@ export class SessionArm {
       }
       /* X-4‴ (PRDR-212): the boolean `true`, and only that — prose inside a standing signal is still a signal. */
       retracted = parsed.retracted === true;
+      amendment = parsed.amendment;
     } catch {
       /* the signal's existence is the event; the note is best-effort */
     }
@@ -518,6 +521,19 @@ export class SessionArm {
     }
     const detail = missing.length === 0 ? note : `${note} — missing: ${missing.join(", ")}`;
     appendNote(ctx.root, ticketId, { author: "kernel", text: `${FALSIFIED_NOTE}${detail}` });
+    /**
+     * X-4⁸ (PRDR-286): a falsification that names its fix files an amendment,
+     * and one the pack refuses is said on the ticket. A filed one is the
+     * pack's defect, not a path another ticket owns, so it goes to the human
+     * as PREMISE_FALSIFIED whatever it names missing (X-4′).
+     */
+    if (amendment !== undefined) {
+      const filed = fileSignalled(ctx.root, ticketId, amendment, ctx.iso());
+      if (filed !== null) {
+        ctx.journal.appendTicketEvent(ticketId, { event: "amendment_filed", at: ctx.iso(), amendment: filed });
+        return { note, missing: [] };
+      }
+    }
     return { note, missing };
   }
 

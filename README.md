@@ -154,7 +154,11 @@ right behaviours for a tree Detent owns and the wrong ones for yours.
 
 Documented, scriptable, and never required on the golden path:
 `detent status`, `detent report`, `detent doctor`, `detent approve <id>`,
-`detent requeue <id>`, `detent unclaim <id>`, `detent verify sync`.
+`detent requeue <id>`, `detent unclaim <id>`, `detent amend <AM-id>`, `detent verify sync`.
+
+`detent amend <AM-id>` shows an amendment a session filed against the specification pack, and
+decides it with `--approve`, `--edit <file>` or `--reject <reason>`. An applied amendment waits for
+`detent init`, which re-validates the pack and re-plans the slices it changed.
 
 `detent status` also shows how the plan is running, for the plan and for each
 slice: tickets done, and done in their first generation, stops for you,

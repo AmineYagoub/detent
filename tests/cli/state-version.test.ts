@@ -234,6 +234,8 @@ describe("PRDR-300: every verb is one that migrates or one that refuses", () => 
     approve: "cli/plumbing.ts",
     requeue: "cli/plumbing.ts",
     unclaim: "cli/plumbing.ts",
+    /* X-4⁸ (PRDR-286): a plumbing verb, refused as its siblings are. */
+    amend: "cli/plumbing.ts",
     verify: "cli/verify.ts",
   };
 

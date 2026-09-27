@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { amendmentEditSchema } from "../schemas/amendment.js";
 import {
   ATTEMPT_STATES,
   Breach,
@@ -89,6 +90,19 @@ const recordInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("dossier"), ticket_id: ticketId, reason: z.string() }).strict(),
   z.object({ kind: z.literal("finalize"), ticket_id: ticketId }).strict(),
   z.object({ kind: z.literal("drift_halt") }).strict(),
+  /* X-4⁸ (PRDR-286): the operator's decision on an amendment a session filed. */
+  z
+    .object({
+      kind: z.literal("amendment"),
+      amendment_id: z.string().regex(/^AM-\d{3,}$/u),
+      by: z.string().min(1),
+      decision: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("approve") }).strict(),
+        z.object({ kind: z.literal("edit"), edits: z.array(amendmentEditSchema).min(1) }).strict(),
+        z.object({ kind: z.literal("reject"), reason: z.string().min(1) }).strict(),
+      ]),
+    })
+    .strict(),
 ]);
 
 const transitionInput = z.object({ ticket_id: ticketId, ref: z.string().min(1) }).strict();
@@ -112,7 +126,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   next: "The claimable pool: READY tickets plus unclaimed resumable in-flight tickets (C-9).",
   claim: "Atomically acquire or release one ticket's claim (R-2). A refused acquire names why.",
   attempt: "Launch the metered billable session for a state (R-4). The sole path to the backend.",
-  record: "Derive evidence: run a validator-backed stage, record a breach, a human act, or lifecycle bookkeeping.",
+  record: "Derive evidence: run a validator-backed stage, record a breach, a human act, lifecycle bookkeeping, or the operator's decision on an amendment.",
   gate: "Run the bound gates with drift assertion and the X-5 flake filter; returns an evidence ref.",
   transition: "Admit one evidence ref against its ticket (ARCH-1's single apply site). Illegal moves are refused.",
   status: "Read-only: every ticket's state, and the pending (human-gated) set.",
@@ -245,5 +259,7 @@ async function dispatchRecord(core: RefereeCore, arg: z.infer<typeof recordInput
       return { ok: true };
     case "drift_halt":
       return { reason: core.driftHaltSweep() };
+    case "amendment":
+      return { ...core.decideAmendment(arg.amendment_id, arg.by, arg.decision) };
   }
 }

@@ -204,6 +204,35 @@ export function clearCurrentTicket(root: string): void {
 }
 
 /**
+ * X-4⁸ (PRDR-286): commit `paths` and nothing else, as no ticket's work, and
+ * return the commit. The operator's amendment to the pack is decided while
+ * the ticket that filed it may still hold its claim, so the claimed ticket's
+ * marker is set aside for the commit and put back: the hook would otherwise
+ * stamp that ticket's trailer on it, and the ticket's own work is what its
+ * trailer selects (PRDR-171). Other staged paths stay staged. Nothing to
+ * commit returns HEAD; a commit that fails leaves `paths` unstaged again.
+ */
+export function commitPaths(root: string, paths: readonly string[], message: string): string {
+  const marker = path.join(path.resolve(root, git(root, "rev-parse", "--git-common-dir").trim()), "DETENT_TICKET");
+  const held = existsSync(marker) ? readFileSync(marker, "utf8") : null;
+  rmSync(marker, { force: true });
+  try {
+    git(root, "add", "--", ...paths);
+    if (git(root, "diff", "--cached", "--name-only", "--", ...paths).trim() !== "") {
+      try {
+        git(root, "commit", "-q", "-m", message, "--only", "--", ...paths);
+      } catch (err) {
+        tryGit(root, "reset", "-q", "--", ...paths);
+        throw err;
+      }
+    }
+  } finally {
+    if (held !== null) writeFileSync(marker, held);
+  }
+  return git(root, "rev-parse", "HEAD").trim();
+}
+
+/**
  * B-1 dual-read: history written before the D-20 rename carries
  * `Foreman-Ticket:` and is parsed forever; only the current form is written.
  */

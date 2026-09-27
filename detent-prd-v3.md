@@ -984,6 +984,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the second ask is not made before the phases ahead of that phase.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE restarts the chain after WRITE, so the second ask is
   made before VALIDATE runs and not before WRITE.*
+  *Amended by X-4⁸ (PRDR-286): under an applied amendment neither ask is made; PLAN asks it of each
+  slice it plans again, and the filing ticket's NEEDS_HUMAN does not refuse.*
 
 - **C-8‴ (3.1.1, PRDR-118).** Three repairs to what a checkpoint means. A phase may declare
   whether what it WROTE is still there, and PLAN does: deleting `.detent/plan/` used to reuse
@@ -2062,6 +2064,9 @@ the code does what the rules it amends describe, and each of those rules points 
     attempts to spawn subagents, and 1,104 of 6,117 tool calls that errored or were denied.
   *Amended by C-4⁷ (PRDR-292): built. An open spec defect holds approval, and the amendment path
   it takes is X-4⁷'s, not built (PRDR-286).*
+  *Amended by X-4⁸ (PRDR-286): X-4⁷'s path is built for a session during `run`. A spec defect PLAN
+  reports carries no proposed text and does not take it: the operator still amends the pack by
+  hand.*
 
 - **C-4⁷ (3.1.1, PRDR-292).** C-4⁵ is built, in `src/init/plan-records.ts`,
   `src/init/plan-inputs.ts` and `src/init/plan-draft-checks.ts`, with three prompts in place of
@@ -2143,6 +2148,9 @@ the code does what the rules it amends describe, and each of those rules points 
   reads a slice's records rather than the planning documents.*
   *Amended by C-3⁵ (PRDR-298): PRESENT reads no question, since C-7‴ (PRDR-296) deleted its list
   and its merge, and `questions.ts` is gone.*
+  *Amended by X-4⁸ (PRDR-286): X-4⁷'s path is built for a session during `run`. A spec defect
+  carries no proposed text, so it does not take that path: the pack is still amended by hand, and
+  a false defect still has no rejection.*
 
 
 - **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
@@ -2413,6 +2421,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by D-10″ (PRDR-290): `--replan`'s entry at DETERMINE_VERIFICATION is built.*
   *Amended by C-2¹⁵ (PRDR-291): a slice is keyed by its requirements' records and a cut is kept on
   record, which the scoped re-plan needs; the amendment path that ends in it is PRDR-286's.*
+  *Amended by X-4⁸ (PRDR-286): built. The guard is asked of each slice PLAN plans again, before any
+  session, and a reused slice keeps its tickets as they stand.*
 
 - **X-3′ (3.1.1, PRDR-278).** X-3's table admits PREMISE_FALSIFIED from BLIND_FIX, INFORMED_FIX and
   REVIEW_FIX, each with IN_PROGRESS's outcome: hypotheses++, then a bug returns to DIAGNOSED, or
@@ -2468,6 +2478,59 @@ the code does what the rules it amends describe, and each of those rules points 
     superseded by the re-plan. The option the operator chose named `init --replan` for the last
     step, but C-8′ makes `--replan` re-derive every slice, so the decision is recorded with
     C-8⁵'s scoped re-plan in its place.
+  *Amended by X-4⁸ (PRDR-286): built, for a session during `run`.*
+
+- **X-4⁸ (3.1.1, PRDR-286).** X-4⁷ and C-8⁵ are built, in `src/kernel/amendment-store.ts`,
+  `src/kernel/amendment-file.ts`, `src/kernel/amendment-decide.ts` and
+  `src/init/amendment-replan.ts`. What building them settled:
+  - **Filing.** The amendment is a field of `falsified.json`: `requirement_ids`, `defect_class`
+    (`contradiction`, `wrong` or `gap`), `evidence`, and `edits`. The evidence is a failing test
+    with its output, or two or more passages, each with the id of the record it quotes; a
+    contradiction's is its passages. Each edit names a record and replaces text its document
+    holds exactly once, on the lines that write that record. The referee files the amendment
+    only when every requirement is the pack's, every quote is in its record (C-4⁵'s check) and
+    every edit is so placed, and refuses one whose proposed text carries a secret (SEC-4); the
+    evidence is scrubbed. A refused amendment is said on the ticket, and the falsification
+    stands without it. A filed one goes to the human as PREMISE_FALSIFIED whatever it names
+    missing (X-4′). It is kept at `.detent/amendments/AM-nnn.json`, committed beside the pack
+    (F-1).
+  - **Holding.** A filter in C-9's pool, as blockers are: an open or applied amendment holds every
+    READY ticket that names one of its requirements, from filing until the re-plan. `status`
+    lists a held ticket among the pending with the amendment it waits on, so a run that leaves
+    only held work exits 10 where it would have exited 0, and `detent status` lists each
+    amendment still holding and what it holds.
+  - **Deciding.** On a TTY inside `run`, a ticket that filed an amendment escalates as the
+    amendment: approve, edit with the operator's own edits in a JSON file, reject with a reason,
+    skip, or quit. A decision the referee refuses is said, and the amendment offered again. An
+    open amendment no escalation offered, such as one whose bug ticket went back to diagnosis or
+    an earlier run's, is offered when the pool empties. Off a TTY the run exits 10, and
+    `detent amend <AM-id>` shows the amendment and, with `--approve`, `--edit <file>` or
+    `--reject <reason>`, decides it; it takes the run lock, so a live run refuses it. The
+    `record` tool's `amendment` kind carries the decision for either driver (ARCH-2). No ticket
+    moves at a decision, and the filing ticket stays in NEEDS_HUMAN.
+  - **Applying.** The edits are made in order, and the checker must find the pack green, or every
+    document is written back. The changed documents are committed alone, with the claimed
+    ticket's trailer marker set aside for the commit, so neither a resume's reset (B-5) nor a
+    finalize's sweep can take the change. The amendment is then `applied`, and still holds until
+    `detent init` re-validates the pack (C-2¹⁴) and re-plans. `run` does not run `init`, so
+    VALIDATE's AWAIT_INFO at its ceiling stays with `detent init`.
+  - **The scoped re-plan.** An applied amendment makes a plain `detent init` re-plan an approved
+    plan. C-8's early return and C-8″'s two whole-plan asks stand aside, and PLAN runs whatever
+    its key says, so an amendment whose edit was undone by hand still settles. Before PLAN plans
+    a slice again, it asks C-8″ of that slice's tickets alone, as the written plan lists them: the
+    filing ticket's NEEDS_HUMAN does not refuse, and a filing ticket in any other state does. A
+    slice PLAN reuses keeps its tickets as they stand, with their state, generations and notes,
+    and takes only the new plan's blockers; so does the bootstrap. Once the plan is written, each
+    applied amendment is `replanned` with the slices planned again, which frees what it held, and
+    a filing ticket still in NEEDS_HUMAN returns through HUMAN_REQUEUE with the amendment as its
+    guidance. `--replan` is unchanged. The plan is presented again (C-7′); the approval still
+    covers it only where the approved fields did not change.
+  - **Prompts.** `implement.md` and the three fix prompts give the field's shape, and review,
+    diagnose and research are not told it (specification decision 12). The run skill decides an
+    amendment through `record`.
+  - **Not built.** A spec defect PLAN reports carries no proposed text, so it does not become an
+    amendment: PRESENT's instruction to amend the pack by hand stands, and a defect the operator
+    judges false still has no rejection (C-4⁷).
 
 - **S-1‴ (3.1.1, PRDR-278).** S-1's role set gains four roles, one per tool set, because routing and
   tools are both set per role (specification decisions 11 and 15):
@@ -2801,6 +2864,8 @@ the code does what the rules it amends describe, and each of those rules points 
     own, since ksarjs's pack is unpublished.
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built. It runs the checker first, and a red result
   its writer cannot fix blocks every phase after it.*
+  *Amended by X-4⁸ (PRDR-286): an approved amendment runs it before the pack is changed for good,
+  and a red result writes the documents back.*
 
 - **C-2¹¹ (3.1.1, PRDR-281).** AUDIT is built, in `src/init/audit.ts` and the modules beside it,
   directly after DISCOVER. This settles what C-2⁶ left to AUDIT's ticket, and amends C-8's chain.
@@ -3159,6 +3224,8 @@ the code does what the rules it amends describe, and each of those rules points 
   round without one says why; VALIDATE no longer says once per run that none can.*
   *Amended by D-10″ (PRDR-290): DETERMINE_VERIFICATION, SLICE and PLAN read the stack entry from
   the parse, and nothing else in it is read yet (C-2⁸, C-4⁵).*
+  *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
+  at the next `detent init`, which the amendment asks the operator to run.*
 
 - **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
   throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past

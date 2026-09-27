@@ -75,7 +75,8 @@ export function openDefects<T extends SpecDefect & { readonly slice: string }>(p
   });
 }
 
-function passageIssue(root: string, pack: Pack, passage: SpecDefect["passages"][number]): string | null {
+/** Why `passage` is not, word for word, in the record its id gives; null when it is. X-4⁷ (PRDR-286): an amendment's passages are checked the same way. */
+export function passageIssue(root: string, pack: Pack, passage: SpecDefect["passages"][number]): string | null {
   const at = recordAt(pack, passage.id);
   if (at === null) return `it quotes ${passage.id}, which is no requirement, criterion, decision, default, fact or catalogue entry of the pack`;
   const quote = words(passage.quote);
@@ -104,7 +105,7 @@ function recordAt(pack: Pack, id: string): { readonly file: string; readonly lin
 }
 
 /** The lines a record's document writes it on: its own, and the ones that continue it up to a blank line or the next entry. */
-function source(root: string, file: string, line: number): string[] {
+function sourceLines(root: string, file: string, line: number): readonly { readonly n: number; readonly text: string }[] {
   let lines: readonly { readonly n: number; readonly text: string }[];
   try {
     lines = readLines(root, file);
@@ -113,10 +114,28 @@ function source(root: string, file: string, line: number): string[] {
   }
   const at = lines.findIndex((l) => l.n === line);
   if (at === -1) return [];
-  const out = [lines[at]?.text ?? ""];
+  const out = [lines[at] ?? { n: line, text: "" }];
   for (const l of lines.slice(at + 1)) {
     if (l.text.trim() === "" || /^\s*(?:[-*|#]|\d+\.)/u.test(l.text)) break;
-    out.push(l.text);
+    out.push(l);
   }
-  return [out.join(" ")];
+  return out;
+}
+
+function source(root: string, file: string, line: number): string[] {
+  const lines = sourceLines(root, file, line);
+  return lines.length === 0 ? [] : [lines.map((l) => l.text).join(" ")];
+}
+
+/**
+ * X-4⁷ (PRDR-286): where the record `id` is written, first line to last, so
+ * an amendment's edit can be held to the record it names; null when the pack
+ * holds no such record or its document cannot be read.
+ */
+export function recordSpan(root: string, pack: Pack, id: string): { readonly file: string; readonly first: number; readonly last: number } | null {
+  const at = recordAt(pack, id);
+  if (at === null) return null;
+  const lines = sourceLines(root, at.file, at.line);
+  const last = lines.at(-1);
+  return last === undefined ? null : { file: at.file, first: at.line, last: last.n };
 }

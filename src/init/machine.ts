@@ -10,7 +10,7 @@ import { NON_TICKET_FILES } from "../kernel/tickets/readers.js";
 import { INIT_PHASES, INTERRUPT_PHASE, type InitPhase, type Interrupt } from "../schemas/init.js";
 import { approvalSchema } from "../schemas/records.js";
 import { parseArtifact } from "../schemas/common.js";
-import { inFlightTickets, replanRefusal, replansAt, wouldReplan } from "./replan-guard.js";
+import { SliceInFlightError, awaitingReplan, inFlightTickets, replanRefusal, replansAt, wouldReplan, type Progress } from "./replan-guard.js";
 
 /**
  * T-060 — the `init` phase machine (C-4.1, C-5, C-8, C-1).
@@ -469,7 +469,14 @@ export async function runInit(
 
   /** C-8: an approved plan prints status and requires --replan to regenerate. */
   const approval = approvalState(root);
-  if (approval.approved && !approval.stale && opts.replan !== true) {
+  /**
+   * X-4⁸, C-8⁵ (PRDR-286): an amendment applied to the pack asks for the
+   * re-plan of the slices it changed, on an approved plan too, and only that:
+   * the guard is PLAN's, asked of each slice it plans again (`sliceScope`).
+   * `--replan` is unchanged, and re-derives every slice under the whole guard.
+   */
+  const amending = opts.replan !== true && awaitingReplan(root).length > 0;
+  if (approval.approved && !approval.stale && opts.replan !== true && !amending) {
     return {
       exitCode: 0,
       reachedPhase: "READY",
@@ -492,7 +499,7 @@ export async function runInit(
    * phases into PLAN, which resets the claimed ticket a session is working in. The
    * guard belongs to re-planning, not to the flag.
    */
-  if (opts.replan === true || wouldReplan(root, handlers, now)) {
+  if (opts.replan === true || (!amending && wouldReplan(root, handlers, now))) {
     const inFlight = inFlightTickets(root);
     if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true);
   }
@@ -516,9 +523,9 @@ export async function runInit(
   const reused: InitPhase[] = [];
   let replayedFrom: InitPhase | null = null;
   let carried = "";
-  /** The phase that must re-execute regardless of its digest, if any. */
+  /** The phase that must re-execute regardless of its digest, if any. An applied amendment's is PLAN, which settles it (C-8⁵). */
   const forceFrom: InitPhase | null =
-    opts.replan === true ? REPLAN_FROM : approval.approved && approval.stale ? STALE_APPROVAL_FROM : null;
+    opts.replan === true ? REPLAN_FROM : approval.approved && approval.stale ? STALE_APPROVAL_FROM : amending ? "PLAN" : null;
   let replaying = false;
 
   for (const phase of INIT_PHASES) {
@@ -562,11 +569,19 @@ export async function runInit(
     }
 
     /* C-8″ (PRDR-282): what a standalone phase wrote this run can re-plan, which the scan above could not see. */
-    if (!standalone && replansAt(phase, handlers)) {
+    const progress = (): Progress => ({ reachedPhase: phase, replayedFrom, executed, reused, outputs });
+    if (!standalone && !amending && replansAt(phase, handlers)) {
       const inFlight = inFlightTickets(root);
-      if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true, { reachedPhase: phase, replayedFrom, executed, reused, outputs });
+      if (inFlight.length > 0) return replanRefusal(inFlight, opts.replan === true, progress());
     }
-    const outcome = await handler.run(ctx);
+    let outcome: PhaseOutcome;
+    try {
+      outcome = await handler.run(ctx);
+    } catch (err) {
+      /* C-8⁵ (PRDR-286): PLAN met a slice whose tickets are in flight, before it planned it; refused as the whole guard refuses. */
+      if (err instanceof SliceInFlightError) return replanRefusal(err.tickets, false, progress());
+      throw err;
+    }
     if (outcome.kind === "interrupt") {
       /* C-3⁗ (PRDR-282): an interrupt is raised only where INTERRUPT_PHASE says; anything else is a defect in this build. */
       if (!(INTERRUPT_PHASE[outcome.interrupt] as readonly InitPhase[]).includes(phase)) {

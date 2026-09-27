@@ -1,4 +1,5 @@
 import { allTickets } from "../kernel/tickets/readers.js";
+import { holdOf, readAmendments } from "../kernel/amendment-store.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { stateVersionRefusal } from "../kernel/migrate.js";
@@ -57,7 +58,27 @@ function statusLines(tickets: readonly Ticket[]): StatusLine[] {
 
 /** The terminal rendering. C-13's AC snapshots this: no internal state names. */
 export function renderStatus(root: string): string {
-  return `${[...ticketLines(root), ...outcomeLines(root)].join("\n")}\n`;
+  return `${[...ticketLines(root), ...amendmentLines(root), ...outcomeLines(root)].join("\n")}\n`;
+}
+
+/** X-4⁸ (PRDR-286): each amendment still holding tickets, what it waits on, and the tickets it holds. */
+function amendmentLines(root: string): string[] {
+  try {
+    const holding = readAmendments(root).filter((a) => a.status === "open" || a.status === "applied");
+    if (holding.length === 0) return [];
+    const tickets = allTickets(root);
+    return [
+      "",
+      "Amendments to the pack (X-4⁸):",
+      ...holding.flatMap((a) => {
+        const held = tickets.filter((t) => t.state === "READY" && holdOf([a], t) !== null).map((t) => t.id);
+        const next = a.status === "open" ? `waiting on you: \`detent amend ${a.id}\` shows it and decides it` : "applied: `detent init` re-validates the pack and re-plans what it changed";
+        return [`  ${a.id} on ${a.proposal.requirement_ids.join(", ")}, filed by ${a.ticket} — ${next}`, `    holds ${held.length === 0 ? "no ticket" : held.join(", ")}`];
+      }),
+    ];
+  } catch (err) {
+    return ["", `Amendments are not shown: ${(err as Error).message}`];
+  }
 }
 
 function ticketLines(root: string): string[] {

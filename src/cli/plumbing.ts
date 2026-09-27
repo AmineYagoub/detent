@@ -1,6 +1,9 @@
 import { parseArgs } from "node:util";
 import { stateVersionRefusal } from "../kernel/migrate.js";
-import { approveTicket, requeueTicket, sweepStaleClaims, unclaimTicket } from "../kernel/plumbing.js";
+import { describeAmendment, readAmendment } from "../kernel/amendment-store.js";
+import type { AmendDecision } from "../kernel/amendment-decide.js";
+import { amendPlumbing, approveTicket, requeueTicket, sweepStaleClaims, unclaimTicket } from "../kernel/plumbing.js";
+import { readEditsFile } from "./escalate.js";
 
 /**
  * T-055 — `detent approve <id>` and `detent requeue <id>` (C-12).
@@ -79,4 +82,51 @@ export function unclaimMain(argv: readonly string[]): number {
   const result = unclaimTicket(root as string, id, values.user as string);
   process.stdout.write(`${result.message}\n`);
   return result.exitCode;
+}
+
+const AMEND_USAGE = "usage: detent amend [root] <AM-id> [--approve | --edit <file> | --reject <reason>] [--user <name>]\n";
+
+/**
+ * `detent amend <AM-id>` (X-4⁸, PRDR-286): with no decision, shows the
+ * amendment; with one, decides it. `--edit` takes a JSON file of the
+ * operator's own edits, `[{"id", "old", "new"}]`, made in place of the ones
+ * the session proposed.
+ */
+export function amendMain(argv: readonly string[]): number {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    allowPositionals: true,
+    options: {
+      approve: { type: "boolean", default: false },
+      edit: { type: "string" },
+      reject: { type: "string" },
+      user: { type: "string", default: process.env["USER"] ?? "operator" },
+    },
+  });
+  const [root, id] = (positionals.length === 2 ? positionals : [process.cwd(), positionals[0]]) as [string, string | undefined];
+  const chosen = [values.approve === true, values.edit !== undefined, values.reject !== undefined].filter(Boolean).length;
+  if (id === undefined || chosen > 1) {
+    process.stderr.write(AMEND_USAGE);
+    return 2;
+  }
+  if (refused(root)) return 2;
+  if (chosen === 0) {
+    const record = readAmendment(root, id);
+    process.stdout.write(record === null ? `no such amendment: ${id}\n` : `${describeAmendment(record)}\n`);
+    return record === null ? 2 : 0;
+  }
+  let decision: AmendDecision;
+  if (values.edit !== undefined) {
+    const edits = readEditsFile(values.edit);
+    if (typeof edits === "string") {
+      process.stderr.write(`${edits}\n`);
+      return 2;
+    }
+    decision = { kind: "edit", edits };
+  } else {
+    decision = values.reject !== undefined ? { kind: "reject", reason: values.reject.trim() === "" ? "rejected without a reason" : values.reject } : { kind: "approve" };
+  }
+  const result = amendPlumbing(root, id, values.user as string, decision);
+  process.stdout.write(`${result.message}\n`);
+  return result.ok ? 0 : 2;
 }

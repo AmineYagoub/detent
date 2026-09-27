@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { readCheckpoint } from "../fs/checkpoints.js";
+import { stateDir } from "../fs/layout.js";
+import { readAmendments } from "../kernel/amendment-store.js";
+import type { AmendmentRecord } from "../schemas/amendment.js";
 import { isClaimed, readTicket } from "../kernel/tickets/readers.js";
 import { ticketsDir } from "../kernel/tickets/paths.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
@@ -29,25 +33,65 @@ import type { InitResult, PhaseHandler } from "./machine.js";
  * evidence of a live session, and this guard must not be the thing that
  * crashes on it.
  */
-export function inFlightTickets(root: string): string[] {
+export function inFlightTickets(root: string, scope?: SliceScope): string[] {
   const dir = ticketsDir(root);
   if (!existsSync(dir)) return [];
   const found: string[] = [];
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".json") || file === "plan.json" || file === "approval.json") continue;
     const id = file.slice(0, -".json".length);
+    if (scope !== undefined && !scope.only.has(id)) continue;
     if (isClaimed(root, id)) {
       found.push(`${id} (claimed)`);
       continue;
     }
     try {
       const state = readTicket(root, id).state;
-      if (state !== "DONE" && state !== "READY") found.push(`${id} (${state})`);
+      if (state !== "DONE" && state !== "READY" && !(state === "NEEDS_HUMAN" && scope?.exempt.has(id) === true)) found.push(`${id} (${state})`);
     } catch {
       /* unparseable: surfaced by the phases that actually consume it */
     }
   }
   return found;
+}
+
+/**
+ * C-8⁵ (PRDR-286) — the guard an amendment's re-plan asks, slice by slice.
+ *
+ * An amendment applied to the pack asks `init` for the re-plan of the slices
+ * it changed, on an approved plan too, and the in-flight guard narrows to
+ * them: PLAN asks it of each slice it is about to plan again, before any
+ * session runs, and a slice it reuses keeps its tickets as they stand. The
+ * ticket an applied amendment filed waits in NEEDS_HUMAN for exactly this
+ * re-plan, so it does not refuse it (X-4⁸).
+ */
+export interface SliceScope {
+  readonly only: ReadonlySet<string>;
+  readonly exempt: ReadonlySet<string>;
+}
+
+/** The amendments applied to the pack and not yet re-planned. */
+export const awaitingReplan = (root: string): AmendmentRecord[] => readAmendments(root).filter((a) => a.status === "applied");
+
+/** Slice `id`'s tickets in the plan as written, and the filing tickets the re-plan does not refuse on. */
+export function sliceScope(root: string, id: string): SliceScope {
+  let written: readonly string[] = [];
+  try {
+    const plan = JSON.parse(readFileSync(path.join(stateDir(root), "plan", "plan.json"), "utf8")) as { slices?: { id?: unknown; tickets?: unknown }[] };
+    const tickets = plan.slices?.find((s) => s.id === id)?.tickets;
+    if (Array.isArray(tickets)) written = tickets.filter((t): t is string => typeof t === "string");
+  } catch {
+    /* no plan written yet: the slice has no tickets to pull the ground from */
+  }
+  return { only: new Set(written), exempt: new Set(awaitingReplan(root).map((a) => a.ticket)) };
+}
+
+/** PLAN met a slice it may not re-plan: some of its tickets are in flight. */
+export class SliceInFlightError extends Error {
+  constructor(readonly tickets: readonly string[]) {
+    super(`re-planning refused: ${tickets.join(", ")} still in flight`);
+    this.name = "SliceInFlightError";
+  }
 }
 
 /**

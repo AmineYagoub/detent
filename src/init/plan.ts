@@ -19,6 +19,7 @@ import type { Pack } from "../schemas/pack.js";
 import { wholeProduct } from "./slice.js";
 import { draftInputs, type PreviousDraft } from "./plan-inputs.js";
 import { draftIssues, openDefects } from "./plan-draft-checks.js";
+import { awaitingReplan } from "./replan-guard.js";
 
 export { planDraftSkeleton } from "./plan-inputs.js";
 
@@ -212,7 +213,9 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       if (!ids.has(dep)) throw new Error(`ticket ${ticket.id} depends on unknown ticket ${dep}`);
     }
   }
-  const written = writePlan(deps, drafted, slices);
+  /* C-8⁵ (PRDR-286): under an applied amendment, a slice not planned again keeps its tickets as they stand, and so does the bootstrap. */
+  const keep = awaitingReplan(deps.root).length === 0 ? new Set<string>() : new Set([BOOTSTRAP_TICKET_ID, ...drafted.filter((t) => !planned.replanned.includes(t.slice)).map((t) => t.id)]);
+  const written = writePlan(deps, drafted, slices, keep);
 
   /**
    * C-4⁸ (PRDR-294): the review's minors, with A-1″'s repairs of the drafts
@@ -244,6 +247,8 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       review_risks: planned.risks as unknown as Record<string, unknown>[],
       unreviewed: planned.unreviewed as unknown as Record<string, unknown>[],
       derived_edges: final.derived as unknown as Record<string, unknown>[],
+      /* C-8⁵ (PRDR-286): the slices this run planned again, which an applied amendment is marked with. */
+      replanned: planned.replanned,
     },
   };
 }

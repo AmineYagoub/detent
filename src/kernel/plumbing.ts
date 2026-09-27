@@ -12,6 +12,8 @@ import { allTickets, readTicket, isClaimed } from "./tickets/readers.js";
 import { claimsDir } from "./tickets/paths.js";
 import { claimBreakable, pidAlive, readClaim, release, writeTicket, appendNote } from "./tickets/mutations.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
+import { decideAmendment, type AmendDecision, type AmendOutcome } from "./amendment-decide.js";
+import { acquireRunLock, lockHolder } from "./run-lock.js";
 
 /**
  * T-055 — `approve <id>` and `requeue <id>` (C-12, X-3, X-8).
@@ -207,6 +209,22 @@ export function unclaimTicket(root: string, id: string, user: string, deps: Plum
     return { exitCode: PLUMBING_EXIT_OK, message: `${id}: released stale claim (owner pid ${guard.brokeStale.pid} dead)` };
   }
   return { exitCode: PLUMBING_EXIT_OK, message: `${id}: no claim to release` };
+}
+
+/**
+ * `detent amend <AM-id>` (X-4⁸, PRDR-286): the operator's decision on an
+ * amendment, off a run. It changes the pack and commits, so it takes the run
+ * lock as `init` does: a live run refuses it, and decides the amendment at its
+ * own escalation (C-10).
+ */
+export function amendPlumbing(root: string, id: string, user: string, decision: AmendDecision): AmendOutcome {
+  const lock = acquireRunLock(root);
+  if (!lock.ok) return { ok: false, message: `a run holds this root (${lockHolder(lock.heldBy)}): decide ${id} at its escalation, or once it ends (X-4⁸)` };
+  try {
+    return decideAmendment(root, id, user, decision, new Date().toISOString());
+  } finally {
+    lock.release();
+  }
 }
 
 /** The post-crash sweep: releases every claim with a verifiably dead owner, reports the rest. */

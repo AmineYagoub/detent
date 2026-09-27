@@ -69,13 +69,22 @@ export function capstoneBlockers(ticket: DraftedTicket, slices: readonly SliceSp
   return out;
 }
 
+/**
+ * C-8⁵ (PRDR-286): `keep` names the tickets a re-plan leaves as they stand —
+ * under an applied amendment, every ticket of a slice it did not plan again,
+ * and the bootstrap. Each keeps its state, generations and notes, and takes
+ * only the blockers the new plan gives it; a ticket in flight there is left
+ * running. Empty, every ticket not DONE is written afresh (C-8′).
+ */
 export function writePlan(
   deps: WriteDeps,
   drafted: readonly DraftedTicket[],
   slices: readonly SliceSpec[],
+  keep: ReadonlySet<string> = new Set(),
 ): { readonly tickets: string[]; readonly bootstrap: string | null; readonly plan: Record<string, unknown>; readonly findings: PlanFinding[] } {
   const existing = allTickets(deps.root);
   const done = new Map(existing.filter((t) => t.state === "DONE").map((t) => [t.id, t]));
+  const kept = new Map(existing.filter((t) => t.state !== "DONE" && keep.has(t.id)).map((t) => [t.id, t]));
   const findings: PlanFinding[] = [];
 
   /**
@@ -95,7 +104,10 @@ export function writePlan(
      * rebuilding a project that already exists.
      */
     const finished = done.get(BOOTSTRAP_TICKET_ID);
-    if (finished === undefined) {
+    const standing = kept.get(BOOTSTRAP_TICKET_ID);
+    if (standing !== undefined) {
+      planned.push(standing);
+    } else if (finished === undefined) {
       planned.push(bootstrapTicket(deps));
       deps.note?.(`bootstrap ticket ${BOOTSTRAP_TICKET_ID} created; every other ticket is blocked on it (C-4)`);
     } else {
@@ -131,9 +143,9 @@ export function writePlan(
       continue;
     }
     const ordering = capstoneBlockers(draft, slices, drafted);
-    planned.push(
-      newTicket(draft, [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])]),
-    );
+    const blockers = [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])];
+    const standing = kept.get(draft.id);
+    planned.push(standing === undefined ? newTicket(draft, blockers) : { ...standing, blockers });
   }
 
   /**
@@ -174,8 +186,14 @@ export function writePlan(
    * state READY, generations wiped — while its session runs on. The lock
    * surviving is no comfort if the state it protects is rewound.
    */
+  const unchanged = (t: Ticket): boolean => {
+    const before = done.get(t.id) ?? kept.get(t.id);
+    return before !== undefined && JSON.stringify(before.blockers) === JSON.stringify(t.blockers);
+  };
+  const rewritten = new Set(settled.filter((t) => !unchanged(t)).map((t) => t.id));
   for (const current of existing) {
-    if (current.state === "DONE") continue;
+    /* C-8⁵: a ticket left exactly as it stands is not written, so its claim is not in the way. */
+    if (current.state === "DONE" || (ids.has(current.id) && !rewritten.has(current.id))) continue;
     const held = readClaim(deps.root, current.id);
     if (held !== null && !claimBreakable(held, pidAlive, hostname())) {
       throw new Error(
@@ -187,13 +205,12 @@ export function writePlan(
 
   /** ---- everything validated: now the directory may change ---------------- */
   for (const ticket of settled) {
-    const preserved = done.get(ticket.id);
     /**
-     * A preserved ticket is rewritten only when its blockers were pruned, so
+     * A preserved ticket is rewritten only when its blockers changed, so
      * the file and the plan artifact agree; its state, generations and notes
      * are the object read from disk and are carried through untouched.
      */
-    if (preserved === undefined || preserved.blockers.length !== ticket.blockers.length) writeTicket(deps.root, ticket);
+    if (rewritten.has(ticket.id)) writeTicket(deps.root, ticket);
   }
 
   /**

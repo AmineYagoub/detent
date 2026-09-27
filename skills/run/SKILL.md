@@ -30,13 +30,16 @@ Arguments passed by the user: $ARGUMENTS
   and route the user to `/detent:init`.
 - **Humans answer human questions (C-10).** At an escalation you present the
   dossier summary and the four choices — approve / requeue with guidance /
-  skip / quit — and wait. You never pick for the user.
+  skip / quit — and wait; an amendment to the pack has its own five (step 6).
+  You never pick for the user.
 
 ## The loop
 
 Repeat until the pool is empty or the user quits:
 
-1. Call `next`. If the pool is empty, go to **Finish**.
+1. Call `next`. If the pool is empty, go to **Finish** — unless `status`
+   lists a ticket held by an amendment not yet decided that you have not
+   offered this run: offer it as step 6 does, then call `next` again.
 2. Pick one pool entry — default to the first unless the user directed
    otherwise (R-2: any pool entry is legal; nothing else is) — and call
    `claim` with `{op: "acquire", ticket_id}`. A refusal names the blocker;
@@ -86,6 +89,15 @@ Repeat until the pool is empty or the user quits:
      `{kind: "human", action: {kind: "requeue", by, guidance}}`, `transition`,
      `record` `{kind: "open_generation", reason: guidance}`. On **skip**:
      `record` `{kind: "note"}` saying so. On **quit**: finish after release.
+     If the reason says the ticket filed an amendment to the pack (X-4⁸), the
+     escalation is the amendment's instead: present
+     `.detent/amendments/<id>.json` (what it names, its evidence, each edit)
+     and the five choices — approve / edit with the user's own
+     `{id, old, new}` edits / reject with a reason / skip / quit. On a
+     decision, `record` `{kind: "amendment", amendment_id, by, decision}`
+     with `decision` `{kind: "approve"}`, `{kind: "edit", edits}` or
+     `{kind: "reject", reason}`. No ticket moves. A result with `ok: false`
+     says why: present it and offer the choices again. Skip writes no note.
 7. Always call `claim` `{op: "release", ticket_id}` when the ticket's
    processing ends, whatever happened.
 

@@ -6,6 +6,8 @@ import type { LoadedConfig } from "./worstcase.js";
 import type { RunOptions, RunOutcome } from "./run.js";
 import { EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK } from "./run.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
+import type { AmendmentRecord } from "../schemas/amendment.js";
+import { describeAmendment, holdReason, openAmendmentOf, readAmendments } from "./amendment-store.js";
 
 /**
  * T-106 — the headless driver's loop (C-9, C-10, C-13, D-27).
@@ -49,6 +51,8 @@ export class Driver {
   private quitting = false;
   /** PRDR-112: consecutive outage halts without a completed ticket in between. */
   private outages = 0;
+  /** X-4⁸ (PRDR-286): the amendments this run has offered, each once. */
+  private readonly offered = new Set<string>();
 
   constructor(
     private readonly opts: RunOptions,
@@ -87,7 +91,11 @@ export class Driver {
     for (;;) {
       if (this.quitting) return await this.finish();
       const { pool } = await this.tool<{ pool: { id: string; state: State }[] }>("next", {});
-      if (pool.length === 0) return await this.finish();
+      if (pool.length === 0) {
+        /* X-4⁸ (PRDR-286): an amendment no escalation offered is offered before the run ends; a rejection frees what it held. */
+        if (await this.offerOpenAmendments()) continue;
+        return await this.finish();
+      }
 
       const id = (pool[0] as { id: string }).id;
       const acquired = await this.tool<{
@@ -302,13 +310,17 @@ export class Driver {
    */
   private async offerEscalation(id: string, reason: string, summary: string): Promise<void> {
     if (this.opts.escalate === undefined || this.quitting) return;
+    /* X-4⁸ (PRDR-286): a ticket that filed an amendment escalates as the amendment's decision. */
+    const amendment = openAmendmentOf(this.opts.root, id);
+    if (amendment !== null) return await this.offerAmendment(amendment, reason, summary);
     const action = await this.opts.escalate({ ticket: readTicket(this.opts.root, id), reason, summary });
 
     if (action.kind === "quit") {
       this.quitting = true;
       return;
     }
-    if (action.kind === "skip") {
+    /* An amendment's decision answers only an escalation that offered one. */
+    if (action.kind === "skip" || action.kind === "amend") {
       await this.tool("record", { kind: "note", ticket_id: id, author: action.by, text: `skipped at escalation (C-10)` });
       return;
     }
@@ -332,6 +344,38 @@ export class Driver {
     });
     await this.transition(id, ref);
     await this.tool("record", { kind: "open_generation", ticket_id: id, reason: action.guidance });
+  }
+
+  /**
+   * X-4⁸ (PRDR-286): the operator decides an amendment, and no ticket moves.
+   * The filing ticket stays NEEDS_HUMAN, and what the amendment held is held
+   * or freed by the decision. Skip leaves it open and writes no note, so the
+   * pending reason still names it. A decision the referee refuses is said, and
+   * the amendment offered again.
+   */
+  private async offerAmendment(amendment: AmendmentRecord, reason: string, summary: string): Promise<void> {
+    this.offered.add(amendment.id);
+    while (this.opts.escalate !== undefined && !this.quitting) {
+      const action = await this.opts.escalate({ ticket: readTicket(this.opts.root, amendment.ticket), reason, summary, amendment });
+      if (action.kind === "quit") this.quitting = true;
+      if (action.kind !== "amend") return;
+      const result = await this.tool<{ ok: boolean; message: string }>("record", {
+        kind: "amendment",
+        amendment_id: amendment.id,
+        by: action.by,
+        decision: action.decision,
+      });
+      this.opts.announce?.(result.message);
+      if (result.ok) return;
+    }
+  }
+
+  /** Each open amendment this run has not offered — one whose ticket went back to diagnosis, or an earlier run's. True when any was. */
+  private async offerOpenAmendments(): Promise<boolean> {
+    if (this.opts.escalate === undefined || this.quitting) return false;
+    const unoffered = readAmendments(this.opts.root).filter((a) => a.status === "open" && !this.offered.has(a.id));
+    for (const a of unoffered) await this.offerAmendment(a, holdReason(a), describeAmendment(a));
+    return unoffered.length > 0;
   }
 
   private async driveOn(id: string, from: State): Promise<void> {

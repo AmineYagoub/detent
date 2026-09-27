@@ -26,6 +26,7 @@ import { normaliseDraft, tagSlice } from "./plan-normalise.js";
 import { checkedDraft } from "./plan-redraft.js";
 import { isBlocking } from "./plan-review.js";
 import { readSlice } from "./plan-revision.js";
+import { SliceInFlightError, inFlightTickets, sliceScope } from "./replan-guard.js";
 
 /**
  * C-2‴ (PRDR-117) — PLAN, one slice at a time, to the end of the product.
@@ -56,6 +57,8 @@ export interface SlicePlan {
   readonly risks: PlanRisk[];
   /** C-4⁸: the slices no review read, and why. */
   readonly unreviewed: UnreviewedSlice[];
+  /** C-8⁵ (PRDR-286): the slices this run planned again, in order; every other slice's cache was reused. */
+  readonly replanned: string[];
 }
 
 /**
@@ -135,6 +138,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
   const findings: SlicePlan["findings"] = [];
   const risks: PlanRisk[] = [];
   const unreviewed: UnreviewedSlice[] = [];
+  const replanned: string[] = [];
   /* A-1⁷: what each slice has been sent a redraft for, and every redraft the checks across the plan used. */
   const sent = new Map<string, Set<string>>();
   const used: Redraft[] = [];
@@ -187,6 +191,10 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
       deps.note?.(`${slice.id} ${slice.title}: re-planning — the pack no longer says what a spec defect it reported quotes (C-4⁵)`);
     }
 
+    /* C-8⁵ (PRDR-286): asked before any session runs, of this slice's tickets alone; the ticket an applied amendment filed does not refuse. */
+    const flying = inFlightTickets(deps.root, sliceScope(deps.root, slice.id));
+    if (flying.length > 0) throw new SliceInFlightError(flying);
+    replanned.push(slice.id);
     deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
     const drafted = await draftAndRead(deps, { slice, planIndex: index });
@@ -246,5 +254,5 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
   }
   /* C-8⁗: what this run did not use belongs to a plan that no longer exists. */
   writeRedrafts(deps.root, used);
-  return { tickets: index, spec_defects: defects, findings, risks, unreviewed };
+  return { tickets: index, spec_defects: defects, findings, risks, unreviewed, replanned };
 }
