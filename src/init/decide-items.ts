@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DecideArtifact, DecideDefault, DecideQuestion } from "../schemas/decide.js";
 import type { LogView } from "./decide-log.js";
-import { similarQuestions } from "./questions.js";
 
 /**
  * C-2¹² (PRDR-282) — what DECIDE sorts, and the checks code makes of the
@@ -19,6 +18,37 @@ import { similarQuestions } from "./questions.js";
  */
 
 type Json = Record<string, unknown>;
+
+/**
+ * C-3‴ (PRDR-207) — one question, asked once.
+ *
+ * gate-313 asked the founder which npm identity publishes Detent at ANALYZE,
+ * and again, in s14's own words, at PLAN: two paid assumptions, two answers.
+ * Two questions whose vocabularies overlap past a threshold are one question.
+ * No planning stage asks now (C-3⁗), so DECIDE is the one reader: it refuses a
+ * question the decision log already answers in other words. It moved here
+ * from `questions.ts`, which held nothing else once PRESENT's merge was gone
+ * (C-7‴, C-3⁵).
+ *
+ * Tokens are lowercase runs of letters and digits at least four long — long
+ * enough to drop "the", "and", "for", "npm", short enough to keep "identity",
+ * "publishes", "marketplace", "credential", and "which" too, so two questions
+ * that share only their first word share one token. Jaccard over the sets.
+ * gate-313's pair scores well above the threshold; its two other founder
+ * questions, both beginning "Which …", score well below it.
+ */
+export const QUESTION_SIMILARITY = 0.5;
+
+const questionTokens = (question: string): Set<string> => new Set(question.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []);
+
+export function similarQuestions(a: string, b: string): boolean {
+  const ta = questionTokens(a);
+  const tb = questionTokens(b);
+  if (ta.size === 0 || tb.size === 0) return false;
+  let shared = 0;
+  for (const t of ta) if (tb.has(t)) shared += 1;
+  return shared / (ta.size + tb.size - shared) >= QUESTION_SIMILARITY;
+}
 
 export interface Item {
   readonly id: string;

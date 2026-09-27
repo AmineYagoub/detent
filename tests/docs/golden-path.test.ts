@@ -131,8 +131,8 @@ const OPENS_CONSTRUCTS: Record<string, RegExp> = {
   "node:readline": /^[ \t]*import\b[^\n]*\bfrom\s*"(?:node:)?readline(?:\/promises)?"/m,
   "createInterface(": /\bcreateInterface\s*\(/,
   /**
-   * `question` is live vocabulary here — `src/init/questions.ts`, `openQuestions`,
-   * `similarQuestions`. Measured at zero matches on code in every commit, but a
+   * `question` is live vocabulary here — DECIDE's questions, `similarQuestions`
+   * in `src/init/decide-items.ts`. Measured at zero matches on code in every commit, but a
    * `q.question(i)` accessor would fire, so the headroom is recorded rather than assumed.
    */
   ".question(": /\.question\s*\(/,

@@ -28,7 +28,6 @@ export function sessionDeps(deps: PipelineDeps, journal: RunJournal, phase: Init
     /* PRDR-203: the phase's journal, one for every launch the phase makes. */
     journal,
     spendCeiling: deps.budgets.run_spend_usd,
-    ...(deps.note === undefined ? {} : { note: deps.note }),
     /* X-1⁵ (PRDR-191): the breaker's ceilings travel with the total. */
     progressBreaker: {
       spend_without_progress_floor_usd: deps.budgets.spend_without_progress_floor_usd,

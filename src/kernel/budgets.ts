@@ -72,16 +72,17 @@ export const ENFORCEMENT_SITES = {
   /**
    * PRDR-179: `init/pipeline`, not `init/plan-research`.
    *
-   * `plan-research.ts` is HANDED a `budget` number and only names the ceiling
+   * `plan-research.ts` was HANDED a `budget` number and only named the ceiling
    * in a doc comment and a log message — the same posture PRDR-172 declared
-   * disqualifying for `kernel/ledger`. `pipeline.ts` is where
-   * `budgets.planning_research_tool_calls` is read and passed in, so it is the
-   * site whose drift would break enforcement. Found once the parity test
+   * disqualifying for `kernel/ledger`. `pipeline.ts` was where
+   * `budgets.planning_research_tool_calls` was read and passed in, so it was
+   * the site whose drift would break enforcement. Found once the parity test
    * stopped letting a log string vouch for code.
    *
    * D-10′ (PRDR-290): `init/audit`. The pipeline read it for ANALYZE's research
    * launcher, and ANALYZE is folded into DECIDE, so no phase launches planning
-   * research. AUDIT reads it and counts its claim checks against it (C-2¹¹).
+   * research, and C-3⁵ (PRDR-298) deleted the module. AUDIT reads it and
+   * counts its claim checks against it (C-2¹¹).
    */
   planning_research_tool_calls: "init/audit",
   /** C-2¹⁴ (PRDR-284): the loop that counts its rounds against it, and stops there. */

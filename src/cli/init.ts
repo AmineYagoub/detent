@@ -85,14 +85,13 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
     return EXIT_NOT_READY;
   }
   if (where.kind === "no-repo") {
-    /* C-1/C-6: a non-repo directory with planning docs may be offered `git */
     /*
-     * init` under setup-consent rules. That offer is T-065's; until it lands,
-     * saying so is more useful than a bare refusal.
+     * C-1/C-6: Detent runs no setup command, `git init` included. T-065's
+     * consent engine would have offered it, and no path ever reached that
+     * engine; C-3⁵ (PRDR-298) deleted it, so this says what to run and nothing
+     * about an offer.
      */
-    process.stderr.write(
-      "not a git repository — `detent init` needs one. Consented `git init` lands with the setup-consent engine (T-065); run `git init` yourself meanwhile.\n",
-    );
+    process.stderr.write("not a git repository — `detent init` needs one. Run `git init` here, then `detent init` again.\n");
     return EXIT_NOT_READY;
   }
 
@@ -401,13 +400,3 @@ function budgetsFor(config: ReturnType<typeof configFor>): Budgets {
   /* X-1′: every ceiling has a default now, including the spend cap. */
   return config?.budgets ?? (Object.fromEntries(Object.entries(CEILINGS).map(([key, spec]) => [key, spec.default])) as Budgets);
 }
-/**
- * PRDR-086: the increment's planning scope. Read straight from config so a
- * replan plans the slice the project currently declares, not everything the
- * repository has ever specified.
- */
-
-
-/** PRDR-114: the routing init sessions run on — from the config `init` itself just wrote. */
-
-/** C-2‴ (PRDR-117): the production baseline the plan is held to — "none" only when the config says so. */

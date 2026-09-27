@@ -129,7 +129,7 @@ async function richState(): Promise<string> {
   );
   addTicket(root, { id: "t-1" });
   writeArtifact(root, "agents/assignments.json", { assignments: { "t-1": `implement@${PROMPTS.hashes.implement}` } });
-  writeArtifact(root, "research/planning/brief.json", { question: "q", answer: "a" });
+  writeArtifact(root, "research/audit/brief.json", { claim: "c", verdict: "confirmed" });
   writeCheckpoint(root, "ANALYZE", "a".repeat(64), { analysis: { schema_version: SCHEMA_VERSION, summary: "nested" }, greenfield: false });
   writeTree(root, {
     ".detent/runs/t-1/g1/review.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, verdict: "approve", changes: [] })}\n`,

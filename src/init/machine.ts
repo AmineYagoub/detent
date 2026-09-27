@@ -303,7 +303,6 @@ export interface ApprovalState {
   readonly planHash: string | null;
 }
 
-/** The hash an approval covers: every ticket file's content, order-independent. */
 /**
  * C-9‴ (PRDR-139): the fields a human APPROVES. Everything else in a ticket
  * file is run state.
@@ -313,8 +312,7 @@ export interface ApprovalState {
  * run starting. Checking it at run start would have refused every RESUME, and
  * it already made a re-init after a partial run call an untouched plan stale.
  * An approval is a statement about the PLAN; the plan is not the counters.
- */
-/**
+ *
  * PRDR-152: this listed `depends_on`, which is a DRAFTED ticket's field name —
  * a `Ticket` on disk carries `blockers` and `waits_on`. So the projection
  * hashed a key that is always absent and IGNORED the two that hold the
@@ -399,6 +397,7 @@ function plannedIds(root: string): ReadonlySet<string> | null {
   }
 }
 
+/** The hash an approval covers: each ticket file's approved fields, in file-name order, and only the tickets `plan.json` names where it can be read (C-9‴, PRDR-153). */
 export function planHash(root: string): string {
   const dir = path.join(stateDir(root), "plan");
   if (!existsSync(dir)) return createHash("sha256").update("").digest("hex");

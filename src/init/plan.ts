@@ -12,7 +12,7 @@ import type { Skip } from "../adapter/bind.js";
 import type { Candidate } from "../adapter/discover/types.js";
 import { normalizeInvocation } from "../adapter/normalize.js";
 import { ROOT_PACKAGE, gateLabel } from "../adapter/packages.js";
-import { allTickets, readTicket } from "../kernel/tickets/readers.js";
+import { allTickets } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { withOneRelaunch } from "./retry.js";
 import type { Pack } from "../schemas/pack.js";
@@ -76,10 +76,6 @@ import { BOOTSTRAP_TICKET_ID, bootstrapScaffold, writePlan, type DraftedTicket, 
 
 export function planDraftPath(root: string): string {
   return path.join(stateDir(root), "state", "plan-draft.json");
-}
-
-export function planPath(root: string): string {
-  return path.join(stateDir(root), "plan", "plan.json");
 }
 
 export interface PlanDeps {
@@ -350,13 +346,6 @@ export function finalizeBootstrap(
       unresolved.length === 0 ? "" : `; ${unresolved.join(", ")} stayed provisional — nothing discoverable backs them`}`,
   );
   return true;
-}
-
-/** Whether a ticket is claimable given C-4's bootstrap blocking. */
-export function bootstrapBlocks(root: string, ticketId: string): boolean {
-  if (ticketId === BOOTSTRAP_TICKET_ID) return false;
-  if (!existsSync(path.join(stateDir(root), "plan", `${BOOTSTRAP_TICKET_ID}.json`))) return false;
-  return readTicket(root, BOOTSTRAP_TICKET_ID).state !== "DONE";
 }
 
 /** C-4⁵ (PRDR-292): a draft refused for what it says of the pack, not for its shape. */

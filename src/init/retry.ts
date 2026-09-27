@@ -1,5 +1,5 @@
 /**
- * C-4⁗′ (PRDR-118) — one relaunch for every strict planning artifact.
+ * C-4⁗′ (PRDR-118) — one relaunch for an artifact its validator refused.
  *
  * PRDR-116 gave the plan REVIEW a second attempt carrying the validator's own
  * words, because a sound review was thrown away over one wrong token. The
@@ -10,8 +10,12 @@
  * That asymmetry is survivable for a single-pass plan and not for a sliced
  * one. A twenty-slice product asks for thirty to sixty independent strict
  * artifacts; at a one-percent chance of a stray key in any of them, better
- * than a third of runs abort hours in. This makes the attempt uniform: one
- * relaunch, the validator's issue in the inputs, and only then a failure.
+ * than a third of runs abort hours in. So every artifact an `init` session
+ * writes gets one relaunch, the validator's issue in its inputs, before
+ * anything follows from its failure. This serves AUDIT's survey and claim
+ * briefs, DECIDE, WRITE, VALIDATE's rounds, SLICE and PLAN's drafts. The plan
+ * review relaunches by its own loop in `plan-review.ts`, which also reads a
+ * synonym for its verdict (C-4⁗).
  */
 
 export interface RetriedAttempt<T> {
@@ -28,8 +32,9 @@ export interface RetryDeps {
 /**
  * Run `attempt` once; if it yields no value, run it again with the reason the
  * first one failed, so the session is told what the validator refused rather
- * than guessing. Returns the second issue when both fail — the caller decides
- * whether that is fatal (SLICE, PLAN) or merely advisory (a review).
+ * than guessing. Returns the second issue when both fail, and the caller says
+ * what follows: most fail their phase, and AUDIT records the claim unverified
+ * and goes on (C-2¹¹).
  */
 export async function withOneRelaunch<T>(
   deps: RetryDeps,
@@ -41,7 +46,7 @@ export async function withOneRelaunch<T>(
   deps.note?.(`${deps.stage} artifact unusable (${first.issue}) — relaunching once with the validator's own words (C-4⁗′)`);
   const second = await attempt({ issue: first.issue ?? "unusable" });
   if (second.value === null) {
-    deps.note?.(`${deps.stage} artifact unusable again (${second.issue}) — the phase fails (P2)`);
+    deps.note?.(`${deps.stage} artifact unusable again (${second.issue})`);
   }
   return second;
 }

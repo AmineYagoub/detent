@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SCHEMA_VERSION, nonEmptyString, sha256Hex } from "./common.js";
+import { SCHEMA_VERSION, nonEmptyString } from "./common.js";
 
 /**
  * The `init` vocabulary (C-4.1, C-5).
@@ -81,114 +81,14 @@ export const INTERRUPT_PHASE = {
 
 /*
  * ---------------------------------------------------------------------------
- * C-3a planning briefs (A-4's second kind)
+ * X-6a's rules for a research brief
  */
 
 /**
- * A-4: "Planning briefs share the evidence and hierarchy fields, keyed by
- * question hash." Same X-6a discipline as a failure brief — a brief citing a
- * URL must record the local search that preceded it — but keyed by the
- * question rather than by a failure signature.
- */
-export const planningBriefSchema = z
-  .strictObject({
-    schema_version: z.literal(SCHEMA_VERSION),
-    /**
-     * PRDR-264: which arm this brief is.
-     *
-     * Defaults to `answered`, so a brief written before this ticket parses
-     * unchanged and the cache does not need a migration.
-     *
-     * The `undecidable` arm exists because research can SETTLE a question
-     * without answering it, and on the live run both questions were of that
-     * kind — a price ladder the founder has not decided, and a retention
-     * schedule only counsel can give. A schema with one arm made that outcome
-     * unrepresentable, so a correct negative result was indistinguishable from
-     * a broken session, and the operator was told to raise a ceiling.
-     */
-    outcome: z.enum(["answered", "undecidable"]).default("answered"),
-    question: nonEmptyString,
-    question_hash: sha256Hex,
-    answer: z
-      .strictObject({ claim: nonEmptyString, confidence: z.enum(["low", "medium", "high"]) })
-      .optional(),
-    /**
-     * PRDR-264: why the question cannot be researched, and who can settle it.
-     * `who_decides` is the actionable half — C-3′ carries the question to
-     * PRESENT on its assumption either way, and this names the human that
-     * assumption is waiting on.
-     */
-    undecidable: z
-      .strictObject({
-        reason: z.enum(["decision_not_made", "needs_specialist", "no_public_source"]),
-        detail: nonEmptyString,
-        who_decides: nonEmptyString,
-      })
-      .optional(),
-    evidence: z.array(z.strictObject({ source: nonEmptyString, claim: nonEmptyString })).min(1),
-    sources_consulted: z
-      .array(z.strictObject({ tier: z.number().int().min(1).max(6), ref: nonEmptyString }))
-      .default([]),
-    local_search: z.strictObject({
-      docs_checked: z.array(z.string()).default([]),
-      code_checked: z.array(z.string()).default([]),
-    }),
-    what_would_falsify: z.string().default(""),
-  })
-  .superRefine(requireLocalSearchBeforeWeb)
-  .superRefine(requireOutcomeArm)
-  .superRefine(requireEscalationBeforeUndecidable);
-
-/**
- * PRDR-264: the two arms are exclusive and each carries its own evidence.
- *
- * `evidence.min(1)` stays common to both — an undecidable verdict is a claim
- * about the world and needs the same support as an answer. What differs is
- * WHICH block must be present, and that a brief may never carry both: "here is
- * the answer, and also nobody has decided it" is not a state research can be in.
- */
-export function requireOutcomeArm(
-  brief: {
-    readonly outcome: "answered" | "undecidable";
-    readonly answer?: unknown;
-    readonly undecidable?: unknown;
-  },
-  ctx: z.RefinementCtx,
-): void {
-  if (brief.outcome === "answered") {
-    if (brief.answer === undefined) {
-      ctx.addIssue({ code: "custom", path: ["answer"], message: "PRDR-264: an `answered` brief carries an `answer`" });
-    }
-    if (brief.undecidable !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["undecidable"],
-        message: "PRDR-264: an `answered` brief carries no `undecidable` verdict — a question is settled or answered, never both",
-      });
-    }
-    return;
-  }
-  if (brief.undecidable === undefined) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["undecidable"],
-      message: "PRDR-264: an `undecidable` brief says why it cannot be answered and who decides it",
-    });
-  }
-  if (brief.answer !== undefined) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["undecidable"],
-      message: "PRDR-264: an `undecidable` brief carries no `answer` — a question is settled or answered, never both",
-    });
-  }
-}
-export type PlanningBrief = z.infer<typeof planningBriefSchema>;
-
-/**
- * X-6a's mechanical check, shared by both research kinds: a brief citing any
- * URL must include a non-empty `local_search` record (tiers 1–2 consulted).
- * One function, so the two brief schemas cannot drift apart.
+ * X-6a's mechanical check, shared by the two briefs Detent reads, a failing
+ * ticket's (A-4) and a claim AUDIT checked (C-2¹¹): a brief citing any URL
+ * must include a non-empty `local_search` record (tiers 1–2 consulted). One
+ * function, so the two brief schemas cannot drift apart.
  */
 export function requireLocalSearchBeforeWeb(
   brief: {
@@ -217,49 +117,6 @@ export function requireLocalSearchBeforeWeb(
  * world has to have touched.
  */
 export const EXTERNAL_TIER = 3;
-
-/**
- * PRDR-266: X-6a's ascent, the mirror of `requireLocalSearchBeforeWeb`.
- *
- * That rule stops a session skipping the project and going straight to the web.
- * Nothing stopped the opposite: declaring that the outside world holds no answer
- * without consulting it. `needs_specialist` and `no_public_source` are both
- * claims about what exists outside this project, and tiers 1-2 cannot establish
- * either, so a brief asserting one from tiers 1-2 alone asserts something its
- * own evidence cannot reach.
- *
- * `decision_not_made` is exempt, and the exemption is the rule's point rather
- * than a hole in it: that reason is a claim about THIS project's state, which
- * tier 1 settles dispositively. When the decision log lists an item as open, no
- * external tier carries an answer that does not exist anywhere yet.
- *
- * The count that cannot do this job is `evidence.min(1)` — PRDR-264's own guard
- * against this arm becoming a cheap exit. The live brief that forced this ticket
- * cleared it sevenfold and still never left tier 1, because tier-1 citations are
- * free. `sources_consulted` carries the tier and is the field that can tell a
- * session that looked from one that did not.
- */
-export function requireEscalationBeforeUndecidable(
-  brief: {
-    readonly outcome: "answered" | "undecidable";
-    readonly undecidable?: { readonly reason: string } | undefined;
-    readonly sources_consulted: readonly { readonly tier: number }[];
-  },
-  ctx: z.RefinementCtx,
-): void {
-  if (brief.outcome !== "undecidable") return;
-  const reason = brief.undecidable?.reason;
-  if (reason !== "needs_specialist" && reason !== "no_public_source") return;
-  if (brief.sources_consulted.some((s) => s.tier >= EXTERNAL_TIER)) return;
-  ctx.addIssue({
-    code: "custom",
-    path: ["sources_consulted"],
-    message:
-      `X-6a: \`${reason}\` is a claim about sources outside this project, and tiers 1-2 are this ` +
-      `project's own docs and code — escalate and record a tier ${String(EXTERNAL_TIER)}+ consultation, ` +
-      `or settle it as \`decision_not_made\` if what is missing is a decision rather than a source`,
-  });
-}
 
 /*
  * ---------------------------------------------------------------------------

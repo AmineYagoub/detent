@@ -164,11 +164,10 @@ decision yourself.
    Channel: the human disambiguates the project's own tooling, then
    re-invoke.
 4. **`AWAIT_SETUP_CONSENT`** — raised at `DETERMINE_VERIFICATION` when
-   required verification cannot run yet (C-3b/C-6). Present the situation and
-   any proposed setup command verbatim; only the human may consent, and
-   Detent executes setup commands solely from its allowlist with every
-   consent logged (C-6a, SEC-1). Channel: the human establishes the tooling —
-   themselves, or by consenting to the proposal — then re-invoke.
+   required verification cannot run yet (C-3b/C-6). Present the situation
+   verbatim. Detent runs no setup command, so nothing is proposed and nothing
+   waits on a consent (C-6a). Channel: the human establishes the tooling
+   themselves, then re-invoke.
 5. **`AWAIT_APPROVAL`** — raised at `PRESENT` (C-7): the plan's dual-exit
    approval. Present the plan summary verbatim, once (C-7‴): the slices,
    tickets and milestones, the decision log with each default marked

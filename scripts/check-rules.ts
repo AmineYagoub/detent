@@ -90,9 +90,10 @@ export function codeOnly(source: string): string {
  * The hand-written version tracked comments and strings and knew nothing of a
  * regex literal, so the first quote or backtick inside one opened string mode
  * and ran until it found a partner — which was a doc-block, hundreds of lines
- * later. `src/init/allowlist.ts:63` and `src/sessions/git-rm.ts:37` each hold a
- * backtick inside a character class; between them they blanked 40 lines of live
- * code and left comment text standing in the files a rule was scanning. It also
+ * later. `src/init/allowlist.ts:63`, deleted since (PRDR-298), and
+ * `src/sessions/git-rm.ts:37` each held a backtick inside a character class;
+ * between them they blanked 40 lines of live code and left comment text
+ * standing in the files a rule was scanning. It also
  * blanked `${…}` substitutions, which are executable text: 32,347 characters
  * across 188 of 261 files, measured against this parse.
  *

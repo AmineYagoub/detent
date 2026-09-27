@@ -89,8 +89,6 @@ export interface PipelineDeps {
   readonly acceptMixedBuilds?: (builds: readonly string[]) => Promise<boolean>;
 }
 
-/** The deps every init session launch shares — one place, so a new field cannot miss a call site. */
-
 export function buildPipeline(deps: PipelineDeps): PhaseHandler[] {
   return [
     initFsPhase(deps),
@@ -190,7 +188,6 @@ function discoverPhase(deps: PipelineDeps): PhaseHandler {
         kind: "complete",
         outputs: {
           docs: [...docs.docs],
-          patterns_searched: [...docPatterns(deps)],
           stack_markers: [...stack.stack.markers],
           package_manager: stack.stack.pm,
           candidate_count: stack.candidates.length,

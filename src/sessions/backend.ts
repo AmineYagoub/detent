@@ -53,25 +53,6 @@ export interface SessionSpec {
    */
   readonly maxTurns?: number;
   /**
-   * C-4⁗‴ / C-4⁗⁵ (PRDR-204, PRDR-210): called once, when the session's first
-   * response has BEGUN — from then on the prompt it was given is cached — or,
-   * for a stream that carries no events, when its first turn completes. The
-   * plan review's draws, a batch sharing one first turn, launched the rest on
-   * this signal, so the first wrote the cache and the others read it (S-6).
-   * No session sets it since C-4⁸ (PRDR-294) deleted the draws, and C-4⁸
-   * lists it for deletion.
-   */
-  readonly onFirstResponse?: () => void;
-  /**
-   * PRDR-205: the artifact path the PROMPT names, when it is not `artifactOut`.
-   * The plan review's draws were told one path so their first turns were
-   * byte-identical — the prompt cache's key (S-6) — and the containment hook
-   * carries a write to it out at `artifactOut`, which stays the file. No
-   * session sets it since C-4⁸ (PRDR-294) deleted the draws, and C-4⁸ lists
-   * it for deletion.
-   */
-  readonly artifactTold?: string;
-  /**
    * S-2′/D-21: the PER-TICKET containment policy for this session's hook —
    * the ticket's declared surface plus the artifact area, resolved against
    * this session's work root. Absent (init sessions, fixtures), the backend

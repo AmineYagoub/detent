@@ -9,16 +9,23 @@ import type { DraftedTicket } from "./plan-write.js";
  * Every ticket says what it OWNS (`provides`) and what it LEANS ON
  * (`consumes`). The contract is the union of those declarations, so it cannot
  * drift from the tickets the way a separate artifact would. What follows is
- * the whole point: four checks over that union, performed by code, with no
- * model session and no judgement.
+ * the whole point: checks over that union, performed by code, with no model
+ * session and no judgement.
  *
- * Each one corresponds to a real defect a reviewer found by hand in
- * ksar-cloud's first slice, and each cost a revision round to surface:
+ * Three began as defects a reviewer found by hand in ksar-cloud's first slice,
+ * each of which cost a revision round to surface:
  *
- *   unowned    five tickets each assumed someone else assigned the port
- *   duplicate  two tickets both defined `run()` in the same file
- *   ordering   a ticket needed a config key another added four edges downstream
- *   contended  four tickets each edited `controlplane/go.mod`
+ *   unowned    five tickets each assumed someone else assigned the port: a
+ *              name is consumed and no ticket provides it
+ *   duplicate  two tickets both defined `run()` in the same file: two tickets
+ *              provide one name, a file included
+ *   ordering   a ticket needed a config key another added four edges
+ *              downstream: the edge is derived, and refused where it would run
+ *              into a later slice or close a loop
+ *
+ * The fourth, four tickets that each edited `controlplane/go.mod`, is not
+ * checked: tickets that write one file declare no contract, and only two that
+ * both declare they provide it are caught, as a duplicate.
  *
  * `ordering` is the one that changes the product: it does not merely report,
  * it DERIVES the missing dependency edge from the real coupling, so the plan

@@ -75,7 +75,14 @@ export function approvalPath(root: string): string {
 export function readPresentation(root: string): Presentation | null {
   const file = path.join(stateDir(root), "plan", "presentation.json");
   if (!existsSync(file)) return null;
-  const parsed = parseArtifact(presentationSchema, JSON.parse(readFileSync(file, "utf8")));
+  /* PRDR-298: text that is not JSON is a file that will not parse, as a record of the wrong shape is; it threw instead. */
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+  const parsed = parseArtifact(presentationSchema, raw);
   return parsed.ok ? parsed.value : null;
 }
 

@@ -65,12 +65,8 @@ function madeBy(root: string): Made | null {
     const approval = parseArtifact(approvalSchema, raw);
     if (approval.ok) return approval.value.builds === undefined ? null : { builds: approval.value.builds, pack_hash: approval.value.pack_hash ?? null };
   }
-  try {
-    const shown = readPresentation(root);
-    return shown === null ? null : { builds: shown.builds, pack_hash: shown.pack_hash };
-  } catch {
-    return null;
-  }
+  const shown = readPresentation(root);
+  return shown === null ? null : { builds: shown.builds, pack_hash: shown.pack_hash };
 }
 
 /**

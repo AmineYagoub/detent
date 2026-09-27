@@ -49,11 +49,17 @@ export function symbolReminder(
 
   const shown = evidence.slice(0, 3).map((e) => `${e.ticket} → ${e.name}`);
   const pinned = config?.pinned ?? "0.1.4";
+  /**
+   * PRDR-298: what it offers is what it does. `run`'s sessions get the symbol
+   * tools (`referee-session.ts`) and no `init` session does, so this said that
+   * Detent could have checked these couplings mechanically, and it could not
+   * have: the planning that found them runs without the tools either way.
+   */
   return [
     "",
-    `Symbol intelligence is not configured. ${evidence.length} finding(s) in this plan were symbol-level`,
-    "couplings Detent could have checked mechanically instead of leaving to review:",
+    `Symbol intelligence is not configured. ${evidence.length} finding(s) in this plan were symbol-level couplings:`,
     `  ${shown.join("      ")}${evidence.length > shown.length ? `      (+${evidence.length - shown.length} more)` : ""}`,
+    "With it, the sessions `detent run` launches can look such names up with read-only symbol tools. Planning's sessions do not get them.",
     "",
     `  Install:  uv tool install -p 3.13 serena-agent==${pinned}`,
     '  Enable:   "symbols": { "enabled": true }   in .detent/config.json',

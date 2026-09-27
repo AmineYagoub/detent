@@ -86,15 +86,6 @@ export const GREENFIELD_COMMANDS: Readonly<Record<string, Partial<Record<GateSlo
 };
 
 /**
- * C-4: greenfield bindings are recorded `provisional` at init — proposed from
- * the chosen stack, NOT executed, because the tooling they name does not
- * exist yet. That is precisely why they are provisional: bootstrap ticket #1
- * establishes the tooling and its passing gates set the drift baseline.
- *
- * V-1's execute-before-approve is not weakened here. It is deferred, and the
- * `provisional` status is the record that it has not happened yet.
- */
-/**
  * PRDR-115: the planner writes `stack.language` as prose as readily as a
  * name — "Go 1.27 (multi-module monorepo: …)" matched nothing and init
  * refused a stack it had a table row for. The key is the first known
@@ -119,6 +110,15 @@ export function languageKey(raw: string): string | null {
   return null;
 }
 
+/**
+ * C-4: greenfield bindings are recorded `provisional` at init — proposed from
+ * the chosen stack, NOT executed, because the tooling they name does not
+ * exist yet. That is precisely why they are provisional: bootstrap ticket #1
+ * establishes the tooling and its passing gates set the drift baseline.
+ *
+ * V-1's execute-before-approve is not weakened here. It is deferred, and the
+ * `provisional` status is the record that it has not happened yet.
+ */
 function provisionalBindingsFor(stack: DecidedStack, at: string): Binding[] {
   const key = languageKey(stack.language);
   /*
@@ -312,7 +312,7 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
         `Detent found no way to run: ${missingRequired.join(", ")}.`,
         "",
         "A project with no test command cannot be gated — Detent trusts exit codes, not claims (P2).",
-        "Establish the tooling (Detent can propose an allowlisted setup command), then re-run `detent init`.",
+        "Establish the tooling yourself — Detent runs no setup command — then re-run `detent init`.",
       ].join("\n"),
       items: missingRequired,
     };

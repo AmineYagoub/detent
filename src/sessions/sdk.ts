@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { Options, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
-import { guardToolUse, stopGate, type GuardPolicy, carryArtifact, type ArtifactAlias } from "./guard.js";
+import { guardToolUse, stopGate, type GuardPolicy } from "./guard.js";
 import { buildSessionEnv } from "./env.js";
 import { SCRATCH_SERVER } from "./sandbox.js";
 import { scratchServer } from "./scratch-server.js";
@@ -64,15 +64,11 @@ export interface SdkBackendConfig {
  * before `guardToolUse` and is not caught, so a throwing observer rejects the
  * call before the guard decides, and the guard's `policy` is in its lexical
  * scope. The production observer is a field assignment (`runOnce`) and the test
- * attaches a benign one; nothing fences a hostile one. `buildStopHook` and
- * `carryArtifact` share the shape. Observer isolation is not a property this
- * hook holds today, and no D-21 test supplies a hostile observer.
+ * attaches a benign one; nothing fences a hostile one. `buildStopHook` shares
+ * the shape. Observer isolation is not a property this hook holds today, and
+ * no D-21 test supplies a hostile observer.
  */
-export function buildPreToolUseHook(
-  policy: GuardPolicy,
-  alias?: ArtifactAlias,
-  onEffort?: (level: string) => void,
-): NonNullable<Options["hooks"]> {
+export function buildPreToolUseHook(policy: GuardPolicy, onEffort?: (level: string) => void): NonNullable<Options["hooks"]> {
   let reported = false;
   return {
     PreToolUse: [
@@ -86,9 +82,7 @@ export function buildPreToolUseHook(
               onEffort(level);
             }
             const toolName = typeof payload.tool_name === "string" ? payload.tool_name : "";
-            /* PRDR-205: a write to the path the session was told is carried out at the file it has. */
-            const carried = alias === undefined ? null : carryArtifact(toolName, payload.tool_input, alias, policy.workRoot);
-            const decision = guardToolUse(toolName, carried ?? payload.tool_input, policy);
+            const decision = guardToolUse(toolName, payload.tool_input, policy);
             /**
              * S-2‴ (PRDR-122): an abstention omits `permissionDecision`
              * entirely, so the SDK carries on to its deny/ask/allow rules. A
@@ -100,7 +94,6 @@ export function buildPreToolUseHook(
                 hookEventName: "PreToolUse" as const,
                 ...(decision.decision === "abstain" ? {} : { permissionDecision: decision.decision }),
                 permissionDecisionReason: decision.reason,
-                ...(carried !== null && decision.decision === "allow" ? { updatedInput: carried } : {}),
               },
             };
           },
@@ -186,16 +179,6 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
     ...(spec.model === "" ? {} : { model: spec.model }),
     /**
-     * C-4⁗⁵ (PRDR-210): a session someone is waiting on streams its events, so
-     * the wait can end when the first response BEGINS — the moment its first
-     * turn's prompt is cached — rather than when the turn completes. Requested
-     * only then: nothing else reads the events, and a session nobody waits on
-     * gets the stream it always had. Nothing waits on a session since C-4⁸
-     * (PRDR-294) deleted the plan review's draws, and C-4⁸ lists this for
-     * deletion.
-     */
-    ...(spec.onFirstResponse === undefined ? {} : { includePartialMessages: true }),
-    /**
      * PRDR-197: effort where a role is routed to one.
      *
      * Omitted entirely otherwise, so a project that configures nothing gets the
@@ -205,11 +188,7 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     ...(spec.effort === undefined || spec.effort === "" ? {} : { effort: spec.effort as NonNullable<Options["effort"]> }),
     hooks: {
       /** S-2′: the per-ticket policy wins; construction policy is the fallback. */
-      ...buildPreToolUseHook(
-        spec.policy ?? config.policy,
-        spec.artifactTold === undefined ? undefined : { told: spec.artifactTold, actual: spec.artifactOut },
-        onEffort,
-      ),
+      ...buildPreToolUseHook(spec.policy ?? config.policy, onEffort),
       ...buildStopHook(config, spec.role, spec.cwd),
     },
   };
@@ -442,13 +421,6 @@ export class ClaudeCodeBackend implements SessionBackend {
     let mcpFailures: { name: string; status: string }[] | null = null;
     /** PRDR-237: the level the turns actually ran at; null means no tool call reported one. */
     let settledEffort: string | null = null;
-    /** C-4⁗⁵ (PRDR-210): said once, on the first frame that proves a response is under way. */
-    let responded = false;
-    const respond = (): void => {
-      if (responded) return;
-      responded = true;
-      spec.onFirstResponse?.();
-    };
     try {
       const stream = query({
         prompt: fullPrompt(spec),
@@ -474,23 +446,8 @@ export class ClaudeCodeBackend implements SessionBackend {
             if (bad.length > 0) mcpFailures = bad;
           }
         }
-        /**
-         * C-4⁗⁵ (PRDR-210): `message_start` is the API's first streaming event
-         * for a turn — the response has begun, and the prompt that produced it
-         * is cached from here. PRDR-204 fired on the completed `assistant`
-         * frame, which on gate-313 arrived after the 60 s wait on three slices
-         * of fourteen because the reviewer's first turn was a long generation.
-         * The `assistant` frame remains the signal for a stream without events.
-         */
-        if (
-          (message as { type?: string }).type === "stream_event" &&
-          (message as { event?: { type?: string } }).event?.type === "message_start"
-        ) {
-          respond();
-        }
         if ((message as { type?: string }).type === "assistant") {
           observedTurns += 1;
-          respond();
         }
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);

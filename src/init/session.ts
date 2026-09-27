@@ -27,23 +27,25 @@ export const INIT_TICKET = "init";
  *
  * Simpler than the run loop's: init has no ticket and no per-generation
  * counters, so X-1's per-ticket session count — scoped to ticket/generation —
- * has no meaning here, and C-3a's tool-call ceiling budgets research instead.
- * What it keeps is S-1's role discipline (S-1′: the read-only surface plus one
- * scoped rule for its own artifact) and S-6's stable prefix.
+ * has no meaning here. What it keeps is S-1's role discipline (S-1′: the
+ * read-only surface plus one scoped rule for its own artifact) and S-6's
+ * stable prefix.
  *
  * PRDR-088: what it ALSO keeps is the money. An earlier note here claimed
  * there was "nothing to charge" — false, and the hole it left was real:
  * ANALYZE, PLAN, REVIEW_PLAN and planning research were billable sessions, so
- * leaving them off the ledger meant `run_spend_usd` did not bound them (P6)
- * and a failed phase left nothing to diagnose. Every launch now passes the
- * D-25 gate, records an S-4 row, and journals its start and end.
+ * leaving them off the ledger left their spend out of `run_spend_usd` (P6)
+ * and a failed phase left nothing to diagnose. Every launch now records an
+ * S-4 row and journals its start and end, and its spend is read at launch
+ * against X-1's advisory total and the no-progress breaker (D-25), which
+ * announce and refuse nothing (PRDR-265).
  */
 
 export interface InitSessionDeps {
   readonly root: string;
   readonly backend: SessionBackend;
   readonly prompts: PromptSet;
-  /** PRDR-088: X-1's run ceiling — init spend counts against it like any other. */
+  /** PRDR-088: X-1's advisory total, which init's spend counts toward like any other and which only announces (PRDR-265). */
   readonly spendCeiling: number;
   /**
    * X-1⁵ (PRDR-191): the no-progress breaker's two ceilings.
@@ -54,7 +56,7 @@ export interface InitSessionDeps {
    * PRDR-141's shape and was caught here by three tests staying silent.
    */
   readonly progressBreaker?: ProgressBreaker;
-  /** PRDR-114: the config's `model_routing`; the planner and planning research run on their routed models. */
+  /** PRDR-114: the config's `model_routing`; every init session runs on its role's routed model. */
   readonly modelRouting?: Readonly<Record<string, string>>;
   /** PRDR-197: the config's `effort_routing`, resolved per role like the model above. */
   readonly effortRouting?: Readonly<Record<string, string>>;
@@ -100,8 +102,6 @@ export interface InitSessionRequest {
   readonly inputs: Record<string, unknown>;
   /** Absolute path the session writes its artifact to. */
   readonly artifactOut: string;
-  /** C-3a: research capability for planning questions. */
-  readonly withWeb?: boolean;
   /**
    * S-1‴ (PRDR-283): the paths beyond its artifact the session may write, as
    * globs, declared as an implement session's surface is. It gets Edit and
@@ -168,9 +168,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
      * confines it instead.
      */
     allowedTools: [
-      ...(request.withWeb === true
-        ? toolsForRole("research", deps.docsDomains ?? [])
-        : toolsForRole(request.role, deps.docsDomains ?? [])),
+      ...toolsForRole(request.role, deps.docsDomains ?? []),
       ...(request.surface === undefined ? [] : ["Edit", "Write"]),
       ...(request.scratch === undefined ? [] : [SCRATCH_TOOL]),
       artifactWriteRule(request.artifactOut),
@@ -381,7 +379,7 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
     deps.progressBreaker === undefined
       ? new SpendLedger(deps.root, journal, deps.spendCeiling)
       : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
-  /* D-25: the ceiling is a launch gate, evaluated here and never mid-flight. */
+  /* D-25: spend is read here, at launch and never mid-flight; the advisory total and the breaker only announce (PRDR-265). */
   ledger.recordLaunch();
   journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
   const result = await deps.backend.run(initSessionSpec(deps, request));
@@ -419,14 +417,14 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
    * S-4′ (PRDR-118): the same circuit breaker the run loop applies. A stream
    * that ends with no result message parses as `is_error: undefined`, which
    * reads as SUCCESS with no telemetry — so a session killed in transport
-   * returned ok, recorded $0 against the ceiling, and its phase then reported
+   * returned ok, recorded $0 on the ledger, and its phase then reported
    * "produced no artifact", blaming the model for a death on the wire. The
    * run loop has caught this since T-046; init never looked.
    */
   if (!result.telemetryParsed) {
     throw new Error(
       `${request.role} session ended with no telemetry (S-4 circuit breaker) — the session died in transport rather than producing an artifact. ` +
-        "Nothing was charged against the run ceiling, so its cost is unrecorded; re-run `detent init` to resume (C-8).",
+        "Its cost is not on the ledger, since the session reported none; re-run `detent init` to resume (C-8).",
     );
   }
   return result;

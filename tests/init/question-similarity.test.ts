@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
+import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/decide-items.js";
 
 /**
  * C-3‴ (PRDR-207) — one question, asked once.
@@ -14,7 +14,8 @@ import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.
  * (`plan-inputs.test.ts`). C-7‴ (PRDR-296): PRESENT lists no question, and
  * its merge went with the list (`present-rebuilt.test.ts`). The similarity
  * is what is left: DECIDE refuses a question the decision log already
- * answers by it (`decide-items.ts`), held here to gate-313's pair.
+ * answers by it, held here to gate-313's pair. C-3⁵ (PRDR-298): it is
+ * DECIDE's own now, in `decide-items.ts`, and `questions.ts` is gone.
  */
 
 /* gate-313's pair, verbatim. */
@@ -33,5 +34,11 @@ describe("C-3‴ a question asked twice in two stages' words is one question", (
     expect(similarQuestions(Q1, Q2), "two different founder questions").toBe(false);
     expect(similarQuestions(S14Q1, S14Q2)).toBe(false);
     expect(QUESTION_SIMILARITY).toBeGreaterThan(0);
+  });
+
+  /* C-3⁵ (PRDR-298): the doc-block's two token rules, each held by a pair it decides. */
+  it("reads words whatever their case, and not the short words every question shares", () => {
+    expect(similarQuestions("WHICH NPM IDENTITY PUBLISHES DETENT?", "Which npm identity publishes Detent?"), "one question, shouted").toBe(true);
+    expect(similarQuestions("Who owns the npm org and the app key for it?", "Who pays the npm org and the app key for it?"), "two questions that share only short words").toBe(false);
   });
 });

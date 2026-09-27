@@ -109,7 +109,8 @@ export type SymbolsDecision = "on" | "off";
  * reads a private codebase (D-4, F-2). The only way to decide was a prompt, and
  * the runs that matter most have none: the self-build gate, CI, a background
  * launch. gate-313 planned and ran with serena installed and undecided, and
- * sent 80 symbol-level couplings to review that code could have checked.
+ * sent 80 symbol-level couplings to review while the tool that looks such
+ * names up stayed off in every session.
  *
  * "On" is honoured only when the probe finds the tool: `enabled: true` for a
  * command that cannot run would be the silent failure S-3‴ exists to report,

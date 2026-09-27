@@ -1125,6 +1125,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   where its file goes are two facts now, and the prompt carries only the one the cache should.
   *Amended by C-4⁸ (PRDR-294): no session is told another's path, since no launch is batched. The
   backend's support has no caller, and PRDR-298 deletes it.*
+  *Amended by C-3⁵ (PRDR-298): the backend's support is deleted.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -1140,6 +1141,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   12.5k against the cold one's 54k. The wait no longer depends on how long the first turn is.
   *Amended by C-4⁸ (PRDR-294): no launch waits on another's first response, since no launch is
   batched. The backend's streaming signal has no caller, and PRDR-298 deletes it.*
+  *Amended by C-3⁵ (PRDR-298): the streaming signal is deleted, and no session asks for the
+  event stream.*
 
 - **V-1⁗ (3.1.1, PRDR-211).** Before a bound gate runs, the adapter **installs what the work
   directory's manifest declares** — `npm install` for a `package.json` whose install mark is
@@ -1714,6 +1717,8 @@ the code does what the rules it amends describe, and each of those rules points 
   sandbox. A red checker its writer cannot make green stops `init` at VALIDATE too.*
   *Amended by S-1⁗ (PRDR-285): the simulating reviewer is built, on macOS: each reviewer of a round
   may simulate, and where the machine has no sandbox each round says why none can.*
+  *Amended by C-3⁵ (PRDR-298): planning research is deleted. AUDIT keeps what it shared with it:
+  the one relaunch, X-6a's local search before the web, and `EXTERNAL_TIER`.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1803,6 +1808,57 @@ the code does what the rules it amends describe, and each of those rules points 
   entry it edits, and every slice where it edits the stack's entry.*
   *Amended by C-7‴ (PRDR-296): PRESENT's merge of near-duplicate questions is gone, with its
   question list, and PRESENT lists every `D-n` before the `X-n`.*
+  *Amended by C-3⁵ (PRDR-298): built. `similarQuestions` is DECIDE's own, in
+  `src/init/decide-items.ts`, and the rest of the question machinery is gone.*
+
+- **C-3⁵ (3.1.1, PRDR-298).** What the planning redesign replaced is deleted, and what the
+  planning audit found describing more than the code does now says what it does. This settles
+  what C-3⁗, D-10″, C-4⁷ and C-4⁸ left to this ticket, and amends C-3a and D-11, C-6 and C-6a
+  with SEC-1 and D-15, X-6's closing sentence, F-1's committed set, S-6′, C-4⁗⁵, C-2⁶'s and
+  C-2¹¹'s research, and C-7‴'s `questions.ts`.
+  - **Planning research** (C-3a) is gone: `src/init/plan-research.ts`, the brief schema only it
+    read, with the two refinements only that schema used, the research prompt's planning arm,
+    and an init launch's switch to the research role's tools, which nothing set. No phase had
+    launched it since D-10″. D-11's init-time research is AUDIT's claim checks (C-2⁶). The
+    research role stays, since `run` launches it for a failing ticket (X-6), and its prompt
+    answers that alone; X-6's note that planning research shares X-6a and S-3 names nothing now.
+    AUDIT keeps what it shared: `withOneRelaunch`, X-6a's rule that a brief citing a page first
+    searched locally, and `EXTERNAL_TIER`. `research/planning` leaves the layout, so nothing
+    writes it. An older root's briefs there stay committed, since `.detent/.gitignore` lists only
+    the local set, and nothing reads them. `planning_research_tool_calls` keeps its name and
+    counts AUDIT's claim checks alone (C-2¹¹); no question joins a batch at its ceiling, since
+    none is asked.
+  - **Questions** are DECIDE's. `similarQuestions`, all that was left of `questions.ts`, is in
+    `src/init/decide-items.ts` beside the DECIDE code that uses it, and the file is gone. DISCOVER
+    no longer records `patterns_searched`, whose one reader was PRESENT's answer instruction,
+    deleted with the question list (C-7‴).
+  - **Setup consent.** `src/init/consent.ts` and `src/init/allowlist.ts`, which T-065 built for
+    C-6 and C-6a, are deleted, with `bootstrapBlocks` and `planPath` in `src/init/plan.ts` and the
+    tests that were their only callers. No path reached them, so no operator was ever offered a
+    setup command. Detent runs none, `git init` included. AWAIT_SETUP_CONSENT is raised where it
+    was (C-3b, D-10″) and says so, and the human answers it by establishing the tooling and
+    re-invoking. In greenfield the bootstrap ticket establishes it as code under review (C-4), as
+    before. Of C-6's configuration rule, that Detent never modifies an existing configuration
+    file holds; the brownfield files it would create and C-6a's allowlisted installs are not
+    built. SEC-1 has no consent to log, and D-15's rule that nothing off the list runs covers
+    every command. `detent init` outside a repository says to run `git init`.
+  - **The backend** loses what C-4⁸ left without a caller: S-6′'s told path and the guard's
+    redirect of a write to it, C-4⁗⁵'s first-response signal and the event stream it asked for,
+    and the two fields on a session's spec that set them. A session's turns are still its
+    completed `assistant` frames (PRDR-072). `scripts/plan-corpus.ts` reads no ledger.
+  - **Doc-blocks.** A launch's spend is read against X-1's advisory total and the no-progress
+    breaker, which announce and refuse nothing (PRDR-265), where `session.ts` and
+    `plan-slices.ts` still described a gate. `withOneRelaunch` names its callers, and a second
+    refusal is its caller's to act on: AUDIT records the claim unverified and goes on, where the
+    note said the phase fails. The symbol reminder says symbol tools reach the sessions
+    `detent run` launches, and never planning's. `contracts.ts` no longer counts four tickets
+    editing one file among its checks: tickets that write one file declare no contract, and
+    only two that both provide it are caught. `readPresentation` returns null for a file that
+    does not parse, as its doc-block said, where it threw.
+  - **Size.** `src/init` held 68 files, 12,281 lines and 7,895 code lines at PRDR-297, and holds
+    64, 11,566 and 7,537.
+  - **Migration.** None. A DISCOVER checkpoint an earlier build wrote holds `patterns_searched`,
+    which nothing reads, and its key does not move.
 
 - **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
   named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
@@ -1878,6 +1934,7 @@ the code does what the rules it amends describe, and each of those rules points 
   greenfield; the entry keys every slice PLAN drafts. Without a parse it is handed both, as here.*
   *Amended by C-4⁷ (PRDR-292): on a pack PLAN is handed the parse's records and reads no document,
   the planner reads one prompt per job, and no stage is handed `open_questions`.*
+  *Amended by C-3⁵ (PRDR-298): `src/init/plan-research.ts` is deleted, with its tests.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -2084,6 +2141,8 @@ the code does what the rules it amends describe, and each of those rules points 
   it, and the catalogue-name finding is a failure a redraft is sent.*
   *Amended by C-4⁸ (PRDR-294): the review runs on `plan_review`, with the planner's tools, and
   reads a slice's records rather than the planning documents.*
+  *Amended by C-3⁵ (PRDR-298): PRESENT reads no question, since C-7‴ (PRDR-296) deleted its list
+  and its merge, and `questions.ts` is gone.*
 
 
 - **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
@@ -2257,6 +2316,7 @@ the code does what the rules it amends describe, and each of those rules points 
     graded findings and needs no step: its key folds in the review's prompt, which changed, so a
     cache written before misses, and the slice is planned again. PLAN's checkpoint keys on the
     same prompt, so PLAN runs again too.
+  *Amended by C-3⁵ (PRDR-298): the told path and the first-response signal are deleted.*
 
 - **C-7″ (3.1.1, PRDR-278).** PRESENT shows what the operator decides on, and approval is refused
   while the plan is proved wrong. ksar-cloud's PRESENT printed 457 held findings, a revision
@@ -2334,6 +2394,8 @@ the code does what the rules it amends describe, and each of those rules points 
     before.
   *Amended by N-5″ (PRDR-297): its mixed builds are built, and `presentation.json` requires
   `builds` and `pack_hash` beside the counts.*
+  *Amended by C-3⁵ (PRDR-298): the similarity is DECIDE's own, in `src/init/decide-items.ts`,
+  and `questions.ts` is gone.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2804,6 +2866,8 @@ the code does what the rules it amends describe, and each of those rules points 
   reaches planning unchecked.*
   *Amended by D-10″ (PRDR-290): ANALYZE is gone, so AUDIT alone reports against
   `planning_research_tool_calls`, and X-1's site map names `init/audit` for it.*
+  *Amended by C-3⁵ (PRDR-298): planning research is deleted, and `research/planning` leaves the
+  layout, so AUDIT's briefs are the only research `init` commits.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -3163,7 +3227,7 @@ The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts 
 - **C-14′ Porcelain freeze (major-version).** The golden path is exactly the two workflows and the five closed decisions, now surfaced as the two plugin commands and their presented interrupts. Adding a command or a decision class is a major-version decision requiring a PRD amendment. The v2→v3 re-target is itself such a decision, recorded here (D-26).
   *AC:* release-checklist item; a docs test asserts the two-command, five-decision plugin surface.
 
-*(C-6/C-6a setup-consent, C-7 approval, C-8 replay, C-10 escalation, C-12 plumbing, C-13 vocabulary: inherited from v2 §4, reconciled "kernel"→"referee". C-12 plumbing commands become read-only referee tools / plugin subcommands; claim discipline is unchanged.)*
+*(C-6/C-6a setup-consent, which C-3⁵ (3.1.1, PRDR-298) amends: Detent runs no setup command; C-7 approval, C-8 replay, C-10 escalation, C-12 plumbing, C-13 vocabulary: inherited from v2 §4, reconciled "kernel"→"referee". C-12 plumbing commands become read-only referee tools / plugin subcommands; claim discipline is unchanged.)*
 
 ## 8. Sessions & Agent SDK Integration (S, v3)
 S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
@@ -3221,6 +3285,7 @@ The v2 milestones (M0…M4) delivered the CLI line and its 52-test oracle parity
 - **MP4 — self-build + distribution (N-7).** The headless driver self-builds v3 in CI (the permanent gate, D-16); the plugin publishes to a marketplace. *Exit:* N-7 green on the v3 document; marketplace install smoke-tested.
 
 **N-7 scoping note (draft.4, raised by the self-build's own analyst — T-140).** The walking skeleton N-7 builds is the referee core and the headless driver (the MP0-equivalent of this document): a deterministic machine whose gates run green. The plugin shell and marketplace distribution are post-skeleton milestones; their platform-authoring and publish mechanics are plan-time research topics (C-3a) or later tickets' concerns, and are **never blocking questions for the skeleton plan** — an analyst reading this document should plan the skeleton first and defer those surfaces to their milestones.
+*Amended by C-3⁵ (3.1.1, PRDR-298): planning research is deleted, so those mechanics are later tickets' concerns.*
 
 ---
 

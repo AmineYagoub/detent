@@ -39,7 +39,7 @@ const ticket = (id: string, slice: string, over: Record<string, unknown> = {}): 
   ...over,
 });
 
-/** A root as `init` leaves it: slice specs, one cache per planned slice, a ledger. */
+/** A root as `init` leaves it: slice specs and one cache per planned slice. */
 function plannedRoot(caches: Record<string, Record<string, unknown>[]>, specs: Record<string, unknown>[]): string {
   const root = tmpTree({});
   const state = path.join(root, ".detent", "state");
@@ -52,7 +52,6 @@ function plannedRoot(caches: Record<string, Record<string, unknown>[]>, specs: R
   }
   writeFileSync(path.join(state, "slices.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, slices: specs }));
   writeFileSync(path.join(state, "DISCOVER.json"), JSON.stringify({ outputs: { docs: ["PRD.md"] } }));
-  writeFileSync(path.join(root, ".detent", "ledger.jsonl"), `${JSON.stringify({ cost_estimate_usd: 1.5 })}\n${JSON.stringify({ cost_estimate_usd: 2.5 })}\n`);
   return root;
 }
 
@@ -79,7 +78,6 @@ describe("PRDR-202 the harnesses read a planned root the way the schema does", (
       expect(corpus.tickets[0]?.baseline_ids).toEqual([]);
       expect(corpus.planned).toEqual(["s01"]);
       expect(corpus.docs).toEqual(["PRD.md"]);
-      expect(corpus.spend).toEqual({ usd: 4, sessions: 2 });
     } finally {
       removeTree(root);
     }

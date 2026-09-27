@@ -132,7 +132,7 @@ export function writePlan(
     }
     const ordering = capstoneBlockers(draft, slices, drafted);
     planned.push(
-      newTicket(deps, draft, [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])]),
+      newTicket(draft, [...new Set([...(deps.greenfield ? [BOOTSTRAP_TICKET_ID] : []), ...draft.depends_on, ...ordering])]),
     );
   }
 
@@ -303,8 +303,7 @@ function bootstrapTicket(deps: WriteDeps): Ticket {
 }
 
 /** A drafted ticket, built in memory. Writing is the caller's, after validation. */
-function newTicket(deps: WriteDeps, draft: DraftedTicket, blockers: readonly string[]): Ticket {
-  void deps;
+function newTicket(draft: DraftedTicket, blockers: readonly string[]): Ticket {
   return buildTicket({
     id: draft.id,
     type: draft.type,

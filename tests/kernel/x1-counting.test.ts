@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { existsSync } from "node:fs";
 import { CEILINGS, CEILING_KEYS, type CeilingKey } from "../../src/schemas/budgets.js";
 import { breachTargetFor } from "../../src/kernel/budgets.js";
 import { ZERO_COUNTERS } from "../../src/kernel/generations.js";
@@ -10,9 +9,8 @@ import { SpendLedger, noteUnitComplete, type ProgressBreaker } from "../../src/k
 import { RunJournal } from "../../src/kernel/journal.js";
 import { briefCachePath, researchStage } from "../../src/kernel/stages/research.js";
 import { cacheKey, type EnvFingerprint } from "../../src/adapter/env.js";
-import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { okResult } from "../../src/sessions/mock.js";
-import { removeTree, tmpTree } from "../helpers.js";
+import { removeTree } from "../helpers.js";
 import { makeRunRepo } from "./run-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -40,12 +38,6 @@ const roots: string[] = [];
 afterEach(() => {
   for (const r of roots.splice(0)) removeTree(r);
 });
-
-function root(): string {
-  const r = tmpTree({});
-  roots.push(r);
-  return r;
-}
 
 async function runRoot(): Promise<string> {
   const made = await makeRunRepo();
@@ -92,17 +84,6 @@ const GOOD_BRIEF = {
   what_would_falsify: "it stays red",
   local_search: { docs_checked: ["a"], code_checked: [] },
 };
-
-const VALID_PLANNING_BRIEF = (question: string): object => ({
-  schema_version: SCHEMA_VERSION,
-  question,
-  question_hash: questionHash(question),
-  answer: { claim: "the ladder is published", confidence: "high" },
-  evidence: [{ source: "https://docs.example.com/pricing", claim: "the ladder is published" }],
-  sources_consulted: [{ tier: 1, ref: "PRD.md" }],
-  local_search: { docs_checked: ["PRD.md"], code_checked: [] },
-  what_would_falsify: "the page stops listing prices",
-});
 
 describe("PRDR-265 a converted ceiling declares NONE and keeps its counting site", () => {
   it("every converted key routes nowhere, joining turns_per_stage and run_spend_usd", () => {
@@ -167,62 +148,6 @@ describe("PRDR-265 failure_research_tool_calls counts", () => {
     });
     /** Counting without reporting is not counting — the figure has to be observable when nothing is wrong. */
     expect(notes.join(" "), "an in-budget session's spend is reported too").toMatch(/3 turns against .*8/);
-  });
-});
-
-describe("PRDR-265 planning_research_tool_calls counts (D-18)", () => {
-  const THREE = ["which accounts are payable?", "what is the price ladder?", "what retention applies?"];
-
-  async function drive(r: string, questions: readonly string[], budget: number, spend: number) {
-    const notes: string[] = [];
-    const result = await planResearch(questions, {
-      root: r,
-      budget,
-      note: (t) => notes.push(t),
-      researchOne: (question, _share, artifactOut) => {
-        mkdirSync(path.dirname(artifactOut), { recursive: true });
-        writeFileSync(artifactOut, JSON.stringify(VALID_PLANNING_BRIEF(question)), "utf8");
-        return Promise.resolve({ toolCalls: spend });
-      },
-    });
-    return { result, notes };
-  }
-
-  /**
-   * The skip arm is the only thing this ceiling ever did to behaviour: a
-   * question whose turn came after the pool was gone got NO session at all and
-   * joined the AWAIT_INFO batch unresearched. Under counting, a budget may not
-   * decide that a question goes unasked.
-   */
-  it("gives every question a session even when the pool is long gone", async () => {
-    const { result } = await drive(root(), THREE, 2, 5);
-    expect(result.sessionsLaunched, "three questions, three sessions, whatever the pool says").toBe(3);
-    expect(result.briefs, "a budget may not decide which question goes unasked — all three are answered").toHaveLength(3);
-    expect(result.unanswered, "and none of them joins the AWAIT_INFO batch for want of budget").toEqual([]);
-  });
-
-  /**
-   * D-18's actual complaint. `Math.min(spentHere, share)` made `toolCallsUsed`
-   * report ALLOCATION while reading as SPEND — the file's own doc-block conceded
-   * the excess "has always fallen on the floor here". With nothing to enforce
-   * there is no reason left to discard the observation. Live run 4 spent 33
-   * against a pool of 16 and the counter said 16.
-   */
-  it("reports the calls that were actually made, not the share they were allowed", async () => {
-    const { result } = await drive(root(), THREE, 16, 11);
-    expect(result.toolCallsUsed, "33 against a pool of 16 is the number an operator needs to see").toBe(33);
-  });
-
-  it("still answers a cached question for free — C-3a's acceptance is unaffected", async () => {
-    const r = root();
-    const cached = THREE[1] as string;
-    const file = planningBriefPath(r, questionHash(cached));
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(VALID_PLANNING_BRIEF(cached)), "utf8");
-
-    const { result } = await drive(r, THREE, 16, 1);
-    expect(result.cacheHits).toBe(1);
-    expect(result.sessionsLaunched, "only the two uncached questions cost a session").toBe(2);
   });
 });
 

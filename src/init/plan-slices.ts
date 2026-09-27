@@ -227,9 +227,10 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
       )}\n`,
     );
     /**
-     * X-1⁵ (PRDR-191): the slice is on disk, so the run has completed a unit of
-     * work and buys its next budget. Putting it after the checkpoint write
-     * rather than before means a slice that failed to persist does not count.
+     * X-1⁵ (PRDR-191): the slice is on disk, so a unit of work is complete,
+     * and the no-progress breaker measures from here; it only announces
+     * (PRDR-265). Putting it after the checkpoint write rather than before
+     * means a slice that failed to persist does not count.
      *
      * It is not the only mark that resets the no-progress breaker, as this
      * block said: a ticket reaching DONE is one, and so are each completed

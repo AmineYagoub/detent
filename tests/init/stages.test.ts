@@ -1,12 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { initLayout, stateDir } from "../../src/fs/layout.js";
+import { initLayout } from "../../src/fs/layout.js";
 import { isGreenfield } from "../../src/init/greenfield.js";
 import { planDraftSkeleton } from "../../src/init/plan.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
-import { planResearch, planningBriefPath, questionHash } from "../../src/init/plan-research.js";
 import { msUntilReset } from "../../src/init/session.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { runInit } from "../../src/init/machine.js";
@@ -18,7 +17,7 @@ import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { CLEAN_AUDIT, planningPipeline, planning } from "./plan-fixture.js";
 
-/** T-061 (doc discovery), T-062 (ANALYZE, folded into DECIDE by D-10′), T-063 (planning research). */
+/** T-061 (doc discovery), T-062 (ANALYZE, folded into DECIDE by D-10′). T-063's planning research was deleted with C-3a's research (C-3⁵, PRDR-298). */
 
 const PROMPTS = loadPromptSet();
 const BUDGETS = Object.fromEntries(
@@ -268,173 +267,6 @@ describe("T-062 the planning sessions (C-3, D-10′)", () => {
     expect(writeRules[0]).toBe(`Write(/${call!.spec.artifactOut})`);
     expect(writeRules[0]).toContain(".detent/state/slices.json");
   });
-});
-
-/*
- * ---------------------------------------------------------------------------
- * T-063
- */
-
-const VALID_BRIEF = (question: string) => ({
-  schema_version: SCHEMA_VERSION,
-  question,
-  question_hash: questionHash(question),
-  answer: { claim: "The v3 API replaced the callback form with promises.", confidence: "high" },
-  evidence: [{ source: "https://docs.example.com/v3/migration", claim: "callbacks removed in v3" }],
-  sources_consulted: [
-    { tier: 1, ref: "PRD.md" },
-    { tier: 3, ref: "https://docs.example.com/v3/migration" },
-  ],
-  local_search: { docs_checked: ["PRD.md"], code_checked: [] },
-  what_would_falsify: "the v3 changelog shows callbacks retained",
-});
-
-/**
- * PRDR-264: `researchOne` no longer RETURNS a brief — the session writes
- * `artifactOut` and `planResearch` reads it back, so the file and the
- * validation stay together and a stale artifact cannot answer for a session
- * that produced nothing (D-19). This builds the launcher each case needs.
- */
-const writes = (brief: (q: string) => object, toolCalls: number) => (question: string, _share: number, artifactOut: string) => {
-  mkdirSync(path.dirname(artifactOut), { recursive: true });
-  writeFileSync(artifactOut, JSON.stringify(brief(question)), "utf8");
-  return Promise.resolve({ toolCalls });
-};
-
-describe("T-063 planning research (C-3a, D-11)", () => {
-  it("an answered question yields a cited brief, cached by question hash", async () => {
-    const root = repo();
-    const question = "Does the v3 API still accept callbacks?";
-    const result = await planResearch([question], {
-      root,
-      budget: 16,
-      researchOne: writes(VALID_BRIEF, 3),
-    });
-
-    expect(result.briefs).toHaveLength(1);
-    expect(result.unanswered).toEqual([]);
-    expect(result.toolCallsUsed).toBe(3);
-    expect(result.briefs[0]?.evidence[0]?.source).toContain("docs.example.com");
-    expect(existsSync(planningBriefPath(root, questionHash(question)))).toBe(true);
-  });
-
-  it("re-running hits the cache with ZERO sessions and zero tool calls (C-3a's AC)", async () => {
-    const root = repo();
-    const question = "Does the v3 API still accept callbacks?";
-    await planResearch([question], { root, budget: 16, researchOne: writes(VALID_BRIEF, 3) });
-
-    let launched = 0;
-    const second = await planResearch([question], {
-      root,
-      budget: 16,
-      researchOne: (q, share, artifactOut) => {
-        launched += 1;
-        return writes(VALID_BRIEF, 3)(q, share, artifactOut);
-      },
-    });
-    expect(launched).toBe(0);
-    expect(second.sessionsLaunched).toBe(0);
-    expect(second.toolCallsUsed).toBe(0);
-    expect(second.cacheHits).toBe(1);
-    expect(second.briefs).toHaveLength(1);
-  });
-
-  it("the question hash normalizes whitespace and case — the same question is one entry", () => {
-    expect(questionHash("Does the API accept callbacks?")).toBe(questionHash("  does the   API accept callbacks? "));
-    expect(questionHash("a")).not.toBe(questionHash("b"));
-  });
-
-  it("the 16-call pool is DIVIDED per init, and every question gets its share", async () => {
-    const root = repo();
-    const questions = ["q one?", "q two?", "q three?"];
-    const notes: string[] = [];
-    let launched = 0;
-
-    const result = await planResearch(questions, {
-      root,
-      budget: 16,
-      note: (t) => notes.push(t),
-      researchOne: (question, share, artifactOut) => {
-        launched += 1;
-        /* Every session tries to take the whole allowance; PRDR-262 is why none of them can. */
-        return writes(VALID_BRIEF, 16)(question, share, artifactOut);
-      },
-    });
-
-    /**
-     * PRDR-262: this used to assert `launched === 1` with the comment "the
-     * first question burns the whole allowance" — the live defect written down
-     * as the specification, which is why nothing detected it. The per-init
-     * ceiling was never the defect and still holds exactly; what changed is
-     * that holding it no longer costs the other questions their session.
-     */
-    expect(launched, "a question that overruns cannot take another question's share of the division").toBe(3);
-    /**
-     * PRDR-265 (D-18): this asserted `toolCallsUsed === 16` and `<= BUDGETS
-     * .planning_research_tool_calls`, which was true only because the charge
-     * was clamped to each share. Three sessions each reporting 16 calls really
-     * made 48, and the pool cannot refuse any of them — so 48 is what the
-     * operator is shown. The DIVISION is what this test is about and is
-     * unchanged: each question was still asked for its own cut, which is what
-     * `launched === 3` and the "is held for" note below pin.
-     */
-    expect(result.toolCallsUsed, "three sessions at 16 calls apiece is 48, whatever the pool said").toBe(48);
-    expect(result.toolCallsUsed).toBeGreaterThan(BUDGETS.planning_research_tool_calls);
-    expect(result.unanswered, "all three were researched, and all three parsed").toEqual([]);
-    expect(notes.join(" "), "the division is reported so an operator can see why a share was small").toContain("is held for");
-    expect(notes.join(" "), "and so is the overrun, which is the half the clamp used to hide").toContain("OVERRAN");
-  });
-
-  /**
-   * PRDR-265 turned this one around too, and it is the clearest single case.
-   * The old title was "an over-reporting backend cannot push the counter past
-   * the ceiling" and it asserted 16 — a session that reported 9999 calls was
-   * recorded as having made 16. Whether the backend is over-reporting or the
-   * session really did run away, 16 is the one answer that is certainly wrong,
-   * and it is what run 4 showed the operator (D-18).
-   */
-  it("a session reporting far past its share is counted at what it reported", async () => {
-    const root = repo();
-    const notes: string[] = [];
-    const result = await planResearch(["q?"], {
-      root,
-      budget: 16,
-      note: (t) => notes.push(t),
-      researchOne: writes(VALID_BRIEF, 9999),
-    });
-    expect(result.toolCallsUsed, "an implausible figure is an observation, not a number to round down").toBe(9999);
-    expect(notes.join(" "), "and it is flagged against the share it was asked for").toContain("OVERRAN");
-  });
-
-  it("a brief citing a URL with no local_search is refused — X-6a, the SHARED validator", async () => {
-    const root = repo();
-    const question = "unfamiliar API?";
-    const result = await planResearch([question], {
-      root,
-      budget: 16,
-      researchOne: writes((q) => ({ ...VALID_BRIEF(q), local_search: { docs_checked: [], code_checked: [] } }), 2),
-    });
-    expect(result.briefs).toEqual([]);
-    expect(result.unanswered).toEqual([question]);
-    expect(existsSync(planningBriefPath(root, questionHash(question)))).toBe(false);
-  });
-
-  it("planning and failure research keep SEPARATE budgets (two counters, D-11)", () => {
-    expect(BUDGETS.planning_research_tool_calls).toBe(16);
-    expect(BUDGETS.failure_research_tool_calls).toBe(8);
-    expect(CEILINGS.planning_research_tool_calls.scope).toBe("init");
-    expect(CEILINGS.failure_research_tool_calls.scope).toBe("research-session");
-  });
-
-  it("briefs live in the committed research/planning tree (F-1, P8)", async () => {
-    const root = repo();
-    const question = "shared knowledge?";
-    await planResearch([question], { root, budget: 16, researchOne: writes(VALID_BRIEF, 1) });
-    const file = planningBriefPath(root, questionHash(question));
-    expect(file.startsWith(path.join(stateDir(root), "research", "planning"))).toBe(true);
-    expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ question });
-  });
-
 });
 
 /**

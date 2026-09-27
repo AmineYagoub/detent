@@ -1,12 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EXIT_HUMAN_GATED, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
-import { STRUCTURAL_PROTECTED } from "../../src/schemas/common.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
-import type { GuardPolicy } from "../../src/sessions/guard.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { ClaudeCodeBackend, buildOptions, buildPreToolUseHook, parseResultMessage, type SdkBackendConfig } from "../../src/sessions/sdk.js";
@@ -122,43 +119,6 @@ describe("T-046 option construction (S-1, D-21, D-22)", () => {
     expect(output.hookSpecificOutput?.permissionDecisionReason).toContain("D-28");
   });
 
-  /**
-   * PRDR-205 — the k draws of one review are TOLD one artifact path, so their
-   * first turns are byte-identical and the prompt cache serves all but the
-   * first (S-6); each draw's file is its own. A write to the told path is
-   * carried out at the file the draw has, and judged there.
-   */
-  it("a write to the artifact the session was TOLD is carried out at the artifact it HAS, and allowed (PRDR-205)", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "detent-alias-"));
-    roots.push(root);
-    const told = path.join(root, ".detent", "state", "plan-review.json");
-    const actual = path.join(root, ".detent", "state", "draws", "2", "plan-review.json");
-    /* An init session's policy (S-1″): the one file it may write, and the structural floor. */
-    const policy: GuardPolicy = { surface: [path.relative(root, actual)], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root, artifactRoot: actual };
-    const [matcher] = buildPreToolUseHook(policy, { told, actual }).PreToolUse ?? [];
-    const callback = matcher?.hooks[0];
-    expect(callback).toBeDefined();
-    type Output = { hookSpecificOutput?: { permissionDecision?: string; updatedInput?: Record<string, unknown> } };
-    const call = async (tool: string, tool_input: Record<string, unknown>): Promise<Output> =>
-      (await callback!({ hook_event_name: "PreToolUse", tool_name: tool, tool_input, tool_use_id: "x" } as never, undefined, {
-        signal: new AbortController().signal,
-      })) as Output;
-
-    const write = await call("Write", { file_path: told, content: "{}" });
-    expect(write.hookSpecificOutput?.permissionDecision, "the draw's own file is its artifact (B-2″)").toBe("allow");
-    expect(write.hookSpecificOutput?.updatedInput?.["file_path"], "carried out where the file goes").toBe(actual);
-    expect(write.hookSpecificOutput?.updatedInput?.["content"], "and nothing else about the call moves").toBe("{}");
-
-    /* The alias is exactly one path; anything else is judged as before. */
-    const elsewhere = await call("Write", { file_path: path.join(root, ".detent", "state", "other.json"), content: "" });
-    expect(elsewhere.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(elsewhere.hookSpecificOutput?.updatedInput).toBeUndefined();
-
-    /* Reads are not this guard's business (S-2‴), alias or not. */
-    const read = await call("Read", { file_path: told });
-    expect(read.hookSpecificOutput?.permissionDecision).toBeUndefined();
-    expect(read.hookSpecificOutput?.updatedInput).toBeUndefined();
-  });
 });
 
 describe("T-046 telemetry parsing (S-4, PRDR-052/053)", () => {
@@ -561,75 +521,16 @@ describe("PRDR-197 a session carries the effort its role is routed to", () => {
 });
 
 /**
- * C-4⁗⁵ (PRDR-210) — the stagger's signal is the first response's BEGINNING.
+ * PRDR-072 — a stream that dies mid-session reports the turns it completed.
  *
- * `onFirstResponse` fired on the stream's first `assistant` frame, which is a
- * completed turn. The prompt cache is readable once the first response begins,
- * and on gate-313 three of fourteen slices waited the full 60 s for a reviewer
- * whose first turn was a long generation, then launched the other draws cold.
- * With partial messages requested, the SDK yields one `stream_event` per
- * Messages API streaming event; `message_start` is the response beginning.
+ * C-4⁗⁵ (PRDR-210) asked a session someone waited on for the stream's events,
+ * and this held the count to completed turns with events interleaved. No
+ * session asks for them since C-3⁵ (PRDR-298) deleted the signal, so each
+ * `assistant` frame is a turn and nothing else is.
  */
-describe("C-4⁗⁵ the first response's beginning, not its completion", () => {
-  const RESULT = {
-    type: "result",
-    subtype: "success",
-    is_error: false,
-    num_turns: 1,
-    total_cost_usd: 0.01,
-    usage: { input_tokens: 10, output_tokens: 5 },
-    modelUsage: { "claude-opus-5": { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.01 } },
-    result: "ok",
-  };
-  const INIT = { type: "system", subtype: "init" };
-  const START = { type: "stream_event", event: { type: "message_start" }, parent_tool_use_id: null };
-  const DELTA = { type: "stream_event", event: { type: "content_block_delta" }, parent_tool_use_id: null };
-  const ASSISTANT = { type: "assistant", message: { content: [] } };
-
-  /** A backend over a scripted stream that records after WHICH frame the callback fired. */
-  function scripted(frames: readonly object[]): {
-    readonly run: () => Promise<{ readonly firedAfter: number | null; readonly turns: number; readonly cost: number; readonly parsed: boolean }>;
-  } {
-    let fired = false;
-    let firedAfter: number | null = null;
-    const backend = new ClaudeCodeBackend({
-      policy: { surface: ["**"], protectedGlobs: [], workRoot: "/wt" },
-      queryFn: () =>
-        (async function* () {
-          for (const [i, frame] of frames.entries()) {
-            yield frame;
-            if (fired && firedAfter === null) firedAfter = i;
-          }
-        })(),
-    });
-    return {
-      run: async () => {
-        const result = await backend.run(spec({ onFirstResponse: () => { fired = true; } }));
-        return { firedAfter, turns: result.turns, cost: result.costEstimateUsd, parsed: result.telemetryParsed };
-      },
-    };
-  }
-
-  it("fires when the first response BEGINS — the message_start event — not when the turn completes", async () => {
-    const { firedAfter } = await scripted([INIT, START, DELTA, ASSISTANT, RESULT]).run();
-    /* Before PRDR-210 this is 3: the completed `assistant` frame. */
-    expect(firedAfter, "fired while the message_start event was being handled").toBe(1);
-  });
-
-  it("a stream that carries no events still fires on the first assistant frame", async () => {
-    const { firedAfter } = await scripted([INIT, ASSISTANT, RESULT]).run();
-    expect(firedAfter).toBe(1);
-  });
-
-  it("telemetry reads the same values with stream events interleaved", async () => {
-    const withEvents = await scripted([INIT, START, DELTA, ASSISTANT, START, DELTA, ASSISTANT, RESULT]).run();
-    const without = await scripted([INIT, ASSISTANT, ASSISTANT, RESULT]).run();
-    expect([withEvents.turns, withEvents.cost, withEvents.parsed]).toEqual([without.turns, without.cost, without.parsed]);
-  });
-
-  it("a crash counts completed turns, not the events they streamed (PRDR-072's observed count)", async () => {
-    /* The stream dies after two turns; the wrap reports the turns it saw, and no event is a turn. */
-    const frames = [INIT, START, DELTA, ASSISTANT, START, DELTA, ASSISTANT];
+describe("PRDR-072 a stream that dies counts the turns it completed", () => {
+  it("counts each assistant frame, and reports the crash", async () => {
+    const frames = [{ type: "system", subtype: "init" }, { type: "assistant", message: { content: [] } }, { type: "assistant", message: { content: [] } }];
     const backend = new ClaudeCodeBackend({
       policy: { surface: ["**"], protectedGlobs: [], workRoot: "/wt" },
       queryFn: () =>
@@ -638,14 +539,9 @@ describe("C-4⁗⁵ the first response's beginning, not its completion", () => {
           throw new Error("transport died");
         })(),
     });
-    const result = await backend.run(spec({ onFirstResponse: () => {} }));
+    const result = await backend.run(spec());
     expect(result.ok).toBe(false);
-    expect(result.turns, "two assistant frames, six events").toBe(2);
-  });
-
-  it("partial messages are requested only for a session someone is waiting on", () => {
-    expect(buildOptions(spec({ onFirstResponse: () => {} }), CONFIG).includePartialMessages).toBe(true);
-    expect("includePartialMessages" in buildOptions(spec(), CONFIG)).toBe(false);
+    expect(result.turns, "two assistant frames").toBe(2);
   });
 });
 

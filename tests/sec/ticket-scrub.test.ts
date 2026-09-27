@@ -225,7 +225,7 @@ describe("X-5 a quarantine ticket's evidence is bounded, not just scrubbed", () 
 /**
  * SEC-4 (PRDR-252) — the research brief cache is a COMMITTED path.
  *
- * `fs/layout.ts` marks `research/failures` and `research/planning`
+ * `fs/layout.ts` marks `research/failures` and `research/audit`
  * `tracking: "committed"`, and `stageAll` excludes only the LOCAL set. The
  * brief is the research session's own write-up: it reads the repository with
  * Read, Grep and WebSearch and quotes what it finds into `root_cause.claim`,

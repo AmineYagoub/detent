@@ -33,21 +33,21 @@ function fire(hooks: ReturnType<typeof buildPreToolUseHook>, effort?: { level: s
 describe("PRDR-237 the hook reports the effort the turn actually ran at", () => {
   it("reports the active level from the hook input", async () => {
     const seen: string[] = [];
-    await fire(buildPreToolUseHook(POLICY, undefined, (level) => seen.push(level)), { level: "high" });
+    await fire(buildPreToolUseHook(POLICY, (level) => seen.push(level)), { level: "high" });
     expect(seen).toEqual(["high"]);
   });
 
   /* A model without effort support sends no field; that is unobserved, never agreement. */
   it("reports nothing when the input carries no effort", async () => {
     const seen: string[] = [];
-    await fire(buildPreToolUseHook(POLICY, undefined, (level) => seen.push(level)));
+    await fire(buildPreToolUseHook(POLICY, (level) => seen.push(level)));
     expect(seen).toEqual([]);
   });
 
   /* Every tool call carries it; the session's level is one fact, not one per call. */
   it("reports the first level only, across many tool calls", async () => {
     const seen: string[] = [];
-    const hooks = buildPreToolUseHook(POLICY, undefined, (level) => seen.push(level));
+    const hooks = buildPreToolUseHook(POLICY, (level) => seen.push(level));
     await fire(hooks, { level: "high" });
     await fire(hooks, { level: "high" });
     expect(seen).toEqual(["high"]);
@@ -55,7 +55,7 @@ describe("PRDR-237 the hook reports the effort the turn actually ran at", () => 
 
   /* Containment is unaffected: the observer must not change a decision. */
   it("still denies a protected write while observing", async () => {
-    const hooks = buildPreToolUseHook(POLICY, undefined, () => {});
+    const hooks = buildPreToolUseHook(POLICY, () => {});
     const callback = hooks.PreToolUse?.[0]?.hooks[0];
     const out = (await callback!(
       { hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: "/wt/AGENTS.md" }, tool_use_id: "x", effort: { level: "max" } } as never,

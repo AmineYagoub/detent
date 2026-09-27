@@ -40,7 +40,6 @@ export interface PlanCorpus {
   /** Slice ids that actually have a cache — C-2‴ plans one at a time. */
   readonly planned: readonly string[];
   readonly docs: readonly string[];
-  readonly spend: { readonly usd: number; readonly sessions: number };
 }
 
 function readJson(file: string): unknown {
@@ -75,41 +74,7 @@ export function readPlannedRoot(root: string): PlanCorpus {
     ? ((readJson(discoverFile) as { outputs?: { docs?: readonly string[] } }).outputs?.docs ?? [])
     : [];
 
-  return { root, specs, tickets, planned, docs, spend: ledgerSpend(root) };
-}
-
-/** A ledger row as a harness reads it — the columns a session's cost is made of (PRDR-204). */
-export interface LedgerRowLite {
-  readonly at: string;
-  readonly cost_estimate_usd: number;
-  readonly input_tokens: number;
-  readonly cache_read_input_tokens: number;
-  readonly cache_creation_input_tokens: number;
-}
-
-/** Every row of a root's ledger, oldest first, absent columns read as zero. */
-export function readLedger(root: string): readonly LedgerRowLite[] {
-  const file = path.join(stateDir(root), "ledger.jsonl");
-  if (!existsSync(file)) return [];
-  return readFileSync(file, "utf8")
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => {
-      const r = JSON.parse(line) as Partial<LedgerRowLite>;
-      return {
-        at: r.at ?? "",
-        cost_estimate_usd: r.cost_estimate_usd ?? 0,
-        input_tokens: r.input_tokens ?? 0,
-        cache_read_input_tokens: r.cache_read_input_tokens ?? 0,
-        cache_creation_input_tokens: r.cache_creation_input_tokens ?? 0,
-      };
-    });
-}
-
-/** What a root has spent, for a harness to report what its own sweep cost. */
-export function ledgerSpend(root: string): { readonly usd: number; readonly sessions: number } {
-  const rows = readLedger(root);
-  return { usd: rows.reduce((sum, r) => sum + r.cost_estimate_usd, 0), sessions: rows.length };
+  return { root, specs, tickets, planned, docs };
 }
 
 /** The tickets one slice owns, in cache order. */

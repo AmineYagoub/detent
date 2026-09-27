@@ -47,7 +47,7 @@ describe("T-023 F-1 split", () => {
   it("the committed and local sets are exactly F-1's", () => {
     expect(COMMITTED.map((e) => e.rel).sort()).toEqual(
       /* PRDR-281: AUDIT's claim briefs, committed as planning briefs are (C-2¹¹). */
-      [".gitignore", "agents", "bindings.json", "config.json", "plan", "research/audit", "research/failures", "research/planning"],
+      [".gitignore", "agents", "bindings.json", "config.json", "plan", "research/audit", "research/failures"],
     );
     /** T-120/T-121 added the two D-21 hook-policy files to the local set. */
     expect(LOCAL.map((e) => e.rel).sort()).toEqual(
@@ -129,7 +129,7 @@ describe("T-023 F-2 boundary lint", () => {
       ".detent/plan/t-1.json": "{}\n",
       ".detent/plan/approval.json": "{}\n",
       ".detent/agents/assignments.json": "{}\n",
-      ".detent/research/planning/q-1.json": "{}\n",
+      ".detent/research/audit/q-1.json": "{}\n",
     });
     expect(boundaryViolations(root)).toEqual([]);
   });
