@@ -292,50 +292,87 @@ export function requireEscalationBeforeUndecidable(
  * write one whose criteria do not actually prove the gates green.
  */
 /**
+ * The tags a finding about a plan carries, whoever found it: the review's
+ * four, and the three A-1″'s repairs and A-1⁷'s checks also give what code
+ * proves, `coverage`, `traceability` and `testability`. PRDR-103 added
+ * `dependency`, a criterion that needs behaviour another ticket builds where
+ * neither `depends_on` nor the surface says so, and C-2‴ (PRDR-117)
+ * `coherence`, tickets that contradict each other, duplicate each other or
+ * disagree about the interface between them. PRDR-101's `boundaries`, a
+ * ticket whose `non_goals` never says where it stops, left the set with the
+ * review's other tags that code or the drafter answers (C-4⁸, PRDR-294).
+ */
+export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "dependency", "coherence"] as const;
+export type PlanFindingTag = (typeof PLAN_FINDING_TAGS)[number];
+
+/**
+ * C-4⁸ (PRDR-294): what the review judges, four things a model can judge and
+ * code cannot (planning decision 2). `sizing`, whether each ticket fits one
+ * implement session (C-4′); `shape`, whether the slice runs end to end first;
+ * `dependency`, what depends on what where no contract says so; and
+ * `coherence`, tickets that contradict each other or the pack. Coverage,
+ * traceability and contracts are code's (A-1⁷).
+ */
+export const REVIEW_TAGS = ["sizing", "shape", "dependency", "coherence"] as const satisfies readonly PlanFindingTag[];
+
+/** C-4⁸ (PRDR-294): a blocker or a major buys one revision of the slice; a minor goes to the sessions that run its ticket. */
+export const REVIEW_SEVERITIES = ["blocker", "major", "minor"] as const;
+export type ReviewSeverity = (typeof REVIEW_SEVERITIES)[number];
+
+/** C-4⁸ (PRDR-294): one finding of a review, graded, on the ticket at fault, with the fix it asks for. */
+export const reviewFindingSchema = z.strictObject({
+  severity: z.enum(REVIEW_SEVERITIES),
+  tag: z.enum(REVIEW_TAGS),
+  /** The ticket at fault. A finding about two names the one whose change answers it, and the other in its words. */
+  ticket: nonEmptyString,
+  finding: nonEmptyString,
+  fix: nonEmptyString,
+});
+export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
+
+/**
  * PRDR-084 — the plan's own D-6. Every IMPLEMENTATION faces a fresh reviewer
  * judging it against criteria; the plan that determines all of them faced only
- * a human scrolling the presentation. This is that review's artifact: a closed
- * finding set over the five properties a plan can be wrong about, written by a
- * fresh planner-role session at the REVIEW_PLAN stage.
+ * a human scrolling the presentation. This is the review's artifact, written
+ * by a `plan_review` session for one slice (C-4⁸, PRDR-294): each finding
+ * graded, on the ticket at fault, with the fix it asks for. The verdict that
+ * counts is the one the severities give (`plan-review.ts`).
  */
-/**
- * PRDR-101: `boundaries` joins the closed set. A ticket that never says what
- * it is NOT for leaves the reviewer making its commonest judgement — is this
- * in scope — with nothing to judge against. Distinct from `sizing`: sizing is
- * a ticket too large to finish, boundaries a ticket that never says where it
- * stops.
- */
-/**
- * PRDR-103 adds `dependency`: a criterion that needs behaviour another ticket
- * builds, where neither `depends_on` nor the surface says so — distinct from
- * `shape` (skeleton ordering) and `sizing` (too much work). A finding names
- * both tickets, because the remedy is an edge or a surface and both need the pair.
- */
-/**
- * C-2‴ (PRDR-117) adds `coherence`: two tickets — usually in different slices —
- * that contradict each other, duplicate each other, or disagree about the
- * interface between them. A slice's review judges it against the tickets of
- * the slices it builds on. The whole-plan review that judged it across every
- * slice is gone (A-1⁷, PRDR-293): a name two slices both provide is code's.
- */
-export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency", "coherence"] as const;
-
 export const planReviewSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   verdict: z.enum(["approve", "changes"]),
-  findings: z
-    .array(
-      z.strictObject({
-        tag: z.enum(PLAN_FINDING_TAGS),
-        finding: nonEmptyString,
-        /** The ticket at fault, where one is. Absent for plan-wide findings. */
-        ticket: nonEmptyString.optional(),
-      }),
-    )
-    .default([]),
+  findings: z.array(reviewFindingSchema).default([]),
 });
 
 export type PlanReview = z.infer<typeof planReviewSchema>;
+
+/**
+ * A finding about a plan as PLAN records it in `review_findings`, which PRESENT
+ * counts and the sessions that run its ticket read (PRDR-271): the review's
+ * minors, with their severity and fix, and the repairs code made to a draft
+ * (A-1″), which carry neither.
+ */
+export interface PlanFinding {
+  readonly tag: PlanFindingTag;
+  readonly finding: string;
+  /** The ticket at fault, where one is. */
+  readonly ticket?: string;
+  readonly severity?: ReviewSeverity;
+  readonly fix?: string;
+}
+
+/**
+ * C-4⁸ (PRDR-294): a blocker or major a slice's review found, which bought
+ * the slice's one revision. No review reads the revision, so whether it
+ * answered each is not known, and PRESENT shows each as a risk.
+ */
+export type PlanRisk = ReviewFinding & { readonly slice: string };
+
+/** C-4⁸ (PRDR-294): a slice no review read, and why. */
+export interface UnreviewedSlice {
+  readonly slice: string;
+  readonly reason: string;
+}
 
 /** A-1⁷ (PRDR-293): the five things code checks in a plan. */
 export type CheckFamily = "coverage" | "contracts" | "milestones" | "gates" | "graph";
@@ -347,7 +384,7 @@ export type CheckFamily = "coverage" | "contracts" | "milestones" | "gates" | "g
  * provides carries `unowned`, since the earliest slice that consumes it is the
  * one sent a redraft for it across the plan.
  */
-export type CheckFailure = PlanReview["findings"][number] & {
+export type CheckFailure = PlanFinding & {
   readonly check: CheckFamily;
   readonly slice: string;
   readonly key: string;
@@ -474,53 +511,6 @@ export const planDraftSchema = z.strictObject({
 
 export type PlanDraft = z.infer<typeof planDraftSchema>;
 export type PlanDraftTicket = PlanDraft["tickets"][number];
-
-/**
- * D-24′ (PRDR-209), PRDR-269: why a finding is still in front of the human,
- * named for the evidence behind it. `after-revision` was handed to a revision
- * and came back — `revisionOutcome`'s `survived`, computed by the same
- * `findingKey`, and the strongest thing a held finding can be. `introduced`
- * recurred across reads of the REVISED draft but was not something a revision
- * failed to fix; it did not exist when one was paid. `seen-once` is C-4⁗″'s
- * `seenOnce` — one read of three, never reproduced, the kind the null says is
- * mostly noise. Absent means an older cache or a finding the pipeline itself
- * added (an unreviewed slice); it renders plain.
- *
- * PRDR-269: the first two were ONE population until the review that produces
- * them was sampled. It was a single unreplicated read, so everything it
- * returned was held as `after-revision` while `revisionOutcome` reported
- * survived = 0 on every slice measured live — this doc-block named a bucket
- * the code never computed for it. A value is never retired from this union:
- * cached artifacts carry the old marking and must keep parsing.
- */
-export type HeldKind = "seen-once" | "after-revision" | "introduced";
-/**
- * PRDR-271: `seen` is how many of the k reads returned this finding.
- *
- * Not part of `planReviewSchema`, which is strict and describes what the MODEL
- * returns; a reviewer does not report its own reproducibility. `sampleReviewPlan`
- * computes it across the draws and it is attached here, beside `held`, for the
- * same reason `held` is: it is what the pipeline concluded about a finding
- * rather than what the finding says. Optional, because a cached artifact
- * written before this and an unsampled single-draw review both lack it.
- */
-/**
- * PRDR-272 (D-32): `seen` is the count from the panel `held` describes, and the
- * two panels are also carried separately.
- *
- * On PRDR-271 `seen` came from a merge of both panels in which the
- * post-revision one won every shared key, while `held` came from the union of
- * their sub-threshold reads — so the integer could describe the revision while
- * the label described the draft it replaced. `seen_before` and `seen_after` are
- * absent, not zero, when a panel never saw the finding: absent-from-the-panel
- * and seen-by-no-read-of-it are different facts and only the first occurs.
- */
-export type HeldFinding = PlanReview["findings"][number] & {
-  readonly held?: HeldKind;
-  readonly seen?: number;
-  readonly seen_before?: number;
-  readonly seen_after?: number;
-};
 
 /*
  * ---------------------------------------------------------------------------

@@ -3,7 +3,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readPlannedRoot, runDirectly, sliceTickets } from "../../scripts/plan-corpus.js";
 import { coverageFindings } from "../../scripts/coverage-report.js";
-import { nullRates } from "../../scripts/null-review.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { removeTree, tmpTree } from "../helpers.js";
 
@@ -140,22 +139,11 @@ describe("PRDR-202 the harnesses read a planned root the way the schema does", (
     }
   });
 
-  it("states both rate denominators rather than assuming them", () => {
-    expect(nullRates({ resolved: 3, survived: 1, introduced: 6 }, 12, 24)).toEqual({
-      c: 0.25,
-      g: 0.25,
-      introPerResolved: 2,
-    });
-    const empty = nullRates({ resolved: 0, survived: 0, introduced: 0 }, 0, 0);
-    expect(Number.isNaN(empty.c), "no findings before means no rate, not zero").toBe(true);
-    expect(Number.isNaN(empty.g)).toBe(true);
-  });
-
   /**
    * The guard that stopped a real accident. An injected import error failed to
-   * crash `null-review.ts` — the unused symbol was stripped — and the harness
-   * went on to start a live sweep against a planned root. A test importing it
-   * for typechecking must never launch a session.
+   * crash a harness — the unused symbol was stripped — and it went on to start
+   * a live sweep against a planned root. A test importing one for typechecking
+   * must never launch a session.
    */
   it("a harness imported rather than run does not execute its CLI", () => {
     expect(runDirectly("file:///definitely/not/the/entry/point.ts")).toBe(false);

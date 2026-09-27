@@ -9,7 +9,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { CONFORMING_PACK, commitRecord, packRepo } from "./pack-fixture.js";
-import { APPROVE_PLAN, BUDGETS, PROMPTS } from "./plan-fixture.js";
+import { APPROVE_PLAN, BUDGETS, PROMPTS, planning } from "./plan-fixture.js";
 import { covering, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
 
 /**
@@ -107,7 +107,7 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
   const drafts = new Map<string, number>();
   const reviews = new Map<string, number>();
   const backend = new MockBackend({
-    planner: (spec) => {
+    ...planning((spec) => {
       const given = inputsOf(spec);
       inputs.push(given);
       specs.push(spec);
@@ -129,15 +129,15 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
         artifact = (script.draft ?? ((_take: number, i: Json) => draft(i)))(drafts.get(slice) ?? 1, given);
       } else if (out === "plan-review.json") {
         log.push("REVIEW");
-        const scope = given["scope"] === "slice" ? sliceOf(given) : String(given["scope"]);
-        reviews.set(scope, (reviews.get(scope) ?? 0) + 1);
-        artifact = (script.review ?? ((): Json => APPROVE_PLAN))(reviews.get(scope) ?? 1, given);
+        const slice = sliceOf(given);
+        reviews.set(slice, (reviews.get(slice) ?? 0) + 1);
+        artifact = (script.review ?? ((): Json => APPROVE_PLAN))(reviews.get(slice) ?? 1, given);
       } else {
         throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
       }
       writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
       return okResult();
-    },
+    }),
   });
   const init = async (opts: InitOptions = {}, deps: Partial<PipelineDeps> = {}): Promise<InitResult> =>
     await runInit(

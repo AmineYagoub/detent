@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
 import { packDocuments } from "../../src/init/pack.js";
 import { parsePack } from "../../src/init/pack-parse.js";
-import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { CONFORMING_PACK, packRepo } from "./pack-fixture.js";
 import { PROMPTS } from "./plan-fixture.js";
@@ -135,8 +134,7 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
       { milestone: "M1", title: "Selling", groups: [{ code: "CHK", area: "Checkout", requirement_ids: ["CHK-F-001", "CHK-F-002"], criteria: 2 }] },
     ]);
     expect(sliced(s), "a cut of the checkout alone is whole").toEqual(["SLICE"]);
-    const k = String(1 + PLAN_REVIEW_SAMPLES);
-    expect(s.notes.join("\n")).toContain(`1 slice takes at least ${k} planner sessions, ${k}N + ${k}R + C:`);
+    expect(s.notes.join("\n")).toContain("1 slice takes at least 2 planning sessions, 2N + R + C:");
   });
 
   it("cuts the documents as they are where those planning reads hold no live requirement of the pack (C-2‴)", async () => {
@@ -160,12 +158,11 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
   it("announces the session formula for the slice count, and estimates no ticket count", async () => {
     const s = seeded();
     await s.init();
-    const k = 1 + PLAN_REVIEW_SAMPLES;
     const said = s.notes.join("\n");
-    /* PRDR-293: no whole-plan review is counted, since none runs; the redrafts the checks send are. */
+    /* PRDR-293: no whole-plan review is counted, since none runs; the redrafts the checks send are. PRDR-294: one read a slice. */
     expect(said).toContain(
-      `3 slices take at least ${String(3 * k)} planner sessions, ${String(k)}N + ${String(k)}R + C: a draft and ${String(PLAN_REVIEW_SAMPLES)} review reads per slice, ` +
-        `${String(k)} more for each of the R revision rounds a slice review asks for, and one for each of the C redrafts the plan's checks send (A-1⁷).`,
+      "3 slices take at least 6 planning sessions, 2N + R + C: a draft and one review read per slice, one more for each of the R " +
+        "slices whose review finds a blocker or major, and one for each of the C redrafts the plan's checks send (A-1⁷).",
     );
     expect(said).not.toContain("whole-plan");
     expect(said).not.toMatch(/~\d+ ticket/u);

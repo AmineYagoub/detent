@@ -8,7 +8,6 @@ import { DECISION_LOG_PATH, type Pack } from "../schemas/pack.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { DecidedStack } from "./decide-log.js";
 import type { PhaseOutcome } from "./machine.js";
-import { PLAN_REVIEW_SAMPLES } from "./plan-review.js";
 import { previousAttemptInput, refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
 import {
   additionsSkeleton,
@@ -116,21 +115,19 @@ export async function sliceStage(deps: SliceDeps): Promise<PhaseOutcome> {
  * N-5′: what PLAN will spend, as the formula over the slice count, since how
  * many revisions and redrafts it buys is not known before it runs. The slicer
  * estimates no ticket count (C-2⁸): its estimates were off by 58%. A slice is
- * a draft and PLAN_REVIEW_SAMPLES review reads, and each revision round its
- * review asks for is a redraft and the reads again. Each redraft A-1⁷'s checks
- * send is one session more: one for a slice's draft or revision that fails
- * them, and one each time the checks across the plan send a slice failures it
- * was not sent before. No session reviews the whole plan (PRDR-293). SLICE's
- * own session has run and is not counted: once C-4⁶ gives each slice one
- * review read, this is N-5′'s `1 + 2N + R + C` less it.
+ * a draft and one review read (C-4⁸, PRDR-294), and one more session where the
+ * read finds a blocker or major, which buys one revision that nothing reads
+ * again. Each redraft A-1⁷'s checks send is one session more: one for a
+ * slice's draft or revision that fails them, and one each time the checks
+ * across the plan send a slice failures it was not sent before. A slice whose
+ * draft still fails them is not read. SLICE's own session has run and is not
+ * counted, so this is N-5′'s `1 + 2N + R + C` less it.
  */
 export function planningSessions(n: number): string {
-  const k = String(1 + PLAN_REVIEW_SAMPLES);
   const slices = n === 1 ? "1 slice takes" : `${String(n)} slices take`;
   const formula =
-    `${slices} at least ${String(n * (1 + PLAN_REVIEW_SAMPLES))} planner sessions, ${k}N + ${k}R + C: a draft and ` +
-    `${String(PLAN_REVIEW_SAMPLES)} review reads per slice, ${k} more for each of the R revision rounds a slice review asks for, ` +
-    "and one for each of the C redrafts the plan's checks send (A-1⁷).";
+    `${slices} at least ${String(2 * n)} planning sessions, 2N + R + C: a draft and one review read per slice, one more for ` +
+    "each of the R slices whose review finds a blocker or major, and one for each of the C redrafts the plan's checks send (A-1⁷).";
   return `PLAN will now run to the end of the product: ${formula} It does not stop until the plan exists (C-2‴).`;
 }
 

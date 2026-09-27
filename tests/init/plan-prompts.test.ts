@@ -8,7 +8,7 @@ import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { MockBackend } from "../../src/sessions/mock.js";
 import { buildOptions, ClaudeCodeBackend } from "../../src/sessions/sdk.js";
 import { CONFORMING_PACK } from "./pack-fixture.js";
-import { PROMPTS } from "./plan-fixture.js";
+import { PROMPTS, planning } from "./plan-fixture.js";
 import { clear, planned, seeded, sliced, type Json, type Seeded } from "./seed-fixture.js";
 
 /**
@@ -77,14 +77,14 @@ describe("PRDR-292: one prompt per planning job (C-4⁵)", () => {
   it("a planner session launched for a stage no job has is refused, and is not handed another job's prompt", async () => {
     const s = seeded();
     const backend = new MockBackend({
-      planner: () => {
+      ...planning(() => {
         throw new Error("a planner session with no job was run");
-      },
+      }),
     });
     const artifactOut = path.join(s.root, ".detent", "state", "plan-draft.json");
     for (const inputs of [{}, { stage: "ANALYZE" }]) {
       const launch = withInitJournal(s.root, async (journal) => await launchInitSession({ root: s.root, backend, prompts: PROMPTS, spendCeiling: 100, journal }, { role: "planner", inputs, artifactOut }));
-      await expect(launch, JSON.stringify(inputs)).rejects.toThrow(/only SLICE, PLAN and REVIEW_PLAN have a prompt/u);
+      await expect(launch, JSON.stringify(inputs)).rejects.toThrow(/only SLICE and PLAN have a prompt \(C-4⁵\); the review runs on `plan_review`/u);
     }
   });
 

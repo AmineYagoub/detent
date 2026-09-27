@@ -103,9 +103,13 @@ describe("PRDR-293 a failing slice is redrafted once, with its failures and its 
 
   it("a revision that fails a check is redrafted once too, from the revision", async () => {
     const s = seeded(undefined, {
-      review: (take, inputs) =>
-        sliceOfInputs(inputs) === "s01" && take <= 3
-          ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", finding: "t-s01-001 is two sessions' work", ticket: "t-s01-001" }] }
+      review: (_take, inputs) =>
+        sliceOfInputs(inputs) === "s01"
+          ? {
+              schema_version: SCHEMA_VERSION,
+              verdict: "changes",
+              findings: [{ severity: "major", tag: "sizing", finding: "t-s01-001 is two sessions' work", ticket: "t-s01-001", fix: "split t-s01-001 in two" }],
+            }
           : APPROVE_PLAN,
       draft: (take, inputs) => (sliceOfInputs(inputs) === "s01" && take === 2 ? changed(inputs, { consumes: consumes("NOPE") }) : draft(inputs)),
     });
@@ -392,7 +396,9 @@ describe("PRDR-293 the whole-plan review is gone", () => {
     await s.init();
     const reviews = s.inputs.filter((i) => i["stage"] === "REVIEW_PLAN");
     expect(reviews.length).toBeGreaterThan(0);
-    expect(reviews.every((i) => i["scope"] === "slice")).toBe(true);
+    /* C-4⁸ (PRDR-294): each read is one slice's, handed that slice and no other, and each slice is read once. */
+    const slices = [...new Set(s.inputs.filter((i) => i["stage"] === "PLAN").map(sliceOfInputs))].sort();
+    expect(reviews.map(sliceOfInputs).sort()).toEqual(slices);
     expect(s.inputs.some((i) => "already_found" in i)).toBe(false);
     expect(JSON.stringify(s.inputs)).not.toContain("treat it as handled");
     expect(sentTo(plans(s, "s02")[1]).map((f) => f.finding).join("\n"), "what code proved went to a redraft instead").toContain("`NOPE`");

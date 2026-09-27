@@ -166,6 +166,8 @@ describe("PRDR-197 effort_routing is validated on both axes", () => {
       audit: "max",
       spec_write: "max",
       spec_review: "max",
+      /* PRDR-294: the plan's review sits where the planner does (planning decision 9). */
+      plan_review: "max",
     });
   });
 });
@@ -188,7 +190,7 @@ describe("PRDR-263 init writes the effort routing", () => {
     return cfg["effort_routing"] as Record<string, string>;
   };
 
-  it("routes every role — the planner, audit, spec_write and spec_review at max, the other seven at xhigh", () => {
+  it("routes every role — the planner, audit, spec_write, spec_review and plan_review at max, the other seven at xhigh", () => {
     const routing = writtenRouting();
     expect(
       Object.keys(routing).sort(),
@@ -199,8 +201,9 @@ describe("PRDR-263 init writes the effort routing", () => {
     expect(routing["audit"], "audit judges the documents every later role builds on (S-5⁵)").toBe("max");
     expect(routing["spec_write"], "spec_write decides what the plan follows where the documents leave it open (S-5⁵)").toBe("max");
     expect(routing["spec_review"], "spec_review decides what in the pack is wrong before anything plans from it (S-5⁵)").toBe("max");
+    expect(routing["plan_review"], "plan_review judges the drafts on the planner's seat (planning decision 9)").toBe("max");
     for (const role of ROLE_IDS) {
-      if (role === "planner" || role === "audit" || role === "spec_write" || role === "spec_review") continue;
+      if (role === "planner" || role === "audit" || role === "spec_write" || role === "spec_review" || role === "plan_review") continue;
       expect(routing[role], `${role} is routed to xhigh`).toBe("xhigh");
     }
   });

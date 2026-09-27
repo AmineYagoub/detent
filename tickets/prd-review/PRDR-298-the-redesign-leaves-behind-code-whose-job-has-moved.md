@@ -70,3 +70,15 @@ nothing to feed it:
 - `questions.ts` keeps `mergeSimilar`, and `similarQuestions`, which DECIDE uses.
 
 Deleting what planning no longer feeds is this ticket's second criterion.
+
+## From PRDR-294
+
+`src/init/launch-batch.ts` is deleted, with `init`'s batch plumbing: the review's draws were its one
+caller, and VALIDATE's reviewers launch one after another. So the fourth criterion's
+`launch-batch.ts` wording went with the file. What it leaves has no producer:
+- `SessionSpec.onFirstResponse` and `artifactTold` in `src/sessions/backend.ts`; the
+  `includePartialMessages` switch, the first-`message_start` signal and the told-path redirect in
+  `src/sessions/sdk.ts`; the redirect's alias in `src/sessions/guard.ts`; and the mock's call in
+  `src/sessions/mock.ts` (S-6′, C-4⁗⁵). No `init` or `run` session sets either field.
+- `scripts/plan-corpus.ts` keeps `readLedger` and `ledgerSpend` only to feed `readPlannedRoot`,
+  now that `scripts/null-review.ts` is deleted.

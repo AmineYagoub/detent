@@ -1,5 +1,4 @@
 import { writeFileSync } from "node:fs";
-import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { LONE_CANDIDATE } from "./plan-fixture.js";
@@ -97,7 +96,7 @@ export function scriptedPlanner(script: Script, log: string[], seen: Record<stri
       log.push(`PLAN:${sliceOf(inputs)}`);
       artifact = script.draft(inputs);
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
-      log.push(`REVIEW:${String(inputs["scope"])}${inputs["scope"] === "slice" ? `:${sliceOf(inputs)}` : ""}`);
+      log.push(`REVIEW:slice:${sliceOf(inputs)}`);
       artifact = script.review(inputs);
     } else {
       throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
@@ -144,11 +143,8 @@ export const twoSliceDraft = (inputs: Record<string, unknown>): object =>
 export const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
 /**
- * C-4⁗″ (PRDR-200): a slice's review is DRAWN `PLAN_REVIEW_SAMPLES` times.
- *
- * These sequences are about ORDER and REUSE — which slices re-plan when a
- * document moves — not about how many times the reviewer is asked. Expanding
- * the expectation keeps the assertion exact rather than collapsing repeats,
- * which would hide the sampling stopping.
+ * C-4⁸ (PRDR-294): a slice's review is read once. These sequences are about
+ * ORDER and REUSE — which slices re-plan when a document moves — and a slice's
+ * launches are spread from here, so how many reads a slice gets is stated once.
  */
-export const R = (slice: string): string[] => Array.from({ length: PLAN_REVIEW_SAMPLES }, () => `REVIEW:slice:${slice}`);
+export const R = (slice: string): string[] => [`REVIEW:slice:${slice}`];

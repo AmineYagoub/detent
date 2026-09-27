@@ -160,6 +160,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   schema event) and no new X-1 key.
   *Amended by C-4⁶ and S-1‴ (PRDR-278): each slice gets one review read, by its own `plan_review`
   role.*
+  *Amended by C-4⁸ (PRDR-294): built.*
 
 - **X-1′ (3.0.3, PRDR-083).** `run_spend_usd` carries a default (100) like every
   other ceiling in the table, and a first `init` without `--spend-cap-usd` writes it
@@ -241,6 +242,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   either needs the pair. The planner is told the same at PLAN. X-4′ recovers a missing
   edge at run time; this is the plan saying it first.
   *Amended by C-4⁶ (PRDR-278): `dependency` is one of the review's four tags.*
+  *Amended by C-4⁸ (PRDR-294): built. A finding names the ticket whose change answers it, and the
+  other in its words.*
 
 - **X-4″ (3.1.1, PRDR-102).** A session that judges its ticket larger than one session
   commits what is finished, writes `oversized.json` — a note and the split it proposes, one
@@ -280,6 +283,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   (A-5′); only after that does the draft stand unreviewed, and the note names the reason.
   Found on ksar-cloud: six real findings — three tickets oversized, two missing edges, one
   untestable criterion — discarded over one word, and the draft written unreviewed.
+  *Amended by C-4⁸ (PRDR-294): code grades the verdict by the findings' severities, and a word that
+  disagrees with them is noted.*
 
 - **C-2‴ (3.1.1, PRDR-117).** A product larger than one planning pass is planned by Detent
   itself, to the end, without stopping. A **SLICE** phase between DETERMINE_VERIFICATION and
@@ -316,6 +321,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   is shown names what each ticket provides.*
   *Amended by A-1⁸ (PRDR-293): the whole-plan review is deleted; code's checks run across the plan
   after every slice.*
+  *Amended by C-4⁸ (PRDR-294): a slice's draft is read once, by `plan_review`, and revised once
+  where the read finds a blocker or major.*
 
 - **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
   ask for it. Detent carries a **production baseline** — fifteen items across six areas
@@ -658,6 +665,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   *Amended by C-4⁷ (PRDR-292): the event gains PLAN's draft and caches and the ticket's
   `criterion_ids`.*
   *Amended by V-5″ (PRDR-295): the event carries `.detent/bindings.json` to packages.*
+  *Amended by C-4⁸ (PRDR-294): the event routes `plan_review`.*
 
 - **S-4″ (3.1.1, PRDR-138).** A stream that ends with no result message is a CRASH on the kernel
   path, as it already is on the init path (S-4′). It parsed as `ok: true` with
@@ -1000,6 +1008,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   *Amended by C-2¹⁵ (PRDR-291): built. On a pack a slice's key hashes its requirements' records,
   and without a parse the documents it plans from, as here; neither holds the slice's own words.*
   *Amended by C-4⁷ (PRDR-292): a slice's key covers PLAN's prompt and the review's, not SLICE's.*
+  *Amended by C-4⁸ (PRDR-294): the review reads what the key reads, so a cached verdict goes stale
+  when its draft does.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1054,6 +1064,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   were never wrong; what they isolate is smaller than it was read to be, and from here each one
   is reported beside its own null.
   *Amended by C-4⁶ (PRDR-278): the sampling is deleted; each slice gets one review read.*
+  *Amended by C-4⁸ (PRDR-294): built.*
 
 - **D-28′ (3.1.1, PRDR-203).** The overshoot bound is one in-flight **batch**, not one in-flight
   session. D-25 evaluates the gate at launch and never mid-flight, and D-28 states the
@@ -1074,6 +1085,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   hold before it could be.
   *Amended by C-4⁶ (PRDR-278): the draws this bounds are deleted; the rule stands for any later
   batch, bounded by that batch's own size.*
+  *Amended by C-4⁸ (PRDR-294): built. No launch is batched: VALIDATE's reviewers run one after
+  another (C-2¹⁴).*
 
 - **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
   independent by construction — that independence is what the threshold rests on — and they ran
@@ -1094,6 +1107,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the redrafts are still sequential; there is no knob.
   *Amended by C-4⁶ (PRDR-278): the draws are deleted with the sampling.*
   *Amended by A-1⁸ (PRDR-293): the whole-plan review is deleted.*
+  *Amended by C-4⁸ (PRDR-294): built.*
 
 - **S-6′ (3.1.1, PRDR-205).** The sessions of one batch are handed **byte-identical first
   turns**, and the file each writes is still its own. S-6's stable prefix was never the whole
@@ -1109,6 +1123,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   C-4⁗‴'s wait on the first answer, the two warm draws created **10.6k and 24.1k** against the
   cold one's 46.4k — the stagger's test deferred from C-4⁗‴, passed. What a session is told and
   where its file goes are two facts now, and the prompt carries only the one the cache should.
+  *Amended by C-4⁸ (PRDR-294): no session is told another's path, since no launch is batched. The
+  backend's support has no caller, and PRDR-298 deletes it.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -1122,6 +1138,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   read: turns are completed turns, never events. Measured on a never-cached slice, launched
   together: the first began its answer after **2 s**, and the two warm draws created 9.4k and
   12.5k against the cold one's 54k. The wait no longer depends on how long the first turn is.
+  *Amended by C-4⁸ (PRDR-294): no launch waits on another's first response, since no launch is
+  batched. The backend's streaming signal has no caller, and PRDR-298 deletes it.*
 
 - **V-1⁗ (3.1.1, PRDR-211).** Before a bound gate runs, the adapter **installs what the work
   directory's manifest declares** — `npm install` for a `package.json` whose install mark is
@@ -1206,6 +1224,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   the same summary, since the wall is in the file.
   *Amended by C-7″ (PRDR-278): the held-finding labels and the advice file are deleted; PRESENT
   shows what survives a revision as risks.*
+  *Amended by C-4⁸ (PRDR-294): built. PRESENT lists each blocker and major a slice's read found as
+  a risk, since no review reads the revision.*
 
 - **C-3‴ (3.1.1, PRDR-207; renumbered from C-3″ by PRDR-287).** A question is asked **once**. C-3′ batches every stage's
   questions at PRESENT and dedups them on exact text; nothing told a later stage what an
@@ -1951,6 +1971,8 @@ the code does what the rules it amends describe, and each of those rules points 
   draft.*
   *Amended by A-1⁸ (PRDR-293): the announcement counts no whole-plan review. N slices take at
   least `4N`, `4N + 4R + C`, where C is the redrafts the checks send.*
+  *Amended by C-4⁸ (PRDR-294): N slices take at least `2N`, `2N + R + C`, where R is the slices
+  whose read finds a blocker or major.*
 
 - **C-4⁵ (3.1.1, PRDR-278).** PLAN drafts from the pack's records, not from prose, and asks
   nothing.
@@ -2054,6 +2076,8 @@ the code does what the rules it amends describe, and each of those rules points 
     still approved after the migration.
   *Amended by A-1⁸ (PRDR-293): the whole-plan review's cache takes no step, since nothing reads
   it, and the catalogue-name finding is a failure a redraft is sent.*
+  *Amended by C-4⁸ (PRDR-294): the review runs on `plan_review`, with the planner's tools, and
+  reads a slice's records rather than the planning documents.*
 
 
 - **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
@@ -2150,6 +2174,8 @@ the code does what the rules it amends describe, and each of those rules points 
     `state/whole-plan.json`, and a state holding it keeps it as it was. `state/plan-checks.json`
     is new. A presentation carrying `ungated` was written only by a build of the unreleased
     3.1.1 line; it does not parse, and `run` sends the operator to `detent init`.
+  *Amended by C-4⁸ (PRDR-294): the review reads a draft once its checks pass. A revision that still
+  fails after its redraft is discarded, and the draft the review read stands.*
 
 - **C-4⁶ (3.1.1, PRDR-278).** Each slice gets one review read, by its own role, limited to judgement
   (planning decision 2). C-4″'s REVIEW_PLAN grew into three reads, a revision and three more reads
@@ -2175,6 +2201,56 @@ the code does what the rules it amends describe, and each of those rules points 
     batch's own size; the review after the revision (PRDR-269); the churn and null lines; the
     held-finding labels and the advice file (D-24′). A slice costs at most three sessions, the
     draft, the review and one revision, plus A-1⁷'s targeted redrafts.
+  *Amended by C-4⁸ (PRDR-294): built.*
+
+- **C-4⁸ (3.1.1, PRDR-294).** C-4⁶ is built, in `src/init/plan-review.ts`,
+  `src/init/plan-revision.ts`, `src/init/plan-slices.ts`, `src/init/present-review.ts` and
+  `prompts/plan_review.md`. This settles what C-4⁶ left to its ticket, and amends C-4″'s review,
+  C-4‴'s and C-4⁗'s findings and verdict, C-2‴'s slice, A-1⁸'s redraft, C-2¹⁵'s announcement,
+  C-4⁷'s prompts, C-7″'s risks, D-24′, D-28′, C-4⁗″, C-4⁗‴, C-4⁗⁵, S-6′, S-1‴'s migration,
+  F-3″'s event and N-5′'s formula.
+  - **The role.** `plan_review` has its own prompt and routes to `claude-opus-5` at `max`
+    (S-5⁵). Its session is otherwise the planner's: Read, Grep, Glob and its artifact's write, no
+    reach into the root's `archive/`, and no stop gate, since it writes no code. The `planner`
+    runs SLICE and PLAN alone, and a planner session launched for any other stage is refused.
+    F-3″'s event routes `plan_review` in an existing config by the config's planner, model and
+    effort, where it routes one, since the review ran as the planner until now, and by the
+    default where it does not.
+  - **One read, after the checks.** A slice's draft is read once, when A-1⁷'s checks pass on it
+    or on the one redraft they send. A draft that still fails is not read: the slice is
+    presented as not reviewed, with why, and its failures hold approval as before (A-1⁸). The
+    read is handed the tickets, the slice, its records on a pack or its documents without one,
+    the index of the earlier slices, the session budget and X-4″'s `sizing_evidence`. It is
+    handed nothing code proved and no spec defect, which the operator reads at PRESENT. It reads
+    what the slice's key reads, so a cached verdict goes stale when its draft does.
+  - **Findings.** Each has a severity, blocker, major or minor, one of the four tags, the ticket
+    whose change answers it, and its fix; an artifact without them is refused, and relaunched
+    once with the validator's words (C-4⁗). Code grades the verdict: `approve` where nothing is
+    blocker or major, whatever word the review wrote, and a word that disagrees with the grades
+    is noted. An artifact unusable twice leaves the slice not reviewed.
+  - **One revision.** A blocker or major buys one revision, handed the draft the review read and
+    the blockers and majors alone. The checks run on the revision and may send it one redraft; a
+    revision that still fails is discarded, and the draft the review read stands. No review
+    reads the revision, so each blocker and major reaches PRESENT as a risk, with its slice, its
+    ticket and its fix, blockers first. A minor is recorded in PLAN's `review_findings` beside
+    A-1″'s repairs, and reaches the sessions that run its ticket by PRDR-271's path, gravest
+    first. PRESENT counts the minors and lists the repairs, each a decision code made for the
+    operator.
+  - **Cost.** A slice takes at most three sessions, the draft, the read and the revision, plus
+    the redrafts A-1⁷'s checks send and a relaunch of an unusable artifact. SLICE announces
+    `2N + R + C`.
+  - **Deleted**, with their tests: the sampling (`plan-sample.ts`) and the review after the
+    revision; the revision rounds and their seam; the churn and null lines (`plan-signal.ts`,
+    `plan-notes.ts`) and the null harness (`scripts/null-review.ts`); the held-finding labels;
+    the advice file (`present-advice.ts`); and the launch batch (`launch-batch.ts`), which only
+    the draws used, since VALIDATE's reviewers run one after another (C-2¹⁴). The backend still
+    carries S-6′'s told path and C-4⁗⁵'s first-response signal, with no caller; PRDR-298
+    deletes them. The tag set loses PRDR-101's `boundaries`: where a ticket stops is the
+    drafter's to judge, as are its testability and its traceability.
+  - **Migration.** F-3″'s event routes `plan_review`, as above. A slice's cache holds its read's
+    graded findings and needs no step: its key folds in the review's prompt, which changed, so a
+    cache written before misses, and the slice is planned again. PLAN's checkpoint keys on the
+    same prompt, so PLAN runs again too.
 
 - **C-7″ (3.1.1, PRDR-278).** PRESENT shows what the operator decides on, and approval is refused
   while the plan is proved wrong. ksar-cloud's PRESENT printed 457 held findings, a revision
@@ -2205,6 +2281,9 @@ the code does what the rules it amends describe, and each of those rules points 
   tickets as they stand.*
   *Amended by V-5″ (PRDR-295): a path no gate can fail holds approval on both exits, and PRESENT
   lists each with its ticket and package.*
+  *Amended by C-4⁸ (PRDR-294): the review's risks are each blocker and major a slice's read found,
+  with its fix, since no review reads the revision. PRESENT names the slices no review read,
+  lists the repairs code made and counts the minors.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2314,6 +2393,9 @@ the code does what the rules it amends describe, and each of those rules points 
   Seatbelt; elsewhere simulation is off, and each round says so.*
   *Amended by C-4⁷ (PRDR-292): the `planner` reads one prompt per job, and its tools are Read,
   Grep, Glob and its artifact's write.*
+  *Amended by C-4⁸ (PRDR-294): `plan_review` is built, with the planner's tools, and is not
+  stop-gated. The migration routes it by an existing config's planner where the config routes
+  one, and by the default where it does not.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2445,6 +2527,8 @@ the code does what the rules it amends describe, and each of those rules points 
   `2N + R + C`.*
   *Amended by A-1⁸ (PRDR-293): A-1⁷ is built. Until C-4⁶ is, SLICE announces at least `4N`
   sessions, `4N + 4R + C`.*
+  *Amended by C-4⁸ (PRDR-294): C-4⁶ is built, and SLICE announces at least `2N` sessions,
+  `2N + R + C`.*
 
 - **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
   specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes

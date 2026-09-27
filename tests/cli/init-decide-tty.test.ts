@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readDecisionLog } from "../../src/init/decide-log.js";
 import { MockBackend } from "../../src/sessions/mock.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { LONE_CANDIDATE, repo } from "../init/plan-fixture.js";
+import { LONE_CANDIDATE, repo, planning } from "../init/plan-fixture.js";
 import { DOCS, SORTED, auditFinds, decide } from "../init/decide-fixture.js";
 import { TWO_SLICES, scriptedPlanner, twoSliceDraft } from "../init/slicing-fixture.js";
 
@@ -52,7 +52,7 @@ async function init(onTerminal: boolean, answers: string[]): Promise<string> {
   const backend = new MockBackend({
     audit: auditFinds(),
     spec_write: decide((_, i) => SORTED(i)).stage,
-    planner: scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, []),
+    ...planning(scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [])),
   });
   const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
   const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);

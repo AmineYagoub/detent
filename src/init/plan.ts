@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { planDraftSchema, type CheckFailure, type PlanDraftTicket, type PlanReview, type SliceSpec, type SpecDefect } from "../schemas/init.js";
+import { planDraftSchema, type CheckFailure, type PlanDraftTicket, type ReviewFinding, type SliceSpec, type SpecDefect } from "../schemas/init.js";
 import { planSlices } from "./plan-slices.js";
 import { checkPlan, failureLine, type PlanContext } from "./plan-checks.js";
 import type { Gates } from "./plan-check-gates.js";
@@ -15,7 +15,6 @@ import { ROOT_PACKAGE, gateLabel } from "../adapter/packages.js";
 import { allTickets, readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { withOneRelaunch } from "./retry.js";
-import type { LaunchOptions } from "./launch-batch.js";
 import type { Pack } from "../schemas/pack.js";
 import { wholeProduct } from "./slice.js";
 import { draftInputs, type PreviousDraft } from "./plan-inputs.js";
@@ -94,23 +93,10 @@ export interface PlanDeps {
   readonly boundSlots: readonly string[];
   /** PRDR-081: the budget a ticket must fit — the planner sizes against it. */
   readonly budgets: Budgets;
-  /**
-   * PRDR-084: the artifact path is per-launch — PLAN writes a draft, REVIEW_PLAN
-   * a verdict. D-28′ (PRDR-203): a launch may belong to a batch gated once.
-   */
-  readonly launch: (inputs: Record<string, unknown>, artifactOut?: string, options?: LaunchOptions) => Promise<void>;
-  /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
-  readonly sleep?: (ms: number) => Promise<void>;
-  /**
-   * PRDR-268: how many revision rounds a faulted slice buys; `PLAN_REVISIONS`
-   * by default.
-   *
-   * A seam on PRDR-251's terms. The whole content of a second round is what it
-   * is drafted against, and while the count was a module constant no test could
-   * reach a value other than one — the same reason the S-5 refusal "could not be
-   * tested while this was an inline literal". Production passes nothing.
-   */
-  readonly revisionRounds?: number;
+  /** A drafting session on the planner role, writing the draft to `planDraftPath`. */
+  readonly launch: (inputs: Record<string, unknown>) => Promise<void>;
+  /** C-4⁸ (PRDR-294): a review session on the `plan_review` role, writing its verdict to `artifactOut`. */
+  readonly launchReview: (inputs: Record<string, unknown>, artifactOut: string) => Promise<void>;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.
@@ -170,16 +156,17 @@ export async function draftAndRead(
 export interface DraftScope {
   readonly slice?: SliceSpec;
   readonly planIndex?: readonly DraftedTicket[];
-  readonly findings?: PlanReview["findings"];
+  /** C-4⁸ (PRDR-294): the blockers and majors a slice's review found in `draft`, which its one revision answers. */
+  readonly findings?: readonly ReviewFinding[];
   /** Ids later slices depend on; a redraft keeps them or is discarded (`plan-cross.ts`). */
   readonly keepIds?: readonly string[];
   /** A-1⁷ (PRDR-293): what the checks proved wrong in `draft`, which this redraft fixes. */
   readonly failures?: readonly CheckFailure[];
-  /** A-1⁷: the slice's draft the failures were found in, which a redraft keeps where they do not reach. */
+  /** The slice's last draft, which a redraft (A-1⁷) or a revision (C-4⁸) keeps where what it is handed does not reach. */
   readonly draft?: readonly DraftedTicket[];
 }
 
-/** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with findings when a review asks (PRDR-084). */
+/** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with what the checks proved (A-1⁷) or the review graded blocker or major (C-4⁸). */
 export async function draftPlan(deps: PlanDeps, scope: DraftScope = {}, previous: PreviousDraft | null = null): Promise<void> {
   /* A re-run derives fresh (C-8); a stale draft is an echo chamber, not an input. */
   rmSync(planDraftPath(deps.root), { force: true });
@@ -187,13 +174,14 @@ export async function draftPlan(deps: PlanDeps, scope: DraftScope = {}, previous
 }
 
 /**
- * C-2‴ (PRDR-117): PLAN runs to the end of the product. Every slice is
- * drafted, checked, reviewed and revised in turn (`planSlices`), and after
- * every slice the checks run across the plan so far (A-1⁷, PRDR-293); only
- * then are tickets written — bootstrap first, cross-slice order enforced,
- * orphans removed. No stage here asks a human anything, and none asks at all
- * (C-3⁗): what a draft finds the pack leaves open rides to PRESENT as a spec
- * defect (C-4⁵), and what the checks still find there holds approval.
+ * C-2‴ (PRDR-117): PLAN runs to the end of the product. Each slice in turn
+ * is drafted, checked, read once and revised where the read asks
+ * (`planSlices`, C-4⁸, PRDR-294), and after every slice the checks run across
+ * the plan so far (A-1⁷, PRDR-293); only then are tickets written —
+ * bootstrap first, cross-slice order enforced, orphans removed. No stage here
+ * asks a human anything, and none asks at all (C-3⁗): what a draft finds the
+ * pack leaves open rides to PRESENT as a spec defect (C-4⁵), and what the
+ * checks still find there holds approval.
  *
  * The whole-plan model review is gone (A-1⁷). Its prompt carried every ticket
  * of every slice and outgrew its context on ksar-cloud's 547, and what it was
@@ -231,12 +219,12 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const written = writePlan(deps, drafted, slices);
 
   /**
-   * Every finding a slice's review still held after its revision round, with
-   * A-1″'s repairs of the draft that stands. A finding that names a ticket a
-   * later redraft has since replaced keeps its slice, so it can be found.
+   * C-4⁸ (PRDR-294): the review's minors, with A-1″'s repairs of the drafts
+   * that stand. A finding that names a ticket a later draft has since replaced
+   * keeps its slice, so it can be found.
    */
   const live = new Set(drafted.map((t) => t.id));
-  const held = planned.remaining.flatMap((r) =>
+  const held = planned.findings.flatMap((r) =>
     r.findings.map((f) =>
       /* Keep the slice: a plan-wide finding names no ticket, and "which of twenty-five" is the first thing a reader asks. */
       f.ticket !== undefined && live.has(f.ticket) ? f : { ...f, finding: `[${r.slice}] ${f.finding}` },
@@ -244,10 +232,9 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   );
   /**
    * A-1⁵ (PRDR-201), A-1⁷ (PRDR-293): the checks' failures are NOT in this
-   * list. What a check proves is not a judgement held after revision, and it
-   * is not left for a session to read: it holds approval until the pack or the
-   * tickets answer it, and PRESENT names each one from the tickets as they
-   * stand.
+   * list. What a check proves is not a judgement for a session to weigh: it
+   * holds approval until the pack or the tickets answer it, and PRESENT names
+   * each one from the tickets as they stand.
    */
   const findings = [...held, ...written.findings];
   return {
@@ -257,27 +244,9 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
       /* C-4⁵ (PRDR-292): each open one holds approval at PRESENT until the pack is amended. */
       spec_defects: openDefects(deps.pack ?? null, planned.spec_defects) as unknown as Record<string, unknown>[],
       review_findings: findings as unknown as Record<string, unknown>[],
-      /**
-       * PRDR-196: summed for PRESENT, because a measurement written to a cache
-       * nobody reads is the defect this ticket is about, one directory over.
-       */
-      revision_summary: planned.revisions.reduce(
-        (a, r) => ({ resolved: a.resolved + r.resolved, survived: a.survived + r.survived, introduced: a.introduced + r.introduced }),
-        { resolved: 0, survived: 0, introduced: 0 },
-      ) as unknown as Record<string, unknown>,
-      /**
-       * C-4⁗″ (PRDR-200): the null, summed the same way and shown beside it.
-       *
-       * The revision figure above was read for a week as though it isolated
-       * the revision. It does not: run over reads of an UNCHANGED draft the
-       * same arithmetic still returns resolutions and introductions, because
-       * the reviewer does not reproduce itself. Neither number means anything
-       * without the other, so neither is presented without the other.
-       */
-      churn_summary: planned.churns.reduce(
-        (a, r) => ({ resolved: a.resolved + r.resolved, survived: a.survived + r.survived, introduced: a.introduced + r.introduced }),
-        { resolved: 0, survived: 0, introduced: 0 },
-      ) as unknown as Record<string, unknown>,
+      /* C-4⁸ (PRDR-294): the blockers and majors each revision was sent, and the slices no review read, for the operator at PRESENT. */
+      review_risks: planned.risks as unknown as Record<string, unknown>[],
+      unreviewed: planned.unreviewed as unknown as Record<string, unknown>[],
       derived_edges: final.derived as unknown as Record<string, unknown>[],
     },
   };

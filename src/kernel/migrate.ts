@@ -70,13 +70,22 @@ function repin(value: Json, deps: MigrateDeps): Json {
   return { ...value, assignments: out };
 }
 
-/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it (PRDR-281, PRDR-282, PRDR-284). */
-const ROLES_ADDED: readonly RoleId[] = ["audit", "spec_write", "spec_review"];
+/** S-1‴: the roles the 3.1.1 line adds, each routed in an existing config as `init` would route it (PRDR-281, PRDR-282, PRDR-284, PRDR-294). */
+const ROLES_ADDED: readonly RoleId[] = ["audit", "spec_write", "spec_review", "plan_review"];
+
+/**
+ * C-4⁸ (PRDR-294): an added role whose seat is another role's. A plan's
+ * review ran as the planner until it had a role of its own, so where a config
+ * routes its planner the review keeps the model and the effort it ran on, and
+ * stays on the planner's seat (planning decision 9).
+ */
+const SEATED: Partial<Readonly<Record<RoleId, RoleId>>> = { plan_review: "planner" };
 
 /**
  * S-1‴, S-5′ (PRDR-281): an existing config gains the routing `init` writes
  * for each role this line adds, model and effort separately, and a role it
- * already routes keeps what it says. A routing table that is not an object is
+ * already routes keeps what it says. A role with a seat takes its seat's
+ * routing where the config has one. A routing table that is not an object is
  * left for the config's reader to refuse.
  */
 function routeAdded(value: Json): Json {
@@ -84,7 +93,11 @@ function routeAdded(value: Json): Json {
     const table = value[key] ?? {};
     if (typeof table !== "object" || table === null || Array.isArray(table)) return table;
     const out: Record<string, unknown> = { ...table };
-    for (const role of ROLES_ADDED) if (!Object.hasOwn(out, role)) out[role] = defaults[role];
+    for (const role of ROLES_ADDED) {
+      if (Object.hasOwn(out, role)) continue;
+      const seat = SEATED[role];
+      out[role] = seat !== undefined && Object.hasOwn(table, seat) ? (table as Record<string, unknown>)[seat] : defaults[role];
+    }
     return out;
   };
   return { ...value, model_routing: extend("model_routing", DEFAULT_MODEL_ROUTING), effort_routing: extend("effort_routing", DEFAULT_EFFORT_ROUTING) };
@@ -144,9 +157,10 @@ const packaged: Transform = (value) => ({
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
  * a new one. The three prompts that named the version stopped naming it here,
- * and their hashes moved, which is the re-pin; `audit`, `spec_write` and
- * `spec_review` joined the roles, which is the routing (PRDR-281, PRDR-282,
- * PRDR-284); the conformance record gained `validated` (PRDR-283). Three
+ * and their hashes moved, which is the re-pin; `audit`, `spec_write`,
+ * `spec_review` and `plan_review` joined the roles, which is the routing, the
+ * review's where the config seats its planner (PRDR-281, PRDR-282, PRDR-284,
+ * PRDR-294); the conformance record gained `validated` (PRDR-283). Three
  * shapes need no step. C-2⁶'s rounds key, `spec_validation_rounds`: a
  * config's budgets take the default of every key they omit, and `init` writes
  * one key alone. The record's rounds, whose open findings gained an id and
@@ -166,7 +180,14 @@ const packaged: Transform = (value) => ({
  * one. The whole-plan review's cache needs none either since PRDR-293 deleted
  * the review: nothing reads `state/whole-plan.json`, and a state holding it
  * keeps it as it was. The record of the redrafts A-1⁷'s checks send,
- * `state/plan-checks.json`, is new in this event.
+ * `state/plan-checks.json`, is new in this event. The plan's review took a
+ * role of its own and reads each slice once (PRDR-294), which is the routing
+ * above, and a slice's cache holds that read's graded findings where it held
+ * the sampled reads' findings and measurements. That shape needs no step:
+ * the cache's key folds in the review's prompt, which changed, so a cache
+ * written before misses on its key, whatever its shape, and its slice is
+ * planned again. PLAN's checkpoint keys on the same prompt, so PLAN runs
+ * again too, and PRESENT reads only what this build's PLAN writes.
  *
  * Gates bind per package (PRDR-295, D-5′): `bindings.json` names every
  * package, and each binding and skip its own, the root's where it names none.

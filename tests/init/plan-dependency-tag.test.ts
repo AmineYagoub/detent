@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_FINDING_TAGS, planReviewSchema } from "../../src/schemas/init.js";
+import { PLAN_FINDING_TAGS, REVIEW_TAGS, planReviewSchema } from "../../src/schemas/init.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -11,6 +11,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
  */
 describe("PRDR-103 the plan review can name a criterion that reaches a later sibling", () => {
   it("`dependency` is in the closed tag set, distinct from shape and sizing", () => {
+    expect(REVIEW_TAGS, "C-4⁸ (PRDR-294): one of the review's four").toContain("dependency");
     expect(PLAN_FINDING_TAGS).toContain("dependency");
     expect(PLAN_FINDING_TAGS).toContain("shape");
     expect(PLAN_FINDING_TAGS).toContain("sizing");
@@ -22,9 +23,11 @@ describe("PRDR-103 the plan review can name a criterion that reaches a later sib
       verdict: "changes",
       findings: [
         {
+          severity: "major",
           tag: "dependency",
           finding: "t-112 AC2 needs the status display t-154 builds; t-112 neither depends on t-154 nor carries src/cli/** in its surface",
           ticket: "t-112",
+          fix: "t-112 depends on t-154",
         },
       ],
     });
@@ -35,7 +38,7 @@ describe("PRDR-103 the plan review can name a criterion that reaches a later sib
     const parsed = planReviewSchema.safeParse({
       schema_version: SCHEMA_VERSION,
       verdict: "changes",
-      findings: [{ tag: "reach", finding: "x", ticket: "t-1" }],
+      findings: [{ severity: "minor", tag: "reach", finding: "x", ticket: "t-1", fix: "y" }],
     });
     expect(parsed.success).toBe(false);
   });

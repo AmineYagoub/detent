@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { SCHEMA_VERSION } from "../schemas/common.js";
-import { type CheckFailure, type PlanReview, type SliceSpec, specDefectSchema, type SpecDefect } from "../schemas/init.js";
+import { type CheckFailure, type PlanFinding, type SliceSpec, specDefectSchema, type SpecDefect } from "../schemas/init.js";
 import { cachedTicketSchema } from "./plan-cache.js";
 import { checkPlan, failureLine, type PlanContext } from "./plan-checks.js";
 import { redraftRecordPath } from "./machine.js";
@@ -61,7 +61,7 @@ export interface Redraft {
   readonly slice: string;
   readonly tickets: DraftedTicket[];
   readonly spec_defects: SpecDefect[];
-  readonly findings: PlanReview["findings"];
+  readonly findings: PlanFinding[];
 }
 
 export function readRedrafts(root: string): Redraft[] {
@@ -125,7 +125,7 @@ export interface CrossPass {
   readonly tickets: DraftedTicket[];
   readonly spec_defects: PlannedSpecDefect[];
   /** A-1″'s repairs of each redraft, by slice. */
-  readonly findings: { readonly slice: string; readonly findings: PlanReview["findings"] }[];
+  readonly findings: { readonly slice: string; readonly findings: PlanFinding[] }[];
 }
 
 export async function crossSlicePass(

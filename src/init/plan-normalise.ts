@@ -1,4 +1,4 @@
-import type { PlanReview, SliceSpec } from "../schemas/init.js";
+import type { PlanFinding, SliceSpec } from "../schemas/init.js";
 import { isSafeTicketId } from "../schemas/common.js";
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 
@@ -28,7 +28,7 @@ export function normaliseDraft(
   earlier: readonly DraftedTicket[],
   note: ((text: string) => void) | undefined,
   reserved: readonly DraftedTicket[] = earlier,
-): { readonly tickets: DraftedTicket[]; readonly findings: PlanReview["findings"] } {
+): { readonly tickets: DraftedTicket[]; readonly findings: PlanFinding[] } {
   /**
    * The bootstrap id is Detent's own construction (C-4) and is created after
    * planning, so it collides with nothing here — a planner that drafts it
@@ -47,7 +47,7 @@ export function normaliseDraft(
     } while (taken.has(id) || own.has(id) || tickets.some((t) => t.id === id));
     return id;
   };
-  const findings: PlanReview["findings"] = [];
+  const findings: PlanFinding[] = [];
   const retagged = tickets.map((t) => {
     let id = t.id;
     /**
@@ -128,7 +128,7 @@ export function normaliseDraft(
 function breakCycles(
   slice: SliceSpec,
   tickets: readonly DraftedTicket[],
-  findings: PlanReview["findings"],
+  findings: PlanFinding[],
   note: ((text: string) => void) | undefined,
 ): DraftedTicket[] {
   const own = new Set(tickets.map((t) => t.id));

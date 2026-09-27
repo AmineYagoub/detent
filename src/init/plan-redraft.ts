@@ -1,4 +1,4 @@
-import type { PlanReview, SliceSpec, SpecDefect } from "../schemas/init.js";
+import type { CheckFailure, PlanFinding, SliceSpec, SpecDefect } from "../schemas/init.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { failureLine, sliceFailures, type PlanContext } from "./plan-checks.js";
 import { normaliseDraft, tagSlice } from "./plan-normalise.js";
@@ -22,7 +22,9 @@ export interface Checked {
   /** The keys of the failures a redraft was sent, so the checks across the plan do not send them again. */
   readonly sent: string[];
   /** A-1″'s repairs of the redraft, reported as a draft's are. */
-  readonly findings: PlanReview["findings"];
+  readonly findings: PlanFinding[];
+  /** What the checks still find in the tickets returned, which C-4⁸'s review waits on (PRDR-294). */
+  readonly remaining: CheckFailure[];
 }
 
 export async function checkedDraft(
@@ -36,7 +38,7 @@ export async function checkedDraft(
   what: "draft" | "revision",
 ): Promise<Checked> {
   const failures = sliceFailures(context, [...index, ...tickets], slice.id);
-  if (failures.length === 0) return { tickets, spec_defects: [], sent: [], findings: [] };
+  if (failures.length === 0) return { tickets, spec_defects: [], sent: [], findings: [], remaining: [] };
   deps.progress?.(`redrafting ${slice.id} ${slice.title} for the checks`);
   deps.note?.(`${slice.id}: its ${what} fails ${String(failures.length)} check(s) — ${failures.map(failureLine).join("; ")}; redrafting it once with them (A-1⁷)`);
   const drafted = await draftAndRead(deps, { slice, planIndex: index, failures, draft: tickets });
@@ -47,5 +49,5 @@ export async function checkedDraft(
       ? `${slice.id}: the redraft passes the checks`
       : `${slice.id}: ${String(after.length)} check failure(s) remain after its redraft, for the operator at PRESENT — ${after.map(failureLine).join("; ")}`,
   );
-  return { tickets: normalised.tickets, spec_defects: [...drafted.spec_defects], sent: failures.map((f) => f.key), findings: normalised.findings };
+  return { tickets: normalised.tickets, spec_defects: [...drafted.spec_defects], sent: failures.map((f) => f.key), findings: normalised.findings, remaining: after };
 }

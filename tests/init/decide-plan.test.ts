@@ -8,7 +8,7 @@ import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { readBindings } from "../../src/adapter/drift.js";
 import { DECISION_LOG_PATH } from "../../src/schemas/pack.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { LONE_CANDIDATE, repo } from "./plan-fixture.js";
+import { LONE_CANDIDATE, repo, planning } from "./plan-fixture.js";
 import { DOCS, LATE, REFUND, SORTED, SURVEY, TS_STACK, artifact, auditFinds, decide, initThrough, type Json } from "./decide-fixture.js";
 import { R, TWO_SLICES, scriptedPlanner, twoSliceDraft } from "./slicing-fixture.js";
 
@@ -34,7 +34,7 @@ describe("PRDR-282: PRESENT lists every vetoable default (C-3⁗)", () => {
     const log: string[] = [];
     const result = await initThrough(root, decide((_, i) => SORTED(i)), {
       all: true,
-      script: { planner: scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, log) },
+      script: { ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, log)) },
     });
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     const shown = result.interrupt?.message ?? "";
@@ -68,7 +68,7 @@ describe("PRDR-282: every slice plans with the decision log (C-2¹²)", () => {
     const seen: Record<string, unknown>[] = [];
     await initThrough(root, decide((_, i) => SORTED(i)), {
       all: true,
-      script: { planner: scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen) },
+      script: { ...planning(scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen)) },
     });
     const drafts = seen.filter((i) => i["stage"] === "PLAN");
     expect(drafts.map((i) => i["docs"])).toEqual([
@@ -85,7 +85,7 @@ describe("PRDR-282: every slice plans with the decision log (C-2¹²)", () => {
     const bare = { ...TWO_SLICES, slices: TWO_SLICES.slices.map((sl) => (sl.id === "s02" ? { ...sl, docs: [] } : sl)) };
     await initThrough(root, decide((_, i) => SORTED(i)), {
       all: true,
-      script: { planner: scriptedPlanner({ slices: bare, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen) },
+      script: { ...planning(scriptedPlanner({ slices: bare, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen)) },
     });
     const s02 = seen.find((i) => i["stage"] === "PLAN" && (i["slice"] as { id: string }).id === "s02");
     expect(s02?.["docs"]).toEqual(["PRD.md", DECISION_LOG_PATH, "docs/roadmap.md", "prd-billing.md"].sort());
@@ -96,12 +96,12 @@ describe("PRDR-282: every slice plans with the decision log (C-2¹²)", () => {
     const log: string[] = [];
     const planner = scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, log);
     const stub = decide((_, i) => SORTED(i));
-    await initThrough(root, stub, { all: true, script: { planner }, more: approved });
+    await initThrough(root, stub, { all: true, script: { ...planning(planner) }, more: approved });
 
     log.length = 0;
     const file = decisionLogFile(root);
     writeFileSync(file, readFileSync(file, "utf8").replace(LATE.value, "A late return costs a day's fee."));
-    const vetoed = await initThrough(root, stub, { all: true, script: { planner }, more: approved });
+    const vetoed = await initThrough(root, stub, { all: true, script: { ...planning(planner) }, more: approved });
     expect(vetoed.reused.slice(0, 3)).toEqual(["INIT_FS", "DISCOVER", "AUDIT"]);
     /* D-10′ (PRDR-290): in an existing project the bindings read no log, so they stand, and planning re-runs from SLICE. */
     expect(vetoed.executed.slice(0, 2)).toEqual(["DECIDE", "SLICE"]);
@@ -116,7 +116,7 @@ describe("PRDR-282, PRDR-290: in greenfield the planning phases plan on the stac
     const seen: Record<string, unknown>[] = [];
     await initThrough(root, decide((_, i) => SORTED(i)), {
       all: true,
-      script: { planner: scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen) },
+      script: { ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen)) },
     });
     const entry = { ...TS_STACK, decision: "X-3" };
     expect(seen.find((i) => i["stage"] === "SLICE")?.["stack"]).toEqual(entry);
@@ -131,12 +131,12 @@ describe("PRDR-282, PRDR-290: in greenfield the planning phases plan on the stac
     const root = repo({ ...DOCS });
     const planner = scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, []);
     const stub = decide((_, i) => SORTED(i));
-    await initThrough(root, stub, { all: true, script: { planner }, more: approved });
+    await initThrough(root, stub, { all: true, script: { ...planning(planner) }, more: approved });
     const file = decisionLogFile(root);
     const log = readFileSync(file, "utf8");
     expect(log).toContain("| . | test | `pnpm test` |");
     writeFileSync(file, log.replace("| . | test | `pnpm test` |", "| . | test | `pnpm run test:unit` |"));
-    const vetoed = await initThrough(root, stub, { all: true, script: { planner }, more: approved });
+    const vetoed = await initThrough(root, stub, { all: true, script: { ...planning(planner) }, more: approved });
     expect(vetoed.executed, "the bindings read the entry, which the log's edit moved").toContain("DETERMINE_VERIFICATION");
     expect(readBindings(root).bindings.map((b) => [b.slot, b.resolved, b.status])).toEqual([["test", "pnpm run test:unit", "provisional"]]);
   });
@@ -149,11 +149,11 @@ describe("PRDR-282, PRDR-290: in an existing project the stack is discovered, no
     const seen: Record<string, unknown>[] = [];
     await initThrough(root, decide((_, i) => SORTED(i)), {
       all: true,
-      script: { planner: scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen) },
+      script: { ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, [], seen)) },
     });
-    const planning = seen.filter((i) => i["stage"] === "SLICE" || i["stage"] === "PLAN");
-    expect(planning.length).toBeGreaterThan(0);
-    for (const inputs of planning) expect(inputs).toHaveProperty("stack", null);
+    const planned = seen.filter((i) => i["stage"] === "SLICE" || i["stage"] === "PLAN");
+    expect(planned.length).toBeGreaterThan(0);
+    for (const inputs of planned) expect(inputs).toHaveProperty("stack", null);
     expect(readBindings(root).bindings.every((b) => b.status === "approved")).toBe(true);
   });
 });
@@ -168,13 +168,13 @@ describe("PRDR-282: DECIDE stands off the chain, so AUDIT's re-runs re-plan only
     const log: string[] = [];
     const planner = scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: approve }, log);
     const stub = decide((n, i) => (n === 0 ? SORTED(i) : artifact({ settled: [{ item: "G1", entry: "X-1" }], defaults: (i["items"] as { id: string }[]).some((x) => x.id === "R1") ? [{ value: "The plan follows the PRD: borrowing is free.", reason: "The PRD is the later intent.", settles: ["R1"] }] : [] })));
-    await initThrough(root, stub, { all: true, script: { planner }, more: approved });
+    await initThrough(root, stub, { all: true, script: { ...planning(planner) }, more: approved });
     let edits = 0;
     const again = async (survey: Json) => {
       log.length = 0;
       edits += 1;
       writeFileSync(path.join(root, "src", "borrow.js"), `export const price = ${String(edits)};\n`);
-      return await initThrough(root, stub, { all: true, audit: auditFinds("wrong", survey), script: { planner }, more: approved });
+      return await initThrough(root, stub, { all: true, audit: auditFinds("wrong", survey), script: { ...planning(planner) }, more: approved });
     };
     return { root, log, stub, again };
   }

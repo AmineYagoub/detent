@@ -22,7 +22,7 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
    * PRDR-282: `spec_write`, the second, joins the same event, which no release has shipped yet.
    * PRDR-284: `spec_review`, the third, VALIDATE's reviewers, joins it too.
    */
-  it("the role ids are exactly S-1's eight and S-1‴'s audit, spec_write and spec_review, in order — adding or renaming one is an F-3 schema event", () => {
+  it("the role ids are exactly S-1's eight and S-1‴'s audit, spec_write, spec_review and plan_review, in order — adding or renaming one is an F-3 schema event", () => {
     expect(ROLE_IDS).toEqual([
       "planner",
       "diagnose",
@@ -35,12 +35,16 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
       "audit",
       "spec_write",
       "spec_review",
+      "plan_review",
     ]);
   });
 
-  /** PRDR-284, PRDR-285: VALIDATE's reviewers read the pack and write their findings alone in it; a simulation writes only its scratch directory, outside the repository. */
-  it("the read-only set is S-1's four and S-1‴'s audit and spec_review", () => {
-    expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "planner", "research", "review", "spec_review"]);
+  /**
+   * PRDR-284, PRDR-285: VALIDATE's reviewers read the pack and write their findings alone in it; a simulation writes only its scratch directory, outside the repository.
+   * PRDR-294: a plan's review reads, and writes its verdict alone.
+   */
+  it("the read-only set is S-1's four and S-1‴'s audit, spec_review and plan_review", () => {
+    expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "plan_review", "planner", "research", "review", "spec_review"]);
   });
 
   it("every execution state that launches a session maps to a role; the init roles have none", () => {
@@ -49,16 +53,17 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
     );
     expect(Object.values(ROLE_FOR_STATE)).not.toContain("planner");
     expect(Object.values(ROLE_FOR_STATE)).not.toContain("audit");
+    expect(Object.values(ROLE_FOR_STATE)).not.toContain("plan_review");
   });
 });
 
 describe("T-047 packaging (S-7 AC)", () => {
-  /** C-4⁵ (PRDR-292): the planner role reads one prompt per job, and every other role reads its own. */
+  /** C-4⁵ (PRDR-292): the planner role reads one prompt per job, and every other role reads its own, the plan's review among them since C-4⁸ (PRDR-294). */
   it("the vendored set covers exactly the prompts — a missing one fails at packaging, not runtime", () => {
     for (const id of PROMPT_IDS) {
       expect(readFileSync(path.join(PROMPTS_DIR, `${id}.md`), "utf8").length).toBeGreaterThan(100);
     }
-    expect(PROMPT_IDS.filter((id) => !ROLE_IDS.includes(id as (typeof ROLE_IDS)[number]))).toEqual(["slice", "plan", "plan_review"]);
+    expect(PROMPT_IDS.filter((id) => !ROLE_IDS.includes(id as (typeof ROLE_IDS)[number]))).toEqual(["slice", "plan"]);
   });
 
   it("the checked-in manifest matches the prompt files byte-for-byte", () => {
@@ -129,10 +134,10 @@ describe("T-047 assignment resolution fails closed (S-7 AC)", () => {
 describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () => {
   const set = loadPromptSet();
   const CHECKLIST: Record<string, readonly string[]> = {
-    /* C-4⁵ (PRDR-292): the planner's three jobs, each in its own prompt, and none of them citing a PRD id. */
+    /* C-4⁵ (PRDR-292): the planner's two jobs and the plan's review, each in its own prompt, and none of them citing a PRD id; C-4⁸ (PRDR-294): the review grades by severity on four tags. */
     slice: ["walking skeleton", "depends_on", "slice_size", "production_baseline", "milestone", "artifact_out"],
     plan: ["acceptance_criteria", "criterion_ids", "word for word", "spec_defects", "by its id in `catalogue_ids`", "plan_index", "provides", "consumes", "non_goals", "artifact_out"],
-    plan_review: ["approve", "changes", "sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency", "coherence", "artifact_out"],
+    plan_review: ["approve", "changes", "sizing", "shape", "dependency", "coherence", "blocker", "major", "minor", "`fix`", "artifact_out"],
     /* PRDR-221/222/223: every role that receives the symbol server is told what symbol_tools are for, and that they are its whole surface; PRDR-224: the fix roles are told the two signal shapes. */
     diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified", "symbol_tools", "whole surface"],
     /* PRDR-212: the surface is stated, a refusal is named as containment, and a signal can be taken back. */

@@ -1,126 +1,64 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import type { LaunchBatch, LaunchOptions } from "./launch-batch.js";
-import { sizingEvidence } from "./sizing-evidence.js";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import type { Budgets } from "../schemas/budgets.js";
-import {
-  planReviewSchema,
-  type PlanDraftTicket,
-  type PlanReview,
-  type SliceSpec,
-} from "../schemas/init.js";
+import { planReviewSchema, type PlanDraftTicket, type PlanReview, type ReviewFinding, type SliceSpec } from "../schemas/init.js";
+import type { Pack } from "../schemas/pack.js";
+import { sliceRecords } from "./plan-records.js";
+import { sizingEvidence } from "./sizing-evidence.js";
 
 /**
- * PRDR-084 — the plan's own D-6.
+ * PRDR-084 — the plan's own D-6, read once (C-4⁸, PRDR-294).
  *
- * A fresh planner-role session judges the DRAFT plan before any ticket is
- * written, over the closed set of properties a plan can be wrong about. The review
- * advises: an absent or unparseable verdict leaves the draft standing, because
- * a planning aid that can block the pipeline is a new way for init to fail.
+ * A `plan_review` session reads one slice's draft, after A-1⁷'s checks pass
+ * on it and before any ticket is written, and judges what code cannot: whether
+ * each ticket fits one implement session, whether the slice runs end to end
+ * first, what depends on what where no contract says so, and whether its
+ * tickets agree with each other and with the pack. Each finding is graded, and
+ * a blocker or major buys the slice one revision that no review reads again.
+ *
+ * The review advises (D-24): an absent or unusable verdict leaves the draft
+ * standing, since a planning aid that can block the pipeline is a new way for
+ * init to fail, and what blocks approval is code's.
  */
 
-/** The exact artifact the REVIEW_PLAN stage writes (PRDR-084). */
+/** The exact artifact a review writes (PRDR-084). */
 export function planReviewSkeleton(): Record<string, unknown> {
   return {
     schema_version: SCHEMA_VERSION,
     verdict: "approve",
     findings: [
-      { tag: "sizing", finding: "<what is wrong — required>", ticket: "t-100" },
+      {
+        severity: "minor",
+        tag: "coherence",
+        ticket: "t-100",
+        finding: "<what is wrong, and why it matters to the session that runs the ticket — required>",
+        fix: "<what should change, in the ticket's own terms — required>",
+      },
     ],
   };
 }
 
 /**
- * Where a review is written. A draw of a sampled review gets its OWN file
- * (PRDR-203): one path shared by every draw is harmless in sequence and hands
- * every read the last draw's verdict once two are in flight. Suffix kept — the
- * fixtures dispatch on it; S-1″ scopes each session's surface to its own file.
- *
- * PRDR-260: the SLICE keys the directory, because the draw index alone did not
- * make the path unique across a run. `reviewOnce` deletes the file before every
- * launch, and `planSlices` reviews one slice after another, so slice 02's first
- * draw deleted slice 01's before it launched — three files at the end of a
- * ten-slice run, all holding the last slice's verdict. The un-drawn re-review
- * is keyed the same way and for the same reason: it was clobbered one path over.
- *
- * This is the ACTUAL file only. The path a draw is TOLD stays slice-free and
- * draw-free (PRDR-205): `src/init/session.ts:131` puts it in the prompt cache
- * key, where a per-draw tail cost ~25k tokens and $0.45 a draw.
- *
- * PRDR-269: `revised` is the third key, and it exists for PRDR-260's reason a
- * second time. Both of a slice's reviews are sampled now, so both draw `k`
- * times into `draws/1..k`; without a segment telling them apart the review of
- * the revised draft overwrites the review that BOUGHT the revision, and a run
- * ends holding only the second. The un-drawn slice path this replaced is no
- * longer written: nothing reviews a slice un-drawn.
+ * Where a slice's review is written. PRDR-260: the slice keys the directory,
+ * so each slice's verdict is kept beside the others and none is read back as
+ * another slice's.
  */
-export function planReviewPath(root: string, draw?: number, sliceId?: string, revised?: boolean): string {
-  return path.join(
-    stateDir(root),
-    "state",
-    ...(sliceId === undefined ? [] : ["slices", sliceId]),
-    ...(revised === true ? ["revised"] : []),
-    ...(draw === undefined ? [] : ["draws", String(draw)]),
-    "plan-review.json",
-  );
+export function planReviewPath(root: string, sliceId?: string): string {
+  return path.join(stateDir(root), "state", ...(sliceId === undefined ? [] : ["slices", sliceId]), "plan-review.json");
 }
 
-/**
- * Which draw of a sampled review a launch is (PRDR-203): the index names its
- * artifact, the batch is the gate the draws share (D-28′). A relaunch (C-4⁗)
- * is never handed the batch — it runs after the figure moved.
- */
-export interface ReviewDraw {
-  readonly index: number;
-  readonly batch?: LaunchBatch;
-}
-
-/**
- * PRDR-084: ONE revision round, deliberately — the D-24 argument applies here
- * too. A second bite adds cost without adding information, and a plan the
- * reviewer still faults after a revision is a judgment the human should see at
- * approval, not one the machine should keep grinding on.
- */
-export const PLAN_REVISIONS = 1;
-
-/**
- * C-4⁗″ (PRDR-200): how many times a slice's review is DRAWN.
- *
- * PRDR-084 chose one revision round deliberately and said nothing about where
- * the findings came from, because there was no reason then to think a review
- * was a SAMPLE rather than a reading. It is a sample. Run three times over
- * byte-identical tickets with no redraft between the passes, the production
- * review put ten of sixteen distinct findings in exactly one read, left four
- * of eighteen ordered pairs sharing nothing at all, and gave one ticket three
- * different tags in three reads. The revision was being paid an
- * index-carrying session to chase findings that were not reliably there.
- *
- * Not an X-1 key: a new ceiling is an F-3 schema event and C-4″ declined one
- * for this same loop. Announced instead, with the threshold, because a knob an
- * operator cannot see is one they do not have (PRDR-197).
- */
-export const PLAN_REVIEW_SAMPLES = 3;
-
-/** A finding's identity across reads: the ticket it names and the tag it carries. */
-export const findingKey = (f: PlanReview["findings"][number]): string | null =>
-  f.ticket === undefined || f.ticket === "" ? null : `${f.ticket} ${f.tag}`;
-
-/** The slice of `PlanDeps` a review needs — kept narrow so the seam is obvious. */
+/** What a review needs of PLAN's dependencies — kept narrow so the seam is obvious. */
 export interface ReviewDeps {
   readonly root: string;
   readonly docs: readonly string[];
   readonly budgets: Budgets;
-  readonly launch: (
-    inputs: Record<string, unknown>,
-    artifactOut?: string,
-    /** D-28′ / PRDR-205: the batch this launch is gated with, and the path it is told. */
-    options?: LaunchOptions,
-  ) => Promise<void>;
+  /** C-2⁸: the parse whose records a slice is drafted from, which the review reads too; absent or null without a pack. */
+  readonly pack?: Pack | null;
+  /** C-4⁸ (PRDR-294): one session on the `plan_review` role, writing its verdict to `artifactOut`. */
+  readonly launchReview: (inputs: Record<string, unknown>, artifactOut: string) => Promise<void>;
   readonly note?: (text: string) => void;
-  /** C-4⁗‴ (PRDR-204): the clock the draws' bounded wait runs on; real time by default. */
-  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -162,35 +100,25 @@ export function normaliseVerdict(raw: unknown): {
   return { value: { ...(raw as object), verdict: canonical }, from: verdict };
 }
 
+/** `prompts/plan_review.md` says the same, in its own words; the two must agree (PRDR-292). */
 const REVIEW_INSTRUCTION =
-  "Review this DRAFT PLAN — not code. Judge it on: sizing (does each ticket fit one implement session in `session_budget`; when " +
-  "`sizing_evidence` is present it is MEASURED on a previous plan of these documents — turns per implement session, and tickets " +
-  "whose sessions reported themselves oversized with a proposed split — and outweighs any estimate from the text), " +
-  "testability (is every acceptance criterion checkable by a command or a test, not by opinion), coverage (does every requirement " +
-  "in the documents reach some ticket), shape (do the earliest tickets form a walking skeleton through the riskiest integration, " +
-  "rather than completing infrastructure layers first), traceability (is every ticket sourced from the documents rather than " +
-  "invented), boundaries (does each ticket state what it is NOT for, in `non_goals` — the implementer and the reviewer both " +
-  "receive that field, and empty it leaves the reviewer's commonest judgement, is this in scope, with nothing to judge against), " +
-  "and dependency (a criterion that requires behaviour in code ANOTHER ticket builds — status output, a command, a module — " +
-  "where the ticket neither lists that ticket in `depends_on` nor carries the path in its surface: at run time the criterion " +
-  "cannot be met when the ticket runs. Name BOTH tickets in the finding — the one whose criterion reaches, and the one that " +
-  "owns what it reaches for — because the remedy is an edge or a surface and either needs the pair). " +
-  "An honest `approve` is a real verdict; do not manufacture findings, and a ticket with genuinely no boundary worth stating is " +
-  "not a finding. `coherence` (two tickets that contradict, duplicate, or disagree about their interface, here or against " +
-  "`plan_index`; see `scope_instruction` when present). The verdict is EXACTLY `approve` or `changes` — no other word " +
-  "— and every finding's `tag` is one of the eight named here. Write EXACTLY the `expected_output` shape.";
+  "Review this DRAFT of one slice, tickets and not code, on four things alone. `sizing`: does each ticket fit one implement " +
+  "session within `session_budget` (`sizing_evidence`, when present, is measured on a previous plan of this product and " +
+  "outweighs any estimate from the text). `shape`: do the slice's first tickets form a walking skeleton through its riskiest " +
+  "integration, rather than completing infrastructure first. `dependency`: a criterion that needs behaviour another ticket " +
+  "builds, where neither `depends_on`, `consumes` nor the surface says so; name both tickets. `coherence`: tickets that " +
+  "contradict or duplicate each other, here or against `plan_index`, or contradict the `records` or `docs` the slice was " +
+  "drafted from. Code checks coverage, traceability and contracts, and they are not yours. Grade each finding: `blocker` or " +
+  "`major` where the slice should be redrafted before it runs, `minor` where the session that runs the ticket should know it. " +
+  "Every finding names its ticket and its `fix`. The verdict is `approve` when nothing is blocker or major, and `changes` " +
+  "otherwise. Write EXACTLY the `expected_output` shape.";
 
 /**
- * C-2‴ (PRDR-117): what the reviewer is judging — one slice against its own
- * requirement set, with the earlier slices' tickets in view.
- *
- * A-1⁷ (PRDR-293): the whole-plan review, the other kind of scope, is gone,
- * and with it `already_found`, the list of what code had proved that it was
- * handed with the instruction to treat each as handled. What code proves now
- * goes to a redraft, and what survives one holds approval.
+ * C-2‴ (PRDR-117): what the reviewer is judging, one slice with the earlier
+ * slices' tickets in view. A-1⁷ (PRDR-293): the whole-plan review, the other
+ * kind of scope, is gone.
  */
 export interface ReviewScope {
-  readonly kind: "slice";
   readonly slice: SliceSpec;
   readonly planIndex: readonly {
     readonly id: string;
@@ -198,20 +126,23 @@ export interface ReviewScope {
     readonly title: string;
     readonly surface: readonly string[];
   }[];
-  /** PRDR-269: this is the review of a REVISED draft, so its draws get their own subtree. */
-  readonly revised?: boolean;
 }
 
-export function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
-  if (scope === undefined) return {};
+/**
+ * C-4⁸ (PRDR-294): the slice as its drafter was handed it, so `coherence`
+ * can be judged against what the draft was planned from: on a pack, the
+ * slice's records from the parse, and without one, its documents.
+ */
+export function scopeInputs(deps: Pick<ReviewDeps, "root" | "docs" | "pack">, scope: ReviewScope): Record<string, unknown> {
+  const { slice } = scope;
+  const pack = deps.pack ?? null;
   return {
-    scope: "slice",
-    slice: scope.slice,
+    slice: { id: slice.id, title: slice.title, goal: slice.goal, requirement_ids: slice.requirement_ids, baseline_items: slice.baseline_items },
+    ...(pack !== null ? { records: sliceRecords(deps.root, pack, slice.requirement_ids) } : { docs: slice.docs.length > 0 ? slice.docs : deps.docs }),
     plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })),
     scope_instruction:
-      `This draft is ONE slice, \`${scope.slice.id}\` (${scope.slice.title}). Judge coverage against ITS ` +
-      "`requirement_ids` and `baseline_items` only (a PB-### item traces to `baseline:PB-###`, valid provenance); " +
-      "`plan_index` lists the earlier slices' tickets, for dependency findings that reach across slices.",
+      `This draft is ONE slice, \`${slice.id}\` (${slice.title}). \`plan_index\` lists the earlier slices' tickets, for ` +
+      "dependency and coherence findings that reach across slices.",
   };
 }
 
@@ -219,36 +150,25 @@ async function reviewOnce(
   deps: ReviewDeps,
   tickets: readonly PlanDraftTicket[],
   previous: { readonly issue: string } | null,
-  scope?: ReviewScope,
-  draw?: ReviewDraw,
+  scope: ReviewScope,
 ): Promise<{
   readonly review: PlanReview | null;
   readonly issue: string | null;
   readonly normalisedFrom: string | null;
 }> {
-  const file = planReviewPath(deps.root, draw?.index, scope?.kind === "slice" ? scope.slice.id : undefined, scope?.kind === "slice" && scope.revised === true);
+  const file = planReviewPath(deps.root, scope.slice.id);
   rmSync(file, { force: true });
-  /**
-   * PRDR-205: a draw is TOLD the one shared path, so every draw's first turn
-   * is the same bytes and the prompt cache serves all but the first; its file
-   * is its own, and the hook carries the write there. The told path is cleared
-   * too, so a stale review from an earlier run cannot be read back as this one.
-   */
-  const told = draw === undefined ? undefined : planReviewPath(deps.root);
-  if (told !== undefined) rmSync(told, { force: true });
+  const evidence = sizingEvidence(deps.root);
   try {
-    await deps.launch(
+    await deps.launchReview(
       {
         stage: "REVIEW_PLAN",
         plan: tickets,
-        docs: deps.docs,
         session_budget: sessionBudget(deps.budgets),
-        ...(sizingEvidence(deps.root) === null
-          ? {}
-          : { sizing_evidence: sizingEvidence(deps.root) }),
+        ...(evidence === null ? {} : { sizing_evidence: evidence }),
         expected_output: planReviewSkeleton(),
         instruction: REVIEW_INSTRUCTION,
-        ...scopeInputs(scope),
+        ...scopeInputs(deps, scope),
         ...(previous === null
           ? {}
           : {
@@ -259,44 +179,22 @@ async function reviewOnce(
             }),
       },
       file,
-      {
-        /* The batch gates a draw's FIRST attempt; a relaunch is gated on its own. */
-        ...(previous === null && draw?.batch !== undefined ? { batch: draw.batch } : {}),
-        ...(told === undefined ? {} : { told }),
-      },
     );
   } catch (err) {
     /* PRDR-084: the review advises and never fails init — a session that died is an unusable attempt, not an exit. */
-    return {
-      review: null,
-      issue: `review session failed: ${(err as Error).message}`,
-      normalisedFrom: null,
-    };
+    return { review: null, issue: `review session failed: ${(err as Error).message}`, normalisedFrom: null };
   }
-  if (!existsSync(file))
-    return { review: null, issue: "no artifact written", normalisedFrom: null };
+  if (!existsSync(file)) return { review: null, issue: "no artifact written", normalisedFrom: null };
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, "utf8"));
   } catch (err) {
-    return {
-      review: null,
-      issue: `artifact is not JSON: ${(err as Error).message}`,
-      normalisedFrom: null,
-    };
+    return { review: null, issue: `artifact is not JSON: ${(err as Error).message}`, normalisedFrom: null };
   }
   const normalised = normaliseVerdict(raw);
   const parsed = parseArtifact(planReviewSchema, normalised.value);
-  if (parsed.ok)
-    return {
-      review: parsed.value,
-      issue: null,
-      normalisedFrom: normalised.from,
-    };
-  const issue =
-    parsed.reason === "invalid"
-      ? parsed.issues.join("; ")
-      : `schema_version ${parsed.found} is newer than ${parsed.supported}`;
+  if (parsed.ok) return { review: parsed.value, issue: null, normalisedFrom: normalised.from };
+  const issue = parsed.reason === "invalid" ? parsed.issues.join("; ") : `schema_version ${parsed.found} is newer than ${parsed.supported}`;
   return { review: null, issue, normalisedFrom: null };
 }
 
@@ -307,49 +205,45 @@ async function reviewOnce(
  * relaunch a code review gets (A-5′). Only after that does the draft stand
  * unreviewed, and the note says why.
  */
-export async function reviewPlan(
-  deps: ReviewDeps,
-  tickets: readonly PlanDraftTicket[],
-  scope?: ReviewScope,
-  draw?: ReviewDraw,
-): Promise<PlanReview | null> {
-  const first = await reviewOnce(deps, tickets, null, scope, draw);
+export async function reviewPlan(deps: ReviewDeps, tickets: readonly PlanDraftTicket[], scope: ReviewScope): Promise<PlanReview | null> {
+  const first = await reviewOnce(deps, tickets, null, scope);
   if (first.review !== null) {
-    if (first.normalisedFrom !== null)
-      deps.note?.(
-        `plan review: verdict \`${first.normalisedFrom}\` read as \`${first.review.verdict}\` (C-4⁗)`,
-      );
+    if (first.normalisedFrom !== null) deps.note?.(`plan review: verdict \`${first.normalisedFrom}\` read as \`${first.review.verdict}\` (C-4⁗)`);
     return first.review;
   }
-  deps.note?.(
-    `plan review artifact unusable (${first.issue}) — relaunching the review once (C-4⁗)`,
-  );
-  const second = await reviewOnce(
-    deps,
-    tickets,
-    { issue: first.issue ?? "unusable" },
-    scope,
-    draw,
-  );
+  deps.note?.(`plan review artifact unusable (${first.issue}) — relaunching the review once (C-4⁗)`);
+  const second = await reviewOnce(deps, tickets, { issue: first.issue ?? "unusable" }, scope);
   if (second.review !== null) {
-    if (second.normalisedFrom !== null)
-      deps.note?.(
-        `plan review: verdict \`${second.normalisedFrom}\` read as \`${second.review.verdict}\` (C-4⁗)`,
-      );
+    if (second.normalisedFrom !== null) deps.note?.(`plan review: verdict \`${second.normalisedFrom}\` read as \`${second.review.verdict}\` (C-4⁗)`);
     return second.review;
   }
-  deps.note?.(
-    `plan review artifact unusable again (${second.issue}) — the draft stands unreviewed (PRDR-084)`,
-  );
+  deps.note?.(`plan review artifact unusable again (${second.issue}) — the draft stands unreviewed (PRDR-084)`);
   return null;
+}
+
+/** C-4⁸ (PRDR-294): what buys the slice its one revision. */
+export const isBlocking = (f: ReviewFinding): boolean => f.severity === "blocker" || f.severity === "major";
+
+/**
+ * C-4⁸ (PRDR-294): the verdict is what the severities say. A review that
+ * wrote `changes` over minors alone has approved, and one that wrote `approve`
+ * over a blocker or major has not, since the finding is the more exact of the
+ * two statements. Where the word and the grades disagree, the note says so.
+ */
+export function gradedVerdict(review: PlanReview, sliceId: string, note?: (text: string) => void): "approve" | "changes" {
+  const graded = review.findings.some(isBlocking) ? "changes" : "approve";
+  if (graded !== review.verdict) {
+    note?.(
+      `${sliceId} review: \`${review.verdict}\` read as ${graded === "approve" ? "approve — it found nothing blocker or major" : "changes — it found a blocker or major"} (C-4⁸)`,
+    );
+  }
+  return graded;
 }
 
 export function sessionBudget(budgets: Budgets): Record<string, number> {
   return {
     implement_turns: budgets.turns_per_stage,
-    ticket_wall_clock_minutes: Math.round(
-      budgets.ticket_wall_clock_ms / 60_000,
-    ),
+    ticket_wall_clock_minutes: Math.round(budgets.ticket_wall_clock_ms / 60_000),
     sessions_per_generation: budgets.sessions,
   };
 }

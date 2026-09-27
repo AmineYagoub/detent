@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
 import { sizingEvidence } from "../../src/init/sizing-evidence.js";
 import { MockBackend } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo, planning } from "./plan-fixture.js";
 
 /**
  * X-4″ (PRDR-102) — the planner and the plan review size against what a
@@ -51,7 +51,7 @@ describe("X-4″ sizing evidence", () => {
   it("reaches PLAN and REVIEW_PLAN as `sizing_evidence`", async () => {
     const root = repo(LONE_CANDIDATE);
     seedEvidence(root);
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(DRAFT(["t-100"])) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(planner(DRAFT(["t-100"]))) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     const inputs = backend.calls
       .filter((c) => c.spec.artifactOut.endsWith("plan-draft.json") || c.spec.artifactOut.endsWith("plan-review.json"))

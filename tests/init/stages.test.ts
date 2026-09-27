@@ -17,7 +17,7 @@ import { MockBackend, okResult, outageResult, type StageFn } from "../../src/ses
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { git, gitInit, removeTree, tmpTree, writeTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { CLEAN_AUDIT, planningPipeline } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, planning } from "./plan-fixture.js";
 
 /** T-061 (doc discovery), T-062 (ANALYZE, folded into DECIDE by D-10′), T-063 (planning research). */
 
@@ -186,7 +186,7 @@ describe("T-062 the planning sessions (C-3, D-10′)", () => {
       "package.json": '{"scripts":{"test":"vitest run"}}\n',
       "AGENTS.md": `# Rules\n\n- ${marker}\n`,
     });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(plannerStage(DRAFT)) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -210,7 +210,7 @@ describe("T-062 the planning sessions (C-3, D-10′)", () => {
    */
   it("an init session can write its own artifact and nothing else under the floor (PRDR-184)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(plannerStage(DRAFT)) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -235,7 +235,7 @@ describe("T-062 the planning sessions (C-3, D-10′)", () => {
 
   it("the planner session gets the read-only surface plus ONE scoped write — its artifact (S-1′, PRDR-067)", async () => {
     const root = repo({ "PRD.md": "# thing\n", "package.json": '{"scripts":{"test":"vitest run"}}\n' });
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerStage(DRAFT) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(plannerStage(DRAFT)) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers);
 
@@ -466,7 +466,7 @@ describe("PRDR-185 init waits out a backend outage", () => {
     const notes: string[] = [];
     const handlers = planningPipeline({
       root,
-      backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: flaky }),
+      backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(flaky) }),
       prompts: PROMPTS,
       budgets: BUDGETS,
       note: (t) => notes.push(t),
@@ -487,7 +487,7 @@ describe("PRDR-185 init waits out a backend outage", () => {
     const broken: StageFn = () => outageResult("the model refused: the PRD contradicts itself");
     const handlers = planningPipeline({
       root,
-      backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: broken }),
+      backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(broken) }),
       prompts: PROMPTS,
       budgets: BUDGETS,
       sleep: async (ms: number) => {
@@ -564,7 +564,7 @@ describe("PRDR-189 the wait honours the reset the limit states", () => {
     };
     const handlers = planningPipeline({
       root,
-      backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: flaky }),
+      backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(flaky) }),
       prompts: PROMPTS,
       budgets: BUDGETS,
       note: (t) => notes.push(t),

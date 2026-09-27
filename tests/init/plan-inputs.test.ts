@@ -56,7 +56,11 @@ const reporting =
   (take: number, inputs: Json): Json => ({ ...draft(inputs), ...(sliceOfInputs(inputs) === slice && takes.includes(take) ? { spec_defects: [...defects] } : {}) });
 
 /** A review that asks for `ticket` to be split. */
-const splitting = (ticket: string): Json => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", finding: `${ticket} is two sessions' work`, ticket }] });
+const splitting = (ticket: string): Json => ({
+  schema_version: SCHEMA_VERSION,
+  verdict: "changes",
+  findings: [{ severity: "major", tag: "sizing", finding: `${ticket} is two sessions' work`, ticket, fix: `split ${ticket} in two` }],
+});
 
 describe("PRDR-292: a PLAN session drafts from the checker's parse of its slice's records (C-4⁵)", () => {
   it("is handed each requirement, its criteria and what they cite, and no document or document path", async () => {
@@ -332,7 +336,7 @@ describe("PRDR-292: planning asks nothing, and reports what the pack leaves unse
 
   it("a spec defect a slice's revision reports reaches PRESENT", async () => {
     const s = seeded(CONFORMING_PACK, {
-      review: (take, inputs) => (inputs["scope"] === "slice" && sliceOfInputs(inputs) === "s03" && take <= 3 ? splitting("t-s03-001") : APPROVE_PLAN),
+      review: (_take, inputs) => (sliceOfInputs(inputs) === "s03" ? splitting("t-s03-001") : APPROVE_PLAN),
       draft: reporting("s03", [GAP], [2]),
     });
     const result = await s.init();

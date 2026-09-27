@@ -108,10 +108,11 @@ const configStamp = (root: string): unknown =>
  * A state holding every kind the layout stamps, and a nested stamp.
  *
  * Its assignment already names the prompt this build ships, and its config
- * already routes `audit`, `spec_write` and `spec_review`, so both of the
- * migration's transforms are no-ops here and what these tests see is the
- * restamp alone. Each transform has its own test: the re-pin below, the
- * routing in `tests/init/audit-role.test.ts` (PRDR-281, PRDR-282, PRDR-284).
+ * already routes `audit`, `spec_write`, `spec_review` and `plan_review`, so
+ * both of the migration's transforms are no-ops here and what these tests see
+ * is the restamp alone. Each transform has its own test: the re-pin below, the
+ * routing in `tests/init/audit-role.test.ts` (PRDR-281, PRDR-282, PRDR-284)
+ * and `tests/init/plan-review-role.test.ts` (PRDR-294).
  */
 async function richState(): Promise<string> {
   const { root } = await makeRunRepo();
@@ -122,8 +123,8 @@ async function richState(): Promise<string> {
     configFile,
     `${JSON.stringify({
       ...config,
-      model_routing: { ...config["model_routing"], audit: "claude-opus-5-5", spec_write: "claude-opus-5-5", spec_review: "claude-opus-5-5" },
-      effort_routing: { ...config["effort_routing"], audit: "max", spec_write: "max", spec_review: "max" },
+      model_routing: { ...config["model_routing"], audit: "claude-opus-5-5", spec_write: "claude-opus-5-5", spec_review: "claude-opus-5-5", plan_review: "claude-opus-5" },
+      effort_routing: { ...config["effort_routing"], audit: "max", spec_write: "max", spec_review: "max", plan_review: "max" },
     }, null, 2)}\n`,
   );
   addTicket(root, { id: "t-1" });

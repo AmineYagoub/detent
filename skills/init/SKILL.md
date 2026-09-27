@@ -98,16 +98,19 @@ walking skeleton first. On a pack (C-2⁸) code groups the requirement ids by
 milestone and module for it, refuses a cut that loses, repeats or invents
 one or delivers a milestone out of order, and keeps the cut from one run to
 the next, so an edited requirement re-plans only its own slice. `PLAN` then
-plans every slice in turn, one session-sized ticket set per slice, reviews
-each, and revises what its review faults. Code checks every draft, and after
-every slice the plan so far (A-1⁷): coverage of each requirement, baseline
-item and criterion, one provider for each name a ticket uses, milestone
-order, a gate for every path a ticket writes, and no dependency cycle. A
-draft that fails is redrafted once with its failures; no model reads the
-whole plan. Planning does not pause between slices: it runs to the end of
-the product, and asks nothing. On a pack (C-4⁵) each slice is drafted from
-its requirements' records, and what the pack leaves unsettled is a spec
-defect, quoted from it, that `PRESENT` lists.
+plans every slice in turn, one session-sized ticket set per slice. Code
+checks every draft, and after every slice the plan so far (A-1⁷): coverage
+of each requirement, baseline item and criterion, one provider for each name
+a ticket uses, milestone order, a gate for every path a ticket writes, and
+no dependency cycle. A draft that fails is redrafted once with its failures;
+no model reads the whole plan. A `plan_review` session reads each slice's
+draft once, after it passes the checks (C-4⁸), and grades each finding
+blocker, major or minor with its fix: a blocker or major buys the slice one
+revision, which code checks and no review reads again, and a minor reaches
+the sessions that run its ticket. Planning does not pause between slices: it
+runs to the end of the product, and asks nothing. On a pack (C-4⁵) each
+slice is drafted from its requirements' records, and what the pack leaves
+unsettled is a spec defect, quoted from it, that `PRESENT` lists.
 `SLICE` also places Detent's production baseline (C-2⁗ — secrets, auth,
 backups, health checks, CI gates, and the rest) into the slices where each
 item belongs, so the plan is production grade even when the documents never
@@ -167,12 +170,14 @@ decision yourself.
    consent logged (C-6a, SEC-1). Channel: the human establishes the tooling —
    themselves, or by consenting to the proposal — then re-invoke.
 5. **`AWAIT_APPROVAL`** — raised at `PRESENT` (C-7): the plan's dual-exit
-   approval. Present the plan summary verbatim; the human answers approve,
-   decline, or defer. Relay it on the re-invocation with exactly one flag:
-   `--approve --by "<their name>"`, `--decline`, or `--defer`. Approval is
-   recorded with who, when, and the hash of what was approved; a decline
-   leaves the plan READY-unapproved; a deferral hands presentation to the
-   first `run` (C-7).
+   approval. Present the plan summary verbatim. It lists each blocker and
+   major a slice's review found (C-4⁸), with its fix, since no review read
+   the revision it bought: the human reads the tickets each one names before
+   answering. The human answers approve, decline, or defer. Relay it on the
+   re-invocation with exactly one flag: `--approve --by "<their name>"`,
+   `--decline`, or `--defer`. Approval is recorded with
+   who, when, and the hash of what was approved; a decline leaves the plan
+   READY-unapproved; a deferral hands presentation to the first `run` (C-7).
 
 ## Outcome
 

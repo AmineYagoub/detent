@@ -1,4 +1,4 @@
-import type { PlanQuestion, PlanReview } from "../schemas/init.js";
+import { REVIEW_SEVERITIES, type PlanFinding, type PlanQuestion, type PlanRisk } from "../schemas/init.js";
 import type { PresentInput } from "./present.js";
 import { isPresentedDefect } from "./present-spec.js";
 import { mergeSimilar, similarQuestions } from "./questions.js";
@@ -16,7 +16,7 @@ export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
 ): Pick<
   PresentInput,
-  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "revisions"
+  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "reviewRisks" | "unreviewed" | "derivedEdges" | "gateNotices"
 > {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
@@ -42,7 +42,7 @@ export function presentInputsFromOutputs(
    * `symbol-reminder.ts` iterates the same array. "Returns something
    * renderable or nothing" has to hold for everything it returns.
    */
-  const isFinding = (f: unknown): f is PlanReview["findings"][number] =>
+  const isFinding = (f: unknown): f is PlanFinding =>
     typeof f === "object" && f !== null && typeof (f as { tag?: unknown }).tag === "string" && typeof (f as { finding?: unknown }).finding === "string";
   const isEdge = (e: unknown): e is NonNullable<PresentInput["derivedEdges"]>[number] =>
     typeof e === "object" &&
@@ -100,19 +100,12 @@ export function presentInputsFromOutputs(
     risks: list<unknown>("VALIDATE", "risks").filter(isRow("id", "where", "fix", "left", "reason")),
     specDefects: list<unknown>("PLAN", "spec_defects").filter(isPresentedDefect),
     answeredByLog,
-    findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
-    ...(((v): v is { resolved: number; survived: number; introduced: number } =>
-      typeof v === "object" && v !== null && typeof (v as { resolved?: unknown }).resolved === "number")(
-      outputs["PLAN"]?.["revision_summary"],
-    )
-      ? { revisions: outputs["PLAN"]["revision_summary"] as { resolved: number; survived: number; introduced: number } }
-      : {}),
-    ...(((v): v is { resolved: number; survived: number; introduced: number } =>
-      typeof v === "object" && v !== null && typeof (v as { resolved?: unknown }).resolved === "number")(
-      outputs["PLAN"]?.["churn_summary"],
-    )
-      ? { churn: outputs["PLAN"]["churn_summary"] as { resolved: number; survived: number; introduced: number } }
-      : {}),
+    findings: list<PlanFinding>("PLAN", "review_findings").filter(isFinding),
+    /* C-4⁸ (PRDR-294): a risk renders its severity's rank, so one naming another severity is not one this build wrote. */
+    reviewRisks: list<unknown>("PLAN", "review_risks")
+      .filter(isRow("slice", "severity", "tag", "ticket", "finding", "fix"))
+      .filter((r): r is PlanRisk => (REVIEW_SEVERITIES as readonly string[]).includes(r.severity) && r.severity !== "minor"),
+    unreviewed: list<unknown>("PLAN", "unreviewed").filter(isRow("slice", "reason")),
     derivedEdges: list<{ consumer: string; provider: string; contract: string }>("PLAN", "derived_edges").filter(isEdge),
     gateNotices: list<unknown>("DETERMINE_VERIFICATION", "gate_notices").filter((n): n is string => typeof n === "string"),
   };

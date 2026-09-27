@@ -42,3 +42,18 @@ approval refuses while the count is not zero.
 
 So the first criterion's "the spec defects planning found" is built, and so is the second
 criterion's refusal while a spec defect is open. The refusal while a check fails is PRDR-293's.
+
+## From PRDR-294
+
+Each slice's review is read once (C-4⁸), and PRESENT's part of it is built in
+`src/init/present-review.ts`:
+- Each blocker and major a slice's read found is listed as a risk, with its slice, ticket, grade,
+  tag and fix, blockers first. Each bought one revision that no review read, so none is known to
+  be answered, and the first criterion's "the review majors left after revision" is built as every
+  blocker and major sent to a revision. PLAN outputs them as `review_risks`, and each slice no
+  review read, with why, as `unreviewed`.
+- The minors are counted and not listed: each is recorded in PLAN's `review_findings` and reaches
+  the sessions that run its ticket. The repairs code made to a draft (A-1″) are listed, since each
+  is a decision code made for the operator.
+- The revision and churn lines, the held-finding labels and the advice file are gone, with
+  `present-advice.ts`, so the third criterion holds but for the question list.

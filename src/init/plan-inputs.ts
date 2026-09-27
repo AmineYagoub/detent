@@ -101,9 +101,12 @@ export function draftInputs(deps: PlanDeps, scope: DraftScope, previous: Previou
     /** C-2⁗: the baseline items this slice carries, with what each is verified by — tickets are drafted from them. */
     ...(slice === undefined || deps.baseline === "none" || slice.baseline_items.length === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => slice.baseline_items.includes(b.id)) }),
     ...(index.length === 0 ? {} : { plan_index: index }),
+    /** C-4⁸ (PRDR-294): the blockers and majors the review found in the slice's last draft, each with its fix, which the revision answers. */
     ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
-    /** A-1⁷ (PRDR-293): what code proved wrong in the slice's last draft, with that draft, so a redraft fixes what they name and keeps the rest. */
-    ...(scope.failures === undefined ? {} : { check_failures: failureInputs(scope.failures), draft: asDrafted(scope.draft ?? []) }),
+    /** A-1⁷ (PRDR-293): what code proved wrong in the slice's last draft, so a redraft fixes what they name. */
+    ...(scope.failures === undefined ? {} : { check_failures: failureInputs(scope.failures) }),
+    /** A-1⁷, C-4⁸: the draft a redraft or the revision starts from, which keeps what neither the failures nor the findings name. */
+    ...(scope.draft === undefined ? {} : { draft: asDrafted(scope.draft) }),
     ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
     ...(previous?.refused === true ? refusedAttemptInput(previous, "plan draft") : previousAttemptInput(previous, "plan draft")),
     expected_output: planDraftSkeleton(),
@@ -112,7 +115,9 @@ export function draftInputs(deps: PlanDeps, scope: DraftScope, previous: Previou
         ? "Draft the tickets for the whole product."
         : `Draft slice \`${slice.id}\` (${slice.title}): every requirement of the slice and every item in \`production_baseline\` reaches a ticket, and nothing outside the slice does. Its ticket ids are \`t-${slice.id}-NNN\`.`,
       deps.greenfield ? "This is a new project: Detent writes the bootstrap ticket that scaffolds it and blocks everything on it, so draft no scaffolding or setup ticket." : "",
-      scope.findings === undefined ? "" : "A review of an earlier draft raised the `review_findings` in your inputs: answer every one of them in this draft.",
+      scope.findings === undefined
+        ? ""
+        : "The review of `draft`, this slice's last draft, graded the `review_findings` in your inputs blocker or major: answer every one, each by its fix or better, and keep the rest of `draft` as it is.",
       scope.failures === undefined ? "" : "Code checked `draft`, this slice's last draft, and found the `check_failures` in your inputs: fix every one, and keep the rest of `draft` as it is.",
       scope.keepIds === undefined || scope.keepIds.length === 0 ? "" : "Keep every ticket id in `keep_ids` exactly as it is: later slices depend on them.",
       "Write exactly the `expected_output` shape to `artifact_out`.",

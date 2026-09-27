@@ -190,7 +190,9 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
      * the wait can end when the first response BEGINS — the moment its first
      * turn's prompt is cached — rather than when the turn completes. Requested
      * only then: nothing else reads the events, and a session nobody waits on
-     * gets the stream it always had.
+     * gets the stream it always had. Nothing waits on a session since C-4⁸
+     * (PRDR-294) deleted the plan review's draws, and C-4⁸ lists this for
+     * deletion.
      */
     ...(spec.onFirstResponse === undefined ? {} : { includePartialMessages: true }),
     /**

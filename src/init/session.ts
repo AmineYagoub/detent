@@ -16,7 +16,6 @@ import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
-import type { LaunchBatch } from "./launch-batch.js";
 import { scrub } from "../kernel/scrub.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
@@ -96,13 +95,6 @@ export interface InitSessionRequest {
   /** C-3a: research capability for planning questions. */
   readonly withWeb?: boolean;
   /**
-   * D-28′ (PRDR-203): the batch this launch belongs to, if any. The batch's
-   * first launch evaluates the gate; the rest pass on that evaluation.
-   */
-  readonly batch?: LaunchBatch;
-  /** PRDR-205: the artifact path the prompt names, when it is not `artifactOut`. See `SessionSpec.artifactTold`. */
-  readonly artifactTold?: string;
-  /**
    * S-1‴ (PRDR-283): the paths beyond its artifact the session may write, as
    * globs, declared as an implement session's surface is. It gets Edit and
    * Write for them, and the hook confines both to the surface. Absent, the
@@ -132,27 +124,29 @@ export async function withInitJournal<T>(root: string, body: (journal: RunJourna
 }
 
 /**
- * C-4⁵ (PRDR-292): all a planner session has. It reads, and writes its
+ * C-4⁵ (PRDR-292): all a planning session has. It reads, and writes its
  * artifact through the one rule below; it runs nothing and spawns nothing
  * (D-28″). The planning audit counted 2,846 read-only Bash calls and 97
  * attempts at a subagent in planner sessions whose allowlist named neither.
  */
 const PLANNER_TOOLS: readonly string[] = ["Read", "Grep", "Glob", "Write"];
 
+/** C-4⁵, C-4⁸ (PRDR-292, PRDR-294): the roles that plan, the drafter's and the review's, which a planning session's limits bind. */
+const PLANNING_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["planner", "plan_review"]);
+
 function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
   /* C-4⁵ (PRDR-292): no Detent PRD id in what a model reads; the prompts name none either. */
   const preamble = JSON.stringify({ phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below." }, null, 2);
   /* C-2⁷, C-4⁵ (PRDR-279, PRDR-292): the originals a pack was written from, which planning never reads. */
   const archive = path.join(deps.root, ARCHIVE_DIR);
-  const planner = request.role === "planner";
+  const planning = PLANNING_ROLES.has(request.role);
   return {
     role: request.role,
     /* No ticket exists during init; the id names the pipeline for the journal. */
     ticketId: INIT_TICKET,
-    /* C-4⁵ (PRDR-292): a planner session reads its job's prompt, SLICE's, PLAN's or the review's. */
+    /* C-4⁵ (PRDR-292): a planner session reads its job's prompt, SLICE's or PLAN's; the review reads its role's own (C-4⁸). */
     promptPrefix: stablePrefix(deps.prompts.prompts[promptOf(request.role, request.inputs["stage"])], deps.rulesText ?? "(no rules file)", preamble),
-    /* PRDR-205: the told path, so the sessions of one batch share one first turn. */
-    promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactTold ?? request.artifactOut }, null, 2),
+    promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactOut }, null, 2),
     cwd: deps.root,
     artifactOut: request.artifactOut,
     /**
@@ -173,13 +167,10 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
       ...(request.scratch === undefined ? [] : [SCRATCH_TOOL]),
       artifactWriteRule(request.artifactOut),
     ],
-    ...(planner ? { tools: PLANNER_TOOLS } : {}),
+    ...(planning ? { tools: PLANNER_TOOLS } : {}),
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
     ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
-    /* C-4⁗‴ (PRDR-204): a batched launch reports its first answer to the batch waiting on it. */
-    ...(request.batch === undefined ? {} : { onFirstResponse: request.batch.noteResponse }),
-    ...(request.artifactTold === undefined ? {} : { artifactTold: request.artifactTold }),
     ...(request.scratch === undefined ? {} : { scratch: request.scratch }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
@@ -223,10 +214,11 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
        */
       artifactRoot: request.artifactOut,
       /**
-       * C-4⁵ (PRDR-292): discovery keeps the originals out of a planner's
-       * inputs (PRDR-279), and this keeps them out of its tools' reach.
+       * C-4⁵ (PRDR-292): discovery keeps the originals out of a planning
+       * session's inputs (PRDR-279), and this keeps them out of its tools'
+       * reach, the review's as the drafter's (C-4⁸).
        */
-      ...(planner && existsSync(archive) ? { unreadable: [archive] } : {}),
+      ...(planning && existsSync(archive) ? { unreadable: [archive] } : {}),
     },
   };
 }
@@ -381,15 +373,8 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
     deps.progressBreaker === undefined
       ? new SpendLedger(deps.root, journal, deps.spendCeiling)
       : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
-  /*
-   * D-25: the ceiling is a launch gate, evaluated here and never mid-flight.
-   * D-28′ (PRDR-203): a batch is gated once, by the first of its launches the
-   * gate lets through; `passed` is set only after the gate did not throw.
-   */
-  if (request.batch === undefined || !request.batch.passed) {
-    ledger.recordLaunch();
-    if (request.batch !== undefined) request.batch.passed = true;
-  }
+  /* D-25: the ceiling is a launch gate, evaluated here and never mid-flight. */
+  ledger.recordLaunch();
   journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString() });
   const result = await deps.backend.run(initSessionSpec(deps, request));
   ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString());

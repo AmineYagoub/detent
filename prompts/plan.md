@@ -9,7 +9,8 @@ Your inputs
 - `catalogue_ids`: the pack's catalogue ids, by the contract kind that names them.
 - `stack`: in a new project, the stack the decision log settled. Plan on it, and choose nothing about it.
 - `bound_slots`, `session_budget`, and `sizing_evidence` when a previous plan of this product measured its sessions.
-- `review_findings`, when a review of an earlier draft of this slice asked for changes, and `previous_attempt`, when a draft was refused.
+- `review_findings` and `draft`, when the review of this slice's last draft graded a finding blocker or major: each finding with its grade, its tag, its ticket and the fix it asks for, and the tickets as the review read them. Answer each finding, and keep what none names.
+- `previous_attempt`, when a draft was refused.
 - `check_failures` and `draft`, when Detent's checks failed on this slice's last draft: each failure with its check, the ticket it names where it names one, and the finding, and the tickets as they were drafted. Fix what each failure names, and keep what none names.
 - `keep_ids`: the ids of this slice's tickets that later slices depend on. Keep each one.
 
@@ -32,7 +33,8 @@ What Detent does itself
 - It holds every ticket of a slice until the slices it depends on are done.
 - In a new project it writes the bootstrap ticket that scaffolds the project and proves its gates, and blocks every other ticket on it.
 - It keeps every ticket already done, whatever this draft says.
-- It discards a redraft that drops an id in `keep_ids`, and the slice stands as it was reviewed.
+- It discards a redraft that drops an id in `keep_ids`, and the slice stands as it was.
+- It discards a revision that still fails a check after its redraft, and the draft the review read stands.
 
 Production baseline. Each item in `production_baseline` becomes tickets with its id in their `baseline_ids`. The pack may never ask for backups, rate limits or health checks, and the plan delivers them anyway.
 
@@ -40,17 +42,16 @@ Contracts. `provides` lists what a ticket brings into existence for another tick
 
 Spec defects. When the pack contradicts itself, or leaves unsettled something a ticket cannot be built without, report it in `spec_defects`. Quote each passage word for word, with the id of the record that holds it: a requirement, a criterion, a decision or default (`D-n`, `X-n`), a fact by its section, or a catalogue entry. A contradiction quotes both sides. An open spec defect holds approval of the whole plan until the pack is amended.
 
-What the plan's reviewer judges
+What the plan's reviewer judges. It reads a draft the checks pass, once, and grades each finding: a blocker or major sends the slice back to you once, with `review_findings` and `draft`, and a minor goes to the sessions that run its ticket.
 - Sizing: each ticket is one implement session's work within `session_budget`, and a requirement larger than that becomes several dependent tickets. `sizing_evidence` is measured, and outweighs your reading of the text.
 - Shape: the slice's first tickets form a walking skeleton through its riskiest integration, and infrastructure is built only as far as the slice needs it.
-- Testability: a command or a test settles each acceptance criterion.
-- Boundaries: `non_goals` says where a ticket stops, since the implementer and the reviewer both read it.
 - Dependency: a criterion that needs what another ticket builds says so, with `consumes`, `depends_on` or its surface.
-- Coherence: no ticket duplicates or contradicts another here or in `plan_index`.
-- Traceability: every ticket comes from the records or the baseline.
-- Each `review_findings` entry is answered.
+- Coherence: no ticket duplicates or contradicts another here or in `plan_index`, and none contradicts the records.
 
-What is yours to judge. Detent checks none of it, and the operator who approves the plan reads it.
+What is yours to judge. Detent checks none of it, no reviewer reads it, and the operator who approves the plan reads it.
+- A command or a test settles each acceptance criterion.
+- `non_goals` says where a ticket stops, since the implementer and the reviewer both read it.
+- Every ticket comes from the records or the baseline.
 - A ticket's `type` is `bug` only where it fixes behaviour that exists, since a bug is diagnosed before it is fixed, and `feature` otherwise: documentation, tests and refactoring are features.
 - In a new project no ticket scaffolds it: the bootstrap ticket does.
 - A ticket's `depends_on` names only what it needs. Tickets with disjoint surfaces and no shared dependency run in parallel.

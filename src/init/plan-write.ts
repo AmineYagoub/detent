@@ -7,7 +7,7 @@ import { claimBreakable, pidAlive, readClaim } from "../kernel/tickets/mutations
 import { hostname } from "node:os";
 import { claimPath, ticketPath } from "../kernel/tickets/paths.js";
 import { allTickets } from "../kernel/tickets/readers.js";
-import type { PlanDraftTicket, PlanReview, SliceSpec } from "../schemas/init.js";
+import type { PlanDraftTicket, PlanFinding, SliceSpec } from "../schemas/init.js";
 import type { DecidedStack } from "./decide-log.js";
 import { planSchema, type Plan } from "../schemas/records.js";
 import { scrubJson } from "../kernel/scrub.js";
@@ -73,10 +73,10 @@ export function writePlan(
   deps: WriteDeps,
   drafted: readonly DraftedTicket[],
   slices: readonly SliceSpec[],
-): { readonly tickets: string[]; readonly bootstrap: string | null; readonly plan: Record<string, unknown>; readonly findings: PlanReview["findings"] } {
+): { readonly tickets: string[]; readonly bootstrap: string | null; readonly plan: Record<string, unknown>; readonly findings: PlanFinding[] } {
   const existing = allTickets(deps.root);
   const done = new Map(existing.filter((t) => t.state === "DONE").map((t) => [t.id, t]));
-  const findings: PlanReview["findings"] = [];
+  const findings: PlanFinding[] = [];
 
   /**
    * C-8″ (PRDR-118): everything is decided in memory and validated BEFORE a

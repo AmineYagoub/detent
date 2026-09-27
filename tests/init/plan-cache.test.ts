@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Budgets } from "../../src/schemas/budgets.js";
 import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
-import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo, planning } from "./plan-fixture.js";
 import { okResult } from "../../src/sessions/mock.js";
 import { DOCS, MockBackend, R, reworded, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 
@@ -30,7 +30,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const root = repo(DOCS);
     const log: string[] = [];
     const notes: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ slices: reworded, draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scriptedPlanner({ slices: reworded, draft: twoSliceDraft, review: () => APPROVE_PLAN }, log)) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
@@ -65,7 +65,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const root = repo(DOCS);
     const log: string[] = [];
     const notes: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log)) });
     const build = (budgets: Budgets): PhaseHandler[] =>
       planningPipeline({ root, backend, prompts: PROMPTS, budgets, note: (t) => notes.push(t) });
 
@@ -101,25 +101,16 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
    * `TypeError: t.provides is not iterable`.
    */
   /**
-   * C-4⁗″ (PRDR-200): the OTHER side of the same trust boundary.
-   *
-   * The test below pins that a cache missing REQUIRED fields must miss. This
-   * one pins that a cache missing an ADDITIVE one must still HIT — because the
-   * failure it guards against was nearly shipped. `churn` was written into the
-   * cache before it was added to `sliceCacheSchema`, which is strict, so every
-   * slice planned before this build would have failed to parse, missed, and
-   * re-planned at full price to add a measurement. PRDR-196's comment on the
-   * `revision` field one line above records that exact lesson, and it was
-   * reintroduced anyway while that comment was on screen.
-   */
-  /**
    * C-4⁗″ (PRDR-200): the writer and the schema must agree, in BOTH directions.
    *
    * `churn` was written into the cache before it was added to
    * `sliceCacheSchema`, which is strict — so a cache this build wrote, this
    * build could not read, and every slice would have missed and re-planned at
-   * full price on the next run. PRDR-196's comment on the `revision` field one
-   * line above records that exact lesson; it was reintroduced anyway.
+   * full price on the next run. PRDR-196's comment on the `revision` field
+   * recorded that exact lesson; it was reintroduced anyway. Both fields went
+   * with the sampled reads they measured (C-4⁸, PRDR-294): `review` is the
+   * field PRDR-294 wrote, and `sent` the one a cache written before PRDR-293
+   * lacks.
    *
    * Both halves are one property and are asserted as one: what this build
    * writes it reads, and what an older build wrote it still reads. The first
@@ -133,7 +124,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const log: string[] = [];
     const notes: string[] = [];
     const handlers = (): ReturnType<typeof planningPipeline> =>
-      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) }), prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
+      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log)) }), prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
     const cacheFile = path.join(sliceCacheDir(root), "s01.json");
     const replan = async (): Promise<void> => {
       writeFileSync(path.join(root, "prd-billing.md"), `# billing ${String(log.length)}\n`);
@@ -144,7 +135,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     };
 
     await runInit(root, handlers());
-    expect(JSON.parse(readFileSync(cacheFile, "utf8"))["churn"], "this build writes it").toBeDefined();
+    expect(JSON.parse(readFileSync(cacheFile, "utf8"))["review"], "this build writes it").toBeDefined();
 
     await replan();
     expect(log, "a field the writer knows and the schema does not is a MISS").not.toContain("PLAN:s01");
@@ -152,7 +143,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
 
     /* And the forward direction: the shape every slice cached before this build carries. */
     const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as Record<string, unknown>;
-    delete cached["churn"];
+    delete cached["sent"];
     writeFileSync(cacheFile, JSON.stringify(cached));
     await replan();
     expect(log, "an additive field defaults; an older cache must not re-plan").not.toContain("PLAN:s01");
@@ -161,7 +152,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
   it("a cache whose tickets are missing the fields it casts to is a MISS, not a crash", async () => {
     const root = repo(DOCS);
     const handlers = (): ReturnType<typeof planningPipeline> =>
-      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, []) }), prompts: PROMPTS, budgets: BUDGETS });
+      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [])) }), prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers());
 
     const cacheFile = path.join(sliceCacheDir(root), "s01.json");
@@ -179,7 +170,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const log: string[] = [];
     let takes = 0;
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: (spec) => {
+      ...planning((spec) => {
         const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
         let artifact: object;
         if (spec.artifactOut.endsWith("slices.json")) artifact = reworded((takes += 1));
@@ -190,7 +181,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
         else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
-      },
+      }),
     });
     const handlers = () => planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS });
     await runInit(root, handlers());

@@ -1,20 +1,25 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { presentStage, renderPresentation, type PresentInput } from "../../src/init/present.js";
-import { ADVICE_INLINE_MAX, renderAdviceMarkdown } from "../../src/init/present-advice.js";
-import type { HeldFinding } from "../../src/schemas/init.js";
+import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
+import { newTicket } from "../../src/kernel/tickets/mutations.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import type { PlanFinding, PlanRisk } from "../../src/schemas/init.js";
+import type { Binding } from "../../src/schemas/records.js";
+import type { Ticket } from "../../src/schemas/ticket.js";
 import { removeTree } from "../helpers.js";
 
 /**
- * D-24′ (PRDR-209) — advice a human can act on.
+ * C-4⁸ (PRDR-294) — what PRESENT shows of the plan's review.
  *
- * gate-313's PRESENT printed 144 held findings as one flat list, twice. Buried
- * in it: the twenty-six tickets at least one read called too big for a
- * session, and which findings survived a paid revision versus which were seen
- * once and never again. Structure, not suppression: everything is still there,
- * the first screen is the part a person can act on.
+ * Each slice's review read its draft once, and a blocker or major bought one
+ * revision that nothing read again, so each is shown as a risk with the fix it
+ * asked for. The minors, and the repairs code made to drafts, went to the
+ * sessions that run their tickets: PRESENT counts them and lists none. D-24′'s
+ * labels, its advice file and PRDR-196's revision and churn lines are gone
+ * with the sampled reads they measured.
  */
 
 const roots: string[] = [];
@@ -31,213 +36,115 @@ function root(): string {
 
 const base = (dir: string): PresentInput => ({ root: dir, tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, slices: [], questions: [], derivedEdges: [], gateNotices: [] });
 
-let n = 0;
-const f = (ticket: string | undefined, tag: HeldFinding["tag"], held?: HeldFinding["held"]): HeldFinding => {
-  n += 1;
-  return { tag, finding: `finding ${String(n)} about ${ticket ?? "the plan as a whole"}`, ...(ticket === undefined ? {} : { ticket }), ...(held === undefined ? {} : { held }) };
-};
+const risk = (slice: string, ticket: string, severity: PlanRisk["severity"], finding: string): PlanRisk => ({
+  slice,
+  ticket,
+  severity,
+  tag: "sizing",
+  finding,
+  fix: `split what ${finding} names`,
+});
 
-/** A wall: thirty findings, one ticket drawing three tags, two plan-wide, kinds mixed. */
-function wall(): HeldFinding[] {
-  const out: HeldFinding[] = [
-    f("t-s14-013", "sizing", "after-revision"),
-    f("t-s14-013", "sizing", "seen-once"),
-    f("t-s14-013", "sizing", "seen-once"),
-    f("t-s14-013", "testability", "seen-once"),
-    f("t-s14-013", "dependency", "after-revision"),
-    f("t-s10-002", "sizing", "seen-once"),
-    f("t-s10-002", "sizing", "seen-once"),
-    f("t-s10-002", "coherence", "after-revision"),
-    f(undefined, "coherence", "after-revision"),
-    f(undefined, "shape"),
-  ];
-  for (let i = 0; i < 20; i += 1) out.push(f(`t-s0${String((i % 8) + 1)}-00${String((i % 3) + 1)}`, "dependency", i % 2 === 0 ? "seen-once" : "after-revision"));
-  return out;
-}
+const minors = (n: number): PlanFinding[] =>
+  Array.from({ length: n }, (_, i) => ({ tag: "coherence" as const, ticket: `t-s01-${String(i).padStart(3, "0")}`, finding: `minor finding ${String(i)}`, severity: "minor" as const, fix: "say so" }));
 
-describe("D-24′ held findings render as something a person can act on", () => {
-  it("above the inline size: grouped by ticket, the ticket drawing the most tags first, totals by tag and by kind, and the file named", () => {
-    const findings = wall();
-    expect(findings.length).toBeGreaterThan(ADVICE_INLINE_MAX);
-    const text = renderPresentation({ ...base("/tmp/x"), findings, adviceFile: "/tmp/x/.detent/state/advice.md" });
-    /* Before PRDR-209: thirty indented `tag (ticket): …` lines and nothing else. */
-    expect(text).toMatch(/by tag: .*dependency 21/);
-    expect(text).toMatch(/seen in one read[^\n]*\d+/);
-    expect(text).toMatch(/survived a paid revision[^\n]*\d+/);
-    const top = text.split("\n").find((l) => l.includes("t-s14-013")) ?? "";
-    expect(top, "the ticket that drew three tags leads").toContain("sizing ×3");
-    const s10 = text.indexOf("t-s10-002");
-    expect(s10, "the two-tag ticket follows it").toBeGreaterThan(text.indexOf("t-s14-013"));
-    expect(text).toContain("full list: /tmp/x/.detent/state/advice.md");
-    expect(text.split("\n").filter((l) => /^ {2}(dependency|sizing|coherence|testability|shape) \(/.test(l)), "no wall").toHaveLength(0);
+describe("C-4⁸ PRESENT shows the review's risks, the slices it did not read, and a count of what it recorded", () => {
+  it("lists each blocker and major as a risk, with its slice, ticket, grade, tag and fix, blockers first", () => {
+    const text = renderPresentation({ ...base("/tmp/x"), reviewRisks: [risk("s02", "t-s02-001", "major", "the major"), risk("s01", "t-s01-003", "blocker", "the blocker")] });
+    expect(text).toMatch(/Plan review risks \(2\)/u);
+    expect(text).toContain("s01 t-s01-003 [blocker sizing]: the blocker");
+    expect(text).toContain("fix: split what the blocker names");
+    expect(text.indexOf("the blocker"), "a blocker leads").toBeLessThan(text.indexOf("the major"));
+    expect(text).toMatch(/no review read again/u);
   });
 
-  it("at or below the inline size: every finding, with its kind", () => {
-    const findings = [
-      f("t-s01-001", "sizing", "seen-once"),
-      f("t-s01-002", "dependency", "after-revision"),
-      f("t-s01-003", "coverage", "introduced"),
-      f(undefined, "coherence"),
-    ];
-    const text = renderPresentation({ ...base("/tmp/x"), findings });
-    for (const x of findings) expect(text).toContain(x.finding);
-    expect(text).toMatch(/sizing \(t-s01-001\)[^\n]*seen once/);
-    expect(text).toMatch(/dependency \(t-s01-002\)[^\n]*survived the revision/);
-    expect(text).toMatch(/coverage \(t-s01-003\)[^\n]*introduced by the revision/);
-    expect(text).not.toContain("full list:");
+  it("names a slice no review read, and why", () => {
+    const text = renderPresentation({ ...base("/tmp/x"), unreviewed: [{ slice: "s03", reason: "its draft fails 2 check(s) after its redraft" }] });
+    expect(text).toContain("s03: not reviewed — its draft fails 2 check(s) after its redraft");
   });
 
-  it("presentStage writes the full list to `.detent/state/advice.md` above the size, and names it", async () => {
+  it("counts the minors recorded on tickets and lists none of them, however many there are", () => {
+    const text = renderPresentation({ ...base("/tmp/x"), findings: minors(30) });
+    expect(text).toMatch(/Minor review findings \(30\) are recorded on their tickets/u);
+    expect(text).not.toContain("minor finding 7");
+  });
+
+  it("lists what code did to a draft, since code decided it on the operator's behalf (A-1″)", () => {
+    const repair: PlanFinding = { tag: "dependency", ticket: "t-s02-001", finding: "depends on t-s09-999, which no slice planned — the edge was dropped" };
+    const text = renderPresentation({ ...base("/tmp/x"), findings: [repair, ...minors(3)] });
+    expect(text).toContain("What code did to the drafts (1)");
+    expect(text).toContain(`dependency (t-s02-001): ${repair.finding}`);
+    expect(text).toMatch(/Minor review findings \(3\)/u);
+  });
+
+  it("reads a risk from PLAN's outputs only where it is whole and graded blocker or major", () => {
+    const row = { slice: "s01", ticket: "t-s01-001", severity: "major", tag: "sizing", finding: "larger than one session", fix: "split it" };
+    const built = presentInputsFromOutputs({ PLAN: { review_risks: [row, { ...row, severity: "minor" }, { ...row, severity: "grave" }, { ...row, fix: undefined }, null] } });
+    expect(built.reviewRisks).toEqual([row]);
+  });
+
+  it("says nothing of the review where it left nothing", () => {
+    const text = renderPresentation(base("/tmp/x"));
+    expect(text).not.toMatch(/Plan review risks|not reviewed|What code did|Minor review findings/u);
+  });
+
+  it("writes no advice file and prints no revision or churn line, however many findings there are", async () => {
     const dir = root();
-    const findings = wall();
-    const outcome = await presentStage({ ...base(dir), findings });
+    const outcome = await presentStage({ ...base(dir), findings: minors(40), reviewRisks: [risk("s01", "t-s01-001", "major", "the major")] });
     const message = outcome.kind === "interrupt" ? outcome.message : "";
-    const file = path.join(dir, ".detent", "state", "advice.md");
-    expect(message).toContain(`full list: ${file}`);
-    expect(existsSync(file)).toBe(true);
-    const body = readFileSync(file, "utf8");
-    for (const x of findings) expect(body).toContain(x.finding);
-    expect(body).toContain("## t-s14-013");
-  });
-
-  it("presentStage writes no file when the list fits inline", async () => {
-    const dir = root();
-    const outcome = await presentStage({ ...base(dir), findings: [f("t-s01-001", "sizing")] });
-    expect(outcome.kind).toBe("interrupt");
     expect(existsSync(path.join(dir, ".detent", "state", "advice.md"))).toBe(false);
+    expect(message).not.toMatch(/Revision rounds|full list:|repeated reads/u);
+    expect(message).toContain("the major");
   });
 });
 
 /**
- * PRDR-267 — the two populations are labelled, and never ordered by.
+ * PRDR-196 — what code proved reaches PRESENT, labelled as proved.
  *
- * Run 6 held 95 findings over 70 tickets: 43 `after-revision`, 52 `seen-once`.
- * D-24′ named the distinction and rendered it as a label on a list whose order
- * ignores it, so HEAD gave a top-10 slot to `t-s04-004`, whose two findings were
- * both seen once. The null is why the weights differ: over byte-identical
- * tickets with nothing revised between reads, 50-85% of findings never recur.
+ * Run against the finished gate-312 plan, the checker produced 7 findings,
+ * including the one certain failure in it: two tickets both creating
+ * `plugin/skills/init/SKILL.md`. That was proved, for nothing, and shown to
+ * nobody. PRDR-293: PRESENT proves it itself now, from the tickets as they
+ * stand, and what it proves holds approval.
  */
-describe("PRDR-267 the human meets the revision-surviving findings first", () => {
-  /** The falsifying shape: noise wins on both of HEAD's sort keys. */
-  function lopsided(): HeldFinding[] {
-    const out: HeldFinding[] = [
-      f("t-noise-001", "sizing", "seen-once"),
-      f("t-noise-001", "dependency", "seen-once"),
-      f("t-noise-001", "coherence", "seen-once"),
-      f("t-real-001", "sizing", "after-revision"),
-      f("t-real-001", "dependency", "after-revision"),
-    ];
-    for (let i = 0; i < 10; i += 1) out.push(f(`t-pad-00${String(i)}`, "coverage", "seen-once"));
-    return out;
-  }
+describe("PRDR-196 what code proved reaches PRESENT, labelled as proved", () => {
+  const owning = (id: string): Ticket =>
+    newTicket({ id, type: "feature", title: `t ${id}`, acceptance_criteria: ["it works"], surface: ["src/**"], provides: [{ kind: "file", id: "plugin/skills/init/SKILL.md", note: "the skill" }] });
+  const gate: Binding = {
+    schema_version: SCHEMA_VERSION,
+    package: ".",
+    slot: "test",
+    adapter: "make",
+    ref: "test",
+    resolved: "make test",
+    config_hash: "a".repeat(64),
+    executed_at: "2026-09-27T00:00:00.000Z",
+    approved_by: "auto",
+    status: "approved",
+  };
+  const gated = (dir: string): PresentInput => ({ ...base(dir), bindings: [gate] });
+  const proved = (dir: string): PresentInput => ({ ...gated(dir), tickets: [owning("t-s12-012"), owning("t-s12-013")] });
 
-  it("ranks a ticket whose findings survived a revision above one that merely drew more one-read noise", () => {
-    const findings = lopsided();
-    expect(findings.length).toBeGreaterThan(ADVICE_INLINE_MAX);
-    const text = renderPresentation({ ...base("/tmp/x"), findings, adviceFile: "/tmp/x/.detent/state/advice.md" });
-    const real = text.indexOf("t-real-001");
-    const noise = text.indexOf("t-noise-001");
-    expect(real, "the after-revision ticket appears in the top list").toBeGreaterThan(-1);
-    expect(real, "two findings a revision could not remove outrank three no second read reproduced").toBeLessThan(noise);
+  it("renders what the checks prove, and says code proved them", async () => {
+    const outcome = await presentStage(proved(root()));
+    const message = outcome.kind === "interrupt" ? outcome.message : "";
+    expect(message).toContain("plugin/skills/init/SKILL.md");
+    expect(message).toMatch(/proved by code/iu);
   });
 
-  it("a ticket with no revision-surviving finding never displaces one that has them", () => {
-    const findings: HeldFinding[] = [
-      f("t-zero-001", "sizing", "seen-once"),
-      f("t-zero-001", "dependency", "seen-once"),
-      f("t-one-001", "coverage", "after-revision"),
-    ];
-    for (let i = 0; i < 12; i += 1) findings.push(f(`t-pad-01${String(i)}`, "coverage", "seen-once"));
-    const text = renderPresentation({ ...base("/tmp/x"), findings, adviceFile: "/tmp/x/.detent/state/advice.md" });
-    expect(text.indexOf("t-one-001")).toBeLessThan(text.indexOf("t-zero-001"));
+  it("keeps them apart from the review's risks, because one kind is proved and the other is judgement", async () => {
+    const outcome = await presentStage({ ...proved(root()), reviewRisks: [risk("s01", "t-s01-012", "major", "larger than one implement session")] });
+    const message = outcome.kind === "interrupt" ? outcome.message : "";
+    expect(message).toContain("larger than one implement session");
+    expect(message).toContain("plugin/skills/init/SKILL.md");
+    /* Two headings, not one merged list — the operator must be able to tell them apart. */
+    expect(message).toMatch(/Checks that still fail/iu);
+    expect(message).toMatch(/Plan review risks/iu);
   });
 
-  it("advice.md places every after-revision finding above every seen-once one, and drops none", () => {
-    const findings = lopsided();
-    const body = renderAdviceMarkdown(findings);
-    for (const x of findings) expect(body, "nothing is suppressed").toContain(x.finding);
-    const after = findings.filter((x) => x.held === "after-revision").map((x) => body.indexOf(x.finding));
-    const once = findings.filter((x) => x.held === "seen-once").map((x) => body.indexOf(x.finding));
-    expect(Math.max(...after), "the paid-revision survivors come first").toBeLessThan(Math.min(...once));
-  });
-
-  it("renders no section for a population with nothing in it", () => {
-    const body = renderAdviceMarkdown(lopsided());
-    expect(body, "lopsided() marks every finding, so there is no unmarked population").not.toContain("## Unmarked");
-    const onlyOnce = renderAdviceMarkdown([f("t-a-001", "sizing", "seen-once"), f("t-a-002", "coverage", "seen-once")]);
-    expect(onlyOnce).not.toContain("## Held after revision (0)");
-    expect(onlyOnce).toContain("## Seen once (2)");
-  });
-
-  it("names what each population is worth where the reader meets it", () => {
-    const body = renderAdviceMarkdown(lopsided());
-    expect(body).toMatch(/## Held after revision \(2\)/);
-    expect(body).toMatch(/## Seen once \(13\)/);
-  });
-});
-
-/**
- * PRDR-269 — three populations, ordered by the evidence behind each.
- *
- * `after-revision` meant "whatever one unreplicated read returned after the
- * revision" until the post-revision review was sampled. Across three live arms
- * of one slice `revisionOutcome` reported survived 0 against introduced 7, 7
- * and 8, so PRDR-267's strongest slot held the weakest evidence. Told apart,
- * the top section is what a revision was paid to remove and did not, and
- * `introduced` falls in behind it: reproduced across reads of the revised
- * draft, but not something any revision failed to fix.
- */
-describe("PRDR-269 survivors outrank what the revision introduced, which outranks one-read noise", () => {
-  const three = (): HeldFinding[] => [
-    f("t-once-001", "sizing", "seen-once"),
-    f("t-new-001", "coverage", "introduced"),
-    f("t-real-001", "dependency", "after-revision"),
-  ];
-
-  it("advice.md renders the sections heaviest evidence first", () => {
-    const body = renderAdviceMarkdown(three());
-    const at = (heading: string): number => {
-      const i = body.indexOf(heading);
-      expect(i, `${heading} is rendered`).toBeGreaterThan(-1);
-      return i;
-    };
-    expect(at("## Held after revision"), "a paid revision could not remove these").toBeLessThan(at("## Introduced by the revision"));
-    expect(at("## Introduced by the revision"), "reproduced, but no revision failed to fix them").toBeLessThan(at("## Seen once"));
-  });
-
-  it("places every survivor above every introduced finding, and every introduced one above the noise", () => {
-    const findings = three();
-    const body = renderAdviceMarkdown(findings);
-    for (const x of findings) expect(body, "nothing is suppressed").toContain(x.finding);
-    const where = (kind: HeldFinding["held"]): number => body.indexOf(findings.find((x) => x.held === kind)?.finding ?? "");
-    expect(where("after-revision")).toBeLessThan(where("introduced"));
-    expect(where("introduced")).toBeLessThan(where("seen-once"));
-  });
-});
-
-/**
- * PRDR-270 — the null beside a revision figure is a rate, and the two lines are
- * named as the different measurements they are.
- *
- * `sampleChurn` sums over k*(k-1) = 6 ordered pairs at `PLAN_REVIEW_SAMPLES` =
- * 3; a revision figure is one before/after pair. Printing the churn's raw counts
- * beside it set six pairs' worth against one, under a comment claiming this file
- * prevented that misreading. The numbers below are PRDR-269's own s07.
- */
-describe("PRDR-270 — the churn line beside a revision figure", () => {
-  const revisions = { resolved: 3, survived: 1, introduced: 9 };
-  const churn = { resolved: 18, survived: 12, introduced: 18 };
-
-  it("renders a rate rather than six pairs' worth of raw counts", () => {
-    const text = renderPresentation({ ...base("/tmp/x"), revisions, churn });
-    expect(text).toContain("resolve 60% of what they saw");
-    expect(text).not.toContain("18 resolved, 12 survived, 18 introduced");
-  });
-
-  it("does not tell the reader to subtract and not to subtract in one sentence", () => {
-    const text = renderPresentation({ ...base("/tmp/x"), revisions, churn });
-    expect(text).not.toContain("not error to subtract");
-    expect(text).not.toContain("The difference between the two lines is what the revision did");
-    expect(text).toContain("not the revision's effect");
+  it("says nothing extra when code found nothing", async () => {
+    const outcome = await presentStage(gated(root()));
+    const message = outcome.kind === "interrupt" ? outcome.message : "";
+    expect(message).not.toMatch(/Checks that still fail/iu);
   });
 });

@@ -11,8 +11,8 @@ import {
 } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
-import type { CheckFailure, HeldFinding } from "../schemas/init.js";
-import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
+import type { CheckFailure, PlanFinding, PlanRisk, UnreviewedSlice } from "../schemas/init.js";
+import { reviewLines } from "./present-review.js";
 import type { PresentQuestion } from "./questions.js";
 import { defectInterrupt, defectLines, specLines, type PresentedDefault, type PresentedDefect, type PresentedRisk } from "./present-spec.js";
 import { planHash } from "./machine.js";
@@ -86,21 +86,12 @@ export interface PresentInput {
   readonly specDefects?: readonly PresentedDefect[];
   /** C-3‴ (PRDR-282): planning questions the log's decisions already answer, by id, so they are named and not asked again. */
   readonly answeredByLog?: readonly { readonly id: string; readonly entry: string }[];
-  /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
-  readonly findings?: readonly HeldFinding[];
-  /** D-24′ (PRDR-209): where the full list went when it did not fit on the screen. */
-  readonly adviceFile?: string;
-  /**
-   * PRDR-196: what the revision rounds did, summed over the slices.
-   *
-   * The audit of that ticket found the per-slice figure written to every cache
-   * and read by nothing — a measurement stored where nobody looks, which is one
-   * hop from the defect the ticket is about. PRESENT is where an operator
-   * decides whether to approve, so it is where the number belongs.
-   */
-  readonly revisions?: { readonly resolved: number; readonly survived: number; readonly introduced: number };
-  /** C-4⁗″ (PRDR-200): the same count with nothing revised — never shown apart from the line above. */
-  readonly churn?: { readonly resolved: number; readonly survived: number; readonly introduced: number };
+  /** C-4⁸ (PRDR-294): what PLAN recorded on its tickets: the review's minors, which PRESENT counts, and A-1″'s repairs, which it lists. */
+  readonly findings?: readonly PlanFinding[];
+  /** C-4⁸: the blockers and majors each slice's one revision was sent, shown as risks. */
+  readonly reviewRisks?: readonly PlanRisk[];
+  /** C-4⁸: the slices no review read, and why. */
+  readonly unreviewed?: readonly UnreviewedSlice[];
   /**
    * PRDR-166: the globs DISCOVER actually searched, so an AWAIT_INFO answer can
    * be put where the next run will read it.
@@ -187,7 +178,13 @@ export function renderPresentation(input: PresentInput): string {
   if (answered.length > 0) {
     lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
   }
-  lines.push(...defectLines(defects), ...failureLines(failures), ...specLines(input.defaults ?? [], input.risks ?? []));
+  const findings = input.findings ?? [];
+  lines.push(
+    ...defectLines(defects),
+    ...failureLines(failures),
+    ...specLines(input.defaults ?? [], input.risks ?? []),
+    ...reviewLines(input.reviewRisks ?? [], input.unreviewed ?? [], findings),
+  );
   const edges = input.derivedEdges ?? [];
   if (edges.length > 0) {
     lines.push(
@@ -196,50 +193,9 @@ export function renderPresentation(input: PresentInput): string {
     );
     for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
   }
-  const rev = input.revisions;
-  if (rev !== undefined && rev.resolved + rev.survived + rev.introduced > 0) {
-    lines.push(
-      "",
-      `Revision rounds: ${String(rev.resolved)} finding(s) resolved, ${String(rev.survived)} survived the revision, ` +
-        `${String(rev.introduced)} introduced by it (PRDR-196).`,
-    );
-    /**
-     * C-4⁗″ (PRDR-200): never the revision figure alone.
-     *
-     * The same arithmetic over repeated reads of an UNCHANGED draft still
-     * returns resolutions and introductions, because the reviewer does not
-     * reproduce itself. Read without that line beside it, the figure above
-     * says the revision did something it may not have done.
-     *
-     * PRDR-270: as a RATE, and with the two lines named as the different
-     * measurements they are. This printed the churn's raw counts, which at
-     * `PLAN_REVIEW_SAMPLES` = 3 are summed over k*(k-1) = 6 ordered pairs, beside
-     * a revision figure over ONE before/after pair — the scale mismatch
-     * `nullNote` renders a rate to avoid, committed directly under a comment
-     * that claimed this code prevented it. The old sentence also told the reader
-     * the difference between the lines was the revision's doing and, after the
-     * semicolon, not to subtract them. Both halves are gone: the rates are over
-     * different populations — unfiltered reads against the filtered set — so
-     * their difference is not an effect size in either direction.
-     */
-    const churn = input.churn;
-    if (churn !== undefined) {
-      const seen = churn.resolved + churn.survived;
-      const rate = seen === 0 ? null : Math.round((churn.resolved / seen) * 100);
-      lines.push(
-        rate === null
-          ? `  ...and no null was sampled for this draft, so the figure above stands unqualified (C-4⁗″).`
-          : `  ...and with NOTHING revised, repeated reads of the same draft resolve ${String(rate)}% of what they saw. ` +
-            `That rate is over UNFILTERED reads and the figure above is over the filtered set, so the two are not the ` +
-            `same baseline and the gap between them is not the revision's effect (C-4⁗″, PRDR-270).`,
-      );
-    }
-  }
-  const findings = input.findings ?? [];
-  if (findings.length > 0) lines.push(...renderHeldFindings(findings, input.adviceFile));
   lines.push("", "Bindings and tickets are overridable — edit them and re-run `detent init` (C-3b/C-8).");
   /** S-3″ (PRDR-121): shown only when this run produced evidence it would have helped. */
-  const reminder = symbolReminder(input.symbols, findings);
+  const reminder = symbolReminder(input.symbols, [...findings, ...(input.reviewRisks ?? [])]);
   if (reminder !== null) lines.push(reminder);
   return lines.join("\n");
 }
@@ -281,12 +237,9 @@ export interface PresentDeps extends PresentInput {
 }
 
 export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
-  /* D-24′ (PRDR-209): a wall goes to a file and the screen gets the summary; a short list stays inline. */
-  const held = deps.findings ?? [];
-  const adviceFile = held.length > ADVICE_INLINE_MAX ? writeAdvice(deps.root, held) : undefined;
   /* A-1⁷ (PRDR-293): the checks, on the tickets and the bindings as they stand. */
   const failures = presentFailures(deps.tickets, deps.slices ?? [], deps.checks, { bindings: deps.bindings, packages: deps.packages ?? [ROOT_PACKAGE] });
-  const presentation = renderPresentation({ ...deps, failures, ...(adviceFile === undefined ? {} : { adviceFile }) });
+  const presentation = renderPresentation({ ...deps, failures });
   deps.print?.(presentation);
 
   /**

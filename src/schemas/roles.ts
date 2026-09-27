@@ -9,9 +9,10 @@ import type { State } from "./states.js";
  * strings for exactly that reason.
  *
  * `audit` (PRDR-281) is the first of S-1‴'s four roles, `spec_write`
- * (PRDR-282) the second and `spec_review` (PRDR-284) the third. All three
- * join the 3.1.1 line's one event (F-3″): the v1→v2 migration writes their
- * routing into an existing config.
+ * (PRDR-282) the second, `spec_review` (PRDR-284) the third and
+ * `plan_review` (PRDR-294) the fourth. All four join the 3.1.1 line's one
+ * event (F-3″): the v1→v2 migration writes their routing into an existing
+ * config.
  *
  * `blind_fix` is the draft.5 rename of the oracle's `fix` (PRDR-044): the
  * role's defining property is that it acts on the failure output alone, and
@@ -29,6 +30,7 @@ export const ROLE_IDS = [
   "audit",
   "spec_write",
   "spec_review",
+  "plan_review",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
@@ -37,9 +39,9 @@ export type RoleId = (typeof ROLE_IDS)[number];
  * C-4⁵ (PRDR-292): the planner's prompts, one per job, by the stage a session
  * is launched for. One `prompts/planner.md` served SLICE, PLAN and the review,
  * so an edit to one job's words re-cut the product and re-planned every slice.
- * The review's is the planner's until it has a role of its own (C-4⁶).
+ * The review's prompt is its role's own since C-4⁸ (PRDR-294).
  */
-export const PLANNER_PROMPTS = { SLICE: "slice", PLAN: "plan", REVIEW_PLAN: "plan_review" } as const;
+export const PLANNER_PROMPTS = { SLICE: "slice", PLAN: "plan" } as const;
 
 /**
  * The vendored prompts, each `prompts/<id>.md` and pinned under its id in
@@ -61,7 +63,7 @@ export const PROMPT_IDS: readonly PromptId[] = [
 export function promptOf(role: RoleId, stage: unknown): PromptId {
   if (role !== "planner") return role;
   if (typeof stage === "string" && Object.hasOwn(PLANNER_PROMPTS, stage)) return PLANNER_PROMPTS[stage as keyof typeof PLANNER_PROMPTS];
-  throw new Error(`a planner session was launched for stage ${JSON.stringify(stage)}, and only SLICE, PLAN and REVIEW_PLAN have a prompt (C-4⁵)`);
+  throw new Error(`a planner session was launched for stage ${JSON.stringify(stage)}, and only SLICE and PLAN have a prompt (C-4⁵); the review runs on \`plan_review\` (C-4⁸)`);
 }
 
 /**
@@ -103,6 +105,8 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
   audit: "claude-opus-5-5",
   spec_write: "claude-opus-5-5",
   spec_review: "claude-opus-5-5",
+  /** C-4⁸ (PRDR-294): the planner's seat, so the review is never weaker than the drafts it judges (planning decision 9). */
+  plan_review: "claude-opus-5",
 };
 
 /**
@@ -132,6 +136,7 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
   audit: "max",
   spec_write: "max",
   spec_review: "max",
+  plan_review: "max",
 };
 
 /**
@@ -146,7 +151,8 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
  * from it. `spec_review` is in it: VALIDATE's reviewers read and write their
  * artifact alone in the repository. The scratch directory S-1‴ gives them for
  * a simulation lies outside it, and is written only by the scripts they run
- * there, sandboxed (S-1⁗, `SCRATCH_ROLES`).
+ * there, sandboxed (S-1⁗, `SCRATCH_ROLES`). `plan_review` is in it: a plan's
+ * review reads, and writes its verdict alone (C-4⁸, PRDR-294).
  */
 export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "planner",
@@ -155,6 +161,7 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "review",
   "audit",
   "spec_review",
+  "plan_review",
 ]);
 
 /**
@@ -176,9 +183,9 @@ export const SCRATCH_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["spec_review"
  * not change what a read-only role WRITES", which was false for `diagnose`.
  * `review` and `research` grant only their artifact, and are narrowed.
  *
- * `planner`, `audit`, `spec_write` and `spec_review` are absent because they
- * are init roles and never reach this policy; `src/init/session.ts` builds
- * their own surface.
+ * `planner`, `audit`, `spec_write`, `spec_review` and `plan_review` are
+ * absent because they are init roles and never reach this policy;
+ * `src/init/session.ts` builds their own surface.
  */
 export const ARTIFACT_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["research", "review"]);
 

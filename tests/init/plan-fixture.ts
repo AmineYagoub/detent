@@ -114,6 +114,13 @@ export const ONE_SLICE = {
   ],
 };
 
+/**
+ * C-4⁸ (PRDR-294): one stage for both roles that write a planning artifact,
+ * the drafter's and the review's, so a fixture that answers by artifact keeps
+ * answering the review now that it runs on a role of its own.
+ */
+export const planning = (stage: StageFn): { readonly planner: StageFn; readonly plan_review: StageFn } => ({ planner: stage, plan_review: stage });
+
 /** The planner answers whichever artifact the spec asks for: SLICE's, PLAN's or a review's (three stages since D-10′). */
 export const planner =
   (draft: object, review: object = APPROVE_PLAN, slices: object = ONE_SLICE): StageFn =>

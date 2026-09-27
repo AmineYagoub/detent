@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runInit } from "../../src/init/machine.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
-import { CLEAN_AUDIT, planningPipeline, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, LONE_CANDIDATE, PROMPTS, repo, planning } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -46,7 +45,8 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
   return (spec: SessionSpec) => {
     const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
     const stage = String(inputs["stage"]);
-    seen.push({ stage: stage === "REVIEW_PLAN" ? `REVIEW:${String(inputs["scope"])}` : stage, kb: spec.promptVariable.length / 1024 });
+    /* A review of no one slice would be the whole-plan review PRDR-293 deleted. */
+    seen.push({ stage: stage === "REVIEW_PLAN" ? `REVIEW:${inputs["slice"] === undefined ? "whole" : "slice"}` : stage, kb: spec.promptVariable.length / 1024 });
 
     let artifact: object;
     if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: SLICES };
@@ -134,7 +134,7 @@ describe("C-2‴ at product scale", () => {
   it("plans twenty-five slices into five hundred tickets and writes a graph `run` can execute", async () => {
     const root = repo(LONE_CANDIDATE);
     const seen: { stage: string; kb: number }[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scaledPlanner(seen) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scaledPlanner(seen)) });
 
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -178,25 +178,24 @@ describe("C-2‴ at product scale", () => {
     /**
      * The session count and the input growth are the run's real cost, so they
      * are asserted rather than left to be discovered on a paid run: one
-     * SLICE, and one draft and its reviews per slice.
+     * SLICE, and one draft and its one review read per slice.
      */
     const count = (stage: string): number => seen.filter((s) => s.stage === stage).length;
     expect(count("PLAN")).toBe(N_SLICES);
-    /* C-4⁗″: k draws per slice — the cost this ticket buys, made visible at scale. */
-    expect(count("REVIEW:slice")).toBe(N_SLICES * PLAN_REVIEW_SAMPLES);
+    /* C-4⁸ (PRDR-294): one read a slice, where C-4⁗″ drew three. */
+    expect(count("REVIEW:slice")).toBe(N_SLICES);
     /* PRDR-293: no session reads the plan as one thing; code's checks across the plan stand in its place. */
     expect(count("REVIEW:whole")).toBe(0);
     /**
-     * C-4⁗″ (PRDR-200): the price, in one number.
+     * C-4⁸ (PRDR-294): the price, in one number.
      *
-     * SLICE + (PLAN + k reviews) per slice. At twenty-five slices that is 101
-     * sessions; the whole-plan review made it 102 until PRDR-293 deleted it. A
-     * slice that needs no revision costs four sessions, which is the cost of
-     * not handing the reviser findings no second read saw, and it belongs in
-     * the test that exists to price product scale. A plan that passes A-1⁷'s
-     * checks buys no redraft, so this fixture, whose drafts pass, prices none.
+     * SLICE + (PLAN + one review) per slice. At twenty-five slices that is 51
+     * sessions; C-4⁗″'s three draws made it 101, and the whole-plan review 102
+     * until PRDR-293 deleted it. A slice whose review finds no blocker or major
+     * costs two sessions, and this fixture's reviews approve, so it prices no
+     * revision; its drafts pass A-1⁷'s checks, so it prices no redraft.
      */
-    expect(seen).toHaveLength(1 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES));
+    expect(seen).toHaveLength(1 + N_SLICES * 2);
 
     /**
      * No stage carries every ticket in full since PRDR-293 deleted the
@@ -210,12 +209,13 @@ describe("C-2‴ at product scale", () => {
      * PRDR-160: every number below was measured through this test's own
      * instrumentation, at 500 tickets, on one machine; PRDR-293 measured them
      * again when it deleted the whole-plan review's row (484.11 KB of a 600 KB
-     * bound).
+     * bound), and PRDR-294 when the review took its own role and instruction
+     * (REVIEW:slice was 127.10 KB).
      *
      *   stage          this fixture   bound   % of bound
      *   SLICE              7.42 KB    < 50       14.8%
      *   PLAN             106.17 KB   < 150       70.8%
-     *   REVIEW:slice     127.10 KB   < 200       63.6%
+     *   REVIEW:slice     126.27 KB   < 200       63.1%
      *
      * PRDR-143 gave this fixture realistic content — a description, three
      * criteria, two non-goals — where it had carried an empty description and a
@@ -237,14 +237,14 @@ describe("C-2‴ at product scale", () => {
 
     const first: string[] = [];
     await expect(
-      runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: fragilePlanner(first, "s07") }), prompts: PROMPTS, budgets: BUDGETS })),
+      runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(fragilePlanner(first, "s07")) }), prompts: PROMPTS, budgets: BUDGETS })),
     ).rejects.toThrow(/simulated session failure/);
     expect(first).toEqual(["s01", "s02", "s03", "s04", "s05", "s06", "s07"]);
 
     const second: string[] = [];
     const result = await runInit(
       root,
-      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: fragilePlanner(second, null) }), prompts: PROMPTS, budgets: BUDGETS }),
+      planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  ...planning(fragilePlanner(second, null)) }), prompts: PROMPTS, budgets: BUDGETS }),
     );
 
     /** The six slices that finished are reused from their caches; analysis and slicing from their checkpoints. */

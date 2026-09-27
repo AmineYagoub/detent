@@ -7,15 +7,17 @@ import type { DraftedTicket } from "../src/init/plan-write.js";
 /**
  * PRDR-202 — reading a planned root off disk, once.
  *
- * The measurement harnesses in this directory both need the same thing: the
+ * The measurement harnesses in this directory needed the same thing: the
  * slice specs SLICE assigned and the tickets PLAN cached, from a root that has
  * already been planned. Both had their own copy of it, and both were outside
  * every gate, so when `revisionOutcome` moved from `plan-slices.ts` to
- * `plan-signal.ts` the import broke and `typecheck` did not see it.
+ * `plan-signal.ts` the import broke and `typecheck` did not see it. One is
+ * left, `coverage-report.ts`: PRDR-294 deleted `null-review.ts` with the
+ * sampled review it measured.
  *
  * The part that actually drifts is this one. `sliceCacheSchema` defaults its
- * additive fields so a cache written before them still HITS — `churn`
- * (PRDR-200), `requirement_ids` and `baseline_ids` (PRDR-201) — and a
+ * additive fields so a cache written before them still HITS — a ticket's
+ * `requirement_ids` and `baseline_ids` (PRDR-201) among them — and a
  * hand-rolled reader gets no schema and therefore no defaults. It fills them
  * here, in one place, and a test pins that it does.
  */
@@ -76,7 +78,7 @@ export function readPlannedRoot(root: string): PlanCorpus {
   return { root, specs, tickets, planned, docs, spend: ledgerSpend(root) };
 }
 
-/** A ledger row as the harnesses read it — the columns a draw's cost is made of (PRDR-204). */
+/** A ledger row as a harness reads it — the columns a session's cost is made of (PRDR-204). */
 export interface LedgerRowLite {
   readonly at: string;
   readonly cost_estimate_usd: number;
@@ -118,11 +120,12 @@ export function sliceTickets(corpus: PlanCorpus, sliceId: string): readonly Corp
 /**
  * Whether a module was RUN or merely imported.
  *
- * Both harnesses launch live sessions, so a top-level `main()` would spend
- * money the moment a test imported the file for typechecking. Observed, not
- * theorised: an injected import error failed to crash `null-review.ts` because
- * the unused symbol was stripped, and the harness went on to start a real sweep
- * against a live root.
+ * A harness runs its CLI at the top level, so a test that imports the file for
+ * typechecking must not run it: `null-review.ts`, deleted by PRDR-294, launched
+ * live sessions and would have spent money the moment it was imported.
+ * Observed, not theorised: an injected import error failed to crash it because
+ * the unused symbol was stripped, and it went on to start a real sweep against
+ * a live root.
  */
 export function runDirectly(moduleUrl: string): boolean {
   const entry = process.argv[1];

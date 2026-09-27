@@ -1,4 +1,4 @@
-import type { PlanReview } from "../schemas/init.js";
+import type { PlanFinding } from "../schemas/init.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
 
 /**
@@ -16,7 +16,7 @@ import type { SymbolsConfig } from "../adapter/symbols.js";
  */
 
 /** A finding counts as evidence when its subject is a name a symbol lookup could have settled. */
-export function symbolEvidence(findings: readonly PlanReview["findings"][number][]): { readonly ticket: string; readonly name: string }[] {
+export function symbolEvidence(findings: readonly PlanFinding[]): { readonly ticket: string; readonly name: string }[] {
   const out: { ticket: string; name: string }[] = [];
   for (const f of findings) {
     if (f.tag !== "coherence" && f.tag !== "dependency") continue;
@@ -33,7 +33,7 @@ export function symbolEvidence(findings: readonly PlanReview["findings"][number]
  */
 export function symbolReminder(
   config: SymbolsConfig | undefined,
-  findings: readonly PlanReview["findings"][number][],
+  findings: readonly PlanFinding[],
 ): string | null {
   if (config?.enabled === true) return null;
   /**

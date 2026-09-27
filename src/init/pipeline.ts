@@ -22,7 +22,6 @@ import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from ".
 import { launchInitSession, withInitJournal } from "./session.js";
 import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
 import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH } from "../schemas/pack.js";
-import type { LaunchOptions } from "./launch-batch.js";
 import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
 import { decidePhase, planningDocs, type DecideAsk } from "./decide.js";
@@ -57,8 +56,6 @@ export interface PipelineDeps {
   readonly symbols?: SymbolsConfig;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
-  /** PRDR-268: revision rounds a faulted slice buys; `PLAN_REVISIONS` by default. */
-  readonly revisionRounds?: number;
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.
@@ -332,7 +329,6 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         budgets: deps.budgets,
         slices: slicesFromOutputs(ctx.outputs),
         baseline: deps.planBaseline ?? "production",
-        ...(deps.revisionRounds === undefined ? {} : { revisionRounds: deps.revisionRounds }),
         promptHash: planPrompts(deps),
         pack: draftingPack(deps.root, ctx.outputs),
         /* A-1⁷ (PRDR-293): the gates check reads what PRESENT reads. */
@@ -340,15 +336,12 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices and the redrafts the checks send. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),
-        ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
-        launch: async (inputs: Record<string, unknown>, artifactOut?: string, options?: LaunchOptions) => {
-          await launchInitSession(sessionDeps(deps, journal), {
-            role: "planner",
-            inputs,
-            artifactOut: artifactOut ?? planDraftPath(deps.root),
-            ...(options?.batch === undefined ? {} : { batch: options.batch }),
-            ...(options?.told === undefined ? {} : { artifactTold: options.told }),
-          });
+        launch: async (inputs: Record<string, unknown>) => {
+          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
+        },
+        /* C-4⁸ (PRDR-294): the review runs on a role of its own, with its own prompt, model and effort. */
+        launchReview: async (inputs: Record<string, unknown>, artifactOut: string) => {
+          await launchInitSession(sessionDeps(deps, journal), { role: "plan_review", inputs, artifactOut });
         },
       });
     }),

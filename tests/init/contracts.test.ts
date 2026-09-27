@@ -5,7 +5,7 @@ import { stackEntrySchema } from "../../src/schemas/decide.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import { CLEAN_AUDIT } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planning } from "./plan-fixture.js";
 
 /**
  * A-1‴ (PRDR-120) — the contract checks, against the defects that produced them.
@@ -206,7 +206,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
       ],
     };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: (spec) => {
+      ...planning((spec) => {
         const artifact = spec.artifactOut.endsWith("plan-draft.json")
           ? draft
           : spec.artifactOut.endsWith("plan-review.json")
@@ -217,7 +217,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
         if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
         return okResult();
-      },
+      }),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 

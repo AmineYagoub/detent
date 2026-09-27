@@ -125,12 +125,14 @@ const MUTATING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit
 /**
  * PRDR-205: the artifact a session is TOLD against the one it HAS.
  *
- * The k draws of one review are told one path, so their first turns are
- * byte-identical and the prompt cache (S-6) serves every draw but the first;
- * each draw's file is its own. A mutating call naming the told path is carried
- * out at the actual one — rewritten BEFORE the guard judges it, so containment
- * is decided on the file that will actually be written. Reads are untouched
- * (S-2‴), and any other path is judged exactly as before.
+ * The k draws of one review were told one path, so their first turns were
+ * byte-identical and the prompt cache (S-6) served every draw but the first;
+ * each draw's file was its own. A mutating call naming the told path is
+ * carried out at the actual one — rewritten BEFORE the guard judges it, so
+ * containment is decided on the file that will actually be written. Reads are
+ * untouched (S-2‴), and any other path is judged exactly as before. No
+ * session is told a path since C-4⁸ (PRDR-294) deleted the draws, and C-4⁸
+ * lists this for deletion.
  */
 export interface ArtifactAlias {
   readonly told: string;
@@ -453,7 +455,7 @@ function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p:
  * directory outside the repository, and still changes no code the product's
  * gate could judge; a run's limits are the sandbox's, not a gate's.
  */
-export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit", "spec_review"]);
+export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit", "spec_review", "plan_review"]);
 
 /**
  * S-1‴ (PRDR-283): roles that write documents and not code, which the

@@ -16,7 +16,7 @@ import { DECISION_LOG_PATH } from "../../src/schemas/pack.js";
 import { MockBackend } from "../../src/sessions/mock.js";
 import { DOCS, SORTED, decide, initThrough, type Json } from "./decide-fixture.js";
 import { CONFORMING_PACK, DECISION_LOG, commitRecord, packRepo } from "./pack-fixture.js";
-import { BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { BUDGETS, LONE_CANDIDATE, PROMPTS, repo, planning } from "./plan-fixture.js";
 import { covering, scriptedPlanner, ticket } from "./slicing-fixture.js";
 import { clean, initThroughValidate } from "./validate-fixture.js";
 import { RAW, writesPack } from "./write-fixture.js";
@@ -82,10 +82,10 @@ function pipeline(root: string, notes: string[] = []): { readonly handlers: Phas
   const artifacts: string[] = [];
   const answer = scriptedPlanner({ slices: SLICES, draft, review: approve }, log, inputs);
   const backend = new MockBackend({
-    planner: (spec) => {
+    ...planning((spec) => {
       artifacts.push(path.basename(spec.artifactOut));
       return answer(spec);
-    },
+    }),
   });
   const handlers = buildPipeline({
     root,
@@ -191,7 +191,7 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     const first = await init(root);
     expect(first.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
     expect(first.executed).not.toContain("ANALYZE");
-    expect(first.planned.backend.rolesLaunched().every((r) => r === "planner"), "no specification session: the pack conforms").toBe(true);
+    expect(first.planned.backend.rolesLaunched().every((r) => r === "planner" || r === "plan_review"), "no specification session: the pack conforms").toBe(true);
     expect(new Set(first.planned.artifacts), "no session writes an analysis").toEqual(new Set(["slices.json", "plan-draft.json", "plan-review.json"]));
     expect(outputsOf(root, "DETERMINE_VERIFICATION")["status"]).toBe("provisional");
     expect(draftInputs(first.planned)).toMatchObject({ greenfield: true });

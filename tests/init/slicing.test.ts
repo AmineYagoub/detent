@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runInit } from "../../src/init/machine.js";
-import { revisionOutcome } from "../../src/init/plan-signal.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
@@ -13,7 +11,7 @@ import { normaliseDraft } from "../../src/init/plan-normalise.js";
 import { renderPresentation } from "../../src/init/present.js";
 import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
-import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, repo, planning } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
@@ -75,7 +73,7 @@ function scriptedPlanner(script: Script, log: string[], seen: Record<string, unk
       log.push(`PLAN:${sliceOf(inputs)}`);
       artifact = script.draft(inputs);
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
-      log.push(`REVIEW:${String(inputs["scope"])}${inputs["scope"] === "slice" ? `:${sliceOf(inputs)}` : ""}`);
+      log.push(`REVIEW:slice:${sliceOf(inputs)}`);
       artifact = script.review(inputs);
     } else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
     writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
@@ -94,22 +92,15 @@ const twoSliceDraft = (inputs: Record<string, unknown>): object =>
 
 const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
-/**
- * C-4⁗″ (PRDR-200): a slice's review is DRAWN `PLAN_REVIEW_SAMPLES` times.
- *
- * These sequences are about ORDER and REUSE — which slices re-plan when a
- * document moves — not about how many times the reviewer is asked. Expanding
- * the expectation keeps the assertion exact rather than collapsing repeats,
- * which would hide the sampling stopping.
- */
-const R = (slice: string): string[] => Array.from({ length: PLAN_REVIEW_SAMPLES }, () => `REVIEW:slice:${slice}`);
+/** C-4⁸ (PRDR-294): a slice's review is read once; these sequences are about ORDER and REUSE. */
+const R = (slice: string): string[] => [`REVIEW:slice:${slice}`];
 
 describe("C-2‴ the product is planned slice by slice, to the end, without stopping", () => {
   it("plans each slice with the earlier index in view, and writes slice order into the blockers", async () => {
     const root = repo(DOCS);
     const log: string[] = [];
     const seen: Record<string, unknown>[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log, seen) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log, seen)) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
@@ -149,7 +140,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     for (const baseline of ["production", "none"] as const) {
       const root = repo(DOCS);
       const seen: Record<string, unknown>[] = [];
-      const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [], seen) });
+      const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, [], seen)) });
       await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, planBaseline: baseline }));
       const slice = seen.find((i) => i["stage"] === "SLICE")!;
       expect((slice["production_baseline"] as unknown[]).length).toBe(baseline === "production" ? PRODUCTION_BASELINE.length : 0);
@@ -212,37 +203,45 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     });
   });
 
-  it("a finding a slice's own review still holds after its revision reaches the presentation", async () => {
+  /**
+   * C-4⁸ (PRDR-294): a major buys the slice one revision, and no review reads
+   * the revision, so whether it answered the major is not known. It reaches
+   * PRESENT as a risk, with its slice, its ticket and the fix it asked for.
+   */
+  it("a major a slice's review found reaches the presentation as a risk, since no review read the revision", async () => {
     const root = repo(DOCS);
-    const held = { tag: "sizing", ticket: "t-s01-002", finding: "still larger than one session after the revision" };
+    const log: string[] = [];
+    const major = { severity: "major", tag: "sizing", ticket: "t-s01-002", finding: "larger than one implement session", fix: "split it at the baseline item" };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
+      ...planning(scriptedPlanner(
         {
           slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!] },
           draft: twoSliceDraft,
-          review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [held] }),
+          review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [major] }),
         },
-        [],
-      ),
+        log,
+      )),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
-    /** The slice's own leftover is the only finding there is. */
-    expect(result.interrupt?.message).toContain("Review findings held after revision (1)");
-    expect(result.interrupt?.message).toContain("sizing (t-s01-002): still larger than one session");
+    /** One read, one revision, and nothing reads the revision. */
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s01"]);
+    expect(result.interrupt?.message).toContain("Plan review risks (1)");
+    expect(result.interrupt?.message).toContain("s01 t-s01-002 [major sizing]: larger than one implement session");
+    expect(result.interrupt?.message).toContain("fix: split it at the baseline item");
   });
 
   it("a dependency dropped as impossible is presented as a finding, not swallowed", async () => {
     const root = repo(DOCS);
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
+      ...planning(scriptedPlanner(
         {
           slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!] },
           draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", ["t-s99-001"])] }),
           review: () => APPROVE_PLAN,
         },
         [],
-      ),
+      )),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
@@ -256,7 +255,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const notes: string[] = [];
     const seen: Record<string, unknown>[] = [];
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
+      ...planning(scriptedPlanner(
         {
           slices: {
             schema_version: SCHEMA_VERSION,
@@ -267,7 +266,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
         },
         [],
         seen,
-      ),
+      )),
     });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
@@ -449,7 +448,7 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
       s02 += 1;
       return s02 === 1 ? unprovidedDraft(inputs) : twoSliceDraft(inputs);
     };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, ...planning(scriptedPlanner({ draft, review: () => APPROVE_PLAN }, log)) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", "PLAN:s02", ...R("s02")]);
@@ -478,7 +477,7 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
       if (sliceOf(inputs) !== "s01" || (s01 += 1) > 1) return drafted;
       return { ...drafted, tickets: drafted.tickets.map((t) => ({ ...t, consumes: [{ kind: "config", id: "NOPE" }] })) };
     };
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft, review: () => APPROVE_PLAN }, []) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, ...planning(scriptedPlanner({ draft, review: () => APPROVE_PLAN }, [])) });
     await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t), progress: (t) => progress.push(t) }),
@@ -498,49 +497,7 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
   });
 });
 
-/**
- * PRDR-196 criterion 3 — whether revision fixes what it was given.
- *
- * Counts alone cannot answer it. This run's revision rounds ended with MORE
- * findings than they started on 11 slices of 19, and that is equally consistent
- * with "the revision introduced defects" and with "a fresh review of rewritten
- * text found fresh, partly spurious things". The literature says the critic is
- * the likelier culprit, which makes the distinction the whole question.
- *
- * Identity is `(ticket, tag)`. Finding TEXT is rewritten every round so it
- * cannot key anything, and the pair is what a reader means by "the same
- * complaint about the same ticket".
- */
-describe("PRDR-196 the revision round is measured, not assumed", () => {
-  /**
-   * Through the real pipeline. `revisionOutcome` computing correctly and never
-   * being called is the shape that has broken four times on this line today —
-   * PRDR-191's breaker ceilings, PRDR-194's progress seam, PRDR-166's globs,
-   * and PRDR-193's own wiring. A measurement nothing runs measures nothing.
-   */
-  it("is recorded by the run, not merely computable", async () => {
-    const root = repo(DOCS);
-    const notes: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: twoSliceDraft,
-          /* A slice review that faults something forces the revision round. */
-          review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] }),
-        },
-        [],
-      ),
-    });
-    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
-    expect(notes.join("\n")).toMatch(/revision: \d+ resolved, \d+ survived, \d+ introduced/);
-    /**
-     * And it reaches the operator. Measuring into a cache nobody reads is the
-     * defect this ticket is about; the audit of the ticket found exactly that
-     * and this assertion is what closes it.
-     */
-    expect(result.interrupt?.message ?? "").toMatch(/Revision rounds: \d+ finding\(s\) resolved/);
-  });
-
+describe("PRDR-196 what code proves reaches the operator", () => {
   /**
    * PRDR-196 criterion 1, through the REAL pipeline.
    *
@@ -559,7 +516,7 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
             tickets: [{ ...ticket("t-s02-001"), requirement_ids: ["R2"], consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
           };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),
+      ...planning(scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, [])),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
@@ -568,12 +525,5 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
     expect(message).toMatch(/Checks that still fail/i);
     expect(message).toContain("pkg/thing.Nobody");
     expect(message).toContain("proved by code");
-  });
-
-  /** A finding naming no ticket belongs to the plan; it cannot be matched, so it is not counted as survival. */
-  it("does not pretend an unticketed finding is the same complaint twice", () => {
-    const before = [{ tag: "coherence" as const, finding: "the plan double-books a name" }];
-    const after = [{ tag: "coherence" as const, finding: "a different plan-wide worry" }];
-    expect(revisionOutcome(before, after).survived).toBe(0);
   });
 });

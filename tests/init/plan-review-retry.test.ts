@@ -3,16 +3,18 @@ import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
 import { normaliseVerdict } from "../../src/init/plan-review.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo } from "./plan-fixture.js";
+import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, APPROVE_PLAN, planner, repo, planning } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-4⁗ (PRDR-116) — on ksar-cloud the reviewer wrote `revise`, the validator
  * refused the artifact, six real findings were discarded and the plan was
- * written unreviewed with a note that said "no artifact".
+ * written unreviewed with a note that said "no artifact". Since C-4⁸
+ * (PRDR-294) a slice's review is read once, so each case here is one read and
+ * its one relaunch.
  */
 
-const FINDING = { tag: "sizing", finding: "t-100 is three tickets", ticket: "t-100" };
+const FINDING = { severity: "major", tag: "sizing", finding: "t-100 is three tickets", ticket: "t-100", fix: "split t-100 in three" };
 
 /** A planner whose review artifacts come from a script, one per REVIEW_PLAN launch. */
 function scriptedPlanner(reviews: readonly (object | null)[]): { stage: StageFn; reviewInputs: Record<string, unknown>[] } {
@@ -33,7 +35,7 @@ function scriptedPlanner(reviews: readonly (object | null)[]): { stage: StageFn;
 
 async function init(stage: StageFn): Promise<{ backend: MockBackend; notes: string[] }> {
   const root = repo(LONE_CANDIDATE);
-  const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: stage });
+  const backend = new MockBackend({ audit: CLEAN_AUDIT,  ...planning(stage) });
   const notes: string[] = [];
   await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
   return { backend, notes };
@@ -51,43 +53,33 @@ describe("C-4⁗ the plan review survives a synonym and a bad artifact", () => {
   });
 
   it("ksar's case: `revise` with findings buys the revision it always meant to", async () => {
-    /* C-4⁗″: one read saying `revise` no longer buys a revision — the finding has to recur. */
     const revise = { schema_version: SCHEMA_VERSION, verdict: "revise", findings: [FINDING] };
-    /* PRDR-269: the review of the revised draft is sampled too, so it takes three approvals to pass. */
-    const { stage, reviewInputs } = scriptedPlanner([revise, revise, revise, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
+    const { stage, reviewInputs } = scriptedPlanner([revise]);
     const { backend, notes } = await init(stage);
     expect(drafts(backend)).toBe(2);
-    expect(reviews(backend)).toBe(6);
+    expect(reviews(backend), "nothing reads the revision").toBe(1);
     expect(reviewInputs[0]?.["previous_attempt"]).toBeUndefined();
     expect(notes.some((n) => n.includes("`revise` read as `changes`"))).toBe(true);
   });
 
   it("an unusable artifact is relaunched once, carrying the validator's words; the second one counts", async () => {
-    const bad = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "reach", finding: "x", ticket: "t-100" }] };
+    const bad = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ ...FINDING, tag: "reach" }] };
     const good = { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [FINDING] };
-    const { stage, reviewInputs } = scriptedPlanner([bad, good, good, good, APPROVE_PLAN, APPROVE_PLAN, APPROVE_PLAN]);
+    const { stage, reviewInputs } = scriptedPlanner([bad, good]);
     const { backend, notes } = await init(stage);
-    /**
-     * sample 1 (bad) → samples 2 and 3 launch on its first answer (C-4⁗‴) →
-     * sample 1's relaunch (good) → revision → the revised draft's own three
-     * draws (PRDR-269, all approve). The relaunch is found by what it carries,
-     * not by its position: since PRDR-204 the other draws are in flight before
-     * the first has been judged unusable.
-     */
-    expect(reviews(backend)).toBe(7);
+    /* The read (bad), its one relaunch (good), and the revision the good one's major bought. */
+    expect(reviews(backend)).toBe(2);
     expect(drafts(backend)).toBe(2);
-    const carried = reviewInputs.filter((i) => i["previous_attempt"] !== undefined);
-    expect(carried, "exactly one launch carries the previous attempt").toHaveLength(1);
-    const relaunch = carried[0]?.["previous_attempt"] as { issue: string } | undefined;
+    expect(reviewInputs[0]?.["previous_attempt"]).toBeUndefined();
+    const relaunch = reviewInputs[1]?.["previous_attempt"] as { issue: string } | undefined;
     expect(relaunch?.issue).toContain("tag");
     expect(notes.some((n) => n.startsWith("plan review artifact unusable ("))).toBe(true);
   });
 
   it("absent twice: the draft stands unreviewed, and the note says why", async () => {
-    /* C-4⁗″: unreviewed means every DRAW failed — k samples, each getting PRDR-116's one relaunch. */
-    const { stage } = scriptedPlanner([null, null, null, null, null, null]);
+    const { stage } = scriptedPlanner([null, null]);
     const { backend, notes } = await init(stage);
-    expect(reviews(backend)).toBe(6);
+    expect(reviews(backend)).toBe(2);
     expect(drafts(backend)).toBe(1);
     expect(notes.some((n) => n.includes("no artifact written"))).toBe(true);
     expect(notes.some((n) => n.includes("the draft stands unreviewed"))).toBe(true);
