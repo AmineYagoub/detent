@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { RoleId } from "../schemas/roles.js";
 import type { GuardPolicy } from "./guard.js";
+import type { ScratchGrant } from "./sandbox.js";
 
 /**
  * T-040 — the SessionBackend seam (ARCH-1, D-19).
@@ -76,6 +77,15 @@ export interface SessionSpec {
    * that would write outside the D-21 hook's sight.
    */
   readonly mcpServers?: Readonly<Record<string, unknown>>;
+  /**
+   * S-1⁗ (PRDR-285): a VALIDATE reviewer's scratch directory, and the
+   * interpreters the sandbox offers there. Present, the backend serves the
+   * session one more tool beside any server above, the one that runs a script
+   * in that directory, sandboxed (`SCRATCH_TOOL`). Only a `spec_review`
+   * session ever carries it: `src/init/session.ts` refuses it to every other
+   * role, and the referee's session arm never sets it.
+   */
+  readonly scratch?: ScratchGrant;
 }
 
 /**

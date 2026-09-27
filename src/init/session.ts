@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { type RoleId } from "../schemas/roles.js";
+import { SCRATCH_ROLES, type RoleId } from "../schemas/roles.js";
 import {
   artifactWriteRule,
   stablePrefix,
@@ -10,6 +10,7 @@ import {
   type SessionSpec,
 } from "../sessions/backend.js";
 import { toolsForRole } from "../sessions/guard.js";
+import { SCRATCH_TOOL, type ScratchGrant } from "../sessions/sandbox.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
@@ -107,6 +108,12 @@ export interface InitSessionRequest {
    * session writes its artifact alone (S-1′).
    */
   readonly surface?: readonly string[];
+  /**
+   * S-1⁗ (PRDR-285): a VALIDATE reviewer's round scratch directory. The
+   * session gets the one tool that runs a script there, sandboxed, and no
+   * other role may be given it (`SCRATCH_ROLES`).
+   */
+  readonly scratch?: ScratchGrant;
 }
 
 /**
@@ -143,13 +150,17 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
      * the session's own artifact. Plan mode would deny the write the
      * C-3/A-contract demands; read-only-ness is the allowlist plus the hook.
      * A session that declares a surface (S-1‴, PRDR-283: WRITE's) also gets
-     * Edit and Write, and the hook below confines them to it.
+     * Edit and Write, and the hook below confines them to it. A reviewer
+     * given its round's scratch directory (S-1⁗) gets the tool that runs a
+     * script there; the script writes nothing the hook sees, and the sandbox
+     * confines it instead.
      */
     allowedTools: [
       ...(request.withWeb === true
         ? toolsForRole("research", deps.docsDomains ?? [])
         : toolsForRole(request.role, deps.docsDomains ?? [])),
       ...(request.surface === undefined ? [] : ["Edit", "Write"]),
+      ...(request.scratch === undefined ? [] : [SCRATCH_TOOL]),
       artifactWriteRule(request.artifactOut),
     ],
     permissionMode: "",
@@ -158,6 +169,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     /* C-4⁗‴ (PRDR-204): a batched launch reports its first answer to the batch waiting on it. */
     ...(request.batch === undefined ? {} : { onFirstResponse: request.batch.noteResponse }),
     ...(request.artifactTold === undefined ? {} : { artifactTold: request.artifactTold }),
+    ...(request.scratch === undefined ? {} : { scratch: request.scratch }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
      * rule above is TRUE rather than merely stated.
@@ -303,6 +315,10 @@ export function msUntilReset(message: string, now: Date = new Date()): number | 
 export const MAX_RESET_WAIT_MS = 6 * 60 * 60_000;
 
 export async function launchInitSession(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
+  /* S-1⁗ (PRDR-285): refused before anything is gated, charged or journaled, so no session starts with it. */
+  if (request.scratch !== undefined && !SCRATCH_ROLES.has(request.role)) {
+    throw new Error(`a ${request.role} session was given a scratch directory, and only ${[...SCRATCH_ROLES].join(", ")} may run scripts (S-1‴, S-1⁗)`);
+  }
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   for (let attempt = 0; ; attempt += 1) {
     try {

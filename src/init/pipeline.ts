@@ -3,6 +3,7 @@ import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
+import type { Sandbox } from "../sessions/sandbox.js";
 import { analysisFromOutputs, analysisPath, analyzeStage, isGreenfield } from "./analyze.js";
 import { determineVerification } from "./bind.js";
 import { prepareAgents } from "./agents.js";
@@ -80,6 +81,8 @@ export interface PipelineDeps {
   readonly askApproval?: (presentation: string) => Promise<ApprovalDecision>;
   /** C-3⁗ (PRDR-282): DECIDE's questions, asked on a terminal; absent, each recommended answer is taken (specification decision 9). */
   readonly askDecisions?: DecideAsk;
+  /** S-1⁗ (PRDR-285): the sandbox VALIDATE's reviewers simulate in, asked when a round first runs; absent, this machine is probed. */
+  readonly sandbox?: () => Promise<Sandbox>;
   readonly print?: (text: string) => void;
 }
 
@@ -111,9 +114,7 @@ export function pendingPhases(handlers: readonly PhaseHandler[]): InitPhase[] {
 /* --------------------------------------------------------------------------- */
 
 /** PRDR-086: the configured slice scope, or the full C-2 family set. */
-function docPatterns(deps: PipelineDeps): readonly string[] {
-  return docPatternsFor(deps.planDocs);
-}
+const docPatterns = (deps: PipelineDeps): readonly string[] => docPatternsFor(deps.planDocs);
 
 /**
  * C-2¹² (PRDR-282): DISCOVER never lists the decision log. DECIDE writes it,

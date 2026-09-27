@@ -38,7 +38,7 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
     ]);
   });
 
-  /** PRDR-284: VALIDATE's reviewers read the pack and write their findings alone; a simulation's scratch directory is not built. */
+  /** PRDR-284, PRDR-285: VALIDATE's reviewers read the pack and write their findings alone in it; a simulation writes only its scratch directory, outside the repository. */
   it("the read-only set is S-1's four and S-1‴'s audit and spec_review", () => {
     expect([...READ_ONLY_ROLES].sort()).toEqual(["audit", "diagnose", "planner", "research", "review", "spec_review"]);
   });

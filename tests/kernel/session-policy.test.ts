@@ -158,6 +158,15 @@ describe("T-140 the session arm publishes the per-ticket policy", () => {
     }
     expect(spec.policy?.protectedGlobs).toContain("AGENTS.md");
   });
+
+  /** PRDR-285 (S-1‴): the sandbox is `spec_review`'s alone, and the session arm launches none of it. */
+  it("no run-loop session carries the scratch sandbox or its tool", async () => {
+    for (const stage of ["implement", "review", "diagnose"] as const) {
+      const spec = await specFromAttempt(stage);
+      expect(spec.scratch, stage).toBeUndefined();
+      expect(spec.allowedTools.filter((t) => t.startsWith("mcp__detent_scratch")), stage).toEqual([]);
+    }
+  });
 });
 
 describe("T-140 buildOptions prefers the spec's policy (S-2′)", () => {

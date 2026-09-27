@@ -6,11 +6,13 @@ import { STATE_DIR, stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { DECISION_LOG_PATH, PACK_PATHS, PACK_PRECEDENCE, type OPEN_REASONS, type PackFinding } from "../schemas/pack.js";
 import { fixArtifactSchema, reviewArtifactSchema, type FindingPlace, type FixArtifact, type ReviewFinding } from "../schemas/validate.js";
+import type { ScratchGrant } from "../sessions/sandbox.js";
 import { decisionLogFile, nextId, readDecisionLog, type LogView } from "./decide-log.js";
 import { checkPack } from "./pack-check.js";
 import { packDocuments } from "./pack.js";
 import { refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
 import { checkReview, fixIssues, outcomes, type Outcome, type Severity } from "./validate-checks.js";
+import { simulationInput } from "./validate-scratch.js";
 import type { Area } from "./validate-scope.js";
 import { checkerIssues, citeIssues, holdsRequirement, logIssues } from "./write-checks.js";
 import { changedSince, packPathFiles, restoreFile, rollback, snapshot, type Snapshot } from "./write-tree.js";
@@ -80,7 +82,8 @@ export interface Shown {
 export interface RoundDeps {
   readonly root: string;
   readonly greenfield: boolean;
-  readonly review: (inputs: Json, artifactOut: string) => Promise<void>;
+  /** S-1⁗ (PRDR-285): with the round's scratch directory, or null when the round has none. */
+  readonly review: (inputs: Json, artifactOut: string, scratch: ScratchGrant | null) => Promise<void>;
   readonly fix: (inputs: Json, artifactOut: string) => Promise<void>;
   readonly note?: ((text: string) => void) | undefined;
 }
@@ -111,8 +114,13 @@ function readArtifact<T>(file: string, schema: z.ZodType<T>): { readonly value: 
   return { value: parsed.value, issue: null };
 }
 
-/** One reviewer: refused on any issue the first time; the second time, the findings that stand, the rest dropped aloud, and any document it did not read named. */
-export async function reviewArea(deps: RoundDeps, round: number, task: ReviewTask, pack: readonly string[]): Promise<ReviewFinding[]> {
+/**
+ * One reviewer: refused on any issue the first time; the second time, the
+ * findings that stand, the rest dropped aloud, and any document it did not
+ * read named. With the round's scratch directory it may simulate (S-1⁗), and
+ * a simulation's findings are checked as every other is.
+ */
+export async function reviewArea(deps: RoundDeps, round: number, task: ReviewTask, pack: readonly string[], scratch: ScratchGrant | null): Promise<ReviewFinding[]> {
   const out = reviewArtifactPath(deps.root);
   const verify = task.previous !== null;
   const inputs: Json = {
@@ -123,13 +131,14 @@ export async function reviewArea(deps: RoundDeps, round: number, task: ReviewTas
     documents: [...task.documents],
     heuristic: task.heuristic.map((f) => ({ file: f.file, line: f.line, text: f.text, report: f.message })),
     ...(verify ? { previous: task.previous, diff: task.diff } : {}),
+    simulation: simulationInput(scratch),
     precedence: [...PACK_PRECEDENCE],
     expected_output: reviewSkeleton(),
   };
   const stage = `VALIDATE round ${String(round)}, ${task.area.name}`;
   const result = await withOneRelaunch<ReviewFinding[]>({ stage, note: deps.note }, async (previous) => {
     rmSync(out, { force: true });
-    await deps.review({ ...inputs, ...refusedAttemptInput(previous, "review") }, out);
+    await deps.review({ ...inputs, ...refusedAttemptInput(previous, "review") }, out, scratch);
     const read = readArtifact(out, reviewArtifactSchema);
     if (read.value === null) return { value: null, issue: read.issue };
     const checked = checkReview(deps.root, read.value, { pack, documents: task.documents, previous: (task.previous ?? []).map((p) => p.id) });

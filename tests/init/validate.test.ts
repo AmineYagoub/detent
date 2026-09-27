@@ -115,14 +115,6 @@ describe("PRDR-284: the stop rule (specification decision 3)", () => {
     expect(readProgressMark(root).spent).toBe(readRecordedSpend(root));
     expect(readProgressMark(root).unitCost, "the completed phase is a unit of its own, marked after its last round's, and cost nothing past it").toBe(0);
   });
-
-  it("says once that no reviewer runs a simulation, since its scratch directory is not built", async () => {
-    const root = repo(RAW);
-    const notes: string[] = [];
-    await initThroughValidate(root, { reviewers: lendingOnly((round) => (round === 1 ? [finding()] : [])), writer: appliesAll(), notes });
-    expect(notes.filter((n) => n.includes("no reviewer runs a simulation"))).toHaveLength(1);
-    expect(notes).toContain("VALIDATE validated the pack in 2 rounds (C-2¹⁴)");
-  });
 });
 
 describe("PRDR-284: the ceiling (specification decision 13)", () => {

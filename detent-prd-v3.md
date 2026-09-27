@@ -1656,6 +1656,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE is built, and hands the pack to the phases after it.
   Its simulating reviewer is not: no reviewer runs a simulation until PRDR-285 builds the
   sandbox. A red checker its writer cannot make green stops `init` at VALIDATE too.*
+  *Amended by S-1⁗ (PRDR-285): the simulating reviewer is built, on macOS: each reviewer of a round
+  may simulate, and where the machine has no sandbox each round says why none can.*
 
 - **C-2⁷ (3.1.1, PRDR-278).** The pack has a fixed schema, a committed conformance record and a
   deterministic checker (specification decision 4), so that `init` and the operator can tell a
@@ -1976,6 +1978,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁴ (PRDR-284): `spec_review` is built, read-only, and the migration writes its
   routing. Its scratch directory and sandbox are not, so simulation is off and VALIDATE says so
   (PRDR-285). VALIDATE's writer is `spec_write` over the pack's paths.*
+  *Amended by S-1⁗ (PRDR-285): the scratch directory and the sandbox are built, on macOS's
+  Seatbelt; elsewhere simulation is off, and each round says so.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -2481,6 +2485,66 @@ the code does what the rules it amends describe, and each of those rules points 
     re-validation (PRDR-286); the reader of the checker's parse (PRDR-290); and each phase's spend
     beside planning's, in PRESENT and `detent status` (C-2⁶), which none of the four phases
     reports: their sessions are on the ledger against ticket `init`, as every init session is.
+  *Amended by S-1⁗ (PRDR-285): its reviewers may simulate where the machine has a sandbox, and each
+  round without one says why; VALIDATE no longer says once per run that none can.*
+
+- **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
+  throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past
+  it (specification decision 7).
+  - **The tool.** A reviewer whose round has a sandbox is given one more tool,
+    `mcp__detent_scratch__run`, served in-process: it takes a script's source and the interpreter to
+    run it with. Detent writes the script into the session's own directory inside the round's, runs it
+    there, and returns how the run ended and what it printed. The reviewer holds no shell, and no Read,
+    Write or Edit on the scratch directory, so the output is the only way a result leaves it. The tool
+    is given per session, never per role: `spec_review`'s tools are the read tools, and the launch adds
+    the scratch tool with its round's grant. No other role may be given it, and the referee's session
+    arm gives it to none.
+  - **The sandbox.** macOS's Seatbelt, through `/usr/bin/sandbox-exec`, under a profile written for each
+    run, which denies by default. A script reads `/`, `/System`, `/usr`, its interpreter's install and its
+    own directory, and the metadata of the directories above them: not the repository, and not the
+    operator's home. It reads the system's settings, its processor count and host name among them,
+    without which node dies and python3 cannot count its processors. It writes its own directory and
+    `/dev/null`, reaches no network, local included, and makes no Mach lookup, so it cannot ask a
+    system service to act for it. It starts no process: the profile allows no fork and no spawn, so a
+    run is the one process Detent started, which signals nothing but itself; a simulation that needs a
+    second process cannot run, and threads can. Its environment is `PATH`, a UTF-8 locale, and `HOME`
+    and `TMPDIR` set to its own directory: no variable of Detent's crosses (SEC-4). The hook sees the
+    tool call, and the sandbox, below it, confines what the script then does.
+  - **Limits.** A run stops at 120 s of wall clock, or once its output, both streams together, passes
+    64 KiB: Detent kills it, and the reviewer is told which limit stopped it. A CPU limit of twice the
+    wall clock, which a script's threads spend together, ends a run Detent no longer can, as when Detent
+    itself ends mid-run. A script over 128 KiB, or for an interpreter the sandbox does not offer, is
+    refused, and nothing is written or run.
+  - **Interpreters.** `python3`, the first on `PATH`, run by its real path in isolated mode, and `node`,
+    the one running Detent, each offered with its version. A script uses what the install holds, and
+    nothing can be installed. An install that would open more than itself, holding the operator's home
+    or the repository, or lying inside the repository, is not read, and an interpreter that then does
+    not start in the sandbox is not offered.
+  - **The probe.** Before the first round that runs, VALIDATE asks once whether the machine has the
+    sandbox. A canary per interpreter must write its own directory, and must fail to write beside it
+    and to reach a listener Detent opens. A sandbox that lets either through is off, and so is one that
+    cannot be applied, as when Detent itself runs sandboxed; so is a machine with no `sandbox-exec`, and
+    every platform but macOS. Off, each round says why, a reviewer's `simulation` input is null, and it
+    judges every invariant by reading.
+  - **The round.** On, a round makes its scratch directory under the system's temporary directory,
+    outside the repository and `.detent/`, and removes it once its reviewers are done, whatever they did;
+    a temporary directory inside the repository turns simulation off. Each reviewer's inputs carry
+    `simulation`: the tool, the interpreters with their versions, and the limits. The writer is given
+    none of it, and VALIDATE names the interpreters once per run. A temporary directory that cannot be
+    used turns simulation off for the round too, which says why.
+  - **Findings.** A reviewer simulates where a document states an invariant that reading alone cannot
+    settle: the rules as the pack states them, seeded, over many random sequences. A sequence that
+    breaks the invariant is a finding, checked as every other is: its places quote the rules it breaks,
+    and its `why` gives the seed, the sequence, the step that broke it, and how many sequences of how
+    many did. Code cannot tell a simulated finding from a read one, and only VALIDATE's writer changes
+    the pack.
+  - **Not built here.** A sandbox on any platform but macOS: Linux's bubblewrap is not wired, so a
+    self-build on CI and an N-7 run simulate nothing. A memory or disk limit: macOS enforces no memory
+    limit on a process, and nothing bounds what a script writes to its own directory, so a script can
+    exhaust memory or fill the temporary volume until its time limit ends it. A script that waits when
+    Detent ends mid-run: the CPU limit ends only one that computes, so a waiting one lives on, confined,
+    until it ends, and its round's directory stays. The record does not say whether a round could
+    simulate.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
@@ -2501,6 +2565,8 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   unrecognized form). Plan mode remains for artifact-less sessions (doctor's smoke).
   Read-only-ness is the allowlist plus the D-21 hook, not a mode that contradicts P2's
   artifact interface. Found by T-140's first live read-only session.
+  *Amended by S-1⁗ (PRDR-285): a `spec_review` session whose round has a sandbox is also given
+  the tool that runs a script in the round's scratch directory, sandboxed, beside its one write rule.*
 - **S-2′/D-21** Containment is the `PreToolUse` hook under **both** drivers — the headless driver wires it when constructing sessions; the plugin ships it as a plugin hook. It denies outside `surface[]`, denies protected globs, preserves the surface-expansion lever, and (D-28) denies ledger-bypassing ambient billable tools. A hook deny binds over every allow rule and permission mode.
 - **S-2″ (draft.5, PRDR-068).** The D-21 surface check governs MUTATION: the mutating
   tools (Write/Edit/MultiEdit/NotebookEdit) are denied outside `surface[]` and denied on
@@ -2509,6 +2575,9 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   for every tool. Found by T-140: a worker denied READING the PRD's §10 — its own
   specification — shipped an empty diff that only the D-6 review layer caught. Driver-mode
   policy unchanged (D-27: the driver neither reads nor writes files).
+  *Amended by S-1⁗ (PRDR-285): the scratch tool names no path, so the hook leaves it to the
+  allowlist; the script it runs writes outside the worktree, in its round's scratch directory, where
+  the sandbox, not the hook, confines it.*
 - **OQ-2 resolved (draft.6, PRDR-074).** The license is **MIT** — chosen by the user
   2026-08-20 during T-141 publish preparation. v2 posed MIT vs Apache-2.0 as the sole
   M4 blocker; MIT matches the header's "public, open source" delivery and the plugin

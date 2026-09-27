@@ -368,7 +368,12 @@ function judgeGitRm(reading: GitRmReading, policy: GuardPolicy, resolveReal: (p:
  * Stop gate (oracle `stop_gate.py`) — an accelerant, never the authority (P2).
  */
 
-/** S-1's read-only roles have no stop gate: they produce artifacts, not diffs. */
+/**
+ * S-1's read-only roles have no stop gate: they produce artifacts, not diffs.
+ * `spec_review` runs scripts when its round has a sandbox (S-1⁗), in a scratch
+ * directory outside the repository, and still changes no code the product's
+ * gate could judge; a run's limits are the sandbox's, not a gate's.
+ */
 export const READ_ONLY_STAGES: ReadonlySet<string> = new Set(["planner", "diagnose", "research", "review", "audit", "spec_review"]);
 
 /**
@@ -449,7 +454,10 @@ export function researchTools(docsDomains: readonly string[]): string[] {
  * init session carries. WRITE's and VALIDATE's fixes declare the pack's paths
  * as their surface and get Edit and Write for them, which the hook confines
  * (`InitSessionRequest`'s `surface`). `archive/` is in neither: code moves the
- * originals (C-2¹³). `spec_review`, VALIDATE's reviewers, is read-only.
+ * originals (C-2¹³). `spec_review`, VALIDATE's reviewers, is read-only: the
+ * role's tools are the read tools, and a reviewer whose round has a sandbox is
+ * given the scratch tool per session, never per role (`InitSessionRequest`'s
+ * `scratch`, S-1⁗), since a machine with no sandbox gives it none.
  */
 export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
   if (role === "research" || role === "audit") return researchTools(docsDomains);

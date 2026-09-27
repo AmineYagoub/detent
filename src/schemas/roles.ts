@@ -113,8 +113,9 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
  * decision log among them, for WRITE's and VALIDATE's tasks (PRDR-283,
  * PRDR-284). DECIDE's task writes its artifact alone, and code writes the log
  * from it. `spec_review` is in it: VALIDATE's reviewers read and write their
- * artifact alone, since the scratch directory S-1‴ gives them for a
- * simulation is not built.
+ * artifact alone in the repository. The scratch directory S-1‴ gives them for
+ * a simulation lies outside it, and is written only by the scripts they run
+ * there, sandboxed (S-1⁗, `SCRATCH_ROLES`).
  */
 export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "planner",
@@ -124,6 +125,14 @@ export const READ_ONLY_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "audit",
   "spec_review",
 ]);
+
+/**
+ * S-1‴, S-1⁗ (PRDR-285): the roles whose sessions may be given a scratch
+ * directory and the sandboxed tool that runs a script there. VALIDATE's
+ * reviewers alone (specification decision 7): AUDIT, DECIDE and WRITE run
+ * nothing, and no run-loop role is ever given it.
+ */
+export const SCRATCH_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["spec_review"]);
 
 /**
  * S-1′ (PRDR-178) — the read-only roles whose write surface is their ARTIFACT

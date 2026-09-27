@@ -4,6 +4,8 @@ import { discover as discoverStack } from "../adapter/discover/index.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
 import { PACK_PATHS, isModulePrd, type ConformanceRecord, type PackFinding } from "../schemas/pack.js";
 import type { ReviewFinding } from "../schemas/validate.js";
+import type { Sandbox } from "../sessions/sandbox.js";
+import { probeSandbox } from "../sessions/sandbox-probe.js";
 import { isGreenfield } from "./analyze.js";
 import { docPatternsFor } from "./discover-docs.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
@@ -16,6 +18,7 @@ import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { countsOf, mergeFindings, type Finding, type Outcome } from "./validate-checks.js";
 import { diffPath, fixFindings, reviewArea, type Fixed, type ReviewTask, type RoundDeps, type Shown } from "./validate-round.js";
+import { offeredNote, withRoundScratch } from "./validate-scratch.js";
 import { areaOf, areasOf, reviewable, scopeOf, type Area } from "./validate-scope.js";
 import { handoff, packDigest } from "./write.js";
 
@@ -40,6 +43,11 @@ import { handoff, packDigest } from "./write.js";
  * open, and whatever cites either (C-2⁷). A conforming pack runs the checker
  * alone, which DISCOVER's classification already ran, and no session
  * (specification decision 6).
+ *
+ * A round's reviewers may simulate what the pack states, in a scratch
+ * directory the round makes and removes, when the machine has a sandbox for it
+ * (S-1⁗, specification decision 7). It is probed once, before the first round
+ * that runs; without one, each round says why.
  */
 
 type Round = ConformanceRecord["rounds"][number];
@@ -55,6 +63,8 @@ export interface ValidateStageDeps extends RoundDeps {
   readonly ceiling: number;
   /** `YYYY-MM-DD`, for the record. */
   readonly today: string;
+  /** S-1⁗ (PRDR-285): the machine's sandbox for a reviewer's scripts, asked once, when a round first runs. */
+  readonly sandbox: () => Promise<Sandbox>;
 }
 
 const plural = (n: number, one: string): string => `${String(n)} ${one}${n === 1 ? "" : "s"}`;
@@ -158,7 +168,6 @@ export async function validateStage(deps: ValidateStageDeps): Promise<PhaseOutco
     deps.note?.(`VALIDATE: nothing in the pack moved since round ${String(record.rounds.length)}, the last its record holds, so no round runs, and its rounds say how the validation ends (C-2¹⁴)`);
     return conclude(deps, record.rounds);
   }
-  deps.note?.("VALIDATE: no reviewer runs a simulation, since the scratch directory one needs is not built, so the invariants the pack states are read and never run (C-2¹⁴)");
   return await loop(deps, start);
 }
 
@@ -187,6 +196,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
   let seeds = start.seeds;
   let previous = start.previous;
   let diff = start.diff;
+  let sandbox: Sandbox | null = null;
   for (let r = rounds.length + 1; ; r += 1) {
     const docs = packDocuments(deps.root);
     const { pack } = parsePack(deps.root, docs, { greenfield: deps.greenfield });
@@ -198,8 +208,16 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
       deps.note?.("VALIDATE: nothing that moved is a document a round reviews, so no round runs (C-2¹⁴)");
       return finished(deps, rounds, { ran: true });
     }
-    const reported: { area: number; findings: ReviewFinding[] }[] = [];
-    for (const task of tasks) reported.push({ area: areas.indexOf(task.area), findings: await reviewArea(deps, r, task, docs.filter(reviewable)) });
+    if (sandbox === null) {
+      sandbox = await deps.sandbox();
+      const offered = offeredNote(sandbox);
+      if (offered !== null) deps.note?.(offered);
+    }
+    const reported = await withRoundScratch(deps.root, r, sandbox, deps.note, async (scratch) => {
+      const found: { area: number; findings: ReviewFinding[] }[] = [];
+      for (const task of tasks) found.push({ area: areas.indexOf(task.area), findings: await reviewArea(deps, r, task, docs.filter(reviewable), scratch) });
+      return found;
+    });
     const findings = mergeFindings(r, reported);
     const counts = countsOf(findings);
     const fixed: Fixed =
@@ -287,8 +305,9 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
           ceiling: deps.budgets.spec_validation_rounds,
           today: (deps.now?.() ?? new Date()).toISOString().slice(0, 10),
           note: deps.note,
-          review: async (inputs, artifactOut) => {
-            await launchInitSession(launch, { role: "spec_review", inputs, artifactOut });
+          sandbox: deps.sandbox ?? (async () => await probeSandbox({ root: deps.root })),
+          review: async (inputs, artifactOut, scratch) => {
+            await launchInitSession(launch, { role: "spec_review", inputs, artifactOut, ...(scratch === null ? {} : { scratch }) });
           },
           fix: async (inputs, artifactOut) => {
             await launchInitSession(launch, { role: "spec_write", inputs, artifactOut, surface: PACK_PATHS });

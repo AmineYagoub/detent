@@ -3,6 +3,8 @@ import type { Options, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
 import { guardToolUse, stopGate, type GuardPolicy, carryArtifact, type ArtifactAlias } from "./guard.js";
 import { buildSessionEnv } from "./env.js";
+import { SCRATCH_SERVER } from "./sandbox.js";
+import { scratchServer } from "./scratch-server.js";
 
 /**
  * T-046 — the Claude Agent SDK backend (S-1…S-6, D-21, D-22).
@@ -131,6 +133,15 @@ function buildStopHook(config: SdkBackendConfig, role: string, cwd: string): Non
   };
 }
 
+/** The MCP servers a session is given: its symbol server, if any, and a reviewer's scratch tool, if its round has one. */
+function serversOf(spec: SessionSpec): Pick<Options, "mcpServers"> {
+  const servers: NonNullable<Options["mcpServers"]> = {
+    ...(spec.mcpServers as NonNullable<Options["mcpServers"]> | undefined),
+    ...(spec.scratch === undefined ? {} : { [SCRATCH_SERVER]: scratchServer(spec.scratch) }),
+  };
+  return Object.keys(servers).length === 0 ? {} : { mcpServers: servers };
+}
+
 /**
  * The full option set for one session. Two lines are load-bearing security
  * decisions with their own regression tests:
@@ -164,8 +175,11 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
      * S-3⁸ (PRDR-121): the optional symbol server, when the adapter granted
      * one. Its READ tools are in `allowedTools`; nothing else it exposes is
      * reachable, and `assertNoEditingTools` refuses an allowlist that tries.
+     *
+     * S-1⁗ (PRDR-285): beside it, a VALIDATE reviewer's scratch tool, built
+     * per session from the grant its round made; `allowedTools` names it.
      */
-    ...(spec.mcpServers === undefined ? {} : { mcpServers: spec.mcpServers as NonNullable<Options["mcpServers"]> }),
+    ...serversOf(spec),
     /** X-1″ (PRDR-106): no ceiling unless a caller sets one — only the doctor probe does. */
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
     ...(spec.model === "" ? {} : { model: spec.model }),

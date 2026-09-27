@@ -162,6 +162,8 @@ export async function initThroughWrite(root: string, stub: Write, opts: Run = {}
     prompts: PROMPTS,
     budgets: BUDGETS,
     note: (t) => opts.notes?.push(t),
+    /* PRDR-285: a fixture probes no machine's sandbox, so a test reads the same on every platform; one that simulates passes its own. */
+    sandbox: async () => ({ kind: "off", reason: "the test fixture probes no sandbox" }),
     ...opts.more,
   }).filter((h) => opts.all === true || (opts.through ?? THROUGH_WRITE).has(h.phase));
   return await runInit(root, handlers);
