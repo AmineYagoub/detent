@@ -6,10 +6,13 @@ import type { PlanQuestion } from "../schemas/init.js";
  * C-3′ batches every stage's questions at PRESENT and dedups them on exact
  * text. gate-313 asked the founder which npm identity publishes Detent at
  * ANALYZE, and again — in s14's own words — at PLAN: two paid assumptions,
- * two answers. The stages that draft are handed what was already asked
- * (`open_questions`, in their inputs); this is the backstop for what still
- * slips through: two questions whose vocabularies overlap past a threshold
- * are one question, and the human sees one entry naming both ids.
+ * two answers. This is the backstop for what slipped through: two questions
+ * whose vocabularies overlap past a threshold are one question, and the human
+ * sees one entry naming both ids.
+ *
+ * C-3⁗, C-4⁵ (PRDR-292): no planning stage asks now. DECIDE asks the founder,
+ * and uses `similarQuestions` to refuse a question the decision log already
+ * answers; what a pack leaves open, PLAN reports as a spec defect.
  *
  * Tokens are lowercase runs of letters and digits at least four long — long
  * enough to drop "which", "the", "and", "for", "npm", short enough to keep
@@ -52,19 +55,4 @@ export function mergeSimilar(questions: readonly PlanQuestion[]): PresentQuestio
     }
   }
   return kept.map(({ q, also }) => (also.length === 0 ? q : { ...q, also }));
-}
-
-/**
- * What a drafting stage is handed, and told, about the questions already
- * asked — only when there are any, so a root with none gets the bytes it
- * always got (S-6/C-8).
- */
-export function openQuestionsInput(questions: readonly PlanQuestion[] | undefined): Record<string, unknown> {
-  if (questions === undefined || questions.length === 0) return {};
-  return { open_questions: questions.map((q) => ({ id: q.id, question: q.question, assumption: q.assumption })) };
-}
-
-export function openQuestionsInstruction(questions: readonly PlanQuestion[] | undefined, askedBy: string): string {
-  if (questions === undefined || questions.length === 0) return "";
-  return ` \`open_questions\` lists what ${askedBy} already asked the human, each with the assumption the plan proceeds on: do NOT ask any of them again, in any words; if this stage needs a different assumption, record the difference where it decides — a ticket's \`description\`, a slice's \`rationale\` (C-3‴).`;
 }

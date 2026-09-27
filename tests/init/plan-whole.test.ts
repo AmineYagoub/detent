@@ -57,7 +57,7 @@ function planner(script: Script, log: string[]): StageFn {
       } else {
         log.push(`PLAN:${slice}`);
       }
-      artifact = { schema_version: SCHEMA_VERSION, tickets: [ticket(`t-${slice}-001`), ticket(`t-${slice}-002`, [`t-${slice}-001`])], questions: [] };
+      artifact = { schema_version: SCHEMA_VERSION, tickets: [ticket(`t-${slice}-001`), ticket(`t-${slice}-002`, [`t-${slice}-001`])] };
     } else if (spec.artifactOut.endsWith("plan-review.json")) {
       if (inputs["scope"] === "whole") {
         wholeReviews += 1;

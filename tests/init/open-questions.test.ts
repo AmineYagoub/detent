@@ -1,20 +1,19 @@
-import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { runInit } from "../../src/init/machine.js";
 import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
 import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
-import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
-import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
-import { DOCS, TWO_SLICES, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
-import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
 /**
  * C-3‴ (PRDR-207) — one question, asked once.
  *
  * gate-313 asked the founder the npm-identity question twice: ANALYZE raised
  * it, s14's draft raised it again in its own words, and the batch dedups on
- * exact text. Two paid assumptions, two answers. The stages that draft are now
- * handed what was already asked, and PRESENT merges what still slips through.
+ * exact text. Two paid assumptions, two answers. The stages that drafted were
+ * handed what was already asked, and PRESENT merged what still slipped through.
+ *
+ * C-3⁗, C-4⁵ (PRDR-292): no planning stage asks now, so no draft is handed
+ * what was asked, and a draft or a slicing that asks is refused
+ * (`plan-inputs.test.ts`). PRESENT's merge is what is left, held here to what
+ * it did.
  */
 
 /* gate-313's pair, verbatim. */
@@ -47,50 +46,6 @@ describe("C-3‴ PRESENT merges a question asked twice in two stages' words", ()
     expect(built.questions?.[0]?.also).toEqual(["s14-q2"]);
     const text = renderPresentation({ root: "/tmp/x", tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, ...built });
     expect(text).toContain("also asked as s14-q2");
-  });
-});
-
-/** A planner that raises a question in s01's draft, and records every input it is handed. */
-function planner(seen: Record<string, unknown>[], raise: boolean): StageFn {
-  return (spec) => {
-    const inputs = inputsOf(spec);
-    seen.push({ ...inputs, __artifact: spec.artifactOut.split("/").pop() });
-    let artifact: object;
-    if (spec.artifactOut.endsWith("slices.json")) artifact = TWO_SLICES;
-    else if (spec.artifactOut.endsWith("plan-draft.json")) {
-      const slice = sliceOf(inputs);
-      artifact = {
-        schema_version: SCHEMA_VERSION,
-        tickets: [ticket(`t-${slice}-001`)],
-        questions: raise && slice === "s01" ? [{ id: "q1", question: "Which registry mirror does the build pull from?", blocking: false, assumption: "the public one" }] : [],
-      };
-    } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = APPROVE_PLAN;
-    else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
-    writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
-    return okResult();
-  };
-}
-
-const drafts = (seen: Record<string, unknown>[], slice: string) => seen.filter((i) => i["__artifact"] === "plan-draft.json" && sliceOf(i) === slice);
-const ids = (i: Record<string, unknown> | undefined) => ((i?.["open_questions"] as { id: string }[] | undefined) ?? []).map((x) => x.id);
-
-describe("C-3‴ the drafting stages are handed what was already asked", () => {
-  it("a later slice's draft sees what the slices before it asked, and nothing is asked before SLICE (D-10′)", async () => {
-    const root = repo(DOCS);
-    const seen: Record<string, unknown>[] = [];
-    await runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(seen, true) }), prompts: PROMPTS, budgets: BUDGETS }));
-    const slice = seen.find((i) => i["__artifact"] === "slices.json");
-    /* Before PRDR-207 no stage was told: `open_questions` absent everywhere, and s14 asked ANALYZE's question again. */
-    expect(slice !== undefined && "open_questions" in slice, "PRDR-290 folded ANALYZE, the one stage that asked before SLICE, into DECIDE").toBe(false);
-    expect(ids(drafts(seen, "s01")[0]), "nothing was asked before s01").toEqual([]);
-    expect(ids(drafts(seen, "s02")[0]), "s02 sees s01's, numbered as PRESENT numbers them").toEqual(["s01-q1"]);
-  });
-
-  it("with nothing asked, no stage is handed an empty list — the prompts are byte-for-byte what they were", async () => {
-    const root = repo(DOCS);
-    const seen: Record<string, unknown>[] = [];
-    await runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: planner(seen, false) }), prompts: PROMPTS, budgets: BUDGETS }));
-    for (const i of seen) expect("open_questions" in i, String(i["__artifact"])).toBe(false);
   });
 });
 

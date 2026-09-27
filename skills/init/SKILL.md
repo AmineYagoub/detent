@@ -98,7 +98,9 @@ the next, so an edited requirement re-plans only its own slice. `PLAN` then
 plans every slice in turn, one session-sized ticket set per slice, reviews
 each, reviews the whole plan for coherence and coverage, and revises what the
 reviews fault. Planning does not pause between slices: it runs to the end of
-the product, and the questions it could not answer ride to `PRESENT`.
+the product, and asks nothing. On a pack (C-4⁵) each slice is drafted from
+its requirements' records, and what the pack leaves unsettled is a spec
+defect, quoted from it, that `PRESENT` lists.
 `SLICE` also places Detent's production baseline (C-2⁗ — secrets, auth,
 backups, health checks, CI gates, and the rest) into the slices where each
 item belongs, so the plan is production grade even when the documents never
@@ -125,17 +127,15 @@ decision yourself.
    the human settles each in the pack, or, for a blocker, raises
    `budgets.spec_validation_rounds` in `.detent/config.json`; then re-invoke.
    `VALIDATE` runs the checker again, and carries on from the round it stopped
-   at. At `PRESENT` (C-3′), the whole
-   plan is written first, and every question planning could not answer — from
-   slicing and each slice's drafting — is presented ONCE with it,
-   each with the assumption the plan proceeds on. It becomes `AWAIT_INFO` only
-   when a question is blocking: no assumption could carry it. Channel: the
-   answers go INTO the planning documents; the human edits (or dictates edits
-   they approve), then re-invoke — changed contents replay the phases that read
-   them (C-8), and only the slices whose inputs moved are re-planned. Answers
-   written to `docs/founder-decisions.md` re-run DECIDE and the planning after
-   it, never AUDIT: that file is the decision log, which AUDIT's key leaves out
-   (C-2¹¹, C-2¹²).
+   at. At `PRESENT` (C-4⁵), planning found a spec defect: the pack contradicts
+   itself, or leaves unsettled something a ticket cannot be built without. The
+   whole plan is written first, and the message lists each defect with the
+   slice that reported it and the passages it quotes, each at its `file:line`.
+   Approval is not offered while one is open, on either exit. Channel: the
+   human amends the pack where each defect quotes it (or dictates edits they
+   approve), then re-invoke — `VALIDATE` re-validates the edit, and the slice
+   that reported the defect is planned again from the amended records.
+   `detent init --replan` plans every slice again without an amendment.
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

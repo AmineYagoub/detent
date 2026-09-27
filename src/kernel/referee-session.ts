@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import picomatch from "picomatch";
-import { ARTIFACT_ONLY_ROLES, READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
+import { ARTIFACT_ONLY_ROLES, promptOf, READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { STRUCTURAL_PROTECTED, coversProtected, isConcreteRepoPath, repoPathKey } from "../schemas/common.js";
 import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
@@ -210,7 +210,7 @@ export class SessionArm {
       /** B-5′: which generation this session belongs to — the fact the skip needs and never had. */
       generation: generation.index,
       /* The audit trail names the prompt that actually ran. */
-      prompt: `${role}@${ctx.prompts.hashes[role]}`,
+      prompt: `${role}@${ctx.prompts.hashes[promptOf(role, null)]}`,
       /**
        * PRDR-235: the effort this session was launched with.
        *
@@ -548,7 +548,7 @@ export class SessionArm {
   }
 
   private prefixFor(role: RoleId): string {
-    return stablePrefix(this.ctx.prompts.prompts[role], this.ctx.rulesText, this.ctx.bindingsPreamble);
+    return stablePrefix(this.ctx.prompts.prompts[promptOf(role, null)], this.ctx.rulesText, this.ctx.bindingsPreamble);
   }
 
   private toolsFor(role: RoleId): readonly string[] {

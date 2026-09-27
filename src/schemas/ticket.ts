@@ -67,6 +67,12 @@ export const ticketSchema = z.strictObject({
   requirement_ids: z.array(nonEmptyString).default([]),
   baseline_ids: z.array(nonEmptyString).default([]),
   /**
+   * C-4⁵ (PRDR-292): the pack's criteria this ticket delivers, each carried
+   * word for word among its `acceptance_criteria`, so the run tests what the
+   * pack says. Defaulted: a ticket written before the field carries none.
+   */
+  criterion_ids: z.array(nonEmptyString).default([]),
+  /**
    * X-4′ (PRDR-111): dependencies the RUN discovered — a falsification naming
    * a path another ticket's surface owns. Declared structure stays in
    * `blockers`; the pool waits on both.

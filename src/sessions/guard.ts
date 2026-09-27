@@ -50,6 +50,13 @@ export interface GuardPolicy {
    * B-2″ made worktrees the default to prevent.
    */
   readonly artifactRoot?: string;
+  /**
+   * C-4⁵ (PRDR-292): absolute directories no tool of this session may reach,
+   * to read as much as to write: a planner's is the root's `archive/`, the
+   * originals a pack was written from (C-2⁷). Absent, nothing is refused on
+   * that ground.
+   */
+  readonly unreadable?: readonly string[];
 }
 
 export interface GuardDecision {
@@ -209,6 +216,69 @@ export function realpathNearest(target: string, maxHops = 40): string {
   }
 }
 
+/** Whether `p` is `dir` or inside it. */
+const within = (dir: string, p: string): boolean => {
+  const rel = path.relative(dir, p);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
+/**
+ * Whether a Glob pattern, read from its search root, can match a path below
+ * `below`, a directory under that root: segment by segment, until a `**` or
+ * the directory's own segments are passed with the pattern still going.
+ */
+function globDescends(pattern: string, below: string): boolean {
+  const segments = pattern.split("/").filter((s) => s !== "" && s !== ".");
+  const dirs = below.split("/");
+  for (const [i, dir] of dirs.entries()) {
+    const segment = segments[i];
+    if (segment === undefined) return false;
+    if (segment.includes("**")) return true;
+    if (!picomatch.isMatch(dir, segment, { dot: true })) return false;
+  }
+  return segments.length > dirs.length;
+}
+
+/**
+ * C-4⁵ (PRDR-292): the directory of `policy.unreadable` a call reaches, or
+ * null. A path inside one reaches it, as written or resolved, and the
+ * directory is compared resolved too, so a link reaches it wherever the root
+ * itself is reached through one; so does a search whose root holds one: Grep
+ * from any directory above it, and Glob with a pattern that can match below
+ * it. Grep and Glob search the working directory where they name no path.
+ */
+function unreadableReached(toolName: string, toolInput: unknown, policy: GuardPolicy, resolveReal: (p: string) => string): string | null {
+  const dirs = policy.unreadable ?? [];
+  if (dirs.length === 0) return null;
+  const search = toolName === "Grep" || toolName === "Glob";
+  const target = pathOf(toolInput) ?? (search ? "." : null);
+  if (target === null) return null;
+  const pattern = toolName === "Glob" ? String((toolInput as { pattern?: unknown }).pattern ?? "") : "";
+  /* A Glob pattern's leading directories are part of where it searches. */
+  const base = toolName === "Glob" ? picomatch.scan(pattern).base : "";
+  /* Unresolvable: judged as written, which the containment check refuses anyway. */
+  const resolved = (p: string): string => {
+    try {
+      return resolveReal(p);
+    } catch {
+      return p;
+    }
+  };
+  const at = path.resolve(policy.workRoot, target, base);
+  const real = resolved(at);
+  for (const dir of dirs.map((d) => path.resolve(d))) {
+    const shown = `${path.relative(policy.workRoot, dir).split(path.sep).join("/")}/`;
+    const pairs = [[dir, at], [resolved(dir), real]] as const;
+    if (pairs.some(([d, p]) => within(d, p)) || within(dir, real)) return shown;
+    const above = pairs.find(([d, p]) => within(p, d));
+    if (!search || above === undefined) continue;
+    if (toolName === "Grep") return shown;
+    const glob = base === "" ? pattern : pattern.slice(base.length).replace(/^\/+/u, "");
+    if (globDescends(glob, path.relative(above[1], above[0]).split(path.sep).join("/"))) return shown;
+  }
+  return null;
+}
+
 /**
  * The PreToolUse decision (oracle `pretooluse_guard.py`, S-2″). Deny-by-default
  * outside the declared surface FOR MUTATION; protected denies mutation always
@@ -240,6 +310,15 @@ export function guardToolUse(
       reason:
         `DENY: ${toolName} would spawn a billable session outside the ledger — a session does its own work, ` +
         "and a billable session exists only through the metered path (D-28).",
+    };
+  }
+  const barred = unreadableReached(toolName, toolInput, policy, resolveReal);
+  if (barred !== null) {
+    return {
+      decision: "deny",
+      reason:
+        `DENY: this call reaches ${barred}, which this session may not read: it holds the originals the pack was written from, ` +
+        "and planning reads the pack. Read or search the directories you need instead, naming them in the call.",
     };
   }
   /* S-3⁵ (PRDR-213): the one Bash verb that names paths is judged on them. */

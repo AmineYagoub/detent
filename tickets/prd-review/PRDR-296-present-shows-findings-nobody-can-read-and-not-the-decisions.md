@@ -31,3 +31,14 @@ what PRESENT should show.
 ## Design
 
 The redesign plan's §9.
+
+## From PRDR-292
+
+PRESENT lists the spec defects planning found. Each shows the slice that reported it, its kind,
+each passage's record id, quote and `file:line`, and the defect. While one is open, PRESENT raises
+AWAIT_INFO with one item per defect before approval is offered, and its first line says the plan
+is not approvable. `presentation.json` counts them in `spec_defects`, and `detent run`'s deferred
+approval refuses while the count is not zero.
+
+So the first criterion's "the spec defects planning found" is built, and so is the second
+criterion's refusal while a spec defect is open. The refusal while a check fails is PRDR-293's.

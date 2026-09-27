@@ -44,6 +44,7 @@ const t = (id: string, over: Partial<DraftedTicket> = {}): DraftedTicket => ({
   consumes: [],
   requirement_ids: [],
   baseline_ids: [],
+  criterion_ids: [],
   risk_label: false,
   slice: "s01",
   ...over,
@@ -204,7 +205,6 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
         { ...bare("t-s01-001"), consumes: [{ kind: "config", id: "KSAR_BUILD_TIMEOUT" }] },
         { ...bare("t-s01-002"), provides: [{ kind: "config", id: "KSAR_BUILD_TIMEOUT", note: "build deadline, default 30m" }] },
       ],
-      questions: [],
     };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
@@ -213,7 +213,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
           : spec.artifactOut.endsWith("plan-review.json")
             ? APPROVE_PLAN
             : spec.artifactOut.endsWith("slices.json")
-              ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }], questions: [] }
+              ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }] }
               : null;
         if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
@@ -291,7 +291,8 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
   });
 
   it("the vocabulary is closed and the key is stable", () => {
-    expect([...CONTRACT_KINDS]).toEqual(["symbol", "config", "file", "route", "table", "event"]);
+    /* C-4⁵ (PRDR-292): the kinds a pack catalogues, named by their catalogue ids, joined the six. */
+    expect([...CONTRACT_KINDS]).toEqual(["symbol", "config", "file", "route", "table", "event", "error_code", "setting", "job"]);
     expect(contractKey({ kind: "symbol", id: "pkg.Name" })).toBe("symbol:pkg.Name");
     /** Two kinds sharing an id are two different names. */
     expect(contractKey({ kind: "config", id: "X" })).not.toBe(contractKey({ kind: "file", id: "X" }));

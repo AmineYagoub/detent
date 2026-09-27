@@ -5,6 +5,7 @@ import { SCHEMA_VERSION, upgradeHint } from "../schemas/common.js";
 import { CONFORMANCE_RECORD_PATH } from "../schemas/pack.js";
 import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, type RoleId } from "../schemas/roles.js";
 import { acquireRunLock, lockHolder, lockPhaseSuffix, type RunLockInfo } from "./run-lock.js";
+import { NON_TICKET_FILES } from "./tickets/readers.js";
 
 /**
  * F-3″ (PRDR-300) — carrying a repository's state to the version this build
@@ -29,6 +30,8 @@ const CONFIG = ".detent/config.json";
 
 type Json = Record<string, unknown>;
 
+type Transform = (value: Json, deps: MigrateDeps, rel: string) => Json;
+
 export interface MigrateDeps {
   /** S-7: the prompt hashes this build ships, which a carried `role@hash` is re-pinned to. */
   readonly promptHashes: Readonly<Record<string, string>>;
@@ -41,8 +44,13 @@ export interface Migration {
   /** It carries a file stamped `from` to `from + 1`, nested stamps included. */
   readonly from: number;
   readonly name: string;
-  /** What else it changes, keyed by the file's path from the root. */
-  readonly transforms: Readonly<Record<string, (value: Json, deps: MigrateDeps) => Json>>;
+  /** What else it changes, keyed by the file's path from the root, or as `<dir>/*.json` for every JSON file directly in `dir`. */
+  readonly transforms: Readonly<Record<string, Transform>>;
+}
+
+/** A file's own key wins over its directory's. */
+function transformOf(migration: Migration, rel: string): Transform | undefined {
+  return migration.transforms[rel] ?? migration.transforms[`${path.posix.dirname(rel)}/*.json`];
 }
 
 /**
@@ -91,6 +99,35 @@ function sayValidated(value: Json): Json {
   return Object.hasOwn(value, "validated") ? value : { ...value, validated: true };
 }
 
+const isJson = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** C-4⁵ (PRDR-292): a ticket names the pack criteria it carries, and one drafted before the field carried none. */
+function withCriteria(ticket: unknown): unknown {
+  return isJson(ticket) && !Object.hasOwn(ticket, "criterion_ids") ? { ...ticket, criterion_ids: [] } : ticket;
+}
+
+/** A ticket file; the plan, its presentation and its approval are not tickets, and are left as they are. */
+const ticketFile: Transform = (value, _deps, rel) => (NON_TICKET_FILES.has(path.posix.basename(rel)) ? value : (withCriteria(value) as Json));
+
+/**
+ * C-3⁗, C-4⁵ (PRDR-292): a draft, a slice's cache and a slice the whole-plan
+ * review had redrafted each trade `questions` for `spec_defects`, since no
+ * planning stage asks, and each of their tickets names its criteria. What was
+ * asked is dropped: none of it quoted the pack, so none of it is a defect.
+ */
+function drafted(value: Json): Json {
+  const rest: Json = { ...value };
+  delete rest["questions"];
+  return {
+    ...rest,
+    ...(Array.isArray(value["tickets"]) ? { tickets: value["tickets"].map(withCriteria) } : {}),
+    ...(Object.hasOwn(value, "spec_defects") ? {} : { spec_defects: [] }),
+  };
+}
+
+const wholePlan: Transform = (value) =>
+  Array.isArray(value["redrafted"]) ? { ...value, redrafted: value["redrafted"].map((r) => (isJson(r) ? drafted(r) : r)) } : value;
+
 /**
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
@@ -109,12 +146,26 @@ function sayValidated(value: Json): Json {
  * reading is `init`'s, not this step's, because a state written by a 3.1.1
  * build before PRDR-290 holds the same checkpoint at this version, and no
  * migration runs on it.
+ *
+ * PLAN's draft and the tickets it writes changed shape too (PRDR-292): a
+ * ticket gains `criterion_ids`, and a draft, each slice's cache and the
+ * whole-plan review's cache trade `questions` for `spec_defects`. SLICE's
+ * artifact lost `questions` as well and needs no step: it is removed before
+ * every launch, and read only after one.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
     from: 1,
     name: "the 3.1.1 line",
-    transforms: { ".detent/agents/assignments.json": repin, ".detent/config.json": routeAdded, [CONFORMANCE_RECORD_PATH]: sayValidated },
+    transforms: {
+      ".detent/agents/assignments.json": repin,
+      ".detent/config.json": routeAdded,
+      [CONFORMANCE_RECORD_PATH]: sayValidated,
+      ".detent/plan/*.json": ticketFile,
+      ".detent/state/plan/*.json": drafted,
+      ".detent/state/plan-draft.json": drafted,
+      ".detent/state/whole-plan.json": wholePlan,
+    },
   },
 ];
 
@@ -203,7 +254,7 @@ function carry(found: Found, deps: MigrateDeps): Json {
   for (const migration of MIGRATIONS) {
     if (migration.from < found.version) continue;
     value = restamp(value, migration.from, migration.from + 1) as Json;
-    value = migration.transforms[found.rel]?.(value, deps) ?? value;
+    value = transformOf(migration, found.rel)?.(value, deps, found.rel) ?? value;
   }
   return value;
 }

@@ -23,7 +23,6 @@ export const TWO_SLICES = {
     { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], rationale: "" },
     { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], rationale: "" },
   ],
-  questions: [{ id: "sq1", question: "Which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
 };
 
 export const ticket = (id: string, deps: string[] = []) => ({
@@ -39,6 +38,7 @@ export const ticket = (id: string, deps: string[] = []) => ({
   consumes: [],
   requirement_ids: [],
   baseline_ids: [],
+  criterion_ids: [],
   risk_label: false,
 });
 
@@ -67,7 +67,6 @@ export const oneSlice =
   (_take: number, inputs: Record<string, unknown>): object => ({
     schema_version: SCHEMA_VERSION,
     slices: [{ id: "s01", title, goal: `${title} works end to end`, requirement_ids: seedIds(inputs), baseline_items: [], docs: [...docs], depends_on: [], rationale: "" }],
-    questions: [],
   });
 
 export interface Script {
@@ -113,9 +112,8 @@ export const twoSliceDraft = (inputs: Record<string, unknown>): object =>
     ? {
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
-        questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
       }
-    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
+    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")] };
 
 export const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 

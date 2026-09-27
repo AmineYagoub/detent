@@ -58,3 +58,15 @@ in `tests/init/stages.test.ts`, `research-batch.test.ts`, `research-contract.tes
 `research-share.test.ts` and the planning half of `tests/kernel/x1-counting.test.ts`. X-1's site
 map names `init/audit` for `planning_research_tool_calls`. SLICE no longer takes `open_questions`;
 PLAN's drafts still do, from the slices before them.
+
+## From PRDR-292
+
+No planning stage asks (C-3⁗, C-4⁷). SLICE's slicing and PLAN's draft have no `questions`, and one
+carrying any is refused. `openQuestionsInput` and `openQuestionsInstruction` are gone from
+`src/init/questions.ts`, and no planning session is handed open questions. What is left has
+nothing to feed it:
+- PRESENT still gathers SLICE's and PLAN's `questions` outputs, renumbers and merges them
+  (`mergeSimilar`), and renders them with `answerInstruction`.
+- `questions.ts` keeps `mergeSimilar`, and `similarQuestions`, which DECIDE uses.
+
+Deleting what planning no longer feeds is this ticket's second criterion.

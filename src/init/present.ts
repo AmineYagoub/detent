@@ -14,7 +14,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import type { HeldFinding, PlanQuestion, PlanReview } from "../schemas/init.js";
 import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
 import { mergeSimilar, similarQuestions, type PresentQuestion } from "./questions.js";
-import { specLines, type PresentedDefault, type PresentedRisk } from "./present-spec.js";
+import { defectInterrupt, defectLines, isPresentedDefect, specLines, type PresentedDefault, type PresentedDefect, type PresentedRisk } from "./present-spec.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -74,6 +74,8 @@ export interface PresentInput {
   readonly defaults?: readonly PresentedDefault[];
   /** C-2¹⁴ (PRDR-284): the majors VALIDATE's last round left open, listed beside the defaults. */
   readonly risks?: readonly PresentedRisk[];
+  /** C-4⁵ (PRDR-292): what PLAN found the pack leaves unsettled; while one is open, approval is not offered. */
+  readonly specDefects?: readonly PresentedDefect[];
   /** C-3‴ (PRDR-282): planning questions the log's decisions already answer, by id, so they are named and not asked again. */
   readonly answeredByLog?: readonly { readonly id: string; readonly entry: string }[];
   /** Findings the reviews still held after their revision round, each marked with why (D-24′). */
@@ -131,7 +133,10 @@ export interface PresentInput {
 /** C-2‴/C-3′: what PRESENT shows beyond the tickets, gathered from every planning phase's outputs. */
 export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
-): Pick<PresentInput, "slices" | "questions" | "defaults" | "risks" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"> {
+): Pick<
+  PresentInput,
+  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"
+> {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
    * came straight back — a string was spread into characters and `q.question`
@@ -212,6 +217,7 @@ export function presentInputsFromOutputs(
     questions: mergeSimilar(questions),
     defaults: list<unknown>(logged, "defaults").filter(isRow("id", "value", "reason")),
     risks: list<unknown>("VALIDATE", "risks").filter(isRow("id", "where", "fix", "left", "reason")),
+    specDefects: list<unknown>("PLAN", "spec_defects").filter(isPresentedDefect),
     answeredByLog,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
     contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
@@ -240,8 +246,9 @@ export function presentInputsFromOutputs(
  * than from what the human was shown.
  */
 export function renderPresentation(input: PresentInput): string {
+  const defects = input.specDefects ?? [];
   const lines = [
-    "Plan ready for approval.",
+    defects.length === 0 ? "Plan ready for approval." : "Plan drafted, and not approvable while the spec defects below are open.",
     "",
     "Verification bindings:",
     bindingTable(input.bindings, input.skips),
@@ -286,7 +293,7 @@ export function renderPresentation(input: PresentInput): string {
   if (answered.length > 0) {
     lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
   }
-  lines.push(...specLines(input.defaults ?? [], input.risks ?? []));
+  lines.push(...defectLines(defects), ...specLines(input.defaults ?? [], input.risks ?? []));
   const edges = input.derivedEdges ?? [];
   if (edges.length > 0) {
     lines.push(
@@ -397,7 +404,7 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   /**
    * C-7 (PRDR-255): the rendering is kept, so the second exit can replay it.
    *
-   * Written on EVERY branch — before the blocking-question return below, and
+   * Written on EVERY branch — before the returns below that hold approval, and
    * whatever the decision turns out to be — because `run` may be reached from
    * any of them and what it shows must be what was shown here. That is the
    * whole content of "rendered identically by `init` and by `run`", which was
@@ -408,7 +415,12 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     presentation,
     plan_hash: planHash(deps.root),
     blocking: (deps.questions ?? []).filter((q) => q.blocking).length,
+    spec_defects: (deps.specDefects ?? []).length,
   } satisfies Presentation);
+
+  /** C-4⁵ (PRDR-292): an open spec defect holds approval, and the operator is told each one and how a re-run closes it. */
+  const defective = defectInterrupt(presentation, deps.specDefects ?? []);
+  if (defective !== null) return defective;
 
   /**
    * C-3′ (PRDR-117): the whole plan is written and shown FIRST; a question no

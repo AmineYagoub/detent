@@ -1,13 +1,9 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import type { SliceSpec } from "../schemas/init.js";
-import { CATALOGUES_PATH, type Pack } from "../schemas/pack.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import { contentsDigest } from "./machine.js";
-import { catalogueEntriesUsed, DECISION_REF, FACT_REF } from "./pack-check-refs.js";
-import { readLines } from "./pack-markdown.js";
 import type { PlanDeps } from "./plan.js";
+import { sliceRecords } from "./plan-records.js";
 import { sessionBudget } from "./plan-review.js";
 
 /**
@@ -25,19 +21,20 @@ import { sessionBudget } from "./plan-review.js";
  * slice is its requirement ids now, and its key is those ids, sorted; what
  * they say (below); the baseline items it carries, with what each is
  * verified by; the stack the decision log settles (D-10′); the bindings; the
- * session budget; and the prompt. The model's words are in none of it.
+ * session budget; and the prompts.
  *
- * On a pack, what the ids say is each requirement's record from the checker's
- * parse: its text, milestone and level, its criteria, and the decisions,
- * defaults, facts and catalogue entries it and its criteria cite. So an edit
- * to one requirement re-plans its own slice, and a veto the slices whose
- * requirements cite what it edits (C-3⁗). Until PLAN drafts from those records
- * alone (C-4⁵), its session still reads whole documents, and an edit to text
- * no record holds re-plans nothing. Without a parse, what the ids say is the
- * contents of the documents the slice plans from, as C-8‴ keyed it.
+ * On a pack, what the ids say is their records from the checker's parse, the
+ * ones PLAN drafts from (C-4⁵, PRDR-292): each requirement's text, milestone,
+ * level and tags, the criteria that test them, and the decisions, defaults,
+ * facts and catalogue entries they cite. So an edit to one requirement
+ * re-plans its own slice, and a veto the slices whose records cite what it
+ * edits (C-3⁗). Without a parse, what the ids say is the contents of the
+ * documents the slice plans from, as C-8‴ keyed it.
  *
  * The earlier index matters only where this slice reached into it, and that
  * is checked separately as `external_deps`, precisely and without cascading.
+ * So is a spec defect the slice reported: its quotes are checked against the
+ * pack when the cache is read (`plan-slices.ts`).
  */
 export function sliceKey(deps: PlanDeps, slice: SliceSpec): string {
   const ids = [...slice.requirement_ids].sort();
@@ -45,7 +42,7 @@ export function sliceKey(deps: PlanDeps, slice: SliceSpec): string {
   const read =
     deps.pack === undefined || deps.pack === null
       ? contentsDigest(deps.root, slice.docs.length > 0 ? slice.docs : deps.docs)
-      : recordsOf(deps.root, deps.pack, ids);
+      : sliceRecords(deps.root, deps.pack, ids);
   return createHash("sha256")
     .update(
       JSON.stringify([
@@ -74,56 +71,4 @@ export function sliceKey(deps: PlanDeps, slice: SliceSpec): string {
       ]),
     )
     .digest("hex");
-}
-
-/**
- * Each requirement's record, as arrays so no key order can move the hash,
- * and without its place: a requirement moved down a line says the same.
- */
-function recordsOf(root: string, pack: Pack, ids: readonly string[]): unknown[] {
-  const rows = catalogueRows(root);
-  return ids.map((id) => {
-    const r = pack.requirements.find((x) => x.id === id && !x.withdrawn);
-    if (r === undefined) return [id, null];
-    const criteria = pack.criteria.filter((c) => c.requirements.includes(id)).sort((a, b) => a.id.localeCompare(b.id));
-    const text = [r.text, ...criteria.map((c) => `${c.given} ${c.when} ${c.then}`)].join("\n");
-    const cited = new Set([...text.matchAll(new RegExp(DECISION_REF.source, "gu"))].map((m) => m[0]));
-    return [
-      [r.id, r.kind, r.milestone, r.level, r.text, r.tags],
-      criteria.map((c) => [c.id, c.milestone, c.given, c.when, c.then, c.requirements, c.tags]),
-      pack.decisions.filter((d) => cited.has(d.id)).map((d) => [d.id, d.question, d.answer, d.reason]),
-      pack.defaults.filter((d) => cited.has(d.id)).map((d) => [d.id, d.value, d.reason]),
-      citedFacts(pack, text).map((f) => [f.id, f.fact, f.source, f.tag]),
-      catalogueEntriesUsed(pack, text).map((e) => [e.kind, e.id, rows().get(e.line) ?? ""]),
-    ];
-  });
-}
-
-/** The catalogue's rows by line, read once and only when an entry is cited: the parse keeps an entry's id and line, not its row. */
-function catalogueRows(root: string): () => ReadonlyMap<number, string> {
-  let rows: Map<number, string> | null = null;
-  return () => {
-    rows ??= existsSync(path.join(root, ...CATALOGUES_PATH.split("/"))) ? new Map(readLines(root, CATALOGUES_PATH).map((l) => [l.n, l.text])) : new Map<number, string>();
-    return rows;
-  };
-}
-
-/** `N.M` as a pair, and a bare section `N` as the first (`low`) or the last (`high`) fact under it. */
-function factAt(id: string, end: "low" | "high"): readonly [number, number] {
-  const [n = "0", m] = id.split(".");
-  return [Number(n), m === undefined ? (end === "low" ? 0 : Number.POSITIVE_INFINITY) : Number(m)];
-}
-
-const before = (a: readonly [number, number], b: readonly [number, number]): boolean => a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]);
-
-/** The facts `text` cites as the checker reads a citation: `facts §N.M`, a section `§N`, or a range between two. */
-function citedFacts(pack: Pack, text: string): Pack["facts"] {
-  const out = new Set<Pack["facts"][number]>();
-  for (const m of text.matchAll(new RegExp(FACT_REF.source, "gu"))) {
-    const from = m[1] ?? "";
-    const low = factAt(from, "low");
-    const high = factAt(m[2] ?? from, "high");
-    for (const f of pack.facts) if (before(low, factAt(f.id, "low")) && before(factAt(f.id, "low"), high)) out.add(f);
-  }
-  return [...out];
 }

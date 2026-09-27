@@ -1653,11 +1653,62 @@ function realpathNearest(target, maxHops = 40) {
     current = parent;
   }
 }
+var within = (dir, p) => {
+  const rel = import_node_path.default.relative(dir, p);
+  return rel === "" || !rel.startsWith("..") && !import_node_path.default.isAbsolute(rel);
+};
+function globDescends(pattern, below) {
+  const segments = pattern.split("/").filter((s) => s !== "" && s !== ".");
+  const dirs = below.split("/");
+  for (const [i, dir] of dirs.entries()) {
+    const segment = segments[i];
+    if (segment === void 0) return false;
+    if (segment.includes("**")) return true;
+    if (!import_picomatch.default.isMatch(dir, segment, { dot: true })) return false;
+  }
+  return segments.length > dirs.length;
+}
+function unreadableReached(toolName, toolInput, policy, resolveReal) {
+  const dirs = policy.unreadable ?? [];
+  if (dirs.length === 0) return null;
+  const search = toolName === "Grep" || toolName === "Glob";
+  const target = pathOf(toolInput) ?? (search ? "." : null);
+  if (target === null) return null;
+  const pattern = toolName === "Glob" ? String(toolInput.pattern ?? "") : "";
+  const base = toolName === "Glob" ? import_picomatch.default.scan(pattern).base : "";
+  const resolved = (p) => {
+    try {
+      return resolveReal(p);
+    } catch {
+      return p;
+    }
+  };
+  const at = import_node_path.default.resolve(policy.workRoot, target, base);
+  const real = resolved(at);
+  for (const dir of dirs.map((d) => import_node_path.default.resolve(d))) {
+    const shown = `${import_node_path.default.relative(policy.workRoot, dir).split(import_node_path.default.sep).join("/")}/`;
+    const pairs = [[dir, at], [resolved(dir), real]];
+    if (pairs.some(([d, p]) => within(d, p)) || within(dir, real)) return shown;
+    const above = pairs.find(([d, p]) => within(p, d));
+    if (!search || above === void 0) continue;
+    if (toolName === "Grep") return shown;
+    const glob = base === "" ? pattern : pattern.slice(base.length).replace(/^\/+/u, "");
+    if (globDescends(glob, import_node_path.default.relative(above[1], above[0]).split(import_node_path.default.sep).join("/"))) return shown;
+  }
+  return null;
+}
 function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest) {
   if (SPAWN_TOOLS.includes(toolName)) {
     return {
       decision: "deny",
       reason: `DENY: ${toolName} would spawn a billable session outside the ledger \u2014 a session does its own work, and a billable session exists only through the metered path (D-28).`
+    };
+  }
+  const barred = unreadableReached(toolName, toolInput, policy, resolveReal);
+  if (barred !== null) {
+    return {
+      decision: "deny",
+      reason: `DENY: this call reaches ${barred}, which this session may not read: it holds the originals the pack was written from, and planning reads the pack. Read or search the directories you need instead, naming them in the call.`
     };
   }
   if (toolName === "Bash") {

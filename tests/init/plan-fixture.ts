@@ -112,7 +112,6 @@ export const ONE_SLICE = {
   slices: [
     { id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" },
   ],
-  questions: [],
 };
 
 /** The planner answers whichever artifact the spec asks for: SLICE's, PLAN's or a review's (three stages since D-10′). */

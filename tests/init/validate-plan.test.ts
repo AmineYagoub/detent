@@ -40,7 +40,7 @@ const PLANNING = ["DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"];
 
 /** PRDR-291: on a pack SLICE places every live requirement, and each slice plans from the documents code picks (C-2⁸). */
 const LENDING_SLICE = oneSlice("lending");
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] });
+const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 interface Opts {

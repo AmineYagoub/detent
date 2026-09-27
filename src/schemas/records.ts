@@ -238,6 +238,8 @@ export const presentationSchema = z.strictObject({
   presentation: nonEmptyString,
   plan_hash: sha256Hex,
   blocking: z.number().int().nonnegative(),
+  /** C-4⁵ (PRDR-292): the spec defects PRESENT listed; while any is open, neither exit offers approval. Absent before them, and so none. */
+  spec_defects: z.number().int().nonnegative().default(0),
 });
 export type Presentation = z.infer<typeof presentationSchema>;
 

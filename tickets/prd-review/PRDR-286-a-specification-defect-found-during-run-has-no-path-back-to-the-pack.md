@@ -80,3 +80,23 @@ What stays this ticket's is the amendment's path to that edit: the hold, the dec
 itself. So are C-8″'s guard, narrowed to the re-planned slices' tickets, and presenting the changed
 plan again. A PLAN session still reads whole documents until PRDR-292 lands, so an amendment that
 edits text no record holds re-plans nothing until then.
+
+## From PRDR-292
+
+A spec defect found while planning now holds approval (C-4⁷). PLAN keeps each one a draft
+reports, once its quotes are checked against the pack. PRESENT lists each with its passages'
+`file:line` and raises AWAIT_INFO before approval is offered. `detent run`'s deferred approval
+refuses while `presentation.json` counts one.
+
+PRDR-292's fourth criterion says such a defect "takes the specification phase's amendment path
+before approval". That path is this ticket's, and until it is built:
+- PRESENT tells the operator to amend the pack where each defect quotes it and re-run
+  `detent init`.
+- A slice whose defect quotes a passage the pack no longer holds is planned again (`stillQuoted` in
+  `src/init/plan-draft-checks.ts`). The record it quotes may lie outside the slice's own, and so
+  outside its key.
+- A defect the operator judges false has no rejection path. `--replan` drafts every slice again,
+  and a drafter may report it again.
+
+The path this ticket builds can take a planning defect as it takes a run-time one. The record ids
+and quotes of its passages, and the defect, are the amendment's evidence.

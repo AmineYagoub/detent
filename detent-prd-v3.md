@@ -310,6 +310,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   read.*
   *Amended by C-2¹⁵ (PRDR-291): on a pack SLICE is seeded by code and its cut kept on record.
   Without a parse it cuts the documents as this built it, and no slice carries an estimate.*
+  *Amended by C-4⁷ (PRDR-292): on a pack a slice is drafted from its records, and the index a draft
+  is shown names what each ticket provides.*
 
 - **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
   ask for it. Detent carries a **production baseline** — fifteen items across six areas
@@ -345,6 +347,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   different costumes — two tickets disagreeing about a name neither of them owned.
   *Amended by A-1⁷ (PRDR-278): a proved contract failure buys one targeted redraft, and what still
   fails blocks approval.*
+  *Amended by C-4⁷ (PRDR-292): the kinds gain `error_code`, `setting` and `job`, and a kind the
+  pack catalogues is named by its catalogue ids.*
 
 - **A-1⁵ (3.1.1, PRDR-201).** A ticket declares the **requirement ids and production-baseline
   items it delivers**, in typed fields, so coverage is a set operation rather than a reading.
@@ -642,6 +646,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
 
   A team whose members run different versions on one repository is not supported: an older file
   that arrives after the migration is refused by its reader, by name.
+  *Amended by C-4⁷ (PRDR-292): the event gains PLAN's draft and caches and the ticket's
+  `criterion_ids`.*
 
 - **S-4″ (3.1.1, PRDR-138).** A stream that ends with no result message is a CRASH on the kernel
   path, as it already is on the init path (S-4′). It parsed as `ok: true` with
@@ -983,6 +989,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   then reaches nothing.*
   *Amended by C-2¹⁵ (PRDR-291): built. On a pack a slice's key hashes its requirements' records,
   and without a parse the documents it plans from, as here; neither holds the slice's own words.*
+  *Amended by C-4⁷ (PRDR-292): a slice's key covers PLAN's prompt and the review's, not SLICE's.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1202,6 +1209,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   asking, and `open_questions` goes.*
   *Amended by D-10″ (PRDR-290): ANALYZE is gone, so `open_questions` carries what the slices before
   a draft asked, and SLICE is handed none.*
+  *Amended by C-4⁷ (PRDR-292): no stage is handed `open_questions`, since none asks.*
 
 - **S-3⁵ (3.1.1, PRDR-213).** A write session has **three** git verbs: `git add`, `git rm`
   and `git commit`. Nothing a session had removed a file — Write and Edit create and change,
@@ -1569,6 +1577,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   now with the analyst's assumption beside it. The interrupt set is unchanged at five (C-5).
   *Amended by C-3⁗ (PRDR-278): questions are asked at DECIDE, before planning; AWAIT_INFO may also
   be raised at DECIDE and at VALIDATE; init's research is AUDIT's (C-2⁶).*
+  *Amended by C-4⁷ (PRDR-292): SLICE's and PLAN's artifacts have no questions, so none reaches
+  PRESENT.*
 
 - **C-4′ (3.0.3, PRDR-081).** The plan's unit is an executable step, not a document
   heading: a ticket is ONE implement session's work inside X-1's budget, and a
@@ -1826,6 +1836,8 @@ the code does what the rules it amends describe, and each of those rules points 
     aside, and editing nothing re-executes nothing.
   *Amended by C-2¹⁵ (PRDR-291): on a pack SLICE is handed the seed, and neither the stack nor
   greenfield; the entry keys every slice PLAN drafts. Without a parse it is handed both, as here.*
+  *Amended by C-4⁷ (PRDR-292): on a pack PLAN is handed the parse's records and reads no document,
+  the planner reads one prompt per job, and no stage is handed `open_questions`.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -1920,6 +1932,9 @@ the code does what the rules it amends describe, and each of those rules points 
     session that may only add, and for documents cut as they are. One prompt per job is C-4⁵'s
     (PRDR-292). Until it is built, an edit to PLAN's or the review's part of the planner prompt
     re-cuts the product, as it re-plans every slice.
+  *Amended by C-4⁷ (PRDR-292): a slice cut from the pack has no documents, and PLAN drafts from
+  the records its key reads. SLICE's job has its own prompt, which keys the cut and no slice's
+  draft.*
 
 - **C-4⁵ (3.1.1, PRDR-278).** PLAN drafts from the pack's records, not from prose, and asks
   nothing.
@@ -1944,6 +1959,84 @@ the code does what the rules it amends describe, and each of those rules points 
   - **Tools.** Planning sessions read with Read, Grep and Glob and write their artifact, with no
     Bash and no subagents (D-28″). The planning audit counted 2,846 read-only Bash calls, 97
     attempts to spawn subagents, and 1,104 of 6,117 tool calls that errored or were denied.
+  *Amended by C-4⁷ (PRDR-292): built. An open spec defect holds approval, and the amendment path
+  it takes is X-4⁷'s, not built (PRDR-286).*
+
+- **C-4⁷ (3.1.1, PRDR-292).** C-4⁵ is built, in `src/init/plan-records.ts`,
+  `src/init/plan-inputs.ts` and `src/init/plan-draft-checks.ts`, with three prompts in place of
+  `prompts/planner.md`. This settles what C-4⁵ left to its ticket, and amends C-2‴'s drafting,
+  C-2¹⁵'s documents, key and prompt, C-3′'s and C-3‴'s questions, A-1‴'s kinds, C-7″'s refusal,
+  D-10″'s handoff to PLAN, S-1‴'s `planner` and F-3″'s event.
+  - **The records.** On a pack, a draft is handed the checker's parse of its slice's live
+    requirements: each one's id, milestone, level, tags and text; the criteria that test them,
+    each with the requirements it tests, its tags, its Given, When and Then, and `text`, the
+    words a ticket carries, `<id>: Given …, when …, then ….`, built from the parse so that a
+    criterion rewrapped in its document keeps its words; and the decisions, defaults, facts and
+    catalogue entries they cite, read as the checker reads a citation, each entry with its row.
+    The slice is named by its id, title, goal, requirement ids and baseline items, and no
+    document path. Beside them are `catalogue_ids`, the ids of each kind the pack catalogues at
+    least one of, and `plan_index`: the tickets of the slices the slice names in `depends_on`
+    and of the slices those name, each with its id, title, surface and what it provides as
+    `kind:id`. No document, no analysis and nothing an earlier stage asked is handed. Without a
+    parse, or where the documents planning reads hold none of the pack's requirements and SLICE
+    cut them as they are (C-2¹⁵), a draft is handed the documents, as C-2‴ built it, and names
+    no criterion and no spec defect, since neither can be checked there.
+  - **The key** of a slice's cache hashes the same records, so what a draft reads and what
+    re-plans it are one thing. C-2¹⁵'s gap is closed: no draft reads the prose around a
+    requirement, an entry no requirement cites or a design document, so an edit to one moves
+    nothing a draft was handed. `plan_index` and `catalogue_ids` stay out of the key, so an
+    edit to one slice re-plans no later one. A ticket id that is gone still misses a later
+    slice's cache (C-8‴), and a name no ticket provides any more is a contract finding (A-1‴).
+    The key covers PLAN's prompt and the review's, and SLICE's basis covers SLICE's alone, so an
+    edit to SLICE's prompt re-cuts the product and re-plans only the slices the new cut moves.
+  - **Criteria are copied.** A ticket names the pack criteria it carries in `criterion_ids`, and
+    each one's `text` is among its acceptance criteria, word for word, with whitespace, bold
+    markers and backticks set aside. Code refuses a draft naming a criterion the pack does not
+    define or carrying one without its words, relaunches it once with each reason, and stops
+    planning on a second refusal. Whether every criterion of a slice reaches a ticket is A-1⁷'s
+    check (PRDR-293).
+  - **Catalogue names.** A-1‴'s kinds gain `error_code`, `setting` and `job`, so every kind a
+    catalogue lists has its contract kind. Where the pack catalogues at least one entry of a
+    kind, a `provides` or `consumes` of that kind naming an id the catalogue does not hold is a
+    `traceability` finding among the contract checks PRESENT lists. A kind the pack catalogues
+    nothing of is named freely, as is every kind without a parse. The finding is reported, not
+    refused: A-1⁷ makes a proved failure a redraft (PRDR-293).
+  - **Spec defects.** Each of a draft's `spec_defects` has a kind, `contradiction` or `gap`; the
+    passages it quotes, each with the id of the record that holds it, a requirement, a
+    criterion, a `D-n` or `X-n`, a fact by its section, or a catalogue id; and what the pack
+    leaves unsettled. A contradiction quotes at least two passages. Code refuses a draft whose
+    quote is not in its record, as the parse holds it or as its document writes it, with
+    whitespace, bold markers and backticks set aside. PRESENT lists each open defect with the
+    slice that reported it and the `file:line` of each passage, raises AWAIT_INFO before
+    approval is offered, and records the count in `presentation.json`; `detent run`'s deferred
+    approval presents the plan and refuses while the count is not zero. A slice is drafted again
+    when its records change, or when a passage one of its defects quotes is no longer in the
+    pack. X-4⁷'s amendment path is not built (PRDR-286): the operator amends the pack by hand
+    and runs `detent init` again, and a defect the operator judges false has no rejection yet,
+    only `--replan`, which drafts every slice again.
+  - **No questions.** Neither SLICE's artifact nor PLAN's has `questions`, and one that carries
+    any is refused. No stage is handed `open_questions`. PRESENT still reads questions from their
+    outputs, and finds none; its merge is PRDR-298's to delete.
+  - **Prompts.** `prompts/slice.md`, `prompts/plan.md` and `prompts/plan_review.md` replace
+    `prompts/planner.md`; the review's job stays in its own file until C-4⁶ gives it its role
+    (PRDR-294). The `planner` role keeps its routing, and the stage a session is launched for
+    picks its prompt: a planner session for any other stage is refused. The manifest pins the
+    prompts by id. No planning prompt, instruction or skeleton cites a PRD id, and neither does
+    the preamble every init session reads. Each rule in `slice.md` and `plan.md` is stated as
+    something Detent refuses, reports or does, or as a judgement, the model's or the reviewer's,
+    and PRDR-292 lists which is which. The other roles' prompts still cite PRD ids.
+  - **Tools.** A planner session's tools are Read, Grep, Glob and Write, and its one write is its
+    artifact: no Bash, no Edit and no subagents. Where the root holds `archive/`, its guard
+    refuses a path inside it, as written or resolved, a Grep over a directory that holds it, and
+    a Glob whose pattern can reach into it, so the originals WRITE archived are out of
+    planning's reach as well as out of its inputs (C-2¹³). A Grep or Glob that names no path
+    searches the root, and is refused there.
+  - **Migration.** F-3″'s event gains PLAN's shapes: a ticket gains `criterion_ids: []`, and a
+    draft, each slice's cache and the whole-plan review's cache trade `questions` for
+    `spec_defects: []`. A transform may name every JSON file in one directory. An approval covers
+    `criterion_ids` only where a ticket carries some, so a plan approved before the field is
+    still approved after the migration.
+
 
 - **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
   fixed rather than reported. A-1‴ and A-1⁵ made contracts and coverage set operations and then
@@ -2023,6 +2116,8 @@ the code does what the rules it amends describe, and each of those rules points 
     from an experiment run against the live tree.
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE's residual majors are shown, as risks after the
   defaults.*
+  *Amended by C-4⁷ (PRDR-292): an open spec defect holds approval on both exits, and PRESENT lists
+  each with the `file:line` of its passages.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2130,6 +2225,8 @@ the code does what the rules it amends describe, and each of those rules points 
   (PRDR-285). VALIDATE's writer is `spec_write` over the pack's paths.*
   *Amended by S-1⁗ (PRDR-285): the scratch directory and the sandbox are built, on macOS's
   Seatbelt; elsewhere simulation is off, and each round says so.*
+  *Amended by C-4⁷ (PRDR-292): the `planner` reads one prompt per job, and its tools are Read,
+  Grep, Glob and its artifact's write.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):

@@ -28,7 +28,7 @@ const REGION = "# Founder decisions\n\n## Decisions\n\n| Id | Question | Answer 
 const approved = { askApproval: async () => ({ kind: "deferred" as const }) };
 
 describe("PRDR-282: PRESENT lists every vetoable default (C-3⁗)", () => {
-  it("shows each X-n with its reason, and names a planning question the log answers instead of asking it", async () => {
+  it("shows each X-n with its reason, and no planning question, since no planning stage asks (C-4⁵)", async () => {
     const root = repo({ ...PROJECT, [DECISION_LOG_PATH]: REGION });
     const log: string[] = [];
     const result = await initThrough(root, decide((_, i) => SORTED(i)), {
@@ -41,22 +41,23 @@ describe("PRDR-282: PRESENT lists every vetoable default (C-3⁗)", () => {
     expect(shown).toContain(`  X-1: ${LATE.value}\n      because: ${LATE.reason}`);
     expect(shown).toContain(`  X-2: ${REFUND.value}`);
     expect(shown).toContain("  X-3: Free in the MVP");
-    /* SLICE's sq1 and the s01 draft's pq1 are both D-1's question. */
-    expect(shown).toContain("Not asked again (1) — the decision log already answers: sq1 by D-1 (C-3‴).");
+    expect(shown).not.toContain("Not asked again");
     expect(shown).not.toContain("Open questions");
   });
 
-  it("keeps a question the log does not answer, and lists no defaults when the log holds none", () => {
+  it("names a question the log answers rather than asking it, keeps one it does not, and lists no defaults when the log holds none", () => {
     const outputs = {
       DECIDE: { decisions: [{ id: "D-1", question: "Which region hosts the data?", answer: "**eu-west-1**", reason: "r" }], defaults: [null, { id: "X-1" }] },
       SLICE: { questions: [{ id: "sq1", question: "Which payment provider do we use?", blocking: false, assumption: "Stripe" }] },
+      PLAN: { questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }] },
     };
     const inputs = presentInputsFromOutputs(outputs);
     expect(inputs.questions?.map((q) => q.id)).toEqual(["sq1"]);
+    expect(inputs.answeredByLog).toEqual([{ id: "pq1", entry: "D-1" }]);
     expect(inputs.defaults, "a row without its fields is not shown").toEqual([]);
     const text = renderPresentation({ root: "/nowhere", tickets: [], bindings: [], skips: [], bootstrap: null, assignments: {}, ...inputs });
     expect(text).not.toContain("Defaults (");
-    expect(text).not.toContain("Not asked again");
+    expect(text).toContain("Not asked again (1) — the decision log already answers: pq1 by D-1 (C-3‴).");
   });
 });
 

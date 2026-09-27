@@ -43,7 +43,7 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
     seen.push({ stage: stage === "REVIEW_PLAN" ? `REVIEW:${String(inputs["scope"])}` : stage, kb: spec.promptVariable.length / 1024 });
 
     let artifact: object;
-    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: SLICES, questions: [] };
+    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: SLICES };
     else if (spec.artifactOut.endsWith("plan-draft.json")) {
       const id = (inputs["slice"] as { id: string }).id;
       const index = (inputs["plan_index"] as { id: string }[] | undefined) ?? [];
@@ -80,7 +80,6 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
           depends_on: j === 0 ? previous : [`t-${id}-${String(j).padStart(3, "0")}`],
           risk_label: false,
         })),
-        questions: [],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
     else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
@@ -107,7 +106,7 @@ function fragilePlanner(drafted: string[], dieOn: string | null) {
   return (spec: SessionSpec) => {
     const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
     let artifact: object;
-    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: TEN, questions: [] };
+    if (spec.artifactOut.endsWith("slices.json")) artifact = { schema_version: SCHEMA_VERSION, slices: TEN };
     else if (spec.artifactOut.endsWith("plan-draft.json")) {
       const id = (inputs["slice"] as { id: string }).id;
       drafted.push(id);
@@ -115,7 +114,6 @@ function fragilePlanner(drafted: string[], dieOn: string | null) {
       artifact = {
         schema_version: SCHEMA_VERSION,
         tickets: [{ id: `t-${id}-001`, type: "feature", title: id, description: "", acceptance_criteria: ["x"], non_goals: [], surface: ["src/**"], depends_on: [], risk_label: false }],
-        questions: [],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
     else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);

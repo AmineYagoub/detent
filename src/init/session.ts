@@ -1,6 +1,7 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { SCRATCH_ROLES, type RoleId } from "../schemas/roles.js";
+import { ARCHIVE_DIR } from "../schemas/pack.js";
+import { promptOf, SCRATCH_ROLES, type RoleId } from "../schemas/roles.js";
 import {
   artifactWriteRule,
   stablePrefix,
@@ -130,17 +131,26 @@ export async function withInitJournal<T>(root: string, body: (journal: RunJourna
   }
 }
 
+/**
+ * C-4⁵ (PRDR-292): all a planner session has. It reads, and writes its
+ * artifact through the one rule below; it runs nothing and spawns nothing
+ * (D-28″). The planning audit counted 2,846 read-only Bash calls and 97
+ * attempts at a subagent in planner sessions whose allowlist named neither.
+ */
+const PLANNER_TOOLS: readonly string[] = ["Read", "Grep", "Glob", "Write"];
+
 function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
-  const preamble = JSON.stringify(
-    { phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below (P2)." },
-    null,
-    2,
-  );
+  /* C-4⁵ (PRDR-292): no Detent PRD id in what a model reads; the prompts name none either. */
+  const preamble = JSON.stringify({ phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below." }, null, 2);
+  /* C-2⁷, C-4⁵ (PRDR-279, PRDR-292): the originals a pack was written from, which planning never reads. */
+  const archive = path.join(deps.root, ARCHIVE_DIR);
+  const planner = request.role === "planner";
   return {
     role: request.role,
     /* No ticket exists during init; the id names the pipeline for the journal. */
     ticketId: INIT_TICKET,
-    promptPrefix: stablePrefix(deps.prompts.prompts[request.role], deps.rulesText ?? "(no rules file)", preamble),
+    /* C-4⁵ (PRDR-292): a planner session reads its job's prompt, SLICE's, PLAN's or the review's. */
+    promptPrefix: stablePrefix(deps.prompts.prompts[promptOf(request.role, request.inputs["stage"])], deps.rulesText ?? "(no rules file)", preamble),
     /* PRDR-205: the told path, so the sessions of one batch share one first turn. */
     promptVariable: JSON.stringify({ inputs: request.inputs, artifact_out: request.artifactTold ?? request.artifactOut }, null, 2),
     cwd: deps.root,
@@ -163,6 +173,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
       ...(request.scratch === undefined ? [] : [SCRATCH_TOOL]),
       artifactWriteRule(request.artifactOut),
     ],
+    ...(planner ? { tools: PLANNER_TOOLS } : {}),
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
     ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
@@ -211,6 +222,11 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
        * checkpoint immutable to the session.
        */
       artifactRoot: request.artifactOut,
+      /**
+       * C-4⁵ (PRDR-292): discovery keeps the originals out of a planner's
+       * inputs (PRDR-279), and this keeps them out of its tools' reach.
+       */
+      ...(planner && existsSync(archive) ? { unreadable: [archive] } : {}),
     },
   };
 }

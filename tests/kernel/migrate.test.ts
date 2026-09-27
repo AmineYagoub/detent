@@ -5,11 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { stateDir, writeArtifact } from "../../src/fs/layout.js";
 import { writeCheckpoint } from "../../src/fs/checkpoints.js";
 import { approvalState } from "../../src/init/machine.js";
+import { recordApproval } from "../../src/init/present.js";
 import { classifyPack, conformanceRecord, writeConformanceRecord } from "../../src/init/pack.js";
 import { checkPack } from "../../src/init/pack-check.js";
 import { discoverDocs } from "../../src/init/discover-docs.js";
 import { MIGRATIONS, migrateState, migrationNote, stateVersionRefusal } from "../../src/kernel/migrate.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import { planDraftSchema } from "../../src/schemas/init.js";
+import { ticketSchema } from "../../src/schemas/ticket.js";
 import { CONFORMANCE_RECORD_PATH } from "../../src/schemas/pack.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { removeTree, tmpTree, writeTree } from "../helpers.js";
@@ -363,6 +366,57 @@ describe("PRDR-300: what the migration keeps true", () => {
     expect(approvalState(root).approved).toBe(false);
     migrateState(root, DEPS);
     expect(approvalState(root)).toMatchObject({ approved: true, stale: false });
+  });
+
+  /**
+   * PRDR-292 (C-4⁵): the draft and the ticket changed shape in this event. A
+   * ticket gains `criterion_ids`, and PLAN's draft and each slice's cache trade
+   * `questions` for `spec_defects`, since no planning stage asks.
+   */
+  it("carries a ticket to `criterion_ids`, and PLAN's draft and its two caches from `questions` to `spec_defects`", async () => {
+    const root = await richState();
+    const ticketFile = path.join(stateDir(root), "plan", "t-1.json");
+    const older = JSON.parse(readFileSync(ticketFile, "utf8")) as Record<string, unknown>;
+    delete older["criterion_ids"];
+    writeFileSync(ticketFile, `${JSON.stringify(older, null, 2)}\n`);
+    const drafted = { id: "t-s01-001", type: "feature", title: "t", description: "", acceptance_criteria: ["it works"], non_goals: [], surface: ["src/**"], depends_on: [], provides: [], consumes: [], requirement_ids: [], baseline_ids: [], risk_label: false };
+    const asked = [{ id: "s01-q1", question: "Which region hosts the data?", blocking: false, assumption: "eu-west-1" }];
+    writeTree(root, {
+      ".detent/plan/plan.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, tickets: ["t-1"], edges: [], assignments: {}, input_doc_hashes: {}, slices: [] })}\n`,
+      ".detent/state/plan/s01.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, key: "k", tickets: [{ ...drafted, slice: "s01" }], questions: asked, remaining: [], revision: null, churn: null, external_deps: [], reviewed: true })}\n`,
+      ".detent/state/plan-draft.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, tickets: [drafted], questions: asked })}\n`,
+      ".detent/state/whole-plan.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, key: "k", findings: [], plan_wide_unclaimed: [], redrafted: [{ slice: "s01", tickets: [{ ...drafted, slice: "s01" }], questions: asked }] })}\n`,
+    });
+    /* Approved as a build before this one approved it, over a ticket with no `criterion_ids`. */
+    recordApproval(root, "the operator", Date.parse("2026-09-26T00:00:00Z"));
+    age(root);
+    migrateState(root, DEPS);
+    const read = (rel: string): Record<string, unknown> => JSON.parse(readFileSync(path.join(root, ...rel.split("/")), "utf8")) as Record<string, unknown>;
+    expect(read(".detent/plan/t-1.json")["criterion_ids"]).toEqual([]);
+    expect(ticketSchema.parse(read(".detent/plan/t-1.json")).id).toBe("t-1");
+    const cache = read(".detent/state/plan/s01.json");
+    expect(cache).not.toHaveProperty("questions");
+    expect(cache["spec_defects"]).toEqual([]);
+    expect((cache["tickets"] as Record<string, unknown>[])[0]?.["criterion_ids"]).toEqual([]);
+    expect(read(".detent/state/plan-draft.json")).not.toHaveProperty("questions");
+    const draft = planDraftSchema.parse(read(".detent/state/plan-draft.json"));
+    expect(draft.spec_defects).toEqual([]);
+    expect(draft.tickets[0]?.criterion_ids).toEqual([]);
+    const redrafted = (read(".detent/state/whole-plan.json")["redrafted"] as Record<string, unknown>[])[0];
+    expect(redrafted).not.toHaveProperty("questions");
+    expect(redrafted?.["spec_defects"]).toEqual([]);
+    expect((redrafted?.["tickets"] as Record<string, unknown>[])[0]?.["criterion_ids"]).toEqual([]);
+    expect(read(".detent/plan/plan.json"), "the plan artifact is not a ticket").not.toHaveProperty("criterion_ids");
+    expect(approvalState(root), "a ticket carrying no criterion is the ticket that was approved").toMatchObject({ approved: true, stale: false });
+  });
+
+  /** An operator may write a ticket by hand (C-8), and a ticket a build since PRDR-300 wrote has no such field; neither is migrated. */
+  it("reads a current ticket that names no `criterion_ids` as carrying none", async () => {
+    const root = await richState();
+    const written = JSON.parse(readFileSync(path.join(stateDir(root), "plan", "t-1.json"), "utf8")) as Record<string, unknown>;
+    delete written["criterion_ids"];
+    expect(written["schema_version"]).toBe(SCHEMA_VERSION);
+    expect(ticketSchema.parse(written).criterion_ids).toEqual([]);
   });
 
   it("keeps a conforming pack conforming", async () => {

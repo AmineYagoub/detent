@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { main as runMain } from "../../src/cli/run.js";
+import { stateDir } from "../../src/fs/layout.js";
 import { approvalPath, presentStage, type ApprovalDecision } from "../../src/init/present.js";
 import { readBindings } from "../../src/adapter/drift.js";
 import { allTickets } from "../../src/kernel/tickets/readers.js";
@@ -186,6 +188,64 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
     expect(said.code).toBe(2);
     expect(said.out, "and it says which gate stopped it").toContain("blocking question");
     expect(existsSync(approvalPath(root))).toBe(false);
+  }, 60_000);
+
+  /**
+   * PRDR-292 (C-4⁵, C-7″): a spec defect planning found holds approval until
+   * the pack is amended, on this exit as on `init`'s.
+   */
+  it("a plan with an open spec defect is presented but not approvable", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    addTicket(root, { id: "t-100" });
+    rmSync(approvalPath(root), { force: true });
+    const stored = readBindings(root);
+    const outcome = await presentStage({
+      root,
+      tickets: allTickets(root),
+      bindings: stored.bindings,
+      skips: stored.skips as never[],
+      bootstrap: null,
+      assignments: {},
+      specDefects: [{ slice: "s01", kind: "gap", passages: [{ id: "CAT-F-001", quote: "MUST store every product" }], defect: "The pack does not say how long a product is kept." }],
+    });
+    expect(outcome.kind === "interrupt" ? outcome.interrupt : outcome.kind, "an open spec defect interrupts before any approval is offered").toBe("AWAIT_INFO");
+
+    let asked = 0;
+    const said = await runWith(root, {
+      approve: async () => {
+        asked += 1;
+        return { kind: "approved", by: "should-never-be-asked" };
+      },
+    });
+
+    expect(asked, "`run` does not offer what `init` refused to offer").toBe(0);
+    expect(said.code).toBe(2);
+    expect(said.out, "and it says which gate stopped it").toContain("spec defect");
+    expect(existsSync(approvalPath(root))).toBe(false);
+  }, 60_000);
+
+  /** F-3: the migration leaves a presentation as it was, and one PRESENT wrote before PRDR-292 counts no spec defect. */
+  it("a presentation written before spec defects were counted is approvable, as it was", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    await deferred(root);
+    const file = path.join(stateDir(root), "plan", "presentation.json");
+    const older = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    delete older["spec_defects"];
+    writeFileSync(file, `${JSON.stringify(older)}\n`);
+
+    let asked = 0;
+    const said = await runWith(root, {
+      approve: async () => {
+        asked += 1;
+        return { kind: "approved", by: "reviewer-human" };
+      },
+    });
+
+    expect(asked).toBe(1);
+    expect(said.code).toBe(0);
+    expect(existsSync(approvalPath(root))).toBe(true);
   }, 60_000);
 
   it("the asker is never consulted for a plan that is already approved (the control)", async () => {

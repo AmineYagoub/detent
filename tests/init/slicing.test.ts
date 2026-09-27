@@ -3,7 +3,6 @@ import { PLAN_REVIEW_SAMPLES } from "../../src/init/plan-review.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runInit } from "../../src/init/machine.js";
-import { DOC_PATTERNS } from "../../src/init/discover-docs.js";
 import { revisionOutcome } from "../../src/init/plan-signal.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
@@ -21,8 +20,8 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
  *
  * A product larger than one planning pass is planned by Detent itself, to the
  * end: SLICE cuts the pack, PLAN plans each slice with the earlier index in
- * view, the whole plan is reviewed once for coherence, and every question
- * rides to PRESENT with its assumption. Nothing between stops for a human.
+ * view, and the whole plan is reviewed once for coherence. Nothing between
+ * stops for a human, and no stage asks one anything (C-3⁗, C-4⁵).
  */
 
 const TWO_SLICES = {
@@ -31,7 +30,6 @@ const TWO_SLICES = {
     { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], rationale: "" },
     { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], rationale: "" },
   ],
-  questions: [{ id: "sq1", question: "Which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
 };
 
 const ticket = (id: string, deps: string[] = []) => ({
@@ -47,6 +45,7 @@ const ticket = (id: string, deps: string[] = []) => ({
   consumes: [],
   requirement_ids: [],
   baseline_ids: [],
+  criterion_ids: [],
   risk_label: false,
 });
 
@@ -87,9 +86,8 @@ const twoSliceDraft = (inputs: Record<string, unknown>): object =>
     ? {
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
-        questions: [{ id: "pq1", question: "which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
       }
-    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")], questions: [] };
+    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")] };
 
 const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
@@ -134,8 +132,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     /** The later slice drafts with the earlier slice's tickets in view, and the slice review with the same index. */
     const s02Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s02")!;
     expect(s02Draft["plan_index"]).toEqual([
-      { id: "t-s01-001", slice: "s01", title: "t t-s01-001", surface: ["src/**"] },
-      { id: "t-s01-002", slice: "s01", title: "t t-s01-002", surface: ["src/**"] },
+      { id: "t-s01-001", title: "t t-s01-001", surface: ["src/**"], provides: [] },
+      { id: "t-s01-002", title: "t t-s01-002", surface: ["src/**"], provides: [] },
     ]);
     expect(s02Draft["docs"]).toEqual(["prd-billing.md"]);
     const s01Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s01")!;
@@ -161,49 +159,10 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const message = result.interrupt?.message ?? "";
     expect(message).toContain("Slices (2");
     expect(message).toContain("s02  billing  — 2 ticket(s)");
-    /** C-3′: the slice's question and the plan's are the same question — asked once, with its assumption. */
-    expect(message).toContain("Open questions (1)");
-    expect(message).toContain("assumed: eu-west-1");
+    /** C-3⁗, C-4⁵: no planning stage asks, so nothing reaches PRESENT as a question. */
+    expect(message).not.toContain("Open questions");
     expect(notes.join("\n")).toContain("redrafting s02 billing for 1 whole-plan finding(s)");
     expect(notes.join("\n")).toContain("whole-plan review after revision: approve");
-  });
-
-  it("C-3′: a blocking question is asked once, at PRESENT, after the whole plan is written", async () => {
-    const root = repo(DOCS);
-    const log: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          slices: { ...TWO_SLICES, questions: [{ id: "q1", question: "Which payment provider?", blocking: true, assumption: "" }] },
-          draft: twoSliceDraft,
-          review: () => APPROVE_PLAN,
-        },
-        log,
-      ),
-    });
-    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
-
-    expect(result.reachedPhase).toBe("PRESENT");
-    expect(result.interrupt?.interrupt).toBe("AWAIT_INFO");
-    expect(result.interrupt?.items).toEqual(["Which payment provider?"]);
-    /** SLICE and PLAN both completed first: the plan exists on disk before anyone is asked anything. */
-    expect(result.executed).toEqual(expect.arrayContaining(["SLICE", "PLAN", "PREPARE_AGENTS"]));
-    expect(allTickets(root)).toHaveLength(4);
-    expect(result.interrupt?.message).toContain("[BLOCKING] q1: Which payment provider?");
-    expect(result.interrupt?.message).toContain("1 blocking question(s) need an answer");
-
-    /**
-     * PRDR-166, through the REAL pipeline rather than a hand-passed argument.
-     *
-     * `presentStage` renders the globs it is given, and `stages.test.ts` proves
-     * that much — but the hop that carries DISCOVER's recorded
-     * `patterns_searched` into PRESENT's deps is its own failure surface, and it
-     * is the one that broke three times on this line (PRDR-191's breaker
-     * ceilings, PRDR-194's first cut, PRDR-141's four dead features). A message
-     * naming no glob is exactly as unfollowable as the one this ticket replaced.
-     */
-    for (const glob of DOC_PATTERNS) expect(result.interrupt?.message).toContain(glob);
-    expect(result.interrupt?.message).toContain("an answer written anywhere else is not read");
   });
 
   it("C-2⁗: SLICE receives the production baseline unless the config opts out", async () => {
@@ -279,8 +238,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
-          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
-          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] }),
+          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!] },
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] }),
           review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [held] }),
         },
         [],
@@ -334,8 +293,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
-          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [] },
-          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", ["t-s99-001"])], questions: [] }),
+          slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!] },
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", ["t-s99-001"])] }),
           review: () => APPROVE_PLAN,
         },
         [],
@@ -358,9 +317,8 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
           slices: {
             schema_version: SCHEMA_VERSION,
             slices: [{ ...TWO_SLICES.slices[0]!, docs: ["docs/imagined.md"], baseline_items: ["PB-001", "PB-404"] }],
-            questions: [],
           },
-          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }),
+          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] }),
           review: () => APPROVE_PLAN,
         },
         [],
@@ -382,47 +340,6 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(slicesFromOutputs({})).toEqual([]);
     expect(() => slicesFromOutputs({ SLICE: { slices: [{ id: "nope", title: "t" }] } })).toThrow(/SLICE checkpoint is unreadable/);
     expect(slicesFromOutputs({ SLICE: { slices: TWO_SLICES.slices } }).map((s) => s.id)).toEqual(["s01", "s02"]);
-  });
-
-  it("PRDR-119: every question reaching the human has a unique id, across a slice's two drafts and across stages", async () => {
-    const root = repo(DOCS);
-    /** Both drafts of s01 number their own questions from one, as a planner naturally would. */
-    const first = { id: "s01-q1", question: "Which payment rail serves the USD tier?", blocking: false, assumption: "Chargily only" };
-    const second = { id: "s01-q1", question: "What is the trial credit amount?", blocking: false, assumption: "5000 DZD" };
-    let drafts = 0;
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: (spec) => {
-        let artifact: object;
-        if (spec.artifactOut.endsWith("slices.json")) {
-          artifact = { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!], questions: [{ id: "s01-q1", question: "Which Cloudflare zone?", blocking: false, assumption: "ksarapp.dev" }] };
-        } else if (spec.artifactOut.endsWith("plan-draft.json")) {
-          drafts += 1;
-          artifact = { schema_version: SCHEMA_VERSION, tickets: [ticket(`t-s01-00${drafts}`)], questions: [drafts === 1 ? first : second] };
-        } else if (spec.artifactOut.endsWith("plan-review.json")) {
-          /** The first review asks for a revision, so the slice drafts twice. */
-          artifact = drafts === 1 ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] } : APPROVE_PLAN;
-        } else throw new Error(`no scripted artifact for ${spec.artifactOut}`);
-        writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
-        return okResult();
-      },
-    });
-    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
-
-    const message = result.interrupt?.message ?? "";
-    /**
-     * Scoped to the questions BLOCK. `^ {2}(\S+): ` matches any two-space
-     * indented `word:` line, and A-1⁵'s contract findings are rendered in that
-     * shape too — so the unscoped version counted a `coverage:` proof as a
-     * fifth question and this test's subject, id uniqueness, was never what
-     * moved it.
-     */
-    const block = message.split("Open questions (")[1]?.split("\n\n")[0] ?? "";
-    const ids = [...block.matchAll(/^ {2}(?:\[BLOCKING\] )?(\S+): /gm)].map((m) => m[1] as string);
-    expect(ids.length, "three questions from two stages, all shown").toBe(3);
-    expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(ids.length);
-    /** Both of the slice's drafts contributed, and neither was lost to the other's id. */
-    expect(message).toContain("Which payment rail serves the USD tier?");
-    expect(message).toContain("What is the trial credit amount?");
   });
 
   it("the SLICE skeleton parses through its own schema; the baseline is well-formed; `coherence` is in the closed tag set", () => {
@@ -500,7 +417,26 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
      */
     { DETERMINE_VERIFICATION: { gate_notices: "not an array" } },
     { DETERMINE_VERIFICATION: { gate_notices: [null, 7, { a: 1 }] } },
+    /* C-4⁵ (PRDR-292): the field PLAN's spec defects arrive in, the container and its elements, down to a passage. */
+    { PLAN: { spec_defects: "not an array" } },
+    { PLAN: { spec_defects: [null, 7, { slice: "s01" }, { slice: "s01", kind: "gap", defect: "d", passages: [null] }] } },
   ];
+
+  /**
+   * PRDR-119, on the builder alone. No planning stage asks since C-4⁵, so no
+   * pipeline reaches it any more; what PRESENT still reads of `questions` is
+   * held to what it did while one could.
+   */
+  it("two stages that number their questions alike reach the human under distinct ids", () => {
+    const q = (id: string, question: string) => ({ id, question, blocking: false, assumption: "" });
+    const built = presentInputsFromOutputs({
+      SLICE: { questions: [q("s01-q1", "Which Cloudflare zone?")] },
+      PLAN: { questions: [q("s01-q1", "Which payment rail serves the USD tier?"), q("s01-q1", "What is the trial credit amount?")] },
+    });
+    const ids = (built.questions ?? []).map((x) => x.id);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size, `ids must be unique, got ${ids.join(", ")}`).toBe(3);
+  });
 
   it("survives outputs that are missing, empty, or the wrong shape", () => {
     for (const outputs of FOREIGN) {
@@ -551,11 +487,10 @@ describe("PRDR-193 code proves what it can before a session is paid to look", ()
   /** s02's ticket leans on a name nothing in the plan owns. */
   const unprovidedDraft = (inputs: Record<string, unknown>): object =>
     sliceOf(inputs) === "s01"
-      ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }
+      ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] }
       : {
           schema_version: SCHEMA_VERSION,
           tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
-          questions: [],
         };
 
   it("reports the mechanical findings BEFORE the review, and tells the review it did", async () => {
@@ -698,11 +633,10 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
     /* s02's ticket leans on a name no ticket in the plan owns — a finding code proves. */
     const unprovided = (inputs: Record<string, unknown>): object =>
       sliceOf(inputs) === "s01"
-        ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] }
+        ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] }
         : {
             schema_version: SCHEMA_VERSION,
             tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
-            questions: [],
           };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),

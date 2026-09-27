@@ -6,6 +6,7 @@ import { checkPack } from "../../src/init/pack-check.js";
 import { packDocuments } from "../../src/init/pack.js";
 import { buildPipeline, type PipelineDeps } from "../../src/init/pipeline.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { CONFORMING_PACK, commitRecord, packRepo } from "./pack-fixture.js";
 import { APPROVE_PLAN, BUDGETS, PROMPTS } from "./plan-fixture.js";
@@ -50,7 +51,6 @@ export function slicing(cut: readonly Cut[], take: number): Json {
       depends_on: [...(s.depends_on ?? [])],
       rationale: `cut on take ${String(take)}`,
     })),
-    questions: [],
   };
 }
 
@@ -59,6 +59,10 @@ export interface Script {
   readonly slices?: (take: number, inputs: Json) => Json;
   /** The artifact of the session that may only add, on its n-th launch. */
   readonly additions?: (take: number, inputs: Json) => Json;
+  /** PRDR-292: a slice's draft on that slice's n-th launch (1-based); one ticket delivering its requirements by default. */
+  readonly draft?: (take: number, inputs: Json) => Json;
+  /** PRDR-292: a review's verdict on the n-th review launch of its scope, a slice's id or `whole`; approval by default. */
+  readonly review?: (take: number, inputs: Json) => Json;
 }
 
 export interface Seeded {
@@ -67,6 +71,8 @@ export interface Seeded {
   readonly log: string[];
   /** Every planner launch's inputs, in order. */
   readonly inputs: Json[];
+  /** PRDR-292: every planner launch's session spec, in order, as the backend received it. */
+  readonly specs: SessionSpec[];
   readonly notes: string[];
   readonly init: (opts?: InitOptions, deps?: Partial<PipelineDeps>) => Promise<InitResult>;
 }
@@ -77,16 +83,16 @@ export const sliced = (s: Seeded): string[] => s.log.filter((e) => e.startsWith(
 export const clear = (s: Seeded): void => {
   s.log.splice(0);
   s.inputs.splice(0);
+  s.specs.splice(0);
   s.notes.splice(0);
 };
 
 /** Each slice's draft: one ticket delivering the slice's requirements. */
-const draft = (inputs: Json): Json => {
+export const draft = (inputs: Json): Json => {
   const slice = inputs["slice"] as { readonly id: string; readonly requirement_ids: string[] };
   return {
     schema_version: SCHEMA_VERSION,
     tickets: [{ ...ticket(`t-${slice.id}-001`), requirement_ids: slice.requirement_ids }],
-    questions: [],
   };
 };
 
@@ -96,13 +102,17 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
   commitRecord(root);
   const log: string[] = [];
   const inputs: Json[] = [];
+  const specs: SessionSpec[] = [];
   const notes: string[] = [];
   let takes = 0;
   let adds = 0;
+  const drafts = new Map<string, number>();
+  const reviews = new Map<string, number>();
   const backend = new MockBackend({
     planner: (spec) => {
       const given = inputsOf(spec);
       inputs.push(given);
+      specs.push(spec);
       const out = path.basename(spec.artifactOut);
       let artifact: Json;
       if (out === "slices.json") {
@@ -115,11 +125,15 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
         if (script.additions === undefined) throw new Error("this case scripted no session that may only add");
         artifact = script.additions(adds, given);
       } else if (out === "plan-draft.json") {
-        log.push(`PLAN:${sliceOf(given)}`);
-        artifact = draft(given);
+        const slice = sliceOf(given);
+        log.push(`PLAN:${slice}`);
+        drafts.set(slice, (drafts.get(slice) ?? 0) + 1);
+        artifact = (script.draft ?? ((_take: number, i: Json) => draft(i)))(drafts.get(slice) ?? 1, given);
       } else if (out === "plan-review.json") {
         log.push("REVIEW");
-        artifact = APPROVE_PLAN;
+        const scope = given["scope"] === "slice" ? sliceOf(given) : "whole";
+        reviews.set(scope, (reviews.get(scope) ?? 0) + 1);
+        artifact = (script.review ?? ((): Json => APPROVE_PLAN))(reviews.get(scope) ?? 1, given);
       } else {
         throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
       }
@@ -141,7 +155,7 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
       }),
       opts,
     );
-  return { root, log, inputs, notes, init };
+  return { root, log, inputs, specs, notes, init };
 }
 
 /**

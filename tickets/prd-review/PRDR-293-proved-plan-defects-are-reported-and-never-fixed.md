@@ -66,3 +66,24 @@ The whole-plan review's cache key (`wholeKey` in `src/init/plan-whole.ts`) hashe
 titles and goals included, since the review reads them. A re-cut in new words re-runs it. On a pack
 that happens only when the band, the baseline or the prompt moves, since a cut on record keeps its
 slices' words otherwise.
+
+## From PRDR-292
+
+- A ticket carries `criterion_ids` (A-1). Code refuses a draft whose ticket names a criterion the
+  pack does not define, or names one without carrying its words among its acceptance criteria
+  (`draftIssues` in `src/init/plan-draft-checks.ts`). Nothing counts whether every criterion of a
+  slice's requirements is carried: that is this ticket's first criterion.
+- A name of a catalogued kind that its catalogue lacks is a `traceability` finding among the
+  contract checks (`catalogueFindings` in `src/init/contracts.ts`). PRDR-292's third criterion
+  calls it a contract failure of this ticket's. It is reported and refuses nothing. Turning it into
+  a redraft's input, and holding approval on it, is this ticket's.
+- `already_found` hands the whole-plan review the contract checks' findings, and two coverage
+  findings in `src/init/contracts.ts` cite PRD marks (`A-1⁵`, `C-8`). A drafter's inputs cite none
+  (C-4⁷). Once this ticket hands proved findings to a redraft, their words reach a drafter, so they
+  should cite none either.
+- A redraft reports spec defects as a first draft does, and PLAN keeps each draft's once per slice
+  and set of passages: the revision's in `src/init/plan-slices.ts`, the whole-plan redraft's in
+  `src/init/plan-whole.ts`. A targeted redraft can keep them the same way.
+- Without a pack, `prompts/slice.md` now states that placing every requirement id the documents
+  define is the slicer's own judgement, since no parse lists those ids. This ticket's sixth
+  criterion still covers the claim there.

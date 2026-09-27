@@ -429,6 +429,13 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
         "answer them and re-run `detent init` (C-3′).",
     );
   }
+  /* C-4⁵ (PRDR-292): the same for a spec defect, which holds approval until the pack is amended. */
+  if (shown.spec_defects > 0) {
+    return notReady(
+      `${String(shown.spec_defects)} spec defect(s) planning found in the pack hold approval of this plan — ` +
+        "amend the pack where each one quotes it and re-run `detent init` (C-4⁵).",
+    );
+  }
   /**
    * C-5: no asker means no human — every non-TTY invocation lands here, and the
    * plan has now been presented, which is the half of C-7 that is available

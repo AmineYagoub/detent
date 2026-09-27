@@ -1,6 +1,6 @@
 /**
  * T-047 — regenerates prompts/manifest.json, the hash pin for the vendored
- * role prompts (S-7, D-9). PREPARE_AGENTS selects only from this set;
+ * prompts (S-7, D-9). PREPARE_AGENTS selects only from this set;
  * `agents/assignments.json` references `role@hash`, and an unknown hash fails
  * closed at load. CI regenerates and diffs, so an edited prompt cannot ship
  * without its hash moving in the same commit.
@@ -11,19 +11,20 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { SCHEMA_VERSION } from "../src/schemas/common.js";
-import { ROLE_IDS } from "../src/schemas/roles.js";
+import { PROMPT_IDS } from "../src/schemas/roles.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 export const PROMPTS_DIR = path.join(ROOT, "prompts");
 export const MANIFEST_PATH = path.join(PROMPTS_DIR, "manifest.json");
 
-export function promptHash(role: string): string {
-  return createHash("sha256").update(readFileSync(path.join(PROMPTS_DIR, `${role}.md`))).digest("hex");
+export function promptHash(id: string): string {
+  return createHash("sha256").update(readFileSync(path.join(PROMPTS_DIR, `${id}.md`))).digest("hex");
 }
 
+/** C-4⁵ (PRDR-292): pinned by prompt, where the planner has one for each job it does. */
 export function renderManifest(): string {
-  const roles = Object.fromEntries(ROLE_IDS.map((r) => [r, promptHash(r)]));
-  return `${JSON.stringify({ schema_version: SCHEMA_VERSION, roles }, null, 2)}\n`;
+  const prompts = Object.fromEntries(PROMPT_IDS.map((id) => [id, promptHash(id)]));
+  return `${JSON.stringify({ schema_version: SCHEMA_VERSION, prompts }, null, 2)}\n`;
 }
 
 function main(): void {

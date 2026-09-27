@@ -34,6 +34,37 @@ export const ROLE_IDS = [
 export type RoleId = (typeof ROLE_IDS)[number];
 
 /**
+ * C-4⁵ (PRDR-292): the planner's prompts, one per job, by the stage a session
+ * is launched for. One `prompts/planner.md` served SLICE, PLAN and the review,
+ * so an edit to one job's words re-cut the product and re-planned every slice.
+ * The review's is the planner's until it has a role of its own (C-4⁶).
+ */
+export const PLANNER_PROMPTS = { SLICE: "slice", PLAN: "plan", REVIEW_PLAN: "plan_review" } as const;
+
+/**
+ * The vendored prompts, each `prompts/<id>.md` and pinned under its id in
+ * `prompts/manifest.json` (S-7): every role's own, and the planner's jobs in
+ * place of the planner's.
+ */
+export type PromptId = (typeof PLANNER_PROMPTS)[keyof typeof PLANNER_PROMPTS] | Exclude<RoleId, "planner">;
+
+export const PROMPT_IDS: readonly PromptId[] = [
+  ...Object.values(PLANNER_PROMPTS),
+  ...ROLE_IDS.filter((r): r is Exclude<RoleId, "planner"> => r !== "planner"),
+];
+
+/**
+ * The prompt a session reads: its role's own, or for a planner session the
+ * one for the job its inputs name. A planner session naming no job is refused
+ * rather than handed another job's words.
+ */
+export function promptOf(role: RoleId, stage: unknown): PromptId {
+  if (role !== "planner") return role;
+  if (typeof stage === "string" && Object.hasOwn(PLANNER_PROMPTS, stage)) return PLANNER_PROMPTS[stage as keyof typeof PLANNER_PROMPTS];
+  throw new Error(`a planner session was launched for stage ${JSON.stringify(stage)}, and only SLICE, PLAN and REVIEW_PLAN have a prompt (C-4⁵)`);
+}
+
+/**
  * PRDR-197: the SDK's closed set, mirrored so a typo is refused at config load
  * rather than accepted and silently ignored.
  *

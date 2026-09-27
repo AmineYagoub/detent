@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { assignmentsFileSchema } from "../schemas/records.js";
-import type { RoleId } from "../schemas/roles.js";
+import { promptOf, type RoleId } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { resolveAssignment, type PromptSet } from "../sessions/prompts.js";
 import type { PhaseOutcome } from "./machine.js";
@@ -42,7 +42,7 @@ export function prepareAgents(deps: PrepareAgentsDeps): PhaseOutcome {
   const assignments: Record<string, string> = {};
   for (const ticket of deps.tickets) {
     const role = openingRole(ticket);
-    const hash = deps.prompts.hashes[role];
+    const hash = deps.prompts.hashes[promptOf(role, null)];
     const ref = `${role}@${hash}`;
     /**
      * S-7's AC asks this to fail closed before writing. It cannot: `ref` is

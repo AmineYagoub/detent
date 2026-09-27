@@ -1,4 +1,6 @@
 import { contractKey, type ContractConsume, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import type { Pack } from "../schemas/pack.js";
+import { catalogueIds } from "./plan-records.js";
 import type { DraftedTicket } from "./plan-write.js";
 
 /**
@@ -40,6 +42,9 @@ const NOUN: Readonly<Record<string, string>> = {
   route: "route",
   table: "table",
   event: "event",
+  error_code: "error code",
+  setting: "setting",
+  job: "job",
 };
 
 /**
@@ -246,6 +251,34 @@ export function applyContracts(
   }
 
   return { tickets, findings, derived };
+}
+
+/**
+ * C-4⁵ (PRDR-292): where the pack catalogues a kind, its catalogue ids are the
+ * names in `provides` and `consumes`, so a contract has one spelling. A name of
+ * such a kind that the catalogue does not hold is a contract finding. A kind
+ * the pack catalogues nothing of is named freely, and without a pack nothing
+ * is catalogued.
+ */
+export function catalogueFindings(tickets: readonly DraftedTicket[], pack: Pack | null): PlanReview["findings"] {
+  if (pack === null) return [];
+  const catalogued = catalogueIds(pack);
+  const findings: PlanReview["findings"] = [];
+  for (const t of tickets) {
+    for (const [verb, names] of [["provides", t.provides], ["consumes", t.consumes]] as const) {
+      for (const c of names) {
+        const ids = catalogued[c.kind];
+        if (ids === undefined || ids.includes(c.id)) continue;
+        const noun = NOUN[c.kind] ?? c.kind;
+        findings.push({
+          tag: "traceability",
+          ticket: t.id,
+          finding: `${verb} \`${contractKey(c)}\`, and the pack's catalogue holds no ${noun} \`${c.id}\` — a ${noun} is named by its catalogue id, so the ticket names another or the catalogue lacks one`,
+        });
+      }
+    }
+  }
+  return findings;
 }
 
 function unownedMessage(id: string, c: ContractConsume): string {

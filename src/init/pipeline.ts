@@ -218,6 +218,17 @@ function planningPack(outputs: Outputs): Pack | null {
 }
 
 /**
+ * C-4⁵ (PRDR-292): the parse PLAN drafts from, where SLICE cut the pack's own
+ * requirements. Where the documents planning reads hold none of them, SLICE
+ * cut those documents as they are (C-2‴), and PLAN drafts from them the same
+ * way: a slice cut from prose has no records to be handed.
+ */
+function draftingPack(root: string, outputs: Outputs): Pack | null {
+  const pack = planningPack(outputs);
+  return pack !== null && placement(pack, planningDocs(root, outputs)).size > 0 ? pack : null;
+}
+
+/**
  * D-10′ (PRDR-290): whether a stack must be decided, and the entry that
  * decided it. `greenfield` is code's, from the stack markers the specification
  * phase handed on (C-2¹³). In an existing project the stack is discovered, and
@@ -260,15 +271,18 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
-/** C-2⁸: what a cut answers to besides the pack's ids: the baseline, the band and the prompt. */
+/** C-2⁸: what a cut answers to besides the pack's ids: the baseline, the band and SLICE's prompt, not PLAN's or the review's (C-4⁵). */
 const sliceBasis = (deps: PipelineDeps): string =>
   valueDigest([
     deps.planBaseline ?? "production",
     baselineDigest(),
     /* C-2⁵′: re-cutting on a new band is the whole point of the knob. */
     deps.sliceSize ?? { min: 12, max: 18 },
-    deps.prompts.hashes.planner,
+    deps.prompts.hashes.slice,
   ]);
+
+/** C-4⁵ (PRDR-292): the prompts a slice's cache answers to, its draft's and its review's. */
+const planPrompts = (deps: PipelineDeps): string => valueDigest([deps.prompts.hashes.plan, deps.prompts.hashes.plan_review]);
 
 function slicePhase(deps: PipelineDeps): PhaseHandler {
   return {
@@ -310,7 +324,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
     phase: "PLAN",
     /* Chained: PLAN re-runs whenever the stack, the bindings or the slices moved; inside, unchanged slices are reused. */
     digest: (ctx) =>
-      /* PRDR-082: the planner prompt joins the stack and the bindings — the
+      /* PRDR-082: PLAN's and the review's prompts join the stack and the bindings — the
        * inputs that actually determine this plan. */
       /**
        * C-8‴ (PRDR-118): PLAN's own OUTPUT joins its inputs. No phase digest
@@ -323,7 +337,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         planningStack(deps.root, ctx.outputs),
         ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] ?? null,
         ctx.outputs["SLICE"]?.["slices"] ?? null,
-        deps.prompts.hashes.planner,
+        planPrompts(deps),
       ])}`,
     /** C-8‴: the tickets and the plan artifact are PLAN's output; if they are gone, plan again. */
     outputIntact: () => planOutputIntact(deps.root),
@@ -338,8 +352,8 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         slices: slicesFromOutputs(ctx.outputs),
         baseline: deps.planBaseline ?? "production",
         ...(deps.revisionRounds === undefined ? {} : { revisionRounds: deps.revisionRounds }),
-        promptHash: deps.prompts.hashes.planner,
-        pack: planningPack(ctx.outputs),
+        promptHash: planPrompts(deps),
+        pack: draftingPack(deps.root, ctx.outputs),
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),

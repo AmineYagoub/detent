@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RoleId } from "../schemas/roles.js";
+import type { PromptId, RoleId } from "../schemas/roles.js";
 import type { GuardPolicy } from "./guard.js";
 import type { ScratchGrant } from "./sandbox.js";
 
@@ -28,6 +28,14 @@ export interface SessionSpec {
   readonly artifactOut: string;
   /** Advisory until T-046 wires real enforcement (S-2/S-3). */
   readonly allowedTools: readonly string[];
+  /**
+   * C-4⁵ (PRDR-292): the built-in tools the session has at all, where its role
+   * is given fewer than the platform's. `allowedTools` grants without asking
+   * and removes nothing: in the default mode the platform grants read-only Bash
+   * whatever it names, and planner sessions ran it 2,846 times in the planning
+   * audit. Absent, the session has the platform's tools.
+   */
+  readonly tools?: readonly string[];
   /** S-1: `"plan"` for the read-only roles, empty otherwise. */
   readonly permissionMode: "" | "plan";
   /** Model routing per role; empty means the backend's default. */
@@ -185,9 +193,10 @@ export interface SessionBackend {
  * zone permits the kernel only this module.
  */
 export interface PromptSet {
-  readonly prompts: Readonly<Record<RoleId, string>>;
-  /** sha256 hex per role, matching prompts/manifest.json. */
-  readonly hashes: Readonly<Record<RoleId, string>>;
+  /** C-4⁵ (PRDR-292): by prompt, where the planner has one for each job it does. */
+  readonly prompts: Readonly<Record<PromptId, string>>;
+  /** sha256 hex per prompt, matching prompts/manifest.json. */
+  readonly hashes: Readonly<Record<PromptId, string>>;
 }
 
 /**

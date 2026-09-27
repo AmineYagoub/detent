@@ -171,6 +171,8 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     env: buildSessionEnv(),
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
+    /* C-4⁵ (PRDR-292): the base set, where a role has fewer tools than the platform's; what it leaves out the model never sees. */
+    ...(spec.tools === undefined ? {} : { tools: [...spec.tools] }),
     /**
      * S-3⁸ (PRDR-121): the optional symbol server, when the adapter granted
      * one. Its READ tools are in `allowedTools`; nothing else it exposes is

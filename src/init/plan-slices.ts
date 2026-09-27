@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { type HeldFinding, planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { type HeldFinding, type PlanReview, type SliceSpec, specDefectSchema, type SpecDefect } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { sliceCacheDir } from "./machine.js";
 import { sliceKey } from "./slice-key.js";
@@ -13,6 +13,7 @@ import { heldFindings, revisionOutcome, sampleChurn, type RevisionOutcome } from
 import { BOOTSTRAP_TICKET_ID, type DraftedTicket } from "./plan-write.js";
 import { isSafeTicketId } from "../schemas/common.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
+import { stillQuoted } from "./plan-draft-checks.js";
 
 /**
  * C-2‴ (PRDR-117) — PLAN, one slice at a time, to the end of the product.
@@ -22,12 +23,16 @@ import { noteUnitComplete } from "../kernel/ledger.js";
  * `.detent/state/plan/<slice>.json` keyed by what it read (`slice-key.ts`) —
  * so an edit to one slice's requirements, or without a pack to its documents,
  * re-plans that slice and reuses the rest (C-8, C-2⁸).
- * Nothing here stops for a human: questions accumulate for PRESENT.
+ * Nothing here stops for a human, and nothing asks (C-3⁗): what a draft finds
+ * the pack leaves open accumulates for PRESENT as a spec defect (C-4⁵).
  */
+
+/** C-4⁵ (PRDR-292): a spec defect, with the slice whose draft reported it. */
+export type PlannedSpecDefect = SpecDefect & { readonly slice: string };
 
 export interface SlicePlan {
   readonly tickets: DraftedTicket[];
-  readonly questions: PlanQuestion[];
+  readonly spec_defects: PlannedSpecDefect[];
   /** Findings a slice's second review still held; shown at PRESENT. */
   readonly remaining: { readonly slice: string; readonly findings: readonly HeldFinding[] }[];
   /** PRDR-196: what each revision round did, for the slices that needed one. */
@@ -68,9 +73,11 @@ const sliceCacheSchema = z.strictObject({
       /* A-1⁵: additive, so a slice cached before the fields existed still HITS. */
       requirement_ids: z.array(z.string()).default([]),
       baseline_ids: z.array(z.string()).default([]),
+      criterion_ids: z.array(z.string()).default([]),
     }),
   ),
-  questions: z.array(planQuestionSchema),
+  /** C-4⁵ (PRDR-292): what the slice's drafts found the pack leaves open. The v1→v2 migration writes it where `questions` was (F-3″). */
+  spec_defects: z.array(specDefectSchema),
   remaining: z.array(z.looseObject({ tag: z.string(), finding: z.string() })),
   /**
    * PRDR-196: what the revision round did, or `null` where none was needed.
@@ -117,7 +124,7 @@ const sliceCacheSchema = z.strictObject({
 type SliceCache = {
   readonly key: string;
   readonly tickets: DraftedTicket[];
-  readonly questions: PlanQuestion[];
+  readonly spec_defects: SpecDefect[];
   readonly remaining: PlanReview["findings"];
   readonly external_deps: string[];
   readonly reviewed: boolean;
@@ -289,7 +296,8 @@ function breakCycles(
 
 export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): Promise<SlicePlan> {
   const index: DraftedTicket[] = [];
-  const questions: PlanQuestion[] = [];
+  const defects: PlannedSpecDefect[] = [];
+  const pack = deps.pack ?? null;
   const remaining: SlicePlan["remaining"] = [];
   /* PRDR-196: one per slice that needed a revision round; summed for PRESENT. */
   const revisions: RevisionOutcome[] = [];
@@ -302,11 +310,18 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     const planned = new Set(index.map((t) => t.id));
     /** A cached slice that reaches into an earlier one is only valid while those tickets still exist. */
     const reachable = cached === null || cached.external_deps.every((d) => planned.has(d));
-    if (cached !== null && cached.key === key && reachable) {
+    /**
+     * C-4⁵ (PRDR-292): a spec defect quotes the pack, and may quote a record
+     * outside the slice's own, which its key does not read. Once a passage it
+     * quotes is amended, the slice is planned again, so an amendment can close
+     * the defect it answers.
+     */
+    const amended = cached !== null && pack !== null && cached.spec_defects.some((d) => !stillQuoted(deps.root, pack, d));
+    if (cached !== null && cached.key === key && reachable && !amended) {
       deps.progress?.(`reusing ${slice.id}`);
       deps.note?.(`${slice.id} ${slice.title}: reused — nothing it read has changed (C-8)`);
       index.push(...cached.tickets);
-      questions.push(...cached.questions);
+      defects.push(...cached.spec_defects.map((d) => ({ ...d, slice: slice.id })));
       const held = cached.reviewed
         ? cached.remaining
         : [...cached.remaining, { tag: "coverage" as const, finding: `${slice.id} was planned but never reviewed — no verdict was produced when it was planned` }];
@@ -315,14 +330,16 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     }
     if (cached !== null && cached.key === key && !reachable) {
       deps.note?.(`${slice.id} ${slice.title}: re-planning — a ticket it depends on is no longer in the plan (C-8‴)`);
+    } else if (cached !== null && cached.key === key && amended) {
+      deps.note?.(`${slice.id} ${slice.title}: re-planning — the pack no longer says what a spec defect it reported quotes (C-4⁵)`);
     }
 
     deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
-    let drafted = await draftAndRead(deps, { slice, planIndex: index, openQuestions: [...questions] });
+    let drafted = await draftAndRead(deps, { slice, planIndex: index });
     let normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
-    /** A question the first draft raised is not answered by redrafting it — both drafts' questions are the human's. */
-    const asked: PlanQuestion[] = [...drafted.questions];
+    /** A defect in the pack is not answered by redrafting a slice: each draft's are kept, once each. */
+    const found: SpecDefect[] = [...drafted.spec_defects];
 
     let leftover: PlanReview["findings"] = [];
     let reviewed = false;
@@ -355,9 +372,9 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
        */
       let outstanding: PlanReview["findings"] = review.findings;
       for (let round = 0; round < (deps.revisionRounds ?? PLAN_REVISIONS); round += 1) {
-        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding, openQuestions: [...questions] });
+        drafted = await draftAndRead(deps, { slice, planIndex: index, findings: outstanding });
         normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), index, deps.note);
-        for (const q of drafted.questions) if (!asked.some((a) => a.question.trim().toLowerCase() === q.question.trim().toLowerCase())) asked.push(q);
+        for (const d of drafted.spec_defects) if (!found.some((f) => JSON.stringify(f.passages) === JSON.stringify(d.passages))) found.push(d);
         after = await sampleReviewPlan(deps, normalised.tickets, { kind: "slice", slice, planIndex: index, revised: true });
         reviewed = after !== null;
         leftover = after !== null && after.verdict === "changes" ? after.findings : [];
@@ -410,13 +427,6 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
       held.push({ tag: "coverage", finding: `${slice.id} produced no review verdict — it is planned but unreviewed (PRDR-084)` });
       deps.note?.(`${slice.id}: no review verdict after the relaunch — the slice is planned but UNREVIEWED (PRDR-084)`);
     }
-    /**
-     * PRDR-119: a slice's questions come from two drafts — the first and the
-     * revision — and each numbered its own from one, so a slice presented two
-     * `q1`s with different content. Ids are assigned here, over the merged
-     * set, because only this side knows both drafts.
-     */
-    const numbered = asked.map((q, i) => ({ ...q, id: `${slice.id}-q${i + 1}` }));
     const own = new Set(normalised.tickets.map((t) => t.id));
     writeFileSync(
       cachePath(deps.root, slice.id),
@@ -425,7 +435,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
           schema_version: SCHEMA_VERSION,
           key,
           tickets: normalised.tickets,
-          questions: numbered,
+          spec_defects: found,
           remaining: held,
           /* PRDR-196: null when the slice needed no revision. */
           revision,
@@ -452,8 +462,8 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
     if (revision !== null) revisions.push(revision);
     if (churn !== null) churns.push(churn);
     index.push(...normalised.tickets);
-    questions.push(...numbered);
+    defects.push(...found.map((d) => ({ ...d, slice: slice.id })));
     if (held.length > 0) remaining.push({ slice: slice.id, findings: held });
   }
-  return { tickets: index, questions, remaining, revisions, churns };
+  return { tickets: index, spec_defects: defects, remaining, revisions, churns };
 }

@@ -75,20 +75,21 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
     expect(inputs, "the stack keys every slice PLAN drafts, and is not the slicer's").not.toHaveProperty("stack");
   });
 
-  it("plans each slice from the module PRDs its requirements live in and the pack's shared documents, never another module's", async () => {
+  /** C-4⁵ (PRDR-292): a draft reads its slice's records, so a slice cut from the pack names no document. */
+  it("gives each slice no documents, and no draft a document to plan from", async () => {
     const s = seeded();
     await s.init();
-    expect(draftDocs(s, "s01")).toContain("docs/prd/01-catalog.md");
-    expect(draftDocs(s, "s01")).not.toContain(CHECKOUT);
-    expect(draftDocs(s, "s03")).toEqual(expect.arrayContaining([CHECKOUT, "docs/founder-decisions.md", "docs/prd/index.md", "docs/design/catalogues.md"]));
-    expect(draftDocs(s, "s03")).not.toContain("docs/prd/01-catalog.md");
+    expect((outputsOf(s.root, "SLICE")["slices"] as Json[]).map((x) => x["docs"])).toEqual([[], [], []]);
+    for (const slice of ["s01", "s02", "s03"]) expect(draftDocs(s, slice), slice).toEqual([]);
   });
 
-  it("plans a slice from the PRD of a criterion that tests its requirements, though another module's PRD holds it", async () => {
+  it("hands a slice the criterion that tests its requirements, though another module's PRD holds it", async () => {
     const s = seeded(CROSS);
     await s.init();
-    expect(draftDocs(s, "s02")).toContain(CHECKOUT);
-    expect(draftDocs(s, "s01")).not.toContain(CHECKOUT);
+    const criteria = (slice: string): unknown[] =>
+      ((s.inputs.find((i) => i["stage"] === "PLAN" && (i["slice"] as { id?: string } | undefined)?.id === slice)?.["records"] as { criteria: Json[] }).criteria).map((c) => c["id"]);
+    expect(criteria("s02")).toContain("CHK-AC-03");
+    expect(criteria("s01")).not.toContain("CHK-AC-03");
   });
 
   const refused: readonly (readonly [string, readonly Cut[], RegExp])[] = [
@@ -171,15 +172,14 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
   });
 
   it("tells the slicer to place each seed id once in milestone order, and a session shown `slices` to add alone", () => {
-    const prompt = readFileSync("prompts/planner.md", "utf8");
-    const atSlice = prompt.slice(prompt.indexOf("At SLICE:"), prompt.indexOf("At PLAN:"));
-    expect(atSlice).toContain("When `seed` is in your inputs");
-    expect(atSlice).toContain("place every id of it in exactly one slice's `requirement_ids`");
-    expect(atSlice).toContain("keep milestone order");
-    expect(atSlice).toContain("When `slices` is in your inputs as well");
-    expect(atSlice).toContain("move, remove or rename nothing already placed");
-    expect(atSlice).toContain("do not estimate how many a slice holds");
-    expect(prompt, "no stage of the planner's estimates a slice's tickets").not.toContain("expected_tickets");
+    const prompt = readFileSync("prompts/slice.md", "utf8");
+    expect(prompt).toContain("`seed` alone");
+    expect(prompt).toContain("every id it lists is placed exactly once");
+    expect(prompt).toContain("From a seed, milestone order");
+    expect(prompt).toContain("`seed` beside `slices`");
+    expect(prompt).toContain("no field to move, rename or remove anything already placed");
+    expect(prompt).toContain("estimate no ticket counts");
+    expect(prompt, "the slicer estimates no slice's tickets").not.toContain("expected_tickets");
   });
 });
 
@@ -419,14 +419,15 @@ describe("PRDR-291 — a slice is its requirement ids: what re-plans, and what i
     expect(slicesOut(s.root).map((x) => x.id)).toEqual(["s01", "s02"]);
   });
 
-  it("cuts the product again, and plans every slice again, when the planner prompt moves (C-4⁵ is not built)", async () => {
+  /** C-4⁵ (PRDR-292): one prompt per job, so SLICE's prompt keys the cut and no slice's draft. */
+  it("cuts the product again when SLICE's prompt moves, and plans no slice the new cut keeps", async () => {
     const s = seeded();
     await s.init();
     clear(s);
-    await s.init({}, { prompts: { ...PROMPTS, hashes: { ...PROMPTS.hashes, planner: "an edited planner prompt" } } });
+    await s.init({}, { prompts: { ...PROMPTS, hashes: { ...PROMPTS.hashes, slice: "an edited slice prompt" } } });
     expect(sliced(s)).toEqual(["SLICE"]);
     expect(s.notes.join("\n")).toContain("the baseline, the band or the prompt moved since the product was last cut");
-    expect(planned(s)).toEqual(["PLAN:s01", "PLAN:s02", "PLAN:s03"]);
+    expect(planned(s), "the new cut holds the same requirement ids, slice by slice").toEqual([]);
   });
 
   it("--replan still re-derives every slice: a fresh slicing, and every slice planned again (C-8′)", async () => {

@@ -182,13 +182,13 @@ describe("SEC-4 a failing init session does not shout its own tail verbatim", ()
       await expect(
         launchInitSession(deps, {
           role: "planner",
-          inputs: {},
+          inputs: { stage: "PLAN" },
           artifactOut: path.join(stateDir(root), "state", "planner.json"),
         }),
       ).rejects.toThrow(/refused/);
       await launchInitSession(deps, {
         role: "planner",
-        inputs: {},
+        inputs: { stage: "PLAN" },
         artifactOut: path.join(stateDir(root), "state", "planner.json"),
       }).catch((err: unknown) => {
         expect((err as Error).message, "the operator still learns why").toContain("refused");

@@ -48,10 +48,10 @@ function plannedRoot(caches: Record<string, Record<string, unknown>[]>, specs: R
   for (const [id, tickets] of Object.entries(caches)) {
     writeFileSync(
       path.join(state, "plan", `${id}.json`),
-      JSON.stringify({ schema_version: SCHEMA_VERSION, key: "k", tickets, questions: [], remaining: [], external_deps: [], reviewed: true }),
+      JSON.stringify({ schema_version: SCHEMA_VERSION, key: "k", tickets, spec_defects: [], remaining: [], external_deps: [], reviewed: true }),
     );
   }
-  writeFileSync(path.join(state, "slices.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, slices: specs, questions: [] }));
+  writeFileSync(path.join(state, "slices.json"), JSON.stringify({ schema_version: SCHEMA_VERSION, slices: specs }));
   writeFileSync(path.join(state, "DISCOVER.json"), JSON.stringify({ outputs: { docs: ["PRD.md"] } }));
   writeFileSync(path.join(root, ".detent", "ledger.jsonl"), `${JSON.stringify({ cost_estimate_usd: 1.5 })}\n${JSON.stringify({ cost_estimate_usd: 2.5 })}\n`);
   return root;

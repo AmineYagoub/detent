@@ -359,7 +359,14 @@ function approvedProjection(raw: unknown): string {
   const granted = new Set(Array.isArray(t["granted"]) ? (t["granted"] as unknown[]).filter((p): p is string => typeof p === "string") : []);
   const value = (k: keyof Ticket): unknown =>
     k === "surface" && Array.isArray(t["surface"]) ? (t["surface"] as unknown[]).filter((p) => !granted.has(p as string)) : (t[k] ?? null);
-  return JSON.stringify(APPROVED_FIELDS.map((k) => [k, value(k)]));
+  /**
+   * C-4⁵ (PRDR-292): the pack criteria a ticket carries are approved content
+   * too, and only where it carries some. A plan approved before the field
+   * existed is migrated to `criterion_ids: []` (F-3″), and its approval still
+   * holds: none is what it carried then.
+   */
+  const criteria = Array.isArray(t["criterion_ids"]) && t["criterion_ids"].length > 0 ? [["criterion_ids", t["criterion_ids"]]] : [];
+  return JSON.stringify([...APPROVED_FIELDS.map((k) => [k, value(k)]), ...criteria]);
 }
 
 /**

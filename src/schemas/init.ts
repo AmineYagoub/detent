@@ -347,8 +347,13 @@ export type PlanReview = z.infer<typeof planReviewSchema>;
  * The kinds are closed, like the interrupt and finding sets: a vocabulary the
  * planner cannot hold in mind is one it fills in badly. Six cover every defect
  * that run actually produced.
+ *
+ * C-4⁵ (PRDR-292): three more, so every kind a pack's catalogue lists has a
+ * contract kind that names it: `error_code`, `setting` and `job`, beside
+ * `route` and `event`. Where the pack catalogues a kind, its catalogue ids are
+ * the names (`catalogueFindings` in `init/contracts.ts`).
  */
-export const CONTRACT_KINDS = ["symbol", "config", "file", "route", "table", "event"] as const;
+export const CONTRACT_KINDS = ["symbol", "config", "file", "route", "table", "event", "error_code", "setting", "job"] as const;
 export type ContractKind = (typeof CONTRACT_KINDS)[number];
 
 /** A name this ticket brings into existence, with the meaning a consumer needs. */
@@ -382,6 +387,25 @@ export type ContractConsume = z.infer<typeof contractConsumeSchema>;
 /** The index key both sides agree on. */
 export const contractKey = (c: { readonly kind: string; readonly id: string }): string => `${c.kind}:${c.id}`;
 
+/**
+ * C-4⁵ (PRDR-292): a contradiction in the pack, or a gap in it, as a drafter
+ * found it. Each passage is quoted word for word from the record whose id it
+ * gives, and code checks the quote before the draft is kept.
+ */
+export const specDefectSchema = z
+  .strictObject({
+    kind: z.enum(["contradiction", "gap"]),
+    passages: z.array(z.strictObject({ id: nonEmptyString, quote: nonEmptyString })).min(1),
+    /** Why the passages cannot all hold, or what the pack leaves unsettled. */
+    defect: nonEmptyString,
+  })
+  .superRefine((d, ctx) => {
+    if (d.kind === "contradiction" && d.passages.length < 2) {
+      ctx.addIssue({ code: "custom", path: ["passages"], message: "a contradiction quotes both passages that contradict each other" });
+    }
+  });
+export type SpecDefect = z.infer<typeof specDefectSchema>;
+
 export const planDraftSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   tickets: z
@@ -410,12 +434,23 @@ export const planDraftSchema = z.strictObject({
          */
         requirement_ids: z.array(nonEmptyString).default([]),
         baseline_ids: z.array(nonEmptyString).default([]),
+        /**
+         * C-4⁵ (PRDR-292): the pack's criteria this ticket delivers, each one
+         * word for word among its `acceptance_criteria` (`draftIssues` in
+         * `init/plan-draft-checks.ts`).
+         */
+        criterion_ids: z.array(nonEmptyString).default([]),
         risk_label: z.boolean().default(false),
       }),
     )
     .min(1),
-  /** C-3′: questions a slice's drafting raised; batched to PRESENT with the rest. */
-  questions: z.array(planQuestionSchema).default([]),
+  /**
+   * C-4⁵ (PRDR-292): what the pack leaves unsettled, quoted from it. The draft
+   * has no `questions`: the founder settled the pack's questions at DECIDE, and
+   * what it still leaves open is a defect in the pack, which holds approval
+   * until the pack is amended (C-3⁗).
+   */
+  spec_defects: z.array(specDefectSchema).default([]),
 });
 
 export type PlanDraft = z.infer<typeof planDraftSchema>;
@@ -530,11 +565,11 @@ export const sliceAdditionsSchema = z.strictObject({
 });
 export type SliceAdditions = z.infer<typeof sliceAdditionsSchema>;
 
+/** C-3⁗, C-4⁵ (PRDR-292): no planning stage asks, so a slicing carries no `questions`. */
 export const slicesSchema = z
   .strictObject({
     schema_version: z.literal(SCHEMA_VERSION),
     slices: z.array(sliceSchema).min(1),
-    questions: z.array(planQuestionSchema).default([]),
   })
   .superRefine((value, ctx) => {
     const seen = new Set<string>();

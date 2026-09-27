@@ -25,7 +25,7 @@ const PACK_DOCS = ["README.md", DECISION_LOG_PATH, "docs/prd/01-lending.md", "do
 
 /** PRDR-291: on a pack SLICE places every live requirement, and each slice plans from the documents code picks (C-2⁸). */
 const LENDING_SLICE = oneSlice("lending");
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] });
+const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 interface Seen {
@@ -56,8 +56,9 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     expect(first.planned.every((i) => i["stage"] !== undefined), "D-10′ (PRDR-290): no planner session reads the documents for a stack before SLICE").toBe(true);
     expect(first.planned.find((i) => i["stage"] === "SLICE")?.["docs"]).toEqual(PACK_DOCS);
     const drafted = first.planned.find((i) => i["stage"] === "PLAN");
-    /* PRDR-291: on a pack a slice plans from the module PRDs its requirements live in and the pack's other documents, the log among them (C-2¹⁵). */
-    expect(drafted?.["docs"]).toEqual(PACK_DOCS);
+    /* C-4⁵ (PRDR-292): on a pack a slice drafts from its records, and names no document. */
+    expect(drafted).not.toHaveProperty("docs");
+    expect((drafted?.["records"] as { requirements: unknown[] } | undefined)?.requirements.length).toBeGreaterThan(0);
   });
 
   /** PRDR-284: VALIDATE's record moved WRITE's key, so WRITE runs again, writing nothing; VALIDATE's key stands, and the planning chains from it. */

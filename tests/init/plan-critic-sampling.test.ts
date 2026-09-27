@@ -41,7 +41,7 @@ const READS: readonly (readonly object[])[] = [
 
 const RECUR = ["t-100 dependency", "t-102 sizing"];
 
-const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: IDS.map((id) => ticket(id)), questions: [] }).tickets;
+const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: IDS.map((id) => ticket(id)) }).tickets;
 
 const keyOf = (x: unknown): string => {
   const r = x as { ticket?: string; tag?: string };
@@ -188,7 +188,7 @@ describe("D-28′ a batch of review draws is accounted once", () => {
       expect(review?.reads, "all three draws ran").toHaveLength(3);
       await launchInitSession(init, {
         role: "planner",
-        inputs: {},
+        inputs: { stage: "PLAN" },
         artifactOut: path.join(stateDir(root), "state", "after.json"),
       });
       /**

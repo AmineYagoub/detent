@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { type PlanReview, type SliceSpec, specDefectSchema, type SpecDefect } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { stateDir } from "../fs/layout.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { reviewPlan, sessionBudget } from "./plan-review.js";
 import { remainLine } from "./plan-notes.js";
 import { revisionOutcome } from "./plan-signal.js";
-import { normaliseDraft, tagSlice } from "./plan-slices.js";
+import { normaliseDraft, type PlannedSpecDefect, tagSlice } from "./plan-slices.js";
 import type { DraftedTicket } from "./plan-write.js";
 
 /**
@@ -35,7 +35,8 @@ const wholeCacheSchema = z.strictObject({
     z.strictObject({
       slice: z.string(),
       tickets: z.array(z.looseObject({ id: z.string(), slice: z.string() })),
-      questions: z.array(planQuestionSchema),
+      /* C-4⁵ (PRDR-292): where `questions` was; the v1→v2 migration writes it (F-3″). */
+      spec_defects: z.array(specDefectSchema),
     }),
   ),
 });
@@ -44,7 +45,7 @@ interface WholeCache {
   readonly key: string;
   readonly findings: PlanReview["findings"];
   readonly plan_wide_unclaimed: PlanReview["findings"];
-  readonly redrafted: { readonly slice: string; readonly tickets: DraftedTicket[]; readonly questions: PlanQuestion[] }[];
+  readonly redrafted: { readonly slice: string; readonly tickets: DraftedTicket[]; readonly spec_defects: SpecDefect[] }[];
 }
 
 function readWholeCache(root: string): WholeCache | null {
@@ -110,7 +111,8 @@ function stableJson(value: unknown): string {
 
 export interface WholeReview {
   readonly tickets: DraftedTicket[];
-  readonly questions: PlanQuestion[];
+  /** C-4⁵ (PRDR-292): what the redrafts found the pack leaves open. */
+  readonly spec_defects: PlannedSpecDefect[];
   readonly remaining: PlanReview["findings"];
 }
 
@@ -122,7 +124,7 @@ export async function wholePlanReview(
   known: PlanReview["findings"] = [],
 ): Promise<WholeReview> {
   /* One slice is one plan, and its own review already read all of it. */
-  if (slices.length <= 1) return { tickets: [...tickets], questions: [], remaining: [] };
+  if (slices.length <= 1) return { tickets: [...tickets], spec_defects: [], remaining: [] };
 
   /**
    * C-8⁗ (PRDR-199): the review is the expensive half, and a resumed run used
@@ -154,7 +156,7 @@ export async function wholePlanReview(
     deps.note?.("whole-plan review: NO VERDICT after the relaunch — the plan was never reviewed as one thing");
     return {
       tickets: [...tickets],
-      questions: [],
+      spec_defects: [],
       remaining: [
         {
           tag: "coherence",
@@ -165,7 +167,7 @@ export async function wholePlanReview(
   }
   if (first.verdict !== "changes" || first.findings.length === 0) {
     deps.note?.(first.verdict === "approve" ? "whole-plan review: approve" : "whole-plan review: changes, but the verdict named no finding — nothing to revise");
-    return { tickets: [...tickets], questions: [], remaining: [] };
+    return { tickets: [...tickets], spec_defects: [], remaining: [] };
   }
   deps.note?.(`whole-plan review: ${first.findings.length} finding(s) — ${first.findings.map((f) => f.tag).join(", ")}`);
 
@@ -178,12 +180,12 @@ export async function wholePlanReview(
   }
   if (bySlice.size === 0) {
     deps.note?.("whole-plan review: findings name no ticket — presented for the human, nothing redrafted");
-    return { tickets: [...tickets], questions: [], remaining: first.findings };
+    return { tickets: [...tickets], spec_defects: [], remaining: first.findings };
   }
 
   let done = resuming ? [...cached.redrafted] : [];
   let updated: DraftedTicket[] = [...tickets];
-  const questions: PlanQuestion[] = [];
+  const defects: PlannedSpecDefect[] = [];
   /* The findings land before the first session that acts on them, not after the last. */
   const persist = (unclaimed: PlanReview["findings"]): void => {
     writeWholeCache(deps.root, { key, findings: first.findings, plan_wide_unclaimed: unclaimed, redrafted: done });
@@ -208,7 +210,7 @@ export async function wholePlanReview(
         ...already.tickets,
         ...updated.filter((t) => sliceOrder(slices, t.slice) > at0),
       ];
-      questions.push(...already.questions);
+      defects.push(...already.spec_defects.map((d) => ({ ...d, slice: slice.id })));
       deps.note?.(`${slice.id} ${slice.title}: redraft reused — already written down (C-8⁗)`);
       continue;
     }
@@ -228,19 +230,11 @@ export async function wholePlanReview(
       continue;
     }
     updated = [...earlier, ...fresh, ...later];
-    questions.push(...drafted.questions);
-    done = [...done, { slice: slice.id, tickets: fresh, questions: [...drafted.questions] }];
+    defects.push(...drafted.spec_defects.map((d) => ({ ...d, slice: slice.id })));
+    done = [...done, { slice: slice.id, tickets: fresh, spec_defects: [...drafted.spec_defects] }];
     planWideUnclaimed = [];
     persist(planWideUnclaimed);
   }
-
-  /**
-   * PRDR-119: every question reaching the human needs a unique id. The slice
-   * path numbers its own; these did not, so each redrafted slice's session
-   * numbered from one and the human could be shown several different `q1`s —
-   * the same defect PRDR-119 removed one level down.
-   */
-  const numbered = questions.map((q, i) => ({ ...q, id: `whole-q${i + 1}` }));
 
   const second = await reviewPlan(deps, updated, { kind: "whole", slices });
   /**
@@ -253,7 +247,7 @@ export async function wholePlanReview(
     deps.note?.("whole-plan review after revision: NO VERDICT after the relaunch — the redrafted plan was never re-reviewed as one thing");
     return {
       tickets: updated,
-      questions: numbered,
+      spec_defects: defects,
       remaining: [
         {
           tag: "coherence",
@@ -283,7 +277,7 @@ export async function wholePlanReview(
           remaining.map((f) => `${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}`).join("; "),
         ),
   );
-  return { tickets: updated, questions: numbered, remaining };
+  return { tickets: updated, spec_defects: defects, remaining };
 }
 
 function sliceOrder(slices: readonly SliceSpec[], id: string): number {

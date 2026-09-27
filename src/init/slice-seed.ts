@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { SCHEMA_VERSION } from "../schemas/common.js";
-import { planQuestionSchema, sliceSchema, type PlanQuestion, type SliceAdditions, type SliceSpec } from "../schemas/init.js";
+import { sliceSchema, type SliceAdditions, type SliceSpec } from "../schemas/init.js";
 import type { Pack } from "../schemas/pack.js";
 import { slicingRecordPath } from "./machine.js";
 
@@ -166,9 +166,6 @@ export function withAdditions(
  * The sessions' artifacts
  */
 
-/** The question entry every slicing skeleton shows. */
-export const QUESTION = { id: "q1", question: "<a question ONLY the user can answer — omit entry if none>", blocking: false, assumption: "<what the slicing proceeds on if unanswered>" };
-
 /** C-2⁸: the EXACT artifact SLICE writes on a pack, where each slice's documents are code's. */
 export function seededSkeleton(): Record<string, unknown> {
   return {
@@ -184,7 +181,6 @@ export function seededSkeleton(): Record<string, unknown> {
         rationale: "<why this slice, here — may be empty>",
       },
     ],
-    questions: [QUESTION],
   };
 }
 
@@ -218,14 +214,12 @@ const recordSchema = z.strictObject({
   /** Each id the cut places, with the milestone it had then. */
   placement: z.record(z.string(), z.number().int().nonnegative()),
   slices: z.array(sliceSchema).min(1),
-  questions: z.array(planQuestionSchema),
 });
 
 export interface SlicingRecord {
   readonly basis: string;
   readonly placement: Readonly<Record<string, number>>;
   readonly slices: readonly SliceSpec[];
-  readonly questions: readonly PlanQuestion[];
 }
 
 /** The cut on record, or null: absent, or a shape this build does not read, which is cut again rather than trusted. */

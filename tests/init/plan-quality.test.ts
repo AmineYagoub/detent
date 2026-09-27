@@ -70,7 +70,7 @@ describe("PRDR-101 the drafted non_goals reach the written ticket", () => {
 });
 
 describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () => {
-  it("PLAN's digest moves when the planner prompt changes, and not when another role's does", () => {
+  it("PLAN's digest moves when its draft's or its review's prompt changes, and not when SLICE's or another role's does", () => {
     const root = repo(LONE_CANDIDATE);
     const backend = new MockBackend({ audit: CLEAN_AUDIT, });
     const ctx = {
@@ -91,7 +91,10 @@ describe("PRDR-082 a changed prompt invalidates its phase checkpoint (C-8)", () 
     };
 
     const base = digestWith({});
-    expect(digestWith({ planner: "0".repeat(64) }), "planner change must re-derive").not.toBe(base);
+    /* C-4⁵ (PRDR-292): the planner reads one prompt per job; PLAN's draft and its review key PLAN, and SLICE's keys the cut. */
+    expect(digestWith({ plan: "0".repeat(64) }), "PLAN's prompt must re-derive").not.toBe(base);
+    expect(digestWith({ plan_review: "0".repeat(64) }), "the plan review's prompt must re-derive").not.toBe(base);
+    expect(digestWith({ slice: "0".repeat(64) }), "SLICE's prompt keys SLICE, not PLAN").toBe(base);
     expect(digestWith({ review: "0".repeat(64) }), "an unrelated role must NOT re-derive").toBe(base);
   });
 });

@@ -36,6 +36,7 @@ const ticket = (id: string, deps: string[] = [], title = `t ${id}`) => ({
   consumes: [],
   requirement_ids: [],
   baseline_ids: [],
+  criterion_ids: [],
   risk_label: false,
 });
 
@@ -50,7 +51,7 @@ const SLICE = (id: string, dependsOn: string[] = []): SliceSpec => ({
   rationale: "",
 });
 
-const ONE_SLICE = { schema_version: SCHEMA_VERSION, slices: [SLICE("s01")], questions: [] };
+const ONE_SLICE = { schema_version: SCHEMA_VERSION, slices: [SLICE("s01")] };
 
 /** A planner whose PLAN draft is supplied per call, so a test can hand it a hostile one. */
 function plannerWith(draft: object, slices: object = ONE_SLICE): StageFn {
@@ -74,7 +75,7 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
     const victim = path.join(root, "package.json");
     const before = readFileSync(victim, "utf8");
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: plannerWith({ schema_version: SCHEMA_VERSION, tickets: [ticket("../../package"), ticket("t-s01-002")], questions: [] }),
+      planner: plannerWith({ schema_version: SCHEMA_VERSION, tickets: [ticket("../../package"), ticket("t-s01-002")] }),
     });
 
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
@@ -90,7 +91,6 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
       planner: plannerWith({
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001"), ticket("T-S01-001"), ticket("t-s01-002", ["T-S01-001"])],
-        questions: [],
       }),
     });
 
@@ -110,7 +110,6 @@ describe("PRDR-118 a drafted id is a file name, and the model writes it", () => 
       planner: plannerWith({
         schema_version: SCHEMA_VERSION,
         tickets: [ticket("t-s01-001", ["t-s01-002"]), ticket("t-s01-002", ["t-s01-001"])],
-        questions: [],
       }),
     });
 
@@ -151,7 +150,7 @@ describe("PRDR-118 slice order survives the shape the planner is told to write",
 describe("PRDR-118 re-planning does not destroy work", () => {
   it("a plain `detent init` refuses to re-plan while a ticket is claimed — the guard covered only --replan", async () => {
     const root = repo(LONE_CANDIDATE);
-    const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002")], questions: [] };
+    const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002")] };
     const deps = { root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(draft) }), prompts: PROMPTS, budgets: BUDGETS };
     await runInit(root, planningPipeline(deps));
 
@@ -172,7 +171,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
   it("deleting the plan directory re-plans from the slice caches instead of reporting READY over nothing", async () => {
     const root = repo(LONE_CANDIDATE);
-    const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")], questions: [] };
+    const draft = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] };
     let planned = 0;
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec: SessionSpec) => {
@@ -196,7 +195,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
   it("a DONE bootstrap is preserved, and a stale blocker it carries is dropped rather than crashing the write", async () => {
     const root = repo({ "PRD.md": "# build it\n" });
-    const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] };
+    const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(first) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
@@ -208,7 +207,7 @@ describe("PRDR-118 re-planning does not destroy work", () => {
     const bootstrapBefore = readTicket(root, BOOTSTRAP_TICKET_ID);
 
     /** The new plan drops t-s01-001, which the DONE t-s01-002 still names as a blocker. */
-    const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-002"), ticket("t-s01-003")], questions: [] };
+    const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-002"), ticket("t-s01-003")] };
     const backend2 = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(), planner: plannerWith(second) });
     const again = await runInit(root, planningPipeline({ root, backend: backend2, prompts: PROMPTS, budgets: BUDGETS }), { replan: true });
 
@@ -224,12 +223,12 @@ describe("PRDR-118 re-planning does not destroy work", () => {
 
   it("a DONE ticket whose id the new plan reuses for different work is kept and flagged, never silently swapped", async () => {
     const root = repo(LONE_CANDIDATE);
-    const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Add health endpoint")], questions: [] };
+    const first = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Add health endpoint")] };
     await runInit(root, planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(first) }), prompts: PROMPTS, budgets: BUDGETS }));
     const done = readTicket(root, "t-s01-001");
     writeFileSync(ticketPath(root, "t-s01-001"), `${JSON.stringify({ ...done, state: "DONE" }, null, 2)}\n`);
 
-    const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Implement OAuth callback")], questions: [] };
+    const second = { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001", [], "Implement OAuth callback")] };
     const again = await runInit(
       root,
       planningPipeline({ root, backend: new MockBackend({ audit: CLEAN_AUDIT,  planner: plannerWith(second) }), prompts: PROMPTS, budgets: BUDGETS }),
@@ -254,7 +253,6 @@ describe("A-1⁶ the bootstrap ticket provides the scaffold files the stack entr
         ticket("t-s01-001"),
         { ...ticket("t-s01-002", ["t-s01-001"]), consumes: [{ kind: "file", id: "package.json" }] },
       ],
-      questions: [],
     };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, spec_write: decideDefaults(stack), planner: plannerWith(draft) });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));

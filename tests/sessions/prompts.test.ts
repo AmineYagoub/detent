@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MANIFEST_PATH, PROMPTS_DIR, promptHash, renderManifest } from "../../scripts/hash-prompts.js";
-import { READ_ONLY_ROLES, ROLE_FOR_STATE, ROLE_IDS } from "../../src/schemas/roles.js";
+import { PROMPT_IDS, READ_ONLY_ROLES, ROLE_FOR_STATE, ROLE_IDS, type PromptId } from "../../src/schemas/roles.js";
 import { assignmentsFileSchema } from "../../src/schemas/records.js";
 import {
   PromptIntegrityError,
@@ -53,10 +53,12 @@ describe("T-047 the roles are a pinned wire format (S-1, S-7)", () => {
 });
 
 describe("T-047 packaging (S-7 AC)", () => {
-  it("the vendored set covers exactly the roles — a missing role fails at packaging, not runtime", () => {
-    for (const role of ROLE_IDS) {
-      expect(readFileSync(path.join(PROMPTS_DIR, `${role}.md`), "utf8").length).toBeGreaterThan(100);
+  /** C-4⁵ (PRDR-292): the planner role reads one prompt per job, and every other role reads its own. */
+  it("the vendored set covers exactly the prompts — a missing one fails at packaging, not runtime", () => {
+    for (const id of PROMPT_IDS) {
+      expect(readFileSync(path.join(PROMPTS_DIR, `${id}.md`), "utf8").length).toBeGreaterThan(100);
     }
+    expect(PROMPT_IDS.filter((id) => !ROLE_IDS.includes(id as (typeof ROLE_IDS)[number]))).toEqual(["slice", "plan", "plan_review"]);
   });
 
   it("the checked-in manifest matches the prompt files byte-for-byte", () => {
@@ -72,9 +74,9 @@ describe("T-047 packaging (S-7 AC)", () => {
 
   it("loadPromptSet verifies every hash and returns the set", () => {
     const set = loadPromptSet();
-    for (const role of ROLE_IDS) {
-      expect(set.hashes[role]).toBe(promptHash(role));
-      expect(set.prompts[role].length).toBeGreaterThan(0);
+    for (const id of PROMPT_IDS) {
+      expect(set.hashes[id]).toBe(promptHash(id));
+      expect(set.prompts[id].length).toBeGreaterThan(0);
     }
   });
 
@@ -82,8 +84,8 @@ describe("T-047 packaging (S-7 AC)", () => {
     const dir = tmpTree();
     try {
       const manifest = readFileSync(MANIFEST_PATH, "utf8");
-      for (const role of ROLE_IDS) {
-        writeTree(dir, { [`${role}.md`]: readFileSync(path.join(PROMPTS_DIR, `${role}.md`), "utf8") });
+      for (const id of PROMPT_IDS) {
+        writeTree(dir, { [`${id}.md`]: readFileSync(path.join(PROMPTS_DIR, `${id}.md`), "utf8") });
       }
       writeTree(dir, { "manifest.json": manifest });
       expect(() => loadPromptSet(dir)).not.toThrow();
@@ -127,7 +129,10 @@ describe("T-047 assignment resolution fails closed (S-7 AC)", () => {
 describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () => {
   const set = loadPromptSet();
   const CHECKLIST: Record<string, readonly string[]> = {
-    planner: ["A-2", "acceptance criteria", "artifact_out", "P2"],
+    /* C-4⁵ (PRDR-292): the planner's three jobs, each in its own prompt, and none of them citing a PRD id. */
+    slice: ["walking skeleton", "depends_on", "slice_size", "production_baseline", "milestone", "artifact_out"],
+    plan: ["acceptance_criteria", "criterion_ids", "word for word", "spec_defects", "by its id in `catalogue_ids`", "plan_index", "provides", "consumes", "non_goals", "artifact_out"],
+    plan_review: ["approve", "changes", "sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency", "coherence", "artifact_out"],
     /* PRDR-221/222/223: every role that receives the symbol server is told what symbol_tools are for, and that they are its whole surface; PRDR-224: the fix roles are told the two signal shapes. */
     diagnose: ["repro", "predicted_failure", "A-3", "artifact_out", "falsified", "symbol_tools", "whole surface"],
     /* PRDR-212: the surface is stated, a refusal is named as containment, and a signal can be taken back. */
@@ -141,7 +146,7 @@ describe("T-047 prompt-lint checklist — each prompt encodes its protocol", () 
   };
 
   it.each(Object.entries(CHECKLIST))("%s encodes its protocol markers", (role, markers) => {
-    const text = set.prompts[role as (typeof ROLE_IDS)[number]].toLowerCase();
+    const text = set.prompts[role as PromptId].toLowerCase();
     for (const marker of markers) {
       expect(text, `${role}.md must mention "${marker}"`).toContain(marker.toLowerCase());
     }

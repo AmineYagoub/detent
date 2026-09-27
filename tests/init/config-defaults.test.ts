@@ -82,7 +82,6 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
           JSON.stringify({
             schema_version: SCHEMA_VERSION,
             slices: [{ id: "s01", title: "t", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }],
-            questions: [],
           }),
         );
       },

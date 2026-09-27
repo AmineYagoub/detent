@@ -326,6 +326,8 @@ function newTicket(deps: WriteDeps, draft: DraftedTicket, blockers: readonly str
     /** A-1⁵: what it delivers travels too — the coverage check and the session read the same lists. */
     requirement_ids: draft.requirement_ids,
     baseline_ids: draft.baseline_ids,
+    /** C-4⁵ (PRDR-292): the pack criteria it carries, each one's words among its acceptance criteria. */
+    criterion_ids: draft.criterion_ids,
     risk_label: draft.risk_label,
   });
 }

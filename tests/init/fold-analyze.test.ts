@@ -48,14 +48,13 @@ const SLICES = {
       rationale: "",
     },
   ],
-  questions: [],
 };
 /** The pack WRITE's fixture writes, in one slice. */
 const LENDING_SLICES = {
   ...SLICES,
   slices: [{ ...SLICES.slices[0], title: "lending", goal: "a tool is lent", requirement_ids: ["LND-F-001", "LND-F-002", "LND-F-003"] }],
 };
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] });
+const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 /** The stack entry the pack fixture's log records, as the checker parses it. */
@@ -173,13 +172,15 @@ describe("PRDR-290: the phase list (D-10′)", () => {
 });
 
 describe("PRDR-290: the planner is told the stack is decided (D-10′)", () => {
-  it("names three stages and, in greenfield, has the planner plan on the entry and choose nothing about it", () => {
-    const prompt = readFileSync("prompts/planner.md", "utf8");
-    expect(prompt).toContain("You serve THREE stages");
-    expect(prompt).toContain("In greenfield the stack is already decided: `stack` in your inputs is the entry the decision log records");
-    expect(prompt).toContain("Plan on it and choose nothing about it");
-    expect(prompt, "no stage of the planner's is ANALYZE").not.toContain("ANALYZE");
-    expect(prompt, "and no phase launches planning research").not.toContain("planning research");
+  /** C-4⁵ (PRDR-292): one prompt per planning job, each with its own line on the stack. */
+  it("has each job that is handed the stack plan on the entry in greenfield, and choose nothing about it", () => {
+    const [slice, plan, review] = ["slice", "plan", "plan_review"].map((id) => readFileSync(`prompts/${id}.md`, "utf8"));
+    expect(plan).toContain("`stack`: in a new project, the stack the decision log settled. Plan on it, and choose nothing about it.");
+    expect(slice).toContain("In a new project `stack` is the stack the decision log settled: cut on it, and choose nothing about it.");
+    for (const prompt of [slice, plan, review]) {
+      expect(prompt, "no planning job is ANALYZE").not.toContain("ANALYZE");
+      expect(prompt, "and no phase launches planning research").not.toContain("planning research");
+    }
   });
 });
 

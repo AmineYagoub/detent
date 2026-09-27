@@ -70,7 +70,7 @@ const ledgerRows = (root: string): number => {
   return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter((l) => l.trim() !== "").length : 0;
 };
 
-const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-1"), ticket("t-2"), ticket("t-3")], questions: [] }).tickets;
+const TICKETS = planDraftSchema.parse({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-1"), ticket("t-2"), ticket("t-3")] }).tickets;
 
 describe("PRDR-203 two init sessions in flight on one root", () => {
   it("both launches complete, and both reach the ledger (F-1: one writer — the process, not the launch)", async () => {
@@ -80,7 +80,7 @@ describe("PRDR-203 two init sessions in flight on one root", () => {
     try {
       const deps: InitSessionDeps = { root, backend: heldBackend(hold.promise), prompts: PROMPTS, spendCeiling: 0, journal };
       const launch = (name: string): Promise<unknown> =>
-        launchInitSession(deps, { role: "planner", inputs: {}, artifactOut: path.join(stateDir(root), "state", `${name}.json`) });
+        launchInitSession(deps, { role: "planner", inputs: { stage: "PLAN" }, artifactOut: path.join(stateDir(root), "state", `${name}.json`) });
       const both = Promise.all([launch("a"), launch("b")]);
       hold.release();
       await both;

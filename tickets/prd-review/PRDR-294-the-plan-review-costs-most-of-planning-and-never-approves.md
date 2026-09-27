@@ -47,3 +47,27 @@ review change it. With PRDR-293's deletion of the whole-plan review, the announc
 N-5′'s `1 + 2N + R + C` becomes `2N + R + C`: the 1 is SLICE's own session, which has already run
 when the announcement is made. The formula case in `tests/init/slice-seed.test.ts` pins the
 sentence.
+
+## From PRDR-292
+
+The review has its own prompt, `prompts/plan_review.md`, and still runs on the planner role:
+`promptOf` in `src/schemas/roles.ts` picks it for a planner session launched for REVIEW_PLAN. This
+ticket's first criterion gives the review a role of its own, and the prompt moves with it.
+- `prompts/plan.md` states six rules as the drafter's own, since no review tag covers them: a
+  ticket's `type`, which sends a `bug` to diagnosis first; no scaffolding ticket in a new project;
+  a `depends_on` naming only what a ticket needs; a baseline item's criteria being its
+  `verifiable_by`, with the pack winning where it decides otherwise; what an engineer decides from
+  the records, with why in the description; and a spec defect being only what the pack leaves
+  open. Which of them the review takes on is this ticket's call, weighed against the churn it
+  measured.
+- It is handed the tickets and `docs`, the planning documents. It is handed neither the records a
+  draft is planned from nor the draft's spec defects, so only the operator reads a defect, at
+  PRESENT. Whether one is real, or the records settle it, is a judgement this ticket's review could
+  make.
+- A slice's review verdict is cached under the slice's key, which reads the records and not the
+  documents the review reads. An edit to a document no record holds leaves a cached verdict
+  standing.
+- `REVIEW_INSTRUCTION` in `src/init/plan-review.ts` restates the tags beside the prompt, in its own
+  words, and the two must agree.
+- A review session is a planner session: Read, Grep and Glob, a write to its artifact alone, and no
+  reach into the root's `archive/`.

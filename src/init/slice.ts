@@ -3,15 +3,14 @@ import path from "node:path";
 import type { z } from "zod";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
-import { sliceAdditionsSchema, slicesSchema, type PlanQuestion, type SliceSpec, type Slices } from "../schemas/init.js";
-import { DECISION_LOG_PATH, isModulePrd, type Pack } from "../schemas/pack.js";
+import { sliceAdditionsSchema, slicesSchema, type SliceSpec, type Slices } from "../schemas/init.js";
+import { DECISION_LOG_PATH, type Pack } from "../schemas/pack.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { DecidedStack } from "./decide-log.js";
 import type { PhaseOutcome } from "./machine.js";
 import { PLAN_REVIEW_SAMPLES } from "./plan-review.js";
 import { previousAttemptInput, refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
 import {
-  QUESTION,
   additionsSkeleton,
   cutIssue,
   milestonesOf,
@@ -32,8 +31,10 @@ import {
  * walking skeleton first, each later slice thickening what came before, every
  * requirement id placed exactly once, every applicable production-baseline
  * item placed too. PLAN then plans one slice at a time — what one session can
- * write and one human can read — and never stops between slices: the
- * questions each stage raises ride to PRESENT.
+ * write and one human can read — and never stops between slices.
+ *
+ * C-3⁗, C-4⁵ (PRDR-292): the cut asks nothing. The founder answers at DECIDE,
+ * and what a pack still leaves open, PLAN reports as a spec defect.
  *
  * C-2⁸, C-2¹⁵ (PRDR-291): on a pack, code seeds the session from the checker's
  * parse and checks its cut (`slice-seed.ts`), and a cut on record is kept.
@@ -69,7 +70,6 @@ export interface SliceDeps {
 
 interface Cut {
   readonly slices: readonly SliceSpec[];
-  readonly questions: readonly PlanQuestion[];
 }
 
 /** The EXACT artifact SLICE writes without a parse; a test parses it through `slicesSchema`. */
@@ -88,7 +88,6 @@ export function slicesSkeleton(): Record<string, unknown> {
         rationale: "<why this slice, here — may be empty>",
       },
     ],
-    questions: [QUESTION],
   };
 }
 
@@ -109,10 +108,7 @@ export async function sliceStage(deps: SliceDeps): Promise<PhaseOutcome> {
   deps.note?.(planningSessions(slices.length));
   return {
     kind: "complete",
-    outputs: {
-      slices: slices as unknown as Record<string, unknown>[],
-      questions: cut.questions as unknown as Record<string, unknown>[],
-    },
+    outputs: { slices: slices as unknown as Record<string, unknown>[] },
   };
 }
 
@@ -164,9 +160,7 @@ const BASELINE =
   "Place every `production_baseline` item whose `applies_when` the product meets into the slice where it belongs (PB-### in " +
   "`baseline_items`); an item that does not apply is omitted, and the rationale of the slice that would have carried it says why. ";
 
-const QUESTIONS =
-  "Do NOT draft tickets here, and do not estimate how many a slice holds. A question the documents cannot answer goes in " +
-  "`questions` with the assumption the slicing proceeds on — mark it blocking only if no assumption can carry it. ";
+const NO_TICKETS = "Do NOT draft tickets here, and do not estimate how many a slice holds. ";
 
 /** C-2‴: the documents cut as they are, where there is no parse to seed from. */
 async function proseCut(deps: SliceDeps): Promise<Cut> {
@@ -186,8 +180,8 @@ async function proseCut(deps: SliceDeps): Promise<Cut> {
           "Cut the WHOLE document set into ordered slices — increments of the product, each a thin end-to-end path that works " +
           "when it is DONE. The first slice is the walking skeleton through the riskiest integration; each later slice thickens " +
           "earlier ones and names them in `depends_on`. Place EVERY requirement id the documents define in exactly one slice's " +
-          `\`requirement_ids\`, exactly as written. ${BASELINE}${sizing(deps)}${QUESTIONS}Write EXACTLY the \`expected_output\` ` +
-          "shape to artifact_out; the validator is strict (P2).",
+          `\`requirement_ids\`, exactly as written. ${BASELINE}${sizing(deps)}${NO_TICKETS}Write EXACTLY the \`expected_output\` ` +
+          "shape to artifact_out; the validator is strict.",
       },
       slicesPath(deps.root),
     );
@@ -221,13 +215,13 @@ async function seededCut(deps: SliceDeps, pack: Pack, ids: Placement): Promise<C
     if (since.removed.length + since.added.length === 0) {
       deps.note?.("SLICE: the pack's requirement ids and milestones are those the product was cut on; the cut on record stands, and no session runs (C-2⁸)");
     }
-    cut = { slices, questions: record.questions };
+    cut = { slices };
   } else {
     const attempt = await withOneRelaunch<Slices>({ stage: "SLICE", note: deps.note }, async (previous) => await seededOnce(deps, pack, ids, previous));
     if (attempt.value === null) throw new Error(`SLICE produced no usable slices artifact: ${attempt.issue}`);
     cut = attempt.value;
   }
-  writeSlicing(deps.root, { basis, placement: Object.fromEntries(ids), slices: [...cut.slices], questions: [...cut.questions] });
+  writeSlicing(deps.root, { basis, placement: Object.fromEntries(ids), slices: [...cut.slices] });
   return cut;
 }
 
@@ -250,7 +244,7 @@ async function seededOnce(deps: SliceDeps, pack: Pack, ids: Placement, previous:
         "than one a slice before it holds. A module's group may be split across slices or joined with others; the criteria " +
         "counts say how much each asks. The first slice is the walking skeleton through the riskiest integration; each later " +
         "slice thickens earlier ones and names them in `depends_on`. The documents in `docs` say what each id means: read what " +
-        `you need to judge the riskiest integration. ${BASELINE}${sizing(deps)}${QUESTIONS}Write EXACTLY the ` +
+        `you need to judge the riskiest integration. ${BASELINE}${sizing(deps)}${NO_TICKETS}Write EXACTLY the ` +
         "`expected_output` shape to artifact_out: the validator is strict, and a slicing that leaves an id out, places one " +
         "twice, names one the seed does not list, or breaks milestone order is refused.",
     },
@@ -296,7 +290,7 @@ async function addTo(deps: SliceDeps, pack: Pack, ids: Placement, kept: readonly
     if (read.value === null) return { value: null, issue: read.issue };
     const merged = withAdditions(kept, read.value, want);
     if (merged.value === null) return merged;
-    const ordered = slicesSchema.safeParse({ schema_version: SCHEMA_VERSION, slices: merged.value, questions: [] });
+    const ordered = slicesSchema.safeParse({ schema_version: SCHEMA_VERSION, slices: merged.value });
     if (!ordered.success) return { value: null, issue: ordered.error.issues.map((i) => i.message).join("; ") };
     const issue = cutIssue(pack, ids, merged.value);
     return issue === null ? { value: merged.value, issue: null } : { value: null, issue };
@@ -318,10 +312,9 @@ async function addTo(deps: SliceDeps, pack: Pack, ids: Placement, kept: readonly
  * settles (C-2⁷), and a slice planned without it would plan on what the log
  * overrules. A slice with none plans from every document, the log among them.
  *
- * C-2¹⁵ (PRDR-291): on a pack a slice's documents are code's, not the model's:
- * the module PRDs that hold its requirements and their criteria, and every
- * document planning reads that is not a module PRD, the log among them.
- * Another module's PRD is left out.
+ * C-2¹⁵ (PRDR-291) made a slice's documents code's on a pack, and C-4⁵
+ * (PRDR-292) left it none: PLAN drafts a slice cut from the pack from its
+ * records, so nothing reads a document path there.
  */
 function groundSlices(slices: readonly SliceSpec[], deps: SliceDeps, pack: Pack | null): SliceSpec[] {
   const discovered = new Set(deps.docs);
@@ -331,7 +324,7 @@ function groundSlices(slices: readonly SliceSpec[], deps: SliceDeps, pack: Pack 
     const items = slice.baseline_items.filter((b) => known.has(b));
     const strays = slice.baseline_items.filter((b) => !known.has(b));
     if (strays.length > 0) deps.note?.(`${slice.id}: ${strays.join(", ")} name no production-baseline item — dropped`);
-    if (pack !== null) return { ...slice, docs: packDocs(pack, deps.docs, slice), baseline_items: items };
+    if (pack !== null) return { ...slice, docs: [], baseline_items: items };
     const docs = slice.docs.filter((d) => discovered.has(d));
     const missing = slice.docs.filter((d) => !discovered.has(d));
     if (missing.length > 0) {
@@ -342,15 +335,6 @@ function groundSlices(slices: readonly SliceSpec[], deps: SliceDeps, pack: Pack 
     }
     return { ...slice, docs: docs.length === 0 || docs.includes(DECISION_LOG_PATH) ? docs : [...docs, ...log], baseline_items: items };
   });
-}
-
-function packDocs(pack: Pack, docs: readonly string[], slice: SliceSpec): string[] {
-  const own = new Set(slice.requirement_ids);
-  const held = new Set([
-    ...pack.requirements.filter((r) => own.has(r.id)).map((r) => r.file),
-    ...pack.criteria.filter((c) => c.requirements.some((id) => own.has(id))).map((c) => c.file),
-  ]);
-  return docs.filter((d) => !isModulePrd(d) || held.has(d));
 }
 
 /**
