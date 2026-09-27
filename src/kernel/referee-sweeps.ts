@@ -1,9 +1,8 @@
 import { existsSync } from "node:fs";
-import { discover } from "../adapter/discover/index.js";
 import { assertNoDrift, readBindings, writeBindings } from "../adapter/drift.js";
+import { discoverPackages, packageCandidates } from "../adapter/packages.js";
 import { finalizeBootstrap } from "../init/plan.js";
 import { BOOTSTRAP_TICKET_ID } from "../init/plan-write.js";
-import type { Binding } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { KernelEvent } from "./events.js";
 import { humanRequeue, outageRequeue } from "./events.js";
@@ -30,10 +29,11 @@ export type Commit = (ticket: Ticket, event: KernelEvent) => Ticket;
  * only send it back into the same halt.
  */
 export function requeueDriftBlocked(root: string, commit: Commit, at: string): void {
-  const bindings = readBindings(root).bindings;
+  const file = readBindings(root);
+  const bindings = file.bindings;
   if (bindings.length === 0) return;
   try {
-    assertNoDrift(bindings, discover(root));
+    assertNoDrift(bindings, discoverPackages(root, file.packages));
   } catch {
     return;
   }
@@ -222,8 +222,9 @@ export function bootstrapFinalizeDeps(
 ): Parameters<typeof finalizeBootstrap>[2] {
   return {
     readBindings: () => readBindings(root),
-    writeBindings: (file) => writeBindings(root, file as { bindings: Binding[]; skips: never[] }),
-    rediscover: () => discover(workDir).candidates,
+    writeBindings: (file) => writeBindings(root, file),
+    /* V-5′ (PRDR-295): each package's candidates, found in its own directory of the tree that passed. */
+    rediscover: () => packageCandidates(workDir, readBindings(root).packages),
     note,
   };
 }
@@ -247,8 +248,8 @@ export function promoteBootstrapBindings(root: string, note: (text: string) => v
    * it can promote something. Left to itself it wrote "0 provisional binding(s)
    * finalized … stayed provisional" on EVERY pool for a slot nothing backs.
    */
-  const found = discover(root).candidates;
-  if (!provisional.some((b) => found.some((c) => c.slot === b.slot))) return false;
+  const found = packageCandidates(root, readBindings(root).packages);
+  if (!provisional.some((b) => found.some((c) => c.package === b.package && c.slot === b.slot))) return false;
   const deps = { ...bootstrapFinalizeDeps(root, root, (text) => note(`late (PRDR-218): ${text}`)), rediscover: () => found };
   return finalizeBootstrap(root, BOOTSTRAP_TICKET_ID, deps);
 }

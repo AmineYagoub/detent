@@ -122,7 +122,7 @@ describe("PRDR-230 the tree's baseline is its fork commit, not whatever the root
     const runBranch = git(root, "rev-parse", "--abbrev-ref", "HEAD").trim();
     const fork = forkCommit(tree, runBranch);
     expect(fork, "the fork commit is derivable from the worktree alone").not.toBeNull();
-    expect(discoverAtCommit(tree, fork as string)?.candidates.some((c) => c.slot === "test")).toBe(true);
+    expect(discoverAtCommit(tree, fork as string)?.get(".")?.candidates.some((c) => c.slot === "test")).toBe(true);
 
     /* The root moves on — another ticket's change, accepted and merged. */
     const file = readBindings(root);

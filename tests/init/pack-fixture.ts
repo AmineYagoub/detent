@@ -46,7 +46,7 @@ export const DECISION_LOG = [
   "|---|---|---|",
   "| . | test | `pnpm test` |",
   "| . | lint | `pnpm lint` |",
-  "| dashboard | test | `pnpm --dir dashboard test` |",
+  "| dashboard | test | `pnpm test` |",
   "",
 ].join("\n");
 

@@ -25,6 +25,8 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
  */
 
 interface ApprovalRow {
+  /** V-5′ (PRDR-295): absent on a row written before packages, which was the root's. */
+  readonly package?: string;
   readonly slot: string;
   readonly adapter: string;
   readonly ref: string;
@@ -35,8 +37,9 @@ export function approvalsPath(root: string): string {
   return path.join(stateDir(root), "state", "approvals.jsonl");
 }
 
+/** A gate's configuration is admissible in its own package only: two packages may hold the same script text. */
 function key(row: ApprovalRow): string {
-  return [row.slot, row.adapter, row.ref, row.config_hash].join("|");
+  return [row.package ?? ".", row.slot, row.adapter, row.ref, row.config_hash].join("|");
 }
 
 export function hasApprovals(root: string): boolean {
@@ -51,6 +54,7 @@ export function recordApprovals(root: string, bindings: readonly Binding[], at: 
       JSON.stringify({
         schema_version: SCHEMA_VERSION,
         at,
+        package: b.package,
         slot: b.slot,
         adapter: b.adapter,
         ref: b.ref,
@@ -79,7 +83,8 @@ export function approvedHashes(root: string): ReadonlySet<string> {
         typeof row.ref === "string" &&
         typeof row.config_hash === "string"
       ) {
-        out.add(key({ slot: row.slot, adapter: row.adapter, ref: row.ref, config_hash: row.config_hash }));
+        const pkg = typeof row.package === "string" ? row.package : ".";
+        out.add(key({ package: pkg, slot: row.slot, adapter: row.adapter, ref: row.ref, config_hash: row.config_hash }));
       }
     } catch {
       /* A torn last line is what a crash produces; every whole row before it still counts. */
@@ -89,5 +94,5 @@ export function approvedHashes(root: string): ReadonlySet<string> {
 }
 
 export function isApproved(approved: ReadonlySet<string>, binding: Binding, hash: string): boolean {
-  return approved.has(key({ slot: binding.slot, adapter: binding.adapter, ref: binding.ref, config_hash: hash }));
+  return approved.has(key({ package: binding.package, slot: binding.slot, adapter: binding.adapter, ref: binding.ref, config_hash: hash }));
 }

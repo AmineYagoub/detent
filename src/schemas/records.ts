@@ -71,9 +71,20 @@ export const reviewSchema = z
   });
 export type Review = z.infer<typeof reviewSchema>;
 
+/**
+ * V-5′ (PRDR-295): a package, `.` for the root or a directory inside the
+ * repository. A gate runs with it as its working directory, so a path that
+ * climbs out, or starts at `/`, is refused where the file is read.
+ */
+export const packagePath = z
+  .string()
+  .refine((p) => p === "." || p.split("/").every((seg) => seg !== "" && seg !== "." && seg !== ".." && !seg.includes("\\")), "is not a directory inside the repository");
+
 /** A-6 Binding record (V-2). */
 export const bindingSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
+  /** V-5′ (PRDR-295): the package whose directory the gate runs in. Absent before packages, and so the root's. */
+  package: packagePath.default("."),
   slot: z.enum(GATE_SLOTS),
   adapter: nonEmptyString,
   ref: nonEmptyString,
@@ -240,6 +251,8 @@ export const presentationSchema = z.strictObject({
   blocking: z.number().int().nonnegative(),
   /** C-4⁵ (PRDR-292): the spec defects PRESENT listed; while any is open, neither exit offers approval. Absent before them, and so none. */
   spec_defects: z.number().int().nonnegative().default(0),
+  /** V-5′ (PRDR-295): the paths PRESENT named that lie in no package with a gate; while any is, neither exit offers approval. Absent before packages, and so none. */
+  ungated: z.number().int().nonnegative().default(0),
 });
 export type Presentation = z.infer<typeof presentationSchema>;
 
@@ -249,11 +262,18 @@ export type Presentation = z.infer<typeof presentationSchema>;
  */
 export const bindingsFileSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
+  /**
+   * V-5′ (PRDR-295): every package DETERMINE_VERIFICATION found, bound or not,
+   * the root first. A path lies in the deepest of them, so a package with no
+   * gate still holds its own files. Absent before packages: the root alone.
+   */
+  packages: z.array(packagePath).default(["."]),
   bindings: z.array(bindingSchema).default([]),
-  /** V-1: slots deliberately left unbound, with who acknowledged it and when. */
+  /** V-1: slots deliberately left unbound, with who acknowledged it and when, per package (V-5′). */
   skips: z
     .array(
       z.strictObject({
+        package: packagePath.default("."),
         slot: bindingSchema.shape.slot,
         acknowledged_by: nonEmptyString,
         at: isoTimestamp,

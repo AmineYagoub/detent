@@ -16,7 +16,7 @@ import { LATE, PRICE, REFUND, STACK_DEFAULT, SURVEY, artifact, type Json } from 
 
 const CHECKED_CLAIM = { ...(SURVEY["claims"] as Json[])[0], claim_hash: "a".repeat(64), verdict: "wrong", source: "https://docs.stripe.com/refunds", correction: "Stripe keeps the fee.", checked: true };
 const AUDIT: Json = { ...SURVEY, ran: true, claims: [CHECKED_CLAIM] };
-const LOG = (over: Partial<LogView> = {}): LogView => ({ exists: true, ids: new Set(), decisions: [], defaults: [], stack: null, hasStack: false, rootSlots: new Set(), ...over });
+const LOG = (over: Partial<LogView> = {}): LogView => ({ exists: true, ids: new Set(), decisions: [], defaults: [], stack: null, hasStack: false, rootSlots: new Set(), packages: [], ...over });
 const parse = (value: Json) => decideArtifactSchema.parse(value);
 
 describe("PRDR-282: the items AUDIT leaves open", () => {

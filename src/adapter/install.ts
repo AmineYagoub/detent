@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import path from "node:path";
 import type { GateResult } from "./run.js";
 import type { PackageManager } from "./discover/types.js";
+import { ROOT_PACKAGE } from "./packages.js";
 
 /**
  * V-1⁗ (PRDR-211) — the adapter installs what the manifest declares before a
@@ -145,4 +146,13 @@ export async function ensureDependencies(
     return { kind: "installed", ecosystem: eco.name, reason, result };
   }
   return { kind: "none", reason: declined ?? "nothing to install" };
+}
+
+/**
+ * V-1⁗ (PRDR-211): what the referee installs is never part of a change set.
+ * V-5′ (PRDR-295): it installs in each package's own directory, so every
+ * package's install directory is one, named from the repository's root.
+ */
+export function installDirs(packages: readonly string[], ecosystems: readonly Ecosystem[]): string[] {
+  return packages.flatMap((pkg) => ecosystems.map((e) => (pkg === ROOT_PACKAGE ? e.dir : `${pkg}/${e.dir}`)));
 }

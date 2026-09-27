@@ -85,10 +85,13 @@ for the human to settle. Every round is recorded in `docs/conformance.json`, so
 re-invoking carries on from the last. A conforming pack runs the checker
 alone; an edited one is re-validated for the edit and whatever cites it.
 
-`DETERMINE_VERIFICATION` binds the project's gate commands. In an existing
-project it discovers them and runs each before binding it; in a new one,
-where nothing can run yet, it proposes the commands the decision log's stack
-entry records (D-10′), and the bootstrap ticket proves them.
+`DETERMINE_VERIFICATION` binds the project's gate commands, for the root and
+for each package with a manifest of its own, each in its package's directory
+(V-5′). In an existing project it discovers them and runs each before binding
+it; in a new one, where nothing can run yet, it proposes the commands the
+decision log records for each package under `## Packages` (D-10′), and the
+bootstrap ticket proves them. A ticket's gates are its packages', so `PRESENT`
+holds approval while a ticket writes where no package has a gate.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first. On a pack (C-2⁸) code groups the requirement ids by
@@ -135,7 +138,14 @@ decision yourself.
    human amends the pack where each defect quotes it (or dictates edits they
    approve), then re-invoke — `VALIDATE` re-validates the edit, and the slice
    that reported the defect is planned again from the amended records.
-   `detent init --replan` plans every slice again without an amendment.
+   `detent init --replan` plans every slice again without an amendment. Also
+   at `PRESENT` (V-5′), a ticket writes where no package has a gate a ticket
+   runs, so no gate could fail for it: the message names each path, its
+   ticket and its package. Approval is not offered while one does, on either
+   exit. Channel: the human declares that package's gate commands under
+   `## Packages` in `docs/founder-decisions.md`, each run in the package's
+   own directory, or gives the package a `test`, `lint` or `typecheck`
+   command of its own; then re-invoke.
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

@@ -12,6 +12,7 @@ import { discoverDocs } from "../../src/init/discover-docs.js";
 import { MIGRATIONS, migrateState, migrationNote, stateVersionRefusal } from "../../src/kernel/migrate.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
+import { bindingsFileSchema } from "../../src/schemas/records.js";
 import { ticketSchema } from "../../src/schemas/ticket.js";
 import { CONFORMANCE_RECORD_PATH } from "../../src/schemas/pack.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
@@ -408,6 +409,47 @@ describe("PRDR-300: what the migration keeps true", () => {
     expect((redrafted?.["tickets"] as Record<string, unknown>[])[0]?.["criterion_ids"]).toEqual([]);
     expect(read(".detent/plan/plan.json"), "the plan artifact is not a ticket").not.toHaveProperty("criterion_ids");
     expect(approvalState(root), "a ticket carrying no criterion is the ticket that was approved").toMatchObject({ approved: true, stale: false });
+  });
+
+  /**
+   * PRDR-295 (V-5′): a binding names the package whose directory it runs in,
+   * and the file names every package DETERMINE_VERIFICATION found. A file
+   * bound before packages bound the root alone.
+   */
+  it("carries `bindings.json` to packages: every binding and skip the root's, and the root the one package", async () => {
+    const root = await richState();
+    const file = path.join(stateDir(root), "bindings.json");
+    const current = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    const strip = (entry: unknown): unknown => {
+      const rest = { ...(entry as Record<string, unknown>) };
+      delete rest["package"];
+      return rest;
+    };
+    const older: Record<string, unknown> = {
+      schema_version: current["schema_version"],
+      bindings: (current["bindings"] as unknown[]).map(strip),
+      skips: [{ slot: "e2e", acknowledged_by: "alice", at: "2026-09-01T00:00:00.000Z" }],
+    };
+    writeFileSync(file, `${JSON.stringify(older, null, 2)}\n`);
+    age(root);
+    migrateState(root, DEPS);
+    const carried = JSON.parse(readFileSync(file, "utf8")) as { packages: unknown; bindings: Record<string, unknown>[]; skips: Record<string, unknown>[] };
+    expect(carried.packages).toEqual(["."]);
+    expect(carried.bindings.length).toBeGreaterThan(0);
+    expect(carried.bindings.every((b) => b["package"] === ".")).toBe(true);
+    expect(carried.skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: "2026-09-01T00:00:00.000Z", package: "." }]);
+  });
+
+  /** A file a build since PRDR-300 wrote before packages is at this version, and is not migrated: it reads as the root's. */
+  it("reads a current `bindings.json` that names no package as the root's", () => {
+    const parsed = bindingsFileSchema.parse({
+      schema_version: SCHEMA_VERSION,
+      bindings: [{ schema_version: SCHEMA_VERSION, slot: "test", adapter: "make", ref: "test", resolved: "make test", config_hash: "a".repeat(64), executed_at: "2026-09-01T00:00:00.000Z", approved_by: "auto", status: "approved" }],
+      skips: [{ slot: "e2e", acknowledged_by: "auto", at: "2026-09-01T00:00:00.000Z" }],
+    });
+    expect(parsed.packages).toEqual(["."]);
+    expect(parsed.bindings[0]?.package).toBe(".");
+    expect(parsed.skips[0]?.package).toBe(".");
   });
 
   /** An operator may write a ticket by hand (C-8), and a ticket a build since PRDR-300 wrote has no such field; neither is migrated. */

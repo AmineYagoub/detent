@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildPipeline } from "../../src/init/pipeline.js";
-import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
+import { renderPresentation } from "../../src/init/present.js";
+import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { vacuousGateNotices } from "../../src/adapter/bind.js";
 import { scrub } from "../../src/kernel/scrub.js";
 import type { Candidate } from "../../src/adapter/discover/types.js";
@@ -165,6 +166,7 @@ const CAND: Candidate = {
 
 const BINDING: Binding = {
   schema_version: SCHEMA_VERSION,
+  package: ".",
   slot: "test",
   adapter: "node-scripts",
   ref: "test",

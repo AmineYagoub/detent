@@ -128,6 +128,21 @@ function drafted(value: Json): Json {
 const wholePlan: Transform = (value) =>
   Array.isArray(value["redrafted"]) ? { ...value, redrafted: value["redrafted"].map((r) => (isJson(r) ? drafted(r) : r)) } : value;
 
+/** V-5′ (PRDR-295): an entry bound before packages was the root's. */
+const rooted = (entry: unknown): unknown => (isJson(entry) && !Object.hasOwn(entry, "package") ? { ...entry, package: "." } : entry);
+
+/**
+ * V-5′ (PRDR-295): a binding and a skip name their package, and the file names
+ * every package. A file bound before packages bound the root alone, so each of
+ * its entries is the root's, and the root is its one package.
+ */
+const packaged: Transform = (value) => ({
+  ...value,
+  ...(Array.isArray(value["bindings"]) ? { bindings: value["bindings"].map(rooted) } : {}),
+  ...(Array.isArray(value["skips"]) ? { skips: value["skips"].map(rooted) } : {}),
+  ...(Object.hasOwn(value, "packages") ? {} : { packages: ["."] }),
+});
+
 /**
  * F-3″: one entry per version, in order. S-1‴ puts the 3.1.1 line's persisted
  * shapes in one event, so each of them adds its step to this entry rather than
@@ -152,6 +167,14 @@ const wholePlan: Transform = (value) =>
  * whole-plan review's cache trade `questions` for `spec_defects`. SLICE's
  * artifact lost `questions` as well and needs no step: it is removed before
  * every launch, and read only after one.
+ *
+ * Gates bind per package (PRDR-295, D-5′): `bindings.json` names every
+ * package, and each binding and skip its own, the root's where it names none.
+ * Three shapes that carry gates need no step. DETERMINE_VERIFICATION's
+ * checkpoint, whose bindings PLAN reads for their slots alone. The accepted
+ * drift of a ticket, whose hashes a root gate keys by its slot as before, and
+ * a package's as `package:slot`. And the approvals log, which is history: a
+ * row without a package is read as the root's.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -165,6 +188,7 @@ export const MIGRATIONS: readonly Migration[] = [
       ".detent/state/plan/*.json": drafted,
       ".detent/state/plan-draft.json": drafted,
       ".detent/state/whole-plan.json": wholePlan,
+      ".detent/bindings.json": packaged,
     },
   },
 ];

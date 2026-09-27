@@ -119,7 +119,12 @@ export const AGENT_SDK_PIN_SITES = {
 } as const;
 
 export function buildLiveBackend(root: string): ClaudeCodeBackend {
-  const gateCmd = readBindings(root).bindings.find((b) => b.slot === "test")?.resolved ?? null;
+  /**
+   * V-5′ (PRDR-295): the root package's own `test`, since the stop gate runs
+   * where the session works, the tree's root. A package's gates are the
+   * referee's to run, in the package's directory, after the session ends.
+   */
+  const gateCmd = readBindings(root).bindings.find((b) => b.package === "." && b.slot === "test")?.resolved ?? null;
   return new ClaudeCodeBackend({
     /** PRDR-149: the same structural floor the per-session policies carry. */
     policy: { surface: ["**"], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root },

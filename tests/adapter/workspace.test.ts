@@ -151,7 +151,7 @@ describe("T-029 test_single (V-5, PRDR-060)", () => {
     },
   );
 
-  it("carries no per-workspace field — D-5's non-goal", () => {
+  it("proposes the root package's candidates, which carry no package of their own", () => {
     const workspace = detectWorkspace(gatherFacts(tree(FIXTURES["turbo"]!)))!;
     for (const candidate of workspaceCandidates(workspace)) {
       expect(Object.keys(candidate).sort()).toEqual([
@@ -171,11 +171,12 @@ describe("T-029 test_single (V-5, PRDR-060)", () => {
 });
 
 describe("T-029 the notice is printed once (V-5)", () => {
-  it("names the workspace and says gates are repository-wide", () => {
+  it("names the workspace, says its command is the root's, and that each member is bound as a package (V-5′)", () => {
     const workspace = detectWorkspace(gatherFacts(tree(FIXTURES["turbo"]!)))!;
     const notice = workspaceNotice(workspace);
     expect(notice).toContain("turbo");
-    expect(notice).toContain("root entrypoints only");
+    expect(notice).toContain("root package's gate");
+    expect(notice).toContain("bound in its own directory");
   });
 
   it("a notice log emits once however many gates ask", () => {

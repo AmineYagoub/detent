@@ -7,13 +7,15 @@ import type { GateSlot } from "./run.js";
 /**
  * T-029 — monorepo detection and root candidates (V-5, D-5).
  *
- * v1 binds root entrypoints only. Where an orchestrator exists, its own
+ * The root package's own candidates. Where an orchestrator exists, its own
  * root-level command is preferred over a per-package one, because that is the
  * command the repository's authors made responsible for the whole tree.
  *
- * Non-goal (V-5, D-5): any per-workspace schema field. Nothing here is stored
- * per workspace; a detected workspace changes which *root* command is proposed
- * and nothing else. Workspace scoping is a named v2 migration.
+ * A detected workspace changes which *root* command is proposed and nothing
+ * else. Since V-5′ (PRDR-295) each member with a manifest is a package bound in
+ * its own directory (`adapter/packages.ts`), so a ticket writing one member is
+ * gated by that member's commands; what this module proposes is the root's.
+ * It is not wired into discovery (PRDR-154).
  */
 
 type WorkspaceKind =
@@ -191,8 +193,8 @@ export function preferOrchestrator(
 
 export function workspaceNotice(workspace: Workspace): string {
   return (
-    `Workspace detected (${workspace.kind}). Detent binds root entrypoints only in v1 (D-5), so gates run ` +
-    `workspace-wide rather than per package. Per-workspace scoping is a named v2 migration.`
+    `Workspace detected (${workspace.kind}). Its orchestrator's command is the root package's gate, and it runs ` +
+    `workspace-wide; each member with a manifest of its own is a package, bound in its own directory (V-5′).`
   );
 }
 

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readBindings } from "../adapter/drift.js";
+import { ROOT_PACKAGE, comparePackages, ownerOf, packageDir } from "../adapter/packages.js";
 import { CI_ENV, needsBaseRef, substituteBase } from "../adapter/normalize.js";
 import { runGate, runnable } from "../adapter/run.js";
 import { changedFiles, git } from "./git.js";
@@ -48,8 +49,12 @@ export interface FalsifyDeps {
   readonly workDir: string;
   /** The ticket's claim base — what the diff is measured against. */
   readonly base: string | null;
-  /** Runs the bound test gate in `workDir`; true when it passed. */
-  readonly runTests: () => Promise<boolean>;
+  /**
+   * Runs the bound test gate in `workDir`; true when it passed. V-5′
+   * (PRDR-295): handed the test files the diff changed, so each is run by its
+   * own package's gate.
+   */
+  readonly runTests: (tests: readonly string[]) => Promise<boolean>;
 }
 
 const NOTHING: FalsifyProbe = { unfalsified: [], skipped: null };
@@ -86,7 +91,7 @@ export async function falsificationProbe(deps: FalsifyDeps): Promise<FalsifyProb
        */
       return { unfalsified: [], skipped: "the source half of the diff could not be reverted cleanly" };
     }
-    const stillGreen = await deps.runTests();
+    const stillGreen = await deps.runTests(tests);
     return { unfalsified: stillGreen ? tests : [], skipped: null };
   } finally {
     if (reverted) {
@@ -132,13 +137,24 @@ export function falsifyEvidence(probe: FalsifyProbe): Record<string, unknown> {
  * as "the tests did not pass without the source", i.e. no finding: this must
  * never manufacture an accusation out of a missing binding.
  */
-export function boundTestRunner(root: string, baseRef: string, timeoutMs: number): (workDir: string) => Promise<boolean> {
-  return async (workDir: string): Promise<boolean> => {
-    const bindings = readBindings(root).bindings;
-    const binding = bindings.find((b) => b.slot === "test_single") ?? bindings.find((b) => b.slot === "test");
-    if (binding === undefined) return false;
-    const command = needsBaseRef(binding.resolved) ? substituteBase(binding.resolved, baseRef) : binding.resolved;
-    const result = await runGate({ command, cwd: workDir, slot: binding.slot, timeoutMs, env: CI_ENV });
-    return runnable(result) && result.green;
+export function boundTestRunner(root: string, baseRef: string, timeoutMs: number): (workDir: string, tests?: readonly string[]) => Promise<boolean> {
+  return async (workDir: string, tests: readonly string[] = []): Promise<boolean> => {
+    const file = readBindings(root);
+    /**
+     * V-5′ (PRDR-295): each changed test is run by the gate of the package it
+     * lies in, in that package's directory, and the probe passes only if every
+     * one of them does. A package with no test gate answers `false`, as the
+     * root with none always has.
+     */
+    const packages = tests.length === 0 ? [ROOT_PACKAGE] : [...new Set(tests.map((t) => ownerOf(t, file.packages)))].sort(comparePackages);
+    for (const pkg of packages) {
+      const own = file.bindings.filter((b) => b.package === pkg);
+      const binding = own.find((b) => b.slot === "test_single") ?? own.find((b) => b.slot === "test");
+      if (binding === undefined) return false;
+      const command = needsBaseRef(binding.resolved) ? substituteBase(binding.resolved, baseRef) : binding.resolved;
+      const result = await runGate({ command, cwd: packageDir(workDir, pkg), slot: binding.slot, timeoutMs, env: CI_ENV });
+      if (!(runnable(result) && result.green)) return false;
+    }
+    return true;
   };
 }

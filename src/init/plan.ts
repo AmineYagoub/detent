@@ -9,6 +9,10 @@ import { planSlices } from "./plan-slices.js";
 import { wholePlanReview } from "./plan-whole.js";
 import { applyContracts, catalogueFindings } from "./contracts.js";
 import type { Binding } from "../schemas/records.js";
+import type { Skip } from "../adapter/bind.js";
+import type { Candidate } from "../adapter/discover/types.js";
+import { normalizeInvocation } from "../adapter/normalize.js";
+import { ROOT_PACKAGE, gateLabel } from "../adapter/packages.js";
 import { allTickets, readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { withOneRelaunch } from "./retry.js";
@@ -320,23 +324,23 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
  * (`greenfield:typescript`) and never discovered, because the tooling did not
  * exist; bootstrap #1 has just created it, so the real binding — with the
  * real config region that V-3 will watch — is what discovery finds NOW. The
- * slot is the only thing carried across.
+ * package and the slot are what is carried across (V-5′, PRDR-295): a
+ * package's binding is promoted from what discovery finds in that package.
+ *
+ * The command stored is the one a gate RUNS, as `bindSlot` stores it: the
+ * candidate normalized for invocation (V-4). Stored raw, a scaffold whose
+ * `test` script is a runner that watches by default was stored as `npm run
+ * test` and compared, before its first gate, with `npm run test -- --run`:
+ * drift on a tree nothing had changed.
  */
 export function finalizeBootstrap(
   root: string,
   ticketId: string,
   deps: {
-    readonly readBindings: () => { bindings: readonly Binding[]; skips: readonly unknown[] };
-    readonly writeBindings: (file: { bindings: Binding[]; skips: unknown[] }) => void;
-    /** Candidates discoverable now, after bootstrap created the tooling. */
-    readonly rediscover: () => readonly {
-      slot: string;
-      adapter: string;
-      ref: string;
-      resolved: string;
-      config_hash: string;
-      pm: string | null;
-    }[];
+    readonly readBindings: () => { readonly packages?: readonly string[]; readonly bindings: readonly Binding[]; readonly skips: readonly Skip[] };
+    readonly writeBindings: (file: { packages?: string[]; bindings: Binding[]; skips: Skip[] }) => void;
+    /** Candidates discoverable now, after bootstrap created the tooling, each with the package it was found in; none named is the root. */
+    readonly rediscover: () => readonly (Candidate & { readonly package?: string })[];
     readonly now?: () => string;
     readonly note?: (text: string) => void;
   },
@@ -356,14 +360,14 @@ export function finalizeBootstrap(
       finalized.push(binding);
       continue;
     }
-    const now = candidates.find((c) => c.slot === binding.slot);
+    const now = candidates.find((c) => (c.package ?? ROOT_PACKAGE) === binding.package && c.slot === binding.slot);
     if (now === undefined) {
       /*
        * Bootstrap's gates passed, so SOMETHING ran — but nothing discoverable
        * backs this slot. Keeping it provisional is the honest record: an
        * approved binding with no config region has no baseline to drift from.
        */
-      unresolved.push(binding.slot);
+      unresolved.push(gateLabel(binding));
       finalized.push(binding);
       continue;
     }
@@ -371,7 +375,7 @@ export function finalizeBootstrap(
       ...binding,
       adapter: now.adapter,
       ref: now.ref,
-      resolved: now.resolved,
+      resolved: normalizeInvocation(now).command,
       config_hash: now.config_hash,
       ...(now.pm === null ? {} : { pm: now.pm }),
       executed_at: at,
@@ -379,7 +383,7 @@ export function finalizeBootstrap(
     });
   }
 
-  deps.writeBindings({ bindings: finalized, skips: [...file.skips] });
+  deps.writeBindings({ ...(file.packages === undefined ? {} : { packages: [...file.packages] }), bindings: finalized, skips: [...file.skips] });
   const promoted = provisional.length - unresolved.length;
   deps.note?.(
     `bootstrap complete: ${promoted} provisional binding(s) finalized with drift baselines (C-4)${ 

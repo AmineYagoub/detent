@@ -212,7 +212,9 @@ describe("T-027 bindings.json", () => {
     const read = readBindings(root);
     expect(read.schema_version).toBe(SCHEMA_VERSION);
     expect(read.bindings).toEqual(bindings);
-    expect(read.skips).toEqual([{ slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
+    /* V-5′ (PRDR-295): a skip written with no package is the root's, and the file names the root as its one package. */
+    expect(read.skips).toEqual([{ package: ".", slot: "e2e", acknowledged_by: "alice", at: NOW() }]);
+    expect(read.packages).toEqual(["."]);
   });
 
   it("a missing file reads as empty rather than throwing", () => {
@@ -313,6 +315,7 @@ describe("T-027 `verify sync` (C-12)", () => {
      */
     const kept = readBindings(root).skips;
     expect(kept.find((s) => s.slot === "e2e"), "alice's acknowledgement survives a re-baseline unchanged").toEqual({
+      package: ".",
       slot: "e2e",
       acknowledged_by: "alice",
       at: NOW(),

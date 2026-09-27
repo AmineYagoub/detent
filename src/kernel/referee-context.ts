@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readBindings } from "../adapter/drift.js";
-import type { PromptSet, SessionBackend } from "../sessions/backend.js";
+import { bindingsPreamble, type PromptSet, type SessionBackend } from "../sessions/backend.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { git, gitCouldNotRun, resolveBaseRef, snapshotRefs, type RefSnapshot, type RunBranch } from "./git.js";
@@ -140,16 +140,7 @@ export class RefereeContext {
     this.probe = opts.probeSymbols ?? probeSymbols;
     this.worktree = opts.worktree === true;
     this.rulesText = readRules(opts.root);
-    const bindings = readBindings(opts.root).bindings;
-    this.bindingsPreamble = JSON.stringify(
-      {
-        bindings: Object.fromEntries(bindings.map((b) => [b.slot, b.resolved])),
-        protected: this.loaded.config.protected,
-        non_negotiables: "Only artifacts and exit codes count (P2).",
-      },
-      null,
-      2,
-    );
+    this.bindingsPreamble = bindingsPreamble(readBindings(opts.root).bindings, this.loaded.config.protected);
     /* X-1⁵ (PRDR-191): the breaker reads its own two ceilings, from the same config. */
     this.spend = new SpendLedger(
       opts.root,

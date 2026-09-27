@@ -1,7 +1,9 @@
-import { discover } from "../adapter/discover/index.js";
 import { probeSymbols, symbolsSetupMessage, type SymbolsConfig } from "../adapter/symbols.js";
-import { bindAll, acknowledgeSkip, type BindReport, type Skip } from "../adapter/bind.js";
+import { acknowledgeSkip, type Skip } from "../adapter/bind.js";
+import { bindPackages, type PackagesReport } from "../adapter/bind-packages.js";
 import { writeBindings } from "../adapter/drift.js";
+import { ROOT_PACKAGE, findPackages, gateLabel } from "../adapter/packages.js";
+import { declaredBindings, packagesWith, withDeclared, type DeclaredPackage } from "./bind-declared.js";
 import type { Binding } from "../schemas/records.js";
 import type { GateSlot } from "../schemas/gates.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
@@ -49,6 +51,12 @@ export interface DetermineDeps {
    * log records none.
    */
   readonly stack?: DecidedStack | null;
+  /**
+   * V-5′ (PRDR-295): the packages the pack declares under `## Packages`, the
+   * root's among them, from the parse VALIDATE handed on or the decision log.
+   * Empty where it declares none.
+   */
+  readonly packages?: readonly DeclaredPackage[];
   readonly timeoutMs?: number;
   readonly acknowledgedBy?: string;
   readonly now?: () => string;
@@ -133,6 +141,7 @@ function provisionalBindingsFor(stack: DecidedStack, at: string): Binding[] {
   const language = key ?? "documented";
   return commands.map(([slot, resolved]) => ({
     schema_version: SCHEMA_VERSION,
+    package: ROOT_PACKAGE,
     slot,
     adapter: `greenfield:${language}`,
     ref: resolved,
@@ -195,6 +204,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
       };
     }
     /**
+     * V-5′ (PRDR-295): every other package the pack declares binds as it
+     * declares, provisionally, like the root's documented commands.
+     */
+    const declared = (deps.packages ?? []).filter((pkg) => pkg.path !== ROOT_PACKAGE);
+    const all = [...bindings, ...declared.flatMap((pkg) => declaredBindings(pkg, at))];
+    const packages = packagesWith([ROOT_PACKAGE], declared);
+    /**
      * PRDR-276: the toolchain behind these commands is NOT checked here.
      * PRDR-273 checked it and PRDR-274 installed it from this phase, but an
      * approved plan's `init` runs no phase (C-8), so neither could reach a
@@ -202,11 +218,12 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
      * and installs on the operator's answer. A stop here would now strand a
      * fresh project: `init` would wait for a compiler that only `run` installs.
      */
-    writeBindings(deps.root, { bindings, skips: [] });
+    writeBindings(deps.root, { packages, bindings: all, skips: [] });
     return {
       kind: "complete",
       outputs: {
-        bindings: bindings as unknown as Record<string, unknown>[],
+        bindings: all as unknown as Record<string, unknown>[],
+        packages,
         skips: [],
         /**
          * PRDR-156: greenfield executes nothing (C-4), so there is nothing to
@@ -220,11 +237,10 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     };
   }
 
-  const discovery = discover(deps.root);
   const status: Binding["status"] = "approved";
 
-  const report: BindReport = await bindAll(discovery, {
-    root: deps.root,
+  /** V-5′ (PRDR-295): every package, each bound in its own directory; C-3b's questions name the package. */
+  const report: PackagesReport = await bindPackages(deps.root, findPackages(deps.root), {
     status,
     /* C-3b's provenance for anything a human did not choose */
     approvedBy: "auto",
@@ -249,13 +265,13 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
         `Detent found more than one plausible verification command for ${choices.length} slot(s).`,
         ...choices.flatMap((c) =>
           c.kind === "choice-required"
-            ? [`  ${c.slot}:`, ...c.candidates.map((cand, i) => `    ${i + 1}. ${cand.resolved}  (${cand.adapter})`)]
+            ? [`  ${gateLabel(c)}:`, ...c.candidates.map((cand, i) => `    ${i + 1}. ${cand.resolved}  (${cand.adapter})`)]
             : [],
         ),
         "",
         "Pick one per slot — Detent will not guess between them (V-1).",
       ].join("\n"),
-      items: choices.map((c) => c.slot),
+      items: choices.map((c) => gateLabel(c)),
     };
   }
 
@@ -267,14 +283,27 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
       interrupt: "AWAIT_SETUP_CONSENT",
       message: [
         "A verification command was found but could not be used:",
-        ...rejected.map((r) => (r.kind === "rejected" ? `  ${r.slot}: ${r.explanation}` : "")),
+        ...rejected.map((r) => (r.kind === "rejected" ? `  ${gateLabel(r)}: ${r.explanation}` : "")),
       ].join("\n"),
-      items: rejected.map((r) => r.slot),
+      items: rejected.map((r) => gateLabel(r)),
     };
   }
 
-  /** ---- C-3b interrupt 3: no candidate where one is required --------------- */
-  const missingRequired = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
+  /**
+   * V-5′: the commands the pack declares that no candidate bound, and where it
+   * and a package's manifest disagree.
+   */
+  const declared = deps.packages ?? [];
+  const merged = withDeclared(report.bindings, declared, at);
+  const packages = packagesWith(report.packages, declared);
+
+  /**
+   * ---- C-3b interrupt 3: no candidate where one is required ---------------
+   * V-5′: across the packages. A project whose root runs no tests while a
+   * package does can be gated; its root's tickets are held by the gate check
+   * at PRESENT instead.
+   */
+  const missingRequired = SETUP_REQUIRED_SLOTS.filter((slot) => !merged.bindings.some((b) => b.slot === slot));
   if (missingRequired.length > 0) {
     return {
       kind: "interrupt",
@@ -289,12 +318,20 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
     };
   }
 
-  /** Every remaining unbound slot is an ordinary acknowledged skip (V-1). */
+  /**
+   * Every remaining unbound slot is an ordinary acknowledged skip (V-1), in a
+   * package that binds a gate at all (V-5′). A package with none has left
+   * nothing unbound on purpose: it has no gate, and a ticket writing it is
+   * held at PRESENT.
+   */
+  const gated = new Set(merged.bindings.map((b) => b.package));
   const skips = report.unbound
-    .filter((slot) => !SETUP_REQUIRED_SLOTS.includes(slot))
-    .map((slot) => acknowledgeSkip(slot, deps.acknowledgedBy ?? "auto", deps.now?.() ?? new Date().toISOString()));
+    .filter((u) => !SETUP_REQUIRED_SLOTS.includes(u.slot) && gated.has(u.package))
+    .filter((u) => !merged.bindings.some((b) => b.package === u.package && b.slot === u.slot))
+    .map((u) => acknowledgeSkip(u.slot, deps.acknowledgedBy ?? "auto", deps.now?.() ?? new Date().toISOString(), u.package));
+  const notices = [...report.notices, ...merged.notices];
 
-  writeBindings(deps.root, { bindings: [...report.bindings], skips: [...skips] });
+  writeBindings(deps.root, { packages, bindings: merged.bindings, skips: [...skips] });
 
   /**
    * V-1‴ (PRDR-155): a bound gate that may verify nothing. Said HERE, where the
@@ -302,24 +339,32 @@ export async function determineVerification(deps: DetermineDeps): Promise<PhaseO
    * — this is the moment the answer is obvious to them, and the binding it
    * describes is on the screen.
    */
-  for (const notice of report.notices) deps.note?.(notice);
+  for (const notice of notices) deps.note?.(notice);
 
   return {
     kind: "complete",
     outputs: {
-      bindings: report.bindings as unknown as Record<string, unknown>[],
+      bindings: merged.bindings as unknown as Record<string, unknown>[],
+      packages,
       skips: skips as unknown as Record<string, unknown>[],
-      gate_notices: [...report.notices],
+      gate_notices: notices,
       status,
     },
   };
 }
 
-/** The PRESENT summary's binding table — provenance per slot (C-3b's AC). */
-export function bindingTable(bindings: readonly Binding[], skips: readonly Skip[]): string {
+/**
+ * The PRESENT summary's binding table — provenance per slot (C-3b's AC). V-5′
+ * (PRDR-295): a package's gates are named `package:slot`, the root's by slot
+ * alone, and a package with no gate is listed as having none.
+ */
+export function bindingTable(bindings: readonly Binding[], skips: readonly Skip[], packages: readonly string[] = [ROOT_PACKAGE]): string {
   const rows = [
-    ...bindings.map((b) => `  ${b.slot.padEnd(12)} ${b.resolved.padEnd(34)} ${b.status}, approved_by: ${b.approved_by}`),
-    ...skips.map((s) => `  ${s.slot.padEnd(12)} ${"(skipped)".padEnd(34)} acknowledged_by: ${s.acknowledged_by}`),
+    ...bindings.map((b) => `  ${gateLabel(b).padEnd(12)} ${b.resolved.padEnd(34)} ${b.status}, approved_by: ${b.approved_by}`),
+    ...skips.map((s) => `  ${gateLabel(s).padEnd(12)} ${"(skipped)".padEnd(34)} acknowledged_by: ${s.acknowledged_by}`),
+    ...packages
+      .filter((pkg) => pkg !== ROOT_PACKAGE && !bindings.some((b) => b.package === pkg))
+      .map((pkg) => `  ${pkg.padEnd(12)} (no gates: a ticket writing here cannot be approved)`),
   ];
   return rows.length === 0 ? "  (no verification bindings)" : rows.join("\n");
 }

@@ -211,3 +211,27 @@ export function stablePrefix(rolePrompt: string, rulesText: string, bindingsPrea
     `== VERIFICATION BINDINGS ==\n${bindingsPreamble.trim()}`,
   ].join("\n\n");
 }
+
+/**
+ * The prefix's third part: what every run session is told about the gates.
+ * V-5′ (PRDR-295): the root's by slot, as before packages, and each other
+ * package's under `packages`, only where there is one, so a project with one
+ * package keeps a byte-identical prefix (S-6).
+ */
+export function bindingsPreamble(
+  bindings: readonly { readonly package: string; readonly slot: string; readonly resolved: string }[],
+  protectedGlobs: readonly string[],
+): string {
+  const bySlot = (pkg: string): Record<string, string> => Object.fromEntries(bindings.filter((b) => b.package === pkg).map((b) => [b.slot, b.resolved]));
+  const others = [...new Set(bindings.map((b) => b.package).filter((pkg) => pkg !== "."))];
+  return JSON.stringify(
+    {
+      bindings: bySlot("."),
+      ...(others.length === 0 ? {} : { packages: Object.fromEntries(others.map((pkg) => [pkg, bySlot(pkg)])) }),
+      protected: protectedGlobs,
+      non_negotiables: "Only artifacts and exit codes count (P2).",
+    },
+    null,
+    2,
+  );
+}

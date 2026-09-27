@@ -33,6 +33,7 @@ afterEach(() => {
 
 const provisional = (slot: string): Binding => ({
   schema_version: SCHEMA_VERSION,
+  package: ".",
   slot: slot as Binding["slot"],
   adapter: "greenfield:typescript",
   ref: `npm run ${slot}`,

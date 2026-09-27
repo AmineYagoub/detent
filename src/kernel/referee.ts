@@ -13,8 +13,10 @@ import {
 import { finalizeBootstrap } from "../init/plan.js";
 import { BOOTSTRAP_TICKET_ID } from "../init/plan-write.js";
 import { currentCounters, currentGeneration, openGeneration, withCurrentCounters } from "./generations.js";
-import { WorktreeConflictError, clearCurrentTicket, ensureWorktree, git, markCurrentTicket, mergeWorktree, resetDirtyTracked, stageAll } from "./git.js";
+import { WorktreeConflictError, clearCurrentTicket, commitStaged, ensureWorktree, markCurrentTicket, mergeWorktree, resetDirtyTracked } from "./git.js";
 import { rebaselineAccepted } from "./drift-base.js";
+import { readBindings } from "../adapter/drift.js";
+import { installDirs } from "../adapter/install.js";
 import { settleWorktree } from "./worktree-park.js";
 import { resolveFalsification } from "./dependency.js";
 import { bootstrapFinalizeDeps, finalizeStranded, promoteBootstrapBindings, requeueDriftBlocked, requeueOutageVictims, resumeOnce, type Commit, type ResumeOptions } from "./referee-sweeps.js";
@@ -374,11 +376,11 @@ export class RefereeCore {
      */
     /* PRDR-218: rediscovery runs in the work directory — the tree that passed — never the root before the merge. */
     finalizeBootstrap(this.root, ticket.id, bootstrapFinalizeDeps(this.root, workDir, (text) => appendNote(this.root, ticket.id, { author: "kernel", text })));
-    /* V-1⁗ (PRDR-211): what the referee installed is never part of the change set; the lockfile it produced is. PRDR-216: an ignored directory is never named. */
-    stageAll(workDir, this.ctx.ecosystems.map((e) => e.dir));
-    /* PRDR-228: commit what was STAGED — an excluded untracked path (run state) is dirty to `status` and must not force an empty commit. */
-    const staged = git(workDir, "diff", "--cached", "--name-only").trim();
-    if (staged !== "") git(workDir, "commit", "-q", "-m", `${ticket.id}: finalize`);
+    /*
+     * V-1⁗ (PRDR-211): what the referee installed is never part of the change set; the lockfile it produced is. PRDR-216: an
+     * ignored directory is never named. V-5′ (PRDR-295): the referee installs in each package's directory, so each one's is excluded.
+     */
+    commitStaged(workDir, installDirs(readBindings(this.root).packages, this.ctx.ecosystems), `${ticket.id}: finalize`);
     /** B-2: worktree mode merges --no-ff into the RUN branch — never the base. */
     if (this.ctx.worktree) {
       try {

@@ -250,7 +250,9 @@ describe("T-026 skips and unbound slots (V-1)", () => {
 
   it("a skip records who acknowledged it and when", () => {
     const skip = acknowledgeSkip("e2e", "alice", NOW());
-    expect(skip).toEqual({ slot: "e2e", acknowledged_by: "alice", at: NOW() });
+    expect(skip).toEqual({ package: ".", slot: "e2e", acknowledged_by: "alice", at: NOW() });
+    /* V-5′ (PRDR-295): a package's skip names it. */
+    expect(acknowledgeSkip("lint", "alice", NOW(), "web")).toEqual({ package: "web", slot: "lint", acknowledged_by: "alice", at: NOW() });
     expect(() => acknowledgeSkip("e2e", "  ")).toThrow(/must name who/);
   });
 

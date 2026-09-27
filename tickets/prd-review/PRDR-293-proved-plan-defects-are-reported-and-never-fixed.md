@@ -87,3 +87,17 @@ slices' words otherwise.
 - Without a pack, `prompts/slice.md` now states that placing every requirement id the documents
   define is the slicer's own judgement, since no parse lists those ids. This ticket's sixth
   criterion still covers the claim there.
+
+## From PRDR-295
+
+- A-1⁷'s gates check is built as a check of its own, at PRESENT: `ungatedPaths` in
+  `src/init/present-gates.ts` lists each path of a ticket that is not DONE lying in a package that
+  binds none of `lint`, `typecheck` and `test`, and each package manifest a ticket writes in a
+  directory that is not a package. PRESENT raises AWAIT_INFO on it and records the count as
+  `ungated` in `presentation.json`, and `detent run`'s deferred approval refuses while the count is
+  not zero. It runs once, over the whole plan, and no draft is redrafted for it. This ticket makes
+  it one of the checks that run after each slice's draft, with the rest, and hands its failures to
+  the targeted redraft.
+- A drafter is told a package's gates only as labels in `bound_slots` (`web:test`), not which
+  packages exist or which have none. A redraft sent for an ungated path needs the packages and
+  their bound slots among its inputs, or the failure's own words, to narrow the surface.

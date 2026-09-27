@@ -479,6 +479,7 @@ describe("PRDR-254 the agent-sdk pin reports, and reports to the right reader", 
 describe("PRDR-276 doctor checks the toolchains a run would install", () => {
   const binding = (slot: Binding["slot"], resolved: string): Binding => ({
     schema_version: SCHEMA_VERSION,
+    package: ".",
     slot,
     adapter: "greenfield:go",
     ref: resolved,

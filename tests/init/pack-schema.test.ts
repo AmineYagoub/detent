@@ -201,7 +201,7 @@ describe("PRDR-279: the greenfield stack entry (D-10′) and declared packages (
     const { pack } = parse(CONFORMING_PACK);
     expect(pack.packages).toEqual([
       { path: ".", gates: { test: "pnpm test", lint: "pnpm lint" } },
-      { path: "dashboard", gates: { test: "pnpm --dir dashboard test" } },
+      { path: "dashboard", gates: { test: "pnpm test" } },
     ]);
   });
 

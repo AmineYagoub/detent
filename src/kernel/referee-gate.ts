@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import picomatch from "picomatch";
-import { discover } from "../adapter/discover/index.js";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
+import { ROOT_PACKAGE, discoverPackages, gateLabel, packageDir, touchedPackages } from "../adapter/packages.js";
 import { bindingsForTree } from "./drift-base.js";
 import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
 import { ensureDependencies, readMark } from "../adapter/install.js";
@@ -19,6 +19,18 @@ import { scrub } from "./scrub.js";
 import { readTicket } from "./tickets/readers.js";
 import { assertTicketWallClock } from "./ticket-clock.js";
 import { appendNote } from "./tickets/mutations.js";
+
+/** V-1″ (PRDR-135), per package (V-5′): the packages a ticket touches that no gate asked of them can fail for, named. */
+function unverifiable(slots: readonly GateSlot[], bare: readonly string[]): Breach {
+  const where =
+    bare.length === 1 && bare[0] === ROOT_PACKAGE
+      ? ""
+      : ` in ${bare.map((pkg) => (pkg === ROOT_PACKAGE ? "the root package" : pkg)).join(", ")}, the ${bare.length === 1 ? "package" : "packages"} its surface touches (V-5′)`;
+  return new Breach(
+    `no gate is bound for ${slots.join(", ")}${where} — nothing would be verified. Run \`detent init\` to bind the project's ` +
+      "verification commands (V-1); a run cannot judge a diff it never tested.",
+  );
+}
 
 /** Thrown to unwind to the driver when V-3 halts the run (SEC-5, D-23). */
 export class DriftHaltSignal extends Error {
@@ -124,10 +136,10 @@ export class GateArm {
      * on the root could never clear. The halt names the verb that can.
      */
     const inWorktree = workDir !== ctx.root;
-    const bindings = inWorktree
-      ? bindingsForTree(ctx.root, ticket.id, workDir, ctx.runBranch.branch)
-      : readBindings(ctx.root).bindings;
-    const here = discover(workDir);
+    const file = readBindings(ctx.root);
+    const bindings = inWorktree ? bindingsForTree(ctx.root, ticket.id, workDir, ctx.runBranch.branch) : file.bindings;
+    /** V-5′ (PRDR-295): each package's configuration, read in its own directory of this tree. */
+    const here = discoverPackages(workDir, file.packages);
     try {
       assertNoDrift(bindings, here);
     } catch (err) {
@@ -148,18 +160,33 @@ export class GateArm {
      * because of the ticket. An install that FAILS is a red gate carrying the
      * install's own tail, so the ladder sees it as it sees any red.
      */
-    const install = await ensureDependencies(
-      workDir,
-      (command) => runGate({ command, cwd: workDir, timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
-      ctx.ecosystems,
-      /* PRDR-232: the project's own package manager decides which row may install, so the referee cannot flip it. */
-      here.stack.pm,
-    );
-    if (install.kind !== "none") {
+    /**
+     * V-5′ (PRDR-295): a ticket's gates are those of the packages its surface
+     * touches, and each package installs and runs in its own directory. A
+     * touched package that binds none of the slots asked is a path no gate can
+     * fail, the rule PRESENT holds a plan to; a gated package beside it does
+     * not stand in for it.
+     */
+    const touched = touchedPackages(ticket.surface, file.packages);
+    const bare = touched.filter((pkg) => !bindings.some((b) => b.package === pkg && slots.includes(b.slot)));
+    if (bare.length > 0) throw unverifiable(slots, bare);
+    const installedHere = new Set<string>();
+    for (const pkg of touched) {
+      const dir = packageDir(workDir, pkg);
+      const install = await ensureDependencies(
+        dir,
+        (command) => runGate({ command, cwd: dir, timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
+        ctx.ecosystems,
+        /* PRDR-232: the project's own package manager decides which row may install, so the referee cannot flip it. */
+        here.get(pkg)?.stack.pm ?? null,
+      );
+      if (install.kind === "none") continue;
+      if (install.kind === "installed") installedHere.add(`${pkg}\0${install.ecosystem}`);
       ctx.journal.appendTicketEvent(ticket.id, {
         event: "install",
         ok: install.kind === "installed",
         at: ctx.iso(),
+        ...(pkg === ROOT_PACKAGE ? {} : { package: pkg }),
         ecosystem: install.ecosystem,
         cmd: install.result.command,
         exit: install.result.exitCode,
@@ -168,7 +195,7 @@ export class GateArm {
         ...(install.kind === "failed" ? { tail: scrub(install.result.output.slice(-1500)) } : {}),
       });
       if (install.kind === "failed") {
-        this.recordFailure(ticket.id, install.result);
+        this.recordFailure(ticket.id, install.result, pkg);
         return gateRed(install.result);
       }
     }
@@ -180,15 +207,19 @@ export class GateArm {
      * nothing: a green gate with a failed install as the only install record.
      * A mark the referee did not write is journaled once, as the session's.
      */
-    for (const eco of ctx.ecosystems) {
-      const mark = readMark(workDir, eco);
-      if (mark === null || this.marks.get(`${ticket.id}:${eco.name}`) === mark) continue;
-      this.marks.set(`${ticket.id}:${eco.name}`, mark);
-      if (install.kind === "installed" && install.ecosystem === eco.name) continue;
-      ctx.journal.appendTicketEvent(ticket.id, { event: "install", ok: true, by: "session", at: ctx.iso(), ecosystem: eco.name, mark, reason: `installed during the session — the mark was written at ${mark}` });
+    for (const pkg of touched) {
+      for (const eco of ctx.ecosystems) {
+        const mark = readMark(packageDir(workDir, pkg), eco);
+        const seen = pkg === ROOT_PACKAGE ? `${ticket.id}:${eco.name}` : `${ticket.id}:${pkg}:${eco.name}`;
+        if (mark === null || this.marks.get(seen) === mark) continue;
+        this.marks.set(seen, mark);
+        if (installedHere.has(`${pkg}\0${eco.name}`)) continue;
+        ctx.journal.appendTicketEvent(ticket.id, { event: "install", ok: true, by: "session", at: ctx.iso(), ...(pkg === ROOT_PACKAGE ? {} : { package: pkg }), ecosystem: eco.name, mark, reason: `installed during the session — the mark was written at ${mark}` });
+      }
     }
 
-    const result = await this.runScopedGates(bindings, slots, workDir);
+    const scoped = await this.runScopedGates(bindings, slots, workDir, touched);
+    const result = scoped?.result ?? null;
     /**
      * V-1″ (PRDR-135): no bound gate is UNVERIFIABLE, not green. `null` here
      * means no binding matched any requested slot, and this read it as a pass —
@@ -197,12 +228,7 @@ export class GateArm {
      * DONE with zero verification commands executed. P2's "only exit codes
      * count" is vacuous when nothing runs.
      */
-    if (result === null) {
-      throw new Breach(
-        `no gate is bound for ${slots.join(", ")} — nothing would be verified. Run \`detent init\` to bind the project's ` +
-          "verification commands (V-1); a run cannot judge a diff it never tested.",
-      );
-    }
+    if (result === null) throw unverifiable(slots, [ROOT_PACKAGE]);
     if (result.green) {
       return gateGreen(result);
     }
@@ -213,7 +239,9 @@ export class GateArm {
      * against the run's merge-base, or falls back to the failing command when
      * the baseline is unresolvable (V-5).
      */
-    const single = bindings.find((b) => b.slot === "test_single");
+    /* V-5′: the failing package's own `test_single`, run where its gates run. */
+    const failed = scoped?.package ?? ROOT_PACKAGE;
+    const single = bindings.find((b) => b.package === failed && b.slot === "test_single");
     let isolationCmd = result.command;
     if (single !== undefined) {
       if (!needsBaseRef(single.resolved)) isolationCmd = single.resolved;
@@ -221,7 +249,7 @@ export class GateArm {
     }
     const decision = await filterFlake({
       first: result,
-      rerunInIsolation: () => this.gate(isolationCmd, result.slot ?? "test", workDir),
+      rerunInIsolation: () => this.gate(isolationCmd, result.slot ?? "test", packageDir(workDir, failed), failed),
       ledger: this.flakeLedgerFor(ticket.id),
     });
 
@@ -236,7 +264,7 @@ export class GateArm {
       return gateGreen(decision.result, "flake-filtered");
     }
 
-    this.recordFailure(ticket.id, decision.result);
+    this.recordFailure(ticket.id, decision.result, failed);
     if (escalateReason !== undefined) {
       appendNote(ctx.root, ticket.id, { author: "kernel", text: escalateReason });
     }
@@ -252,38 +280,44 @@ export class GateArm {
     return ledger;
   }
 
+  /** V-5′ (PRDR-295): each touched package's gates in turn, in its own directory; the first red stops, and names its package. */
   private async runScopedGates(
     bindings: ReturnType<typeof readBindings>["bindings"],
     slots: readonly GateSlot[],
     workDir: string,
-  ): Promise<GateResult | null> {
-    let last: GateResult | null = null;
-    for (const slot of slots) {
-      const binding = bindings.find((b) => b.slot === slot);
-      if (binding === undefined) continue;
-      last = await this.gate(binding.resolved, slot, workDir);
-      if (!last.green) return last;
+    packages: readonly string[],
+  ): Promise<{ readonly result: GateResult; readonly package: string } | null> {
+    let last: { readonly result: GateResult; readonly package: string } | null = null;
+    for (const pkg of packages) {
+      for (const slot of slots) {
+        const binding = bindings.find((b) => b.package === pkg && b.slot === slot);
+        if (binding === undefined) continue;
+        last = { result: await this.gate(binding.resolved, slot, packageDir(workDir, pkg), pkg), package: pkg };
+        if (!last.result.green) return last;
+      }
     }
     return last;
   }
 
-  private async gate(command: string, slot: GateSlot, workDir: string): Promise<GateResult> {
+  private async gate(command: string, slot: GateSlot, cwd: string, pkg: string = ROOT_PACKAGE): Promise<GateResult> {
     const result = await runGate({
       command,
-      cwd: workDir,
+      cwd,
       slot,
       timeoutMs: this.ctx.budgets.gate_timeout_ms,
       env: CI_ENV,
     });
     if (result.outcome === "not-found" || !runnable(result)) {
-      throw new Breach(`gate ${slot} is not runnable: \`${command}\` (exit ${result.normalizedExit})`);
+      throw new Breach(`gate ${gateLabel({ package: pkg, slot })} is not runnable: \`${command}\` (exit ${result.normalizedExit})`);
     }
     return result;
   }
 
-  private recordFailure(ticketId: string, result: GateResult): void {
+  private recordFailure(ticketId: string, result: GateResult, pkg: string = ROOT_PACKAGE): void {
     const verdict = classify(result.output, result.exitCode);
     const record = {
+      /* V-5′: where the red gate ran, when it was not the root. */
+      ...(pkg === ROOT_PACKAGE ? {} : { package: pkg }),
       cmd: result.command,
       exit: result.exitCode,
       signature: verdict.signature,

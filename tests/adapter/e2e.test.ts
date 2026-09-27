@@ -320,7 +320,7 @@ describe("T-030 bindings-only diffs between fixtures", () => {
     const done = pairs();
     for (const r of done) {
       const parsed = JSON.parse(r.bindingsJson) as Record<string, unknown>;
-      expect(Object.keys(parsed).sort()).toEqual(["bindings", "schema_version", "skips"]);
+      expect(Object.keys(parsed).sort()).toEqual(["bindings", "packages", "schema_version", "skips"]);
       expect(parsed["schema_version"]).toBe(SCHEMA_VERSION);
     }
     /** Pairwise distinct: the ecosystem lives in the values, nowhere else. */

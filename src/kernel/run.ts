@@ -7,6 +7,7 @@ import { approvalSchema } from "../schemas/records.js";
 import type { Ticket } from "../schemas/ticket.js";
 import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import { readBindings } from "../adapter/drift.js";
+import { gateLabel } from "../adapter/packages.js";
 import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "./run-lock.js";
 import { migrateState, migrationNote } from "./migrate.js";
 import { approvalState } from "../init/machine.js";
@@ -208,7 +209,7 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
    * beside the config and approval preconditions, so it refuses before
    * spending rather than at the first gate — where it used to mint a GREEN.
    */
-  let bindings: readonly { readonly slot: string; readonly resolved: string }[];
+  let bindings: readonly { readonly package: string; readonly slot: string; readonly resolved: string }[];
   try {
     bindings = readBindings(root).bindings;
   } catch (err) {
@@ -256,7 +257,8 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
   let toolchain: ToolchainOutcome;
   try {
     toolchain = await ensureToolchains(
-      bindings,
+      /* V-5′ (PRDR-295): every package's gates, each named with its package. */
+      bindings.map((b) => ({ slot: gateLabel(b), resolved: b.resolved })),
       {
         ...(opts.approveToolchain === undefined ? {} : { approve: opts.approveToolchain }),
         ...(opts.toolchainProbe === undefined ? {} : { probe: opts.toolchainProbe }),
@@ -434,6 +436,13 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
     return notReady(
       `${String(shown.spec_defects)} spec defect(s) planning found in the pack hold approval of this plan — ` +
         "amend the pack where each one quotes it and re-run `detent init` (C-4⁵).",
+    );
+  }
+  /* V-5′ (PRDR-295): and for a ticket writing where no package has a gate, since no gate could fail for it. */
+  if (shown.ungated > 0) {
+    return notReady(
+      `${String(shown.ungated)} path(s) the plan's tickets write have no gate that can fail — ` +
+        "declare their package's gates under `## Packages` in the pack, or give the package a command of its own, and re-run `detent init` (V-5′).",
     );
   }
   /**

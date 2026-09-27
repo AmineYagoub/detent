@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MARKERS, discover } from "../adapter/discover/index.js";
+import { MARKERS } from "../adapter/discover/index.js";
+import type { Discovery } from "../adapter/discover/types.js";
 import { approvedHashes, hasApprovals, isApproved, recordApprovals } from "../adapter/approvals.js";
 import { checkAll, currentFor, readBindings, writeBindings } from "../adapter/drift.js";
+import { ROOT_PACKAGE, discoverPackages, gateLabel } from "../adapter/packages.js";
 import { stateDir } from "../fs/layout.js";
 import type { Binding } from "../schemas/records.js";
 import { git } from "./git.js";
@@ -68,17 +70,19 @@ export function forkCommit(workDir: string, runBranch: string): string | null {
 
 /**
  * The fork's configuration, read by the ORDINARY discovery so both sides of the
- * comparison come from one implementation. `gatherFacts` scans root-level
- * marker files, so materialising those blobs out of the commit is faithful for
- * every adapter that binds from a root marker; a config the fork keeps
+ * comparison come from one implementation. `gatherFacts` scans the marker
+ * files of one directory, so materialising those blobs out of the commit, for
+ * the root and for each package at its own path (V-5′, PRDR-295), is faithful
+ * for every adapter that binds from a marker; a config the fork keeps
  * elsewhere yields no candidate, which falls back to the root's binding rather
  * than to a weaker answer.
  */
-export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeof discover> | null {
+export function discoverAtCommit(workDir: string, sha: string, packages: readonly string[] = [ROOT_PACKAGE]): Map<string, Discovery> | null {
   let dir: string | null = null;
   try {
     dir = mkdtempSync(path.join(tmpdir(), "detent-fork-"));
-    for (const line of git(workDir, "ls-tree", sha).split("\n")) {
+    const listed = packages.flatMap((pkg) => git(workDir, "ls-tree", sha, ...(pkg === ROOT_PACKAGE ? [] : ["--", `${pkg}/`])).split("\n"));
+    for (const line of listed) {
       const [meta, name] = line.split("\t");
       const mode = meta === undefined ? "" : (meta.trim().split(" ")[0] ?? "");
       /**
@@ -89,7 +93,7 @@ export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeo
        * catch below wrote either out as a bogus marker file for the engines
        * to parse. Asked of git instead of inferred from a throw.
        */
-      if (name === undefined || (mode !== "100644" && mode !== "100755") || !MARKERS.includes(name)) continue;
+      if (name === undefined || (mode !== "100644" && mode !== "100755") || !MARKERS.includes(path.posix.basename(name))) continue;
       try {
         /**
          * Audit of PRDR-230: `--filters`, not `git show`. Every other input to
@@ -102,12 +106,13 @@ export function discoverAtCommit(workDir: string, sha: string): ReturnType<typeo
          * `cat-file --filters` runs the same conversion the checkout did, and
          * is byte-identical to `git show` where no filter applies.
          */
-        writeFileSync(path.join(dir, name), git(workDir, "cat-file", "--filters", `${sha}:${name}`));
+        mkdirSync(path.dirname(path.join(dir, ...name.split("/"))), { recursive: true });
+        writeFileSync(path.join(dir, ...name.split("/")), git(workDir, "cat-file", "--filters", `${sha}:${name}`));
       } catch {
         /* Unreadable at this commit: absent, so it yields no candidate and the root's binding decides. */
       }
     }
-    return discover(dir);
+    return discoverPackages(dir, packages);
   } catch {
     return null;
   } finally {
@@ -156,7 +161,8 @@ export function readAcceptedDrift(root: string, id: string): AcceptRecord | null
 export function seedApprovals(root: string, runBranch: string): void {
   if (hasApprovals(root)) return;
   const at = new Date().toISOString();
-  const bindings = readBindings(root).bindings;
+  const file = readBindings(root);
+  const bindings = file.bindings;
   recordApprovals(root, bindings, at, "seed: the root's approved bindings at the first run after PRDR-231");
   const trees = path.join(stateDir(root), "worktrees");
   let standing: string[];
@@ -168,7 +174,7 @@ export function seedApprovals(root: string, runBranch: string): void {
   for (const id of standing) {
     const dir = path.join(trees, id);
     const sha = forkCommit(dir, runBranch);
-    const fork = sha === null ? null : discoverAtCommit(dir, sha);
+    const fork = sha === null ? null : discoverAtCommit(dir, sha, file.packages);
     if (fork === null) continue;
     const forked = bindings.flatMap((b) => {
       const candidate = currentFor(b, fork);
@@ -185,8 +191,8 @@ export function bindingsForTree(root: string, id: string, workDir: string, runBr
   const approved = approvedHashes(root);
   const accepted = readAcceptedDrift(root, id)?.hashes ?? {};
   const sha = forkCommit(workDir, runBranch);
-  const fork = sha === null ? null : discoverAtCommit(workDir, sha);
-  const here = discover(workDir);
+  const fork = sha === null ? null : discoverAtCommit(workDir, sha, file.packages);
+  const here = discoverPackages(workDir, file.packages);
   return file.bindings.map((b) => {
     /**
      * Audit of PRDR-230: an acceptance ADDS an admissible baseline, it does not
@@ -197,7 +203,7 @@ export function bindingsForTree(root: string, id: string, workDir: string, runBr
      * comparison uses; when it matches neither, the operator's own accepted
      * hash is what the halt message names.
      */
-    const admissible = [accepted[b.slot], fork === null ? undefined : currentFor(b, fork)?.config_hash]
+    const admissible = [accepted[gateLabel(b)], fork === null ? undefined : currentFor(b, fork)?.config_hash]
       .filter((hash): hash is string => typeof hash === "string")
       /**
        * V-3⁵ (PRDR-231): a hash nobody ever executed and approved is not a
@@ -221,7 +227,7 @@ export function acceptDrift(root: string, id: string, by: string, at: string, ha
    * until the merge re-baselined the root.
    */
   const bindings = readBindings(root).bindings.flatMap((b) => {
-    const hash = hashes[b.slot];
+    const hash = hashes[gateLabel(b)];
     return hash === undefined ? [] : [{ ...b, config_hash: hash, approved_by: by, executed_at: at }];
   });
   recordApprovals(root, bindings, at, `accepted for ${id} after its gates ran in that tree`);
@@ -241,7 +247,7 @@ export function rebaselineAccepted(root: string, id: string, at: string): string
   const accepted = readAcceptedDrift(root, id);
   if (accepted === null) return [];
   const file = readBindings(root);
-  const checks = checkAll(file.bindings, discover(root)).checks;
+  const checks = checkAll(file.bindings, discoverPackages(root, file.packages)).checks;
   const changed: string[] = [];
   const bindings = file.bindings.map((b) => {
     /**
@@ -251,13 +257,13 @@ export function rebaselineAccepted(root: string, id: string, at: string): string
      * moved — so an acceptance of `lint` silently re-approved a `test` the
      * operator never ran, stamped with their name (SEC-5).
      */
-    const want = accepted.hashes[b.slot];
-    const current = checks.find((c) => c.slot === b.slot)?.current_hash;
+    const want = accepted.hashes[gateLabel(b)];
+    const current = checks.find((c) => c.package === b.package && c.slot === b.slot)?.current_hash;
     if (want === undefined || current !== want || current === b.config_hash) return b;
-    changed.push(b.slot);
+    changed.push(gateLabel(b));
     return { ...b, config_hash: current, executed_at: at, approved_by: accepted.by };
   });
-  if (changed.length > 0) writeBindings(root, { bindings, skips: [...file.skips] });
+  if (changed.length > 0) writeBindings(root, { packages: file.packages, bindings, skips: [...file.skips] });
   rmSync(driftAcceptPath(root, id), { force: true });
   return changed;
 }

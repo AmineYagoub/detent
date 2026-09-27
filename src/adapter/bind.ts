@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 import { plausible, type Candidate, type Discovery, type StackFacts } from "./discover/types.js";
 import { normalizeInvocation, type Invocation } from "./normalize.js";
 import { GATE_SLOTS, looksLikeWatchMode, runGate, runnable, type GateResult, type GateSlot } from "./run.js";
+import { gateLabel } from "./packages.js";
 
 /**
  * T-026 — binding execution (V-1, V-2).
@@ -76,6 +77,8 @@ interface BoundOutcome {
 
 export interface ChoiceRequiredOutcome {
   readonly kind: "choice-required";
+  /** V-5′ (PRDR-295): the package the choice is for, `.` for the root. */
+  readonly package: string;
   readonly slot: GateSlot;
   /** Structured, so C-3b's PRESENT summary can render it without re-deriving. */
   readonly candidates: readonly Candidate[];
@@ -83,6 +86,8 @@ export interface ChoiceRequiredOutcome {
 
 interface RejectedOutcome {
   readonly kind: "rejected";
+  /** V-5′ (PRDR-295): the package whose candidate could not be bound. */
+  readonly package: string;
   readonly slot: GateSlot;
   readonly candidate: Candidate;
   readonly reason: RejectReason;
@@ -97,8 +102,9 @@ interface UnboundOutcome {
 
 export type SlotOutcome = BoundOutcome | ChoiceRequiredOutcome | RejectedOutcome | UnboundOutcome;
 
-/** V-1: an unbound slot is a human-acknowledged skip, recorded with who and when. */
+/** V-1: an unbound slot is a human-acknowledged skip, recorded with who and when, per package (V-5′). */
 export interface Skip {
+  readonly package: string;
   readonly slot: GateSlot;
   readonly acknowledged_by: string;
   readonly at: string;
@@ -113,7 +119,10 @@ export type GateRunner = (spec: {
 }) => Promise<GateResult>;
 
 export interface BindOptions {
+  /** The directory the probe runs in: the package's own (V-5′). */
   readonly root: string;
+  /** V-5′ (PRDR-295): the package `root` is, recorded on the binding. The repository's root package by default. */
+  readonly package?: string;
   readonly timeoutMs?: number;
   readonly runner?: GateRunner;
   readonly now?: () => string;
@@ -155,8 +164,9 @@ export async function bindSlot(
   opts: BindOptions,
 ): Promise<SlotOutcome> {
   const viable = plausible(candidates, slot);
+  const pkg = opts.package ?? ".";
   if (viable.length === 0) return { kind: "unbound", slot };
-  if (viable.length > 1) return { kind: "choice-required", slot, candidates: viable };
+  if (viable.length > 1) return { kind: "choice-required", package: pkg, slot, candidates: viable };
 
   const candidate = viable[0] as Candidate;
   const normalize = opts.normalize ?? normalizeInvocation;
@@ -174,6 +184,7 @@ export async function bindSlot(
   if (looksLikeWatchMode(result)) {
     return {
       kind: "rejected",
+      package: pkg,
       slot,
       candidate,
       reason: "watch-mode",
@@ -187,6 +198,7 @@ export async function bindSlot(
   if (!runnable(result)) {
     return {
       kind: "rejected",
+      package: pkg,
       slot,
       candidate,
       reason: "unrunnable",
@@ -200,6 +212,7 @@ export async function bindSlot(
   if (toolingAbsent(result, invocation.command)) {
     return {
       kind: "rejected",
+      package: pkg,
       slot,
       candidate,
       reason: "unrunnable",
@@ -221,6 +234,7 @@ export async function bindSlot(
     candidate,
     binding: bindingSchema.parse({
       schema_version: SCHEMA_VERSION,
+      package: pkg,
       slot,
       adapter: candidate.adapter,
       ref: candidate.ref,
@@ -390,7 +404,7 @@ export function vacuousGateNotices(outcomes: readonly SlotOutcome[], redact: Red
     const full = redact(commandBody(outcome.candidate)?.trim() ?? "");
     const body = full.length > 120 ? `${full.slice(0, 120)}…` : full;
     notices.push(
-      `${outcome.slot}: \`${outcome.binding.resolved}\` runs \`${body}\` — every statement in it exits 0 having ` +
+      `${gateLabel(outcome.binding)}: \`${outcome.binding.resolved}\` runs \`${body}\` — every statement in it exits 0 having ` +
         `done nothing. It printed: ${tail === "" ? "(nothing)" : tail} (${outcome.result.durationMs}ms). ` +
         "A gate that always passes verifies nothing, and every ticket goes green against it (V-1‴). " +
         "Evidence, not a refusal — bind a command that can fail, or confirm this is what you meant.",
@@ -423,12 +437,12 @@ export async function bindAll(discovery: Discovery, opts: BindAllOptions): Promi
 }
 
 /** V-1: record who acknowledged the skip and when. Never inferred. */
-export function acknowledgeSkip(slot: GateSlot, acknowledgedBy: string, at = new Date().toISOString()): Skip {
+export function acknowledgeSkip(slot: GateSlot, acknowledgedBy: string, at = new Date().toISOString(), pkg = "."): Skip {
   if (acknowledgedBy.trim() === "") throw new Error("a skip must name who acknowledged it (V-1)");
-  return { slot, acknowledged_by: acknowledgedBy, at };
+  return { package: pkg, slot, acknowledged_by: acknowledgedBy, at };
 }
 
-/** Identity of a candidate, stable across a JSON round trip. */
+/** Identity of a candidate within its package, stable across a JSON round trip. */
 function identity(c: Candidate): string {
   return [c.slot, c.adapter, c.ref, c.resolved, c.config_hash].join("\0");
 }

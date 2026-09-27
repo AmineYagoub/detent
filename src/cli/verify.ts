@@ -1,7 +1,10 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
-import { discover } from "../adapter/discover/index.js";
-import { acknowledgeSkip, bindAll, type BindAllOptions, type BindReport, type Skip } from "../adapter/bind.js";
+import type { Discovery } from "../adapter/discover/types.js";
+import { acknowledgeSkip, type BindAllOptions, type BindReport, type Skip } from "../adapter/bind.js";
+import { bindPackages } from "../adapter/bind-packages.js";
+import { comparePackages, discoverPackages, findPackages, gateLabel } from "../adapter/packages.js";
+import { DECLARED_ADAPTER } from "../init/bind-declared.js";
 import { SETUP_REQUIRED_SLOTS } from "../init/bind.js";
 import { checkAll, readBindings, writeBindings, type DriftCheck } from "../adapter/drift.js";
 import type { Binding } from "../schemas/records.js";
@@ -57,7 +60,8 @@ type ConsentPrompt = (summary: SyncSummary) => Promise<boolean>;
 
 export interface VerifySyncDeps {
   readonly consent: ConsentPrompt;
-  readonly bind?: (report: ReturnType<typeof discover>, opts: BindAllOptions) => Promise<BindReport>;
+  /** How each package is bound: `bindAll` by default (V-5′). */
+  readonly bind?: (report: Discovery, opts: BindAllOptions) => Promise<BindReport>;
   readonly now?: () => string;
   readonly user?: string;
   readonly write?: boolean;
@@ -73,8 +77,9 @@ export interface SyncResult {
 export async function verifySync(root: string, deps: VerifySyncDeps): Promise<SyncResult> {
   const messages: string[] = [];
   const stored = readBindings(root);
-  const discovery = discover(root);
-  const drift = checkAll(stored.bindings, discovery).checks;
+  /** V-5′ (PRDR-295): the packages as they stand, each discovered and bound in its own directory. */
+  const found = findPackages(root);
+  const drift = checkAll(stored.bindings, discoverPackages(root, stored.packages)).checks;
 
   /**
    * V-1 in full: the replacement candidates are executed before they may be
@@ -82,22 +87,34 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
    * an unexecuted binding, which P4 calls a guess.
    */
   const at = deps.now?.() ?? new Date().toISOString();
-  const bind = deps.bind ?? bindAll;
-  const report = await bind(discovery, {
+  const packaged = await bindPackages(
     root,
-    approvedBy: deps.user ?? "auto",
-    status: "approved",
-    /* SEC-4 (PRDR-163): notices quote the project's own command output and this path prints them. */
-    redact: scrub,
-    ...(deps.now === undefined ? {} : { now: deps.now }),
-  });
+    found,
+    {
+      approvedBy: deps.user ?? "auto",
+      status: "approved",
+      /* SEC-4 (PRDR-163): notices quote the project's own command output and this path prints them. */
+      redact: scrub,
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+    },
+    deps.bind,
+  );
+  /**
+   * V-5′: a command the pack declared, where discovery binds nothing for its
+   * slot, is kept as declared: nothing on disk re-derives it, and a sync that
+   * dropped it would unbind a package the pack gave gates to.
+   */
+  const kept = stored.bindings.filter((b) => b.adapter === DECLARED_ADAPTER && !packaged.bindings.some((n) => n.package === b.package && n.slot === b.slot));
+  const report = { ...packaged, bindings: [...packaged.bindings, ...kept].sort((a, b) => comparePackages(a.package, b.package)) };
+  const packages = [...new Set([...packaged.packages, ...kept.map((b) => b.package)])].sort(comparePackages);
 
   /**
    * PRDR-167: a setup-required slot with no candidate is a refusal, not a
    * silent deletion — the same line `init` draws, for the same reason (P2: a
    * project with no test command cannot be gated).
    */
-  const missingRequired = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
+  /* V-5′: no package binds it, and no package's candidates for it wait on a human's choice. */
+  const missingRequired = SETUP_REQUIRED_SLOTS.filter((slot) => !report.bindings.some((b) => b.slot === slot) && !report.interrupts.some((i) => i.slot === slot));
   if (missingRequired.length > 0) {
     /**
      * PRDR-179: the notices go FIRST, on this path too.
@@ -127,9 +144,11 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
    * forward unfiltered, so a re-bound slot was listed as bound and skipped at
    * once and `bindingTable` rendered it twice.
    */
-  const storedBySlot = new Map(stored.skips.map((skip) => [skip.slot, skip]));
+  const storedBySlot = new Map(stored.skips.map((skip) => [gateLabel(skip), skip]));
+  const gated = new Set(report.bindings.map((b) => b.package));
   const skips: Skip[] = report.unbound
-    .filter((slot) => !SETUP_REQUIRED_SLOTS.includes(slot))
+    .filter((u) => !SETUP_REQUIRED_SLOTS.includes(u.slot) && gated.has(u.package))
+    .filter((u) => !report.bindings.some((b) => b.package === u.package && b.slot === u.slot))
     /**
      * An EXISTING acknowledgement is kept verbatim — who accepted the gap and
      * when is the whole value of a skip, and re-stamping it `auto`/now would
@@ -137,7 +156,7 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
      * record gets a fresh one. A slot that BOUND this time keeps no skip at
      * all, which is the contradiction `stored.skips` used to carry forward.
      */
-    .map((slot) => storedBySlot.get(slot) ?? acknowledgeSkip(slot, deps.user ?? "auto", at));
+    .map((u) => storedBySlot.get(gateLabel(u)) ?? acknowledgeSkip(u.slot, deps.user ?? "auto", at, u.package));
 
   /**
    * V-1‴ (PRDR-167): in `messages` as well as the summary.
@@ -153,8 +172,8 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   for (const interrupt of report.interrupts) {
     messages.push(
       interrupt.kind === "choice-required"
-        ? `${interrupt.slot}: ${interrupt.candidates.length} plausible candidates — resolve the choice before syncing.`
-        : `${interrupt.slot}: ${interrupt.explanation}`,
+        ? `${gateLabel(interrupt)}: ${interrupt.candidates.length} plausible candidates — resolve the choice before syncing.`
+        : `${gateLabel(interrupt)}: ${interrupt.explanation}`,
     );
   }
   if (report.interrupts.length > 0) {
@@ -173,7 +192,7 @@ export async function verifySync(root: string, deps: VerifySyncDeps): Promise<Sy
   }
 
   if (deps.write !== false) {
-    writeBindings(root, { bindings: [...report.bindings], skips: [...skips] });
+    writeBindings(root, { packages, bindings: [...report.bindings], skips: [...skips] });
   }
   messages.push(`re-baselined ${report.bindings.length} binding(s).`);
   return { exitCode: EXIT_OK, summary, rebaselined: true, messages };
@@ -250,7 +269,8 @@ export async function acceptTicketDrift(root: string, id: string, deps: VerifySy
     messages.push(`${id}: no worktree at ${tree} — nothing to judge (B-2″)`);
     return { exitCode: EXIT_NOT_READY, summary: summaryOf([], [], []), rebaselined: false, messages };
   }
-  const discovery = discover(tree);
+  /* V-5′ (PRDR-295): the tree's packages, as the root's file names them. */
+  const discovery = discoverPackages(tree, stored.packages);
   const runBranch = runBranchOf(root);
   if (runBranch === null) {
     messages.push(
@@ -266,26 +286,28 @@ export async function acceptTicketDrift(root: string, id: string, deps: VerifySy
     return { exitCode: EXIT_OK, summary: summaryOf(drift, [], []), rebaselined: false, messages };
   }
   const at = deps.now?.() ?? new Date().toISOString();
-  const bind = deps.bind ?? bindAll;
-  const report = await bind(discovery, {
-    root: tree,
-    approvedBy: deps.user ?? "auto",
-    status: "approved",
-    redact: scrub,
-    ...(deps.now === undefined ? {} : { now: deps.now }),
-  });
+  const report = await bindPackages(
+    tree,
+    stored.packages,
+    { approvedBy: deps.user ?? "auto", status: "approved", redact: scrub, ...(deps.now === undefined ? {} : { now: deps.now }) },
+    deps.bind,
+  );
   for (const notice of report.notices) messages.push(notice);
   const summary = summaryOf(drift, report.bindings, report.notices);
-  const missing = report.unbound.filter((slot) => SETUP_REQUIRED_SLOTS.includes(slot));
+  /** P2: a required gate the file binds, in a package, that the tree no longer binds there, is a gate removed. */
+  const missing = stored.bindings
+    .filter((b) => SETUP_REQUIRED_SLOTS.includes(b.slot) && b.adapter !== DECLARED_ADAPTER)
+    .filter((b) => !report.bindings.some((n) => n.package === b.package && n.slot === b.slot))
+    .map((b) => gateLabel(b));
   if (missing.length > 0 || report.interrupts.length > 0) {
-    messages.push(`${id}: its tree cannot be gated as it stands (${[...missing, ...report.interrupts.map((i) => i.slot)].join(", ")}) — a change that removes a gate is not accepted (P2)`);
+    messages.push(`${id}: its tree cannot be gated as it stands (${[...missing, ...report.interrupts.map((i) => gateLabel(i))].join(", ")}) — a change that removes a gate is not accepted (P2)`);
     return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
   }
   if (!(await deps.consent(summary))) {
     messages.push("declined — the ticket stays blocked (V-3).");
     return { exitCode: EXIT_NOT_READY, summary, rebaselined: false, messages };
   }
-  const hashes = Object.fromEntries(halting.flatMap((d) => (typeof d.current_hash === "string" ? [[d.slot, d.current_hash]] : [])));
+  const hashes = Object.fromEntries(halting.flatMap((d) => (typeof d.current_hash === "string" ? [[gateLabel(d), d.current_hash]] : [])));
   if (deps.write !== false) {
     acceptDrift(root, id, deps.user ?? "operator", at, hashes);
     messages.push(requeueTicket(root, id, deps.user ?? "operator", `verification change accepted (V-3‴): ${Object.keys(hashes).join(", ")}`).message);
@@ -367,7 +389,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 export function renderSyncSummary(summary: SyncSummary): string {
   const lines = ["", "verification bindings to re-baseline (V-3):"];
   for (const check of summary.drift) lines.push(`  [${check.status}] ${check.message}`);
-  for (const b of summary.proposed) lines.push(`  ${b.slot}: \`${b.resolved}\` (${b.adapter}:${b.ref})`);
+  for (const b of summary.proposed) lines.push(`  ${gateLabel(b)}: \`${b.resolved}\` (${b.adapter}:${b.ref})`);
   /**
    * PRDR-179: the skips, in the text the operator consents to.
    *
@@ -378,7 +400,7 @@ export function renderSyncSummary(summary: SyncSummary): string {
    * it to the decision.
    */
   for (const skip of summary.skips) {
-    lines.push(`  ${skip.slot}: no candidate — recorded as skipped, acknowledged by ${skip.acknowledged_by}`);
+    lines.push(`  ${gateLabel(skip)}: no candidate — recorded as skipped, acknowledged by ${skip.acknowledged_by}`);
   }
   /** PRDR-165: before the decision, not after it. */
   if (summary.notices.length > 0) {

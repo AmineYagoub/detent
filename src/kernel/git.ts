@@ -70,6 +70,12 @@ export function stageAll(cwd: string, excludeDirs: readonly string[]): void {
   git(cwd, "add", "-A", "--", ".", ...excludes);
 }
 
+/** PRDR-228: commit what was STAGED — an excluded untracked path (run state) is dirty to `status` and must not force an empty commit. */
+export function commitStaged(cwd: string, excludeDirs: readonly string[], message: string): void {
+  stageAll(cwd, excludeDirs);
+  if (git(cwd, "diff", "--cached", "--name-only").trim() !== "") git(cwd, "commit", "-q", "-m", message);
+}
+
 /**
  * P7′ (PRDR-130): did git RUN and merely answer non-zero, or could it not run
  * at all? The two were one `null` and the difference is the whole defect: a

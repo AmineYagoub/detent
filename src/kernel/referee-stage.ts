@@ -113,7 +113,7 @@ async function review(ticket: Ticket, ctx: RefereeContext, sessions: SessionArm,
   const probe = await falsificationProbe({
     workDir,
     base: ctx.claimBase(id),
-    runTests: () => boundTestRunner(ctx.root, ctx.runBranch.base, ctx.budgets.gate_timeout_ms)(workDir),
+    runTests: (tests) => boundTestRunner(ctx.root, ctx.runBranch.base, ctx.budgets.gate_timeout_ms)(workDir, tests),
   });
   if (probe.skipped !== null) ctx.journal.appendTicketEvent(id, { event: "falsify_skipped", at: ctx.iso(), reason: probe.skipped });
   const evidence = { ...contract, ...falsifyEvidence(probe) };

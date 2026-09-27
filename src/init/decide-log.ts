@@ -4,6 +4,7 @@ import type { StackEntry } from "../schemas/decide.js";
 import { DECISION_LOG_PATH } from "../schemas/pack.js";
 import { readLines, sections, tableRows } from "./pack-markdown.js";
 import { parsePack } from "./pack-parse.js";
+import type { DeclaredPackage } from "./bind-declared.js";
 
 /**
  * C-2¹² (PRDR-282) — the decision log, read and extended in the pack's own
@@ -38,13 +39,15 @@ export interface LogView {
   readonly hasStack: boolean;
   /** The gate slots `## Packages` already declares for the root package. */
   readonly rootSlots: ReadonlySet<string>;
+  /** V-5′ (PRDR-295): every package `## Packages` declares, the root's among them, with its gate command per slot. */
+  readonly packages: readonly DeclaredPackage[];
 }
 
 export function decisionLogFile(root: string): string {
   return path.join(root, ...DECISION_LOG_PATH.split("/"));
 }
 
-const EMPTY: LogView = { exists: false, ids: new Set(), decisions: [], defaults: [], stack: null, hasStack: false, rootSlots: new Set() };
+const EMPTY: LogView = { exists: false, ids: new Set(), decisions: [], defaults: [], stack: null, hasStack: false, rootSlots: new Set(), packages: [] };
 
 export function readDecisionLog(root: string): LogView {
   if (!existsSync(decisionLogFile(root))) return EMPTY;
@@ -61,6 +64,7 @@ export function readDecisionLog(root: string): LogView {
     stack: pack.stack === null ? null : { ...pack.stack, gates: { ...pack.stack.gates } },
     hasStack: parts.has("stack"),
     rootSlots: new Set(Object.keys(pack.packages.find((p) => p.path === ".")?.gates ?? {})),
+    packages: pack.packages.map((p) => ({ path: p.path, gates: { ...p.gates } })),
   };
 }
 

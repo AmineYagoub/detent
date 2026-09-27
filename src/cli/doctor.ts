@@ -9,6 +9,7 @@ import type { SessionBackend } from "../sessions/backend.js";
 import { researchTools } from "../sessions/guard.js";
 import { recordOutOfBandSpend } from "../kernel/ledger.js";
 import { readBindings } from "../adapter/drift.js";
+import { gateLabel } from "../adapter/packages.js";
 import { currentPlatform, missingToolchains } from "../adapter/toolchain.js";
 import { stateVersionRefusal } from "../kernel/migrate.js";
 
@@ -182,7 +183,8 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
    */
   let bound: { slot: string; resolved: string }[] = [];
   try {
-    bound = readBindings(root).bindings.map((b) => ({ slot: b.slot, resolved: b.resolved }));
+    /* V-5′ (PRDR-295): every package's gates, each named with its package. */
+    bound = readBindings(root).bindings.map((b) => ({ slot: gateLabel(b), resolved: b.resolved }));
   } catch {
     /* PRDR-143: an unreadable bindings.json is its own row's business, not this one's — doctor still prints. */
   }

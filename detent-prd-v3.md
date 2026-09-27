@@ -270,6 +270,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   project whose documents named all three canonical gates.
   *Amended by D-10′ (PRDR-278): the documented commands come from the decision log's stack entry,
   in structured form.*
+  *Amended by V-5″ (PRDR-295): each other package the decision log declares is bound as it
+  declares, provisionally, beside the root's.*
 
 - **C-4⁗ (3.1.1, PRDR-116).** REVIEW_PLAN's verdict vocabulary stays closed, but a reviewer
   that writes a plain synonym — `revise` for `changes`, `approved` for `approve` — has still
@@ -648,6 +650,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   that arrives after the migration is refused by its reader, by name.
   *Amended by C-4⁷ (PRDR-292): the event gains PLAN's draft and caches and the ticket's
   `criterion_ids`.*
+  *Amended by V-5″ (PRDR-295): the event carries `.detent/bindings.json` to packages.*
 
 - **S-4″ (3.1.1, PRDR-138).** A stream that ends with no result message is a CRASH on the kernel
   path, as it already is on the init path (S-4′). It parsed as `ok: true` with
@@ -2067,6 +2070,8 @@ the code does what the rules it amends describe, and each of those rules points 
     about 260 tickets and reached 1.55M tokens against a 1M limit at 547, and ksarjs's pack holds
     2,024 requirements. No model reads the contracts between slices (planning decision 10); one
     is added only if run-time outcomes show tickets failing on contracts the checks passed (D-33).
+  *Amended by V-5″ (PRDR-295): the gates check runs at PRESENT, over the whole plan, until
+  PRDR-293 builds these checks, and no draft is redrafted for it.*
 
 - **C-4⁶ (3.1.1, PRDR-278).** Each slice gets one review read, by its own role, limited to judgement
   (planning decision 2). C-4″'s REVIEW_PLAN grew into three reads, a revision and three more reads
@@ -2118,6 +2123,8 @@ the code does what the rules it amends describe, and each of those rules points 
   defaults.*
   *Amended by C-4⁷ (PRDR-292): an open spec defect holds approval on both exits, and PRESENT lists
   each with the `file:line` of its passages.*
+  *Amended by V-5″ (PRDR-295): a path no gate can fail holds approval on both exits, and PRESENT
+  lists each with its ticket and package.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2252,6 +2259,7 @@ the code does what the rules it amends describe, and each of those rules points 
   "`schema_version` carries the upgrade". The evidence: ksar-cloud's gates ran Go at the root
   while 69 of its 547 tickets wrote `dashboard/`, 41 of them nothing else, and no gate could fail
   for any of them.
+  *Amended by V-5″ (PRDR-295): built.*
 
 - **V-5′ (3.1.1, PRDR-278).** DETERMINE_VERIFICATION finds a manifest in every package directory,
   not only the root, for each ecosystem an adapter supports, and binds each package's gates with
@@ -2264,9 +2272,72 @@ the code does what the rules it amends describe, and each of those rules points 
   for a package that has none: its tickets wait until the pack declares them or the operator
   binds them. `run`'s toolchain check (PRDR-276) covers every package's toolchain, and V-1's
   execute-before-approve rule is unchanged.
+  *Amended by V-5″ (PRDR-295): built. A-1⁷'s gate check runs at PRESENT until PRDR-293 builds
+  A-1⁷.*
 
 - **OQ-4 resolved (3.1.1, PRDR-278).** v2's open question on workspace scoping is settled by D-5′
   and V-5′: gates bind per package.
+
+- **V-5″ (3.1.1, PRDR-295).** V-5′ is built, in `src/adapter/packages.ts`,
+  `src/adapter/bind-packages.ts`, `src/init/bind-declared.ts` and `src/init/present-gates.ts`.
+  This settles what V-5′ left to its ticket, and amends V-1′'s documented commands, V-3's drift,
+  C-3b's questions, C-4's promotion, C-7″'s refusal and F-3″'s event.
+  - **Packages.** A package is the root, and every directory holding `package.json`,
+    `pyproject.toml`, `setup.py`, `setup.cfg`, `go.mod` or `Cargo.toml` that git tracks or would
+    track, outside hidden directories, `node_modules`, `vendor`, `testdata`, `fixtures` and
+    `__fixtures__`. A Makefile, a justfile or a tsconfig runs tasks in a package and does not make
+    one. A path lies in the deepest package holding it. `.detent/bindings.json` lists the
+    packages, and each binding and skip names its own. A gate outside the root is named with its
+    package, `web:test`, and the root's by its slot alone, as before.
+  - **Binding.** DETERMINE_VERIFICATION discovers and binds each package in its own directory, and
+    runs each command there before binding it (V-1). A package with no lockfile takes the package
+    manager of the package holding it. A C-3b question names the package. `test` is missing only
+    where no package binds it, so a root that runs no tests beside a package that does is bound.
+    A slot left unbound is an acknowledged skip only in a package that binds a gate at all. The
+    phase's checkpoint key adds the other packages' marker files and the declared packages only
+    where there are any, so a project with one package keeps its key.
+  - **Declared packages.** DETERMINE_VERIFICATION reads the decision log's `## Packages` rows. In
+    a new project each declared package other than the root is bound provisionally, as the log
+    gives its commands, beside the root's from the stack entry. In an existing project a declared
+    command is bound provisionally for a slot that discovery binds nothing for in that package,
+    which need not exist yet; where discovery binds the slot too, the package's own command is
+    bound and a notice says that the two disagree. A declared binding is not executed at `init`.
+    It runs as its package's gate, and V-3 exempts it as it exempts every provisional binding,
+    since no file holds its configuration. C-4's bootstrap promotes each provisional binding from
+    what discovery then finds in its own package, and stores the command a gate runs, normalized.
+    Outside a new project nothing promotes a declared binding.
+  - **A ticket's gates.** The gate arm reads the packages a ticket's surface touches: a path
+    touches the package it lies in and every package below it, a glob touches its base's package
+    and every package below the base that it can reach, and an exclusion touches none. A touched
+    package that binds none of the slots asked is refused as V-1″ refuses a ticket with no gate,
+    naming it, and a gated package beside it does not stand in. Each touched package installs
+    what its manifest declares, with its own package manager, in its own directory, and runs its
+    gates there, package after package. The first red gate ends the evaluation, and
+    `last_failure.json` names its package. A suspected flake is rerun with the failing package's
+    `test_single`, in its directory. The falsification probe runs each changed test with its own
+    package's `test_single` or `test`, in that package's directory, and passes only if all of them
+    pass. `run`'s toolchain check and `doctor` read every package's gates and name them with
+    their package. Every session's preamble keeps the root's gates by slot and gives each other
+    package's under `packages`. No session may write under any `node_modules`, and finalization
+    stages none. The Stop gate still runs the root's `test` alone, and none where the root binds
+    no `test`.
+  - **Drift.** V-3 re-resolves each binding in its own package. The approvals ledger keys a
+    configuration by its package, and a row written before packages is the root's. The fork's
+    configuration is read package by package, from each package's marker files at the fork
+    commit. `detent verify sync` re-binds every package, keeps a declared binding that discovery
+    does not replace, and names the package in its messages; a ticket's accepted hashes are keyed
+    by the gate's name.
+  - **Approval.** PRESENT lists each path of a ticket that is not DONE lying in a package that
+    binds none of `lint`, `typecheck` and `test`, and each package manifest a ticket writes in a
+    directory that is not a package, and raises AWAIT_INFO before approval is offered, with the
+    count in `presentation.json`. `detent run`'s deferred approval presents the plan and refuses
+    while the count is not zero, and a presentation written before the count counts none. This is
+    the check A-1⁷ names; until PRDR-293 builds A-1⁷ it runs at PRESENT, over the whole plan, and
+    no draft is redrafted for it.
+  - **Migration.** F-3″'s event carries `.detent/bindings.json` to packages: each binding and skip
+    gains `package: "."`, and the file `packages: ["."]`. The approvals ledger, a ticket's accepted
+    hashes and DETERMINE_VERIFICATION's checkpoint need no step, since what each held before
+    packages reads as the root's.
 
 - **N-5′ (3.1.1, PRDR-278).** Plans are measured by how they run (planning decision 3), from what
   `run` already records in `transitions.jsonl` and the ledger. The figures sit beside §14's
@@ -2879,9 +2950,9 @@ The v2 milestones (M0…M4) delivered the CLI line and its 52-test oracle parity
 
 ## Inheritance (from v2.0-draft.7)
 The following sections are **driver-agnostic** and are inherited from `detent-prd-v2.md`, with the single reconciliation "kernel" → "referee", as the dated entries of §4 and §8 amend them; each of those entries names the rule it amends:
-- **§3 Scope & Non-Goals** — including NG7 (Claude Code remains the only backend; a plugin *is* Claude Code, so NG7 is reinforced, not weakened). NG2 is lifted by D-5′ (3.1.1, PRDR-278): gates bind per package.
+- **§3 Scope & Non-Goals** — including NG7 (Claude Code remains the only backend; a plugin *is* Claude Code, so NG7 is reinforced, not weakened). NG2 is lifted by D-5′ (3.1.1, PRDR-278): gates bind per package, as V-5″ (PRDR-295) builds.
 - **§5 Filesystem Contract (F)** — `.detent/` layout, the committed set, content-addressed checkpoints (F-4). **F-1′ (draft.4, PRDR-066/PRDR-064 applied):** the local set gains the two D-21 hook-policy files (`active_surface.json`, `stage.json` — run-level, never committed); and the plan directory is `plan/` (tickets `<ticket-id>.json`, plus the plan artifact `plan.json` and the approval record `approval.json`) — a file in `plan/` is a ticket **iff** its name is not one of the reserved names `plan.json` and `approval.json`; the reserved set is closed, and a reader that enumerates the directory asserts against it rather than carrying its own list. This is A-2's stated home, raised unprompted by the N-7 analyst reading this document (T-140).
-- **§6 Verification Adapter Contract (V)** — discovery, binding, execution, drift. V-5 is amended by V-5′ (3.1.1, PRDR-278): each package's gates are bound.
+- **§6 Verification Adapter Contract (V)** — discovery, binding, execution, drift. V-5 is amended by V-5′ (3.1.1, PRDR-278): each package's gates are bound, as V-5″ (PRDR-295) builds.
 - **§7 Execution State Machine (X)** — the twenty states, the X-3 transition table, the escalation ladder, the budgets of X-1, `GATE_DRIFT` (D-23), attempt generations (D-17). The referee *is* this machine. Its twenty states are unchanged; its table, budgets and signals are amended by the dated `X-*` entries of §4, among them X-3′ (3.1.1, PRDR-278), which admits a false premise from the three fix states, and by C-12‴'s requeue rows.
 - **§9 Branch & Merge Contract (B)**, **§10 Artifacts (A)**, **§12 Non-Functional (N)** — including N-7 self-build, now naming `detent-prd-v3.md` as its target and running the specification phase headless (N-7′) — **§14 Metrics**, **§15 Risks**.
 

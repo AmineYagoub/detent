@@ -211,10 +211,12 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     const root = conforming(withSingle);
     await init(root);
     const bindings = outputsOf(root, "DETERMINE_VERIFICATION")["bindings"] as Json[];
-    expect(bindings.map((b) => [b["slot"], b["resolved"], b["status"]])).toEqual([
-      ["test", "pnpm test", "provisional"],
-      ["lint", "pnpm lint", "provisional"],
-      ["test_single", "pnpm run test:single", "provisional"],
+    expect(bindings.map((b) => [b["package"], b["slot"], b["resolved"], b["status"]])).toEqual([
+      [".", "test", "pnpm test", "provisional"],
+      [".", "lint", "pnpm lint", "provisional"],
+      [".", "test_single", "pnpm run test:single", "provisional"],
+      /* V-5′ (PRDR-295): the other package the log declares binds as declared. */
+      ["dashboard", "test", "pnpm test", "provisional"],
     ]);
   });
 
@@ -226,6 +228,8 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     expect(bootstrap.description).toContain("X-2");
     expect(bootstrap.description).toContain("TypeScript");
     expect(bootstrap.description).not.toContain("ANALYZE");
+    /* V-5′ (PRDR-295): its job is every package's bound gate, the declared package's by its label. */
+    expect(bootstrap.acceptance_criteria).toEqual(expect.arrayContaining(["The `test` gate runs and exits 0.", "The `dashboard:test` gate runs and exits 0."]));
   });
 
   it("still reads an existing project's stack from the repository, and gives PLAN none", async () => {
@@ -299,7 +303,11 @@ describe("PRDR-290: a state an older build left holds ANALYZE's checkpoint (F-3)
     expect(resumed.reused).toEqual(expect.arrayContaining(["AUDIT", "WRITE", "VALIDATE", "DETERMINE_VERIFICATION"]));
     expect(resumed.interrupt?.interrupt, "the checkpoint's blocking question is not asked").toBe("AWAIT_APPROVAL");
     expect(resumed.interrupt?.message ?? "").not.toContain("Which cloud region");
-    expect((outputsOf(root, "DETERMINE_VERIFICATION")["bindings"] as Json[]).map((b) => b["resolved"])).toEqual(["pnpm test", "pnpm lint"]);
+    expect((outputsOf(root, "DETERMINE_VERIFICATION")["bindings"] as Json[]).map((b) => [b["package"], b["resolved"]])).toEqual([
+      [".", "pnpm test"],
+      [".", "pnpm lint"],
+      ["dashboard", "pnpm test"],
+    ]);
     expect(analysisLeft(root), "the checkpoint and its artifact are gone").toBe(false);
     const after = await init(root);
     expect(why(after.messages), "and it says so once").toBeUndefined();

@@ -121,6 +121,8 @@ export const STRUCTURAL_PROTECTED: readonly string[] = [
   ".detent/stage.json",
   /** Writing a dependency is writing an executable the gate will run. */
   "node_modules/**",
+  /** V-5′ (PRDR-295): the referee installs in each package's own directory too. */
+  "**/node_modules/**",
 ];
 
 /**

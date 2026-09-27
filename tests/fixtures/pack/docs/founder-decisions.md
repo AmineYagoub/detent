@@ -59,4 +59,4 @@ Decided on 26 September 2026. Where a decision here conflicts with a PRD, this r
 |---|---|---|
 | . | lint | `pnpm run lint` |
 | . | test | `pnpm run test` |
-| apps/desk | test | `pnpm --dir apps/desk test` |
+| apps/desk | test | `pnpm test` |

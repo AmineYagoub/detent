@@ -1,4 +1,5 @@
-import { discover as discoverStack } from "../adapter/discover/index.js";
+import { discover as discoverStack, gatherFacts } from "../adapter/discover/index.js";
+import { ROOT_PACKAGE, findPackages, gateLabel, packageDir } from "../adapter/packages.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { INIT_PHASES, type InitPhase } from "../schemas/init.js";
@@ -6,10 +7,12 @@ import type { PromptSet, SessionBackend } from "../sessions/backend.js";
 import type { Sandbox } from "../sessions/sandbox.js";
 import { isGreenfield } from "./greenfield.js";
 import { determineVerification } from "./bind.js";
+import type { DeclaredPackage } from "./bind-declared.js";
 import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
 import { planOutputIntact } from "./plan-write.js";
-import { presentInputsFromOutputs, presentStage, type ApprovalDecision } from "./present.js";
+import { presentStage, type ApprovalDecision } from "./present.js";
+import { presentInputsFromOutputs } from "./present-inputs.js";
 import { sliceStage, slicesFromOutputs } from "./slice.js";
 import { placement } from "./slice-seed.js";
 import { baselineDigest } from "./baseline.js";
@@ -17,7 +20,6 @@ import type { SymbolsConfig } from "../adapter/symbols.js";
 import { readBindings } from "../adapter/drift.js";
 import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
-import type { Skip } from "../adapter/bind.js";
 import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
@@ -245,21 +247,49 @@ function planningStack(root: string, outputs: Outputs): { readonly greenfield: b
   return { greenfield, stack: pack === null ? readDecisionLog(root).stack : pack.stack };
 }
 
+/**
+ * V-5′ (PRDR-295): the packages the pack declares under `## Packages`, from
+ * the parse VALIDATE handed on, or from the log as it stands where WRITE wrote
+ * no pack, as the stack entry is read.
+ */
+function declaredPackages(root: string, outputs: Outputs): readonly DeclaredPackage[] {
+  const pack = planningPack(outputs);
+  return pack === null ? readDecisionLog(root).packages : pack.packages;
+}
+
+/**
+ * V-5′: the marker files of every package below the root, which define its
+ * candidates as the root's markers define the root's. Empty where the root is
+ * the one package, so a project with one package keys as it did before them.
+ */
+function packageMarkers(root: string): string[] {
+  return findPackages(root)
+    .filter((pkg) => pkg !== ROOT_PACKAGE)
+    .flatMap((pkg) => gatherFacts(packageDir(root, pkg)).markers.map((m) => `${pkg}/${m}`));
+}
+
 function determinePhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "DETERMINE_VERIFICATION",
     /**
      * The CONTENTS of the files that define candidate commands: a changed
      * `scripts.test` must re-bind, which is the same region V-3 watches. In
-     * greenfield, the stack entry it binds from (D-10′).
+     * greenfield, the stack entry it binds from (D-10′). V-5′ (PRDR-295): each
+     * package's own marker files, and the packages the pack declares, where
+     * there are any beyond the root.
      */
-    digest: (ctx) =>
-      `${contentsDigest(deps.root, planningMarkers(ctx.outputs))}|${valueDigest(planningStack(deps.root, ctx.outputs))}`,
+    digest: (ctx) => {
+      const base = `${contentsDigest(deps.root, planningMarkers(ctx.outputs))}|${valueDigest(planningStack(deps.root, ctx.outputs))}`;
+      const markers = packageMarkers(deps.root);
+      const declared = declaredPackages(deps.root, ctx.outputs).filter((pkg) => pkg.path !== ROOT_PACKAGE);
+      return markers.length === 0 && declared.length === 0 ? base : `${base}|${contentsDigest(deps.root, markers)}|${valueDigest(declared)}`;
+    },
     run: async (ctx) =>
       await determineVerification({
         root: deps.root,
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         ...planningStack(deps.root, ctx.outputs),
+        packages: declaredPackages(deps.root, ctx.outputs),
         /**
          * PRDR-156: this was the one handler in this file that did not forward
          * `note`, so V-1‴'s vacuous-gate notice was emitted into an undefined
@@ -342,12 +372,19 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
     /** C-8‴: the tickets and the plan artifact are PLAN's output; if they are gone, plan again. */
     outputIntact: () => planOutputIntact(deps.root),
     run: async (ctx) => await withInitJournal(deps.root, async (journal) => {
-      const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as Binding[] | undefined) ?? [];
+      /* A checkpoint written before packages holds bindings with none, which were the root's. */
+      const bindings = (ctx.outputs["DETERMINE_VERIFICATION"]?.["bindings"] as (Omit<Binding, "package"> & { readonly package?: string })[] | undefined) ?? [];
       return await planStage({
         root: deps.root,
         ...planningStack(deps.root, ctx.outputs),
         docs: planningDocs(deps.root, ctx.outputs),
-        boundSlots: bindings.map((b) => b.slot),
+        /**
+         * V-5′ (PRDR-295): each gate by its label, the root's by slot alone as
+         * before packages and a package's as `package:slot`, so a project with
+         * one package keys its plan as it did, and the bootstrap ticket proves
+         * every package's gates.
+         */
+        boundSlots: bindings.map((b) => gateLabel({ package: b.package ?? ROOT_PACKAGE, slot: b.slot })),
         budgets: deps.budgets,
         slices: slicesFromOutputs(ctx.outputs),
         baseline: deps.planBaseline ?? "production",
@@ -412,7 +449,8 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         root: deps.root,
         tickets: allTickets(deps.root),
         bindings: stored.bindings,
-        skips: stored.skips as unknown as Skip[],
+        skips: stored.skips,
+        packages: stored.packages,
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
         ...presentInputsFromOutputs(ctx.outputs),

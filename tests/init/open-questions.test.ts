@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { presentInputsFromOutputs, renderPresentation } from "../../src/init/present.js";
+import { renderPresentation } from "../../src/init/present.js";
+import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { QUESTION_SIMILARITY, similarQuestions } from "../../src/init/questions.js";
 
 /**

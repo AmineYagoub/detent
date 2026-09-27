@@ -39,7 +39,10 @@ export const ENGINES: readonly Engine[] = [
   rustEngine,
 ];
 
-/** Files whose presence is a stack fact (C-2). Scanned at the root only (D-5). */
+/**
+ * Files whose presence is a stack fact (C-2), scanned in one directory: the
+ * root, or since V-5′ (PRDR-295) each package's own (`adapter/packages.ts`).
+ */
 export const MARKERS: readonly string[] = [
   "package.json",
   "package-lock.json",
@@ -77,15 +80,19 @@ const PM_BY_LOCKFILE: readonly (readonly [string, PackageManager])[] = [
   ["bun.lockb", "bun"],
 ];
 
-export function gatherFacts(root: string): StackFacts {
+/**
+ * `inherited` is the package manager of the package holding this one (V-5′):
+ * a workspace member has no lockfile of its own, and its root's decides.
+ */
+export function gatherFacts(root: string, inherited: PackageManager | null = null): StackFacts {
   const present = new Set(existsSync(root) ? readdirSync(root) : []);
   const markers = MARKERS.filter((m) => present.has(m)).sort();
-  const pm = PM_BY_LOCKFILE.find(([file]) => present.has(file))?.[1] ?? null;
+  const pm = PM_BY_LOCKFILE.find(([file]) => present.has(file))?.[1] ?? inherited;
   return { root, markers, pm };
 }
 
-export function discover(root: string): Discovery {
-  const facts = gatherFacts(root);
+export function discover(root: string, inherited: PackageManager | null = null): Discovery {
+  const facts = gatherFacts(root, inherited);
   const candidates: Candidate[] = [];
   for (const engine of ENGINES) candidates.push(...engine.discover(facts));
   candidates.sort(compareCandidates);

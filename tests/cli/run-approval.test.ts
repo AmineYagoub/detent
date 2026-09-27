@@ -225,14 +225,18 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
     expect(existsSync(approvalPath(root))).toBe(false);
   }, 60_000);
 
-  /** F-3: the migration leaves a presentation as it was, and one PRESENT wrote before PRDR-292 counts no spec defect. */
-  it("a presentation written before spec defects were counted is approvable, as it was", async () => {
+  /**
+   * F-3: the migration leaves a presentation as it was, and one PRESENT wrote
+   * before PRDR-292 counts no spec defect, nor, before PRDR-295, an ungated path.
+   */
+  it("a presentation written before spec defects or ungated paths were counted is approvable, as it was", async () => {
     const { root } = await makeRunRepo();
     roots.push(root);
     await deferred(root);
     const file = path.join(stateDir(root), "plan", "presentation.json");
     const older = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
     delete older["spec_defects"];
+    delete older["ungated"];
     writeFileSync(file, `${JSON.stringify(older)}\n`);
 
     let asked = 0;
