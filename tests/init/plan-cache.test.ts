@@ -34,7 +34,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
-    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02")]);
     expect(existsSync(path.join(sliceCacheDir(root), "s01.json"))).toBe(true);
 
     /** Only the billing document changes: s01 read nothing that moved. */
@@ -42,13 +42,13 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     log.splice(0);
     notes.splice(0);
     await runInit(root, handlers);
-    expect(log).toEqual(["SLICE", "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s02", ...R("s02")]);
     expect(notes.join("\n")).toContain("s01 skeleton, take 2: reused — nothing it read has changed (C-8)");
 
     /** C-8′: a replan is a fresh planning session — the cache is wiped, every slice drafted again. */
     log.splice(0);
     await runInit(root, handlers, { replan: true });
-    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02")]);
   });
 
   /**

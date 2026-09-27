@@ -5,11 +5,11 @@ import type { RevisionOutcome } from "./plan-signal.js";
  * PRDR-260 — the operator-facing lines a plan review's measurements produce.
  *
  * Split out of `plan-slices.ts`, which reached its 300-line ceiling with this
- * text inline and has a different job: planning slices. Both emit sites for the
- * revision line live here together for the reason the ticket exists — the two
- * had drifted apart, the slice one printing a count that cannot move and the
- * whole-plan one printing the same count with no null available to it at all.
- * One module means the next change to either has to look at both.
+ * text inline and has a different job: planning slices. The revision line had
+ * two emit sites, and they had drifted apart, the slice one printing a count
+ * that cannot move and the whole-plan one printing the same count with no null
+ * available to it at all; one module made the next change to either look at
+ * both. The whole-plan one went with the whole-plan review (PRDR-293).
  */
 
 /**

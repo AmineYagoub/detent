@@ -1,6 +1,8 @@
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
+import type { CheckFailure } from "../schemas/init.js";
 import type { DraftScope, PlanDeps } from "./plan.js";
+import type { DraftedTicket } from "./plan-write.js";
 import { catalogueIds, dependencyIndex, sliceRecords } from "./plan-records.js";
 import { sessionBudget } from "./plan-review.js";
 import { previousAttemptInput, refusedAttemptInput } from "./retry.js";
@@ -15,6 +17,14 @@ import { sizingEvidence } from "./sizing-evidence.js";
  * documents the slice plans from, as C-2‴ handed them. Neither names what an
  * earlier stage asked: no planning stage asks (C-3⁗).
  */
+
+/** A-1⁷ (PRDR-293): the failures as a drafter reads them: the family, the ticket and the words, which cite nothing only Detent's own records explain. */
+export const failureInputs = (failures: readonly CheckFailure[]): Record<string, unknown>[] =>
+  failures.map((f) => ({ check: f.check, ...(f.ticket === undefined ? {} : { ticket: f.ticket }), finding: f.finding }));
+
+/** A draft as a drafter wrote it: the slice each ticket is tagged with is Detent's. */
+export const asDrafted = (tickets: readonly DraftedTicket[]): Record<string, unknown>[] =>
+  tickets.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => k !== "slice")));
 
 /** An earlier attempt at the draft: refused for its shape, or, where `refused` is set, for what it says. */
 export interface PreviousDraft {
@@ -92,6 +102,8 @@ export function draftInputs(deps: PlanDeps, scope: DraftScope, previous: Previou
     ...(slice === undefined || deps.baseline === "none" || slice.baseline_items.length === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => slice.baseline_items.includes(b.id)) }),
     ...(index.length === 0 ? {} : { plan_index: index }),
     ...(scope.findings === undefined ? {} : { review_findings: scope.findings }),
+    /** A-1⁷ (PRDR-293): what code proved wrong in the slice's last draft, with that draft, so a redraft fixes what they name and keeps the rest. */
+    ...(scope.failures === undefined ? {} : { check_failures: failureInputs(scope.failures), draft: asDrafted(scope.draft ?? []) }),
     ...(scope.keepIds === undefined || scope.keepIds.length === 0 ? {} : { keep_ids: scope.keepIds }),
     ...(previous?.refused === true ? refusedAttemptInput(previous, "plan draft") : previousAttemptInput(previous, "plan draft")),
     expected_output: planDraftSkeleton(),
@@ -101,6 +113,7 @@ export function draftInputs(deps: PlanDeps, scope: DraftScope, previous: Previou
         : `Draft slice \`${slice.id}\` (${slice.title}): every requirement of the slice and every item in \`production_baseline\` reaches a ticket, and nothing outside the slice does. Its ticket ids are \`t-${slice.id}-NNN\`.`,
       deps.greenfield ? "This is a new project: Detent writes the bootstrap ticket that scaffolds it and blocks everything on it, so draft no scaffolding or setup ticket." : "",
       scope.findings === undefined ? "" : "A review of an earlier draft raised the `review_findings` in your inputs: answer every one of them in this draft.",
+      scope.failures === undefined ? "" : "Code checked `draft`, this slice's last draft, and found the `check_failures` in your inputs: fix every one, and keep the rest of `draft` as it is.",
       scope.keepIds === undefined || scope.keepIds.length === 0 ? "" : "Keep every ticket id in `keep_ids` exactly as it is: later slices depend on them.",
       "Write exactly the `expected_output` shape to `artifact_out`.",
     ]

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { applyContracts, resolveOwner } from "../../src/init/contracts.js";
 import { BOOTSTRAP_TICKET_ID } from "../../src/init/plan-write.js";
 import { stackEntrySchema } from "../../src/schemas/decide.js";
-import { scopeInputs } from "../../src/init/plan-review.js";
 import { CONTRACT_KINDS, contractKey, planDraftSchema, type SliceSpec } from "../../src/schemas/init.js";
 import type { DraftedTicket } from "../../src/init/plan-write.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -300,36 +299,6 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
 });
 
 /**
- * PRDR-193 — the free check runs before the paid review, and tells it.
- *
- * gate-312's whole-plan review spent a session on `t-s02-003 consumes a name no
- * ticket provides` — a finding `applyContracts` emits verbatim for nothing — and
- * said so itself, citing the mechanical checker by ticket id and observing the
- * defects "should be corrected rather than discovered by it". Then the finding
- * triggered a redraft: a second paid session for a one-line declaration fix.
- *
- * Asserted on `scopeInputs`, which is what a review session is actually handed.
- */
-describe("PRDR-193 the whole-plan review is told what code already proved", () => {
-  const known = [{ tag: "dependency" as const, ticket: "t-s02-003", finding: "consumes a name nobody provides" }];
-
-  it("carries the mechanical findings into the review's own inputs", () => {
-    const inputs = scopeInputs({ kind: "whole", slices: [], known });
-    expect(JSON.stringify(inputs)).toContain("t-s02-003");
-  });
-
-  it("tells the review not to spend its budget restating them", () => {
-    const inputs = scopeInputs({ kind: "whole", slices: [], known });
-    expect(String(inputs["scope_instruction"])).toMatch(/already|do not restate|no need to report/i);
-  });
-
-  it("says nothing extra when code found nothing", () => {
-    const inputs = scopeInputs({ kind: "whole", slices: [] });
-    expect(Object.keys(inputs)).not.toContain("already_found");
-  });
-});
-
-/**
  * A-1⁵ (PRDR-201) — coverage, decided rather than read.
  *
  * C-2⁗ has commanded since PRDR-117 that every id in a slice's
@@ -385,21 +354,20 @@ describe("A-1⁵ coverage is a set operation over what the ticket declares", () 
   });
 
   /**
-   * The C-8 case, and the reason this is not simply "uncovered". A slice cached
-   * before the fields existed declares nothing, and reading that as a plan that
-   * DROPPED four requirements is how a reused checkpoint becomes a false
-   * accusation — which is exactly the error that produced PRDR-201.
+   * PRDR-293: this was the C-8 case, "undeclared, not uncovered", which spared
+   * a slice cached before the fields existed a false accusation. A failure now
+   * goes to a redraft, which is what that report asked the operator for, and a
+   * slice cached before PLAN's prompt changed misses its key; so a slice whose
+   * tickets declare nothing fails for each item, which a redraft can act on.
    */
-  it("a slice planned before the fields existed is UNDECLARED, not uncovered", () => {
+  it("a slice whose tickets declare nothing fails for each item it was assigned", () => {
     const out = applyContracts(
       [t("t-s01-001"), t("t-s01-002")],
       ["s01"],
       [],
       [slice({ requirement_ids: ["R-1", "R-7"], baseline_items: ["PB-004"] })],
     );
-    expect(out.findings).toHaveLength(1);
-    expect(out.findings[0]?.finding).toMatch(/declares no coverage|undeclared/i);
-    expect(out.findings[0]?.finding, "it must not name the ids as dropped").not.toContain("R-7");
+    expect(out.findings.map((f) => f.key)).toEqual(["coverage:s01:PB-004", "coverage:s01:R-1", "coverage:s01:R-7"]);
   });
 
   it("a slice with no tickets yet is not judged at all", () => {

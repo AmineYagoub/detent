@@ -90,8 +90,8 @@ for each package with a manifest of its own, each in its package's directory
 (V-5′). In an existing project it discovers them and runs each before binding
 it; in a new one, where nothing can run yet, it proposes the commands the
 decision log records for each package under `## Packages` (D-10′), and the
-bootstrap ticket proves them. A ticket's gates are its packages', so `PRESENT`
-holds approval while a ticket writes where no package has a gate.
+bootstrap ticket proves them. A ticket's gates are its packages', so a ticket
+writing where no package has a gate fails one of `PLAN`'s checks.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
 walking skeleton first. On a pack (C-2⁸) code groups the requirement ids by
@@ -99,8 +99,12 @@ milestone and module for it, refuses a cut that loses, repeats or invents
 one or delivers a milestone out of order, and keeps the cut from one run to
 the next, so an edited requirement re-plans only its own slice. `PLAN` then
 plans every slice in turn, one session-sized ticket set per slice, reviews
-each, reviews the whole plan for coherence and coverage, and revises what the
-reviews fault. Planning does not pause between slices: it runs to the end of
+each, and revises what its review faults. Code checks every draft, and after
+every slice the plan so far (A-1⁷): coverage of each requirement, baseline
+item and criterion, one provider for each name a ticket uses, milestone
+order, a gate for every path a ticket writes, and no dependency cycle. A
+draft that fails is redrafted once with its failures; no model reads the
+whole plan. Planning does not pause between slices: it runs to the end of
 the product, and asks nothing. On a pack (C-4⁵) each slice is drafted from
 its requirements' records, and what the pack leaves unsettled is a spec
 defect, quoted from it, that `PRESENT` lists.
@@ -139,13 +143,18 @@ decision yourself.
    approve), then re-invoke — `VALIDATE` re-validates the edit, and the slice
    that reported the defect is planned again from the amended records.
    `detent init --replan` plans every slice again without an amendment. Also
-   at `PRESENT` (V-5′), a ticket writes where no package has a gate a ticket
-   runs, so no gate could fail for it: the message names each path, its
-   ticket and its package. Approval is not offered while one does, on either
-   exit. Channel: the human declares that package's gate commands under
-   `## Packages` in `docs/founder-decisions.md`, each run in the package's
-   own directory, or gives the package a `test`, `lint` or `typecheck`
-   command of its own; then re-invoke.
+   at `PRESENT` (A-1⁷), a check still fails after the one redraft planning
+   sent: a requirement, baseline item or criterion no ticket delivers, a name
+   with no provider or two, a ticket waiting on a later milestone's work, a
+   dependency cycle, or a ticket writing where no package has a gate a ticket
+   runs (V-5′). `PRESENT` checks the tickets as they stand, and the message
+   names each failure with its ticket. Approval is not offered while one
+   fails, on either exit. Channel: the human amends the pack where a failure
+   lies, or edits the tickets under `.detent/plan/`; for a path no gate can
+   fail, declares that package's gate commands under `## Packages` in
+   `docs/founder-decisions.md`, each run in the package's own directory, or
+   gives the package a `test`, `lint` or `typecheck` command of its own, or
+   narrows the surface that reaches it; then re-invoke.
 3. **`AWAIT_BINDING_CHOICE`** — raised at `DETERMINE_VERIFICATION` when more
    than one plausible verification command exists for a slot (C-3b). Present
    every candidate verbatim; Detent never guesses between them (V-1).

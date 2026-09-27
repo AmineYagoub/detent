@@ -107,13 +107,39 @@ export function scriptedPlanner(script: Script, log: string[], seen: Record<stri
   };
 }
 
+/**
+ * PRDR-293: `tickets` as a draft that passes A-1⁷'s coverage checks — the
+ * first carries the slice's requirement ids and baseline items, and every
+ * criterion its records hold, word for word — for a case not about them.
+ */
+export function covering(inputs: Record<string, unknown>, tickets: readonly ReturnType<typeof ticket>[]): object {
+  const slice = inputs["slice"] as { readonly requirement_ids?: string[]; readonly baseline_items?: string[] } | undefined;
+  const criteria = (inputs["records"] as { readonly criteria?: readonly { readonly id: string; readonly text: string }[] } | undefined)?.criteria ?? [];
+  const [first, ...rest] = tickets;
+  if (first === undefined) return { schema_version: SCHEMA_VERSION, tickets: [] };
+  return {
+    schema_version: SCHEMA_VERSION,
+    tickets: [
+      {
+        ...first,
+        requirement_ids: slice?.requirement_ids ?? [],
+        baseline_ids: slice?.baseline_items ?? [],
+        criterion_ids: criteria.map((c) => c.id),
+        acceptance_criteria: criteria.length === 0 ? first.acceptance_criteria : criteria.map((c) => c.text),
+      },
+      ...rest,
+    ],
+  };
+}
+
+/** TWO_SLICES drafted, each slice's ids and baseline items named by its tickets, as A-1⁷'s coverage check asks (PRDR-293). */
 export const twoSliceDraft = (inputs: Record<string, unknown>): object =>
   sliceOf(inputs) === "s01"
     ? {
         schema_version: SCHEMA_VERSION,
-        tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
+        tickets: [{ ...ticket("t-s01-001"), requirement_ids: ["R1"] }, { ...ticket("t-s01-002", ["t-s01-001"]), baseline_ids: ["PB-001"] }],
       }
-    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")] };
+    : { schema_version: SCHEMA_VERSION, tickets: [{ ...ticket("t-s02-001", ["t-s01-002"]), requirement_ids: ["R2"] }, ticket("t-s02-002")] };
 
 export const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 

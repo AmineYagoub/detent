@@ -9,7 +9,7 @@ import type { MockBackend } from "../../src/sessions/mock.js";
 import type { Json } from "./decide-fixture.js";
 import { CONFORMING_PACK, ORACLE_ROUNDS, commitRecord, oracleRecord, packRepo } from "./pack-fixture.js";
 import { BUDGETS, LONE_CANDIDATE, repo } from "./plan-fixture.js";
-import { scriptedPlanner, ticket, oneSlice } from "./slicing-fixture.js";
+import { covering, scriptedPlanner, ticket, oneSlice } from "./slicing-fixture.js";
 import { LENDING, PACK, RAW, WROTE, write, writesPack, type Write } from "./write-fixture.js";
 import {
   LENDING_PRD,
@@ -40,7 +40,8 @@ const PLANNING = ["DETERMINE_VERIFICATION", "SLICE", "PLAN", "PREPARE_AGENTS"];
 
 /** PRDR-291: on a pack SLICE places every live requirement, and each slice plans from the documents code picks (C-2⁸). */
 const LENDING_SLICE = oneSlice("lending");
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
+/* PRDR-293: the slice's ids and criteria are carried, so the draft passes A-1⁷'s checks and no redraft is sent. */
+const draft = (inputs: Record<string, unknown>): object => covering(inputs, [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])]);
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 interface Opts {

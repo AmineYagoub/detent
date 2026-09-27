@@ -136,7 +136,7 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
     ]);
     expect(sliced(s), "a cut of the checkout alone is whole").toEqual(["SLICE"]);
     const k = String(1 + PLAN_REVIEW_SAMPLES);
-    expect(s.notes.join("\n"), "one slice has no whole-plan review").toContain(`1 slice takes at least ${k} planner sessions, ${k} + ${k}R:`);
+    expect(s.notes.join("\n")).toContain(`1 slice takes at least ${k} planner sessions, ${k}N + ${k}R + C:`);
   });
 
   it("cuts the documents as they are where those planning reads hold no live requirement of the pack (C-2‴)", async () => {
@@ -162,12 +162,12 @@ describe("PRDR-291 — the seed is code's, and one session orders and groups it 
     await s.init();
     const k = 1 + PLAN_REVIEW_SAMPLES;
     const said = s.notes.join("\n");
+    /* PRDR-293: no whole-plan review is counted, since none runs; the redrafts the checks send are. */
     expect(said).toContain(
-      `3 slices take at least ${String(3 * k + 1)} planner sessions, ${String(k)}N + 1: a draft and ${String(PLAN_REVIEW_SAMPLES)} review reads per slice, and one whole-plan review.`,
+      `3 slices take at least ${String(3 * k)} planner sessions, ${String(k)}N + ${String(k)}R + C: a draft and ${String(PLAN_REVIEW_SAMPLES)} review reads per slice, ` +
+        `${String(k)} more for each of the R revision rounds a slice review asks for, and one for each of the C redrafts the plan's checks send (A-1⁷).`,
     );
-    expect(said).toContain(
-      `Each of the R revision rounds a slice review asks for adds ${String(k)}, and where the whole-plan review faults C slices, their redrafts and one more whole-plan review add C + 1.`,
-    );
+    expect(said).not.toContain("whole-plan");
     expect(said).not.toMatch(/~\d+ ticket/u);
   });
 

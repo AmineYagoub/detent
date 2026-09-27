@@ -17,7 +17,7 @@ import { MockBackend } from "../../src/sessions/mock.js";
 import { DOCS, SORTED, decide, initThrough, type Json } from "./decide-fixture.js";
 import { CONFORMING_PACK, DECISION_LOG, commitRecord, packRepo } from "./pack-fixture.js";
 import { BUDGETS, LONE_CANDIDATE, PROMPTS, repo } from "./plan-fixture.js";
-import { scriptedPlanner, ticket } from "./slicing-fixture.js";
+import { covering, scriptedPlanner, ticket } from "./slicing-fixture.js";
 import { clean, initThroughValidate } from "./validate-fixture.js";
 import { RAW, writesPack } from "./write-fixture.js";
 
@@ -54,7 +54,8 @@ const LENDING_SLICES = {
   ...SLICES,
   slices: [{ ...SLICES.slices[0], title: "lending", goal: "a tool is lent", requirement_ids: ["LND-F-001", "LND-F-002", "LND-F-003"] }],
 };
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
+/* PRDR-293: the slice's ids and criteria are carried, so the draft passes A-1⁷'s checks and no redraft is sent. */
+const draft = (inputs: Record<string, unknown>): object => covering(inputs, [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])]);
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 /** The stack entry the pack fixture's log records, as the checker parses it. */

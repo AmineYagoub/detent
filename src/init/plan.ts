@@ -1,13 +1,12 @@
-import { heldAs } from "./present-advice.js";
 import type { Budgets } from "../schemas/budgets.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { parseArtifact } from "../schemas/common.js";
-import { contractKey, planDraftSchema, type PlanDraftTicket, type PlanReview, type SliceSpec, type SpecDefect } from "../schemas/init.js";
+import { planDraftSchema, type CheckFailure, type PlanDraftTicket, type PlanReview, type SliceSpec, type SpecDefect } from "../schemas/init.js";
 import { planSlices } from "./plan-slices.js";
-import { wholePlanReview } from "./plan-whole.js";
-import { applyContracts, catalogueFindings } from "./contracts.js";
+import { checkPlan, failureLine, type PlanContext } from "./plan-checks.js";
+import type { Gates } from "./plan-check-gates.js";
 import type { Binding } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import type { Candidate } from "../adapter/discover/types.js";
@@ -129,6 +128,13 @@ export interface PlanDeps {
   readonly promptHash?: string;
   /** C-2⁸ (PRDR-291): the checker's parse VALIDATE handed on, whose records key each slice; null or absent where WRITE wrote no pack. */
   readonly pack?: Pack | null;
+  /**
+   * V-5′, A-1⁷ (PRDR-293): the packages and what each binds, which the gates
+   * check reads. Absent, PLAN checks no gate, and PRESENT, which reads them
+   * from `.detent/bindings.json` itself, still holds approval on a path no
+   * gate can fail.
+   */
+  readonly gates?: Gates;
 }
 
 /**
@@ -165,8 +171,12 @@ export interface DraftScope {
   readonly slice?: SliceSpec;
   readonly planIndex?: readonly DraftedTicket[];
   readonly findings?: PlanReview["findings"];
-  /** Ids later slices depend on; a redraft keeps them or is discarded (plan-whole). */
+  /** Ids later slices depend on; a redraft keeps them or is discarded (`plan-cross.ts`). */
   readonly keepIds?: readonly string[];
+  /** A-1⁷ (PRDR-293): what the checks proved wrong in `draft`, which this redraft fixes. */
+  readonly failures?: readonly CheckFailure[];
+  /** A-1⁷: the slice's draft the failures were found in, which a redraft keeps where they do not reach. */
+  readonly draft?: readonly DraftedTicket[];
 }
 
 /** One drafting launch: the whole pack, or one slice of it (C-2‴). Called again with findings when a review asks (PRDR-084). */
@@ -178,58 +188,36 @@ export async function draftPlan(deps: PlanDeps, scope: DraftScope = {}, previous
 
 /**
  * C-2‴ (PRDR-117): PLAN runs to the end of the product. Every slice is
- * drafted, reviewed and revised in turn (`planSlices`), the whole plan is
- * reviewed once for coherence and coverage (`wholePlanReview`) with one
- * targeted revision of the slices it faults, and only then are tickets
- * written — bootstrap first, cross-slice order enforced, orphans removed.
- * No stage here asks a human anything, and none asks at all (C-3⁗): what a
- * draft finds the pack leaves open rides to PRESENT as a spec defect (C-4⁵).
+ * drafted, checked, reviewed and revised in turn (`planSlices`), and after
+ * every slice the checks run across the plan so far (A-1⁷, PRDR-293); only
+ * then are tickets written — bootstrap first, cross-slice order enforced,
+ * orphans removed. No stage here asks a human anything, and none asks at all
+ * (C-3⁗): what a draft finds the pack leaves open rides to PRESENT as a spec
+ * defect (C-4⁵), and what the checks still find there holds approval.
+ *
+ * The whole-plan model review is gone (A-1⁷). Its prompt carried every ticket
+ * of every slice and outgrew its context on ksar-cloud's 547, and what it was
+ * handed that code had proved it was told to treat as handled.
  */
 export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const slices: readonly SliceSpec[] = deps.slices !== undefined && deps.slices.length > 0 ? deps.slices : [wholeProduct(deps.docs)];
-  const planned = await planSlices(deps, slices);
-  /**
-   * PRDR-193: the free check runs BEFORE the paid one.
-   *
-   * `applyContracts` is deterministic and costs nothing, and every ticket it
-   * needs exists the moment `planSlices` returns. It used to run only after the
-   * whole-plan review — the largest paid prompt `init` builds — so that session
-   * rediscovered what code could prove. Observed live: gate-312's review spent
-   * a session on `t-s02-003 consumes a name no ticket provides`, cited this
-   * checker by ticket id, wrote that such defects "should be corrected rather
-   * than discovered by it", and then paid again to redraft the slice.
-   *
-   * Only the FINDINGS move. Edge derivation stays below, on the reviewed
-   * tickets, because an edge must land on the text that reaches disk and a
-   * redraft rewrites that text.
-   */
-  /* A-1⁵: the specs too, so coverage is decided here rather than read by the review. */
-  const early = checked(deps, planned.tickets, slices, []);
-  if (early.findings.length > 0) {
-    deps.note?.(
-      `contract checks before review: ${String(early.findings.length)} finding(s) proved by code, not paid for — ${early.findings.map((f) => f.tag).join(", ")}`,
-    );
-  }
-  const reviewed = await wholePlanReview(deps, slices, planned.tickets, early.findings);
+  const context = planContext(deps);
+  const planned = await planSlices(deps, slices, context);
   /**
    * A-1‴ (PRDR-120): the declarations are checked by code, after every model
-   * has had its say and before a ticket reaches disk. Two tickets owning one
-   * name, a name nobody owns and a shared file two tickets create become
-   * findings; a provider the plan does not already order before its consumer
-   * becomes an EDGE, derived from the coupling rather than guessed.
+   * has had its say and before a ticket reaches disk. A provider the plan does
+   * not already order before its consumer becomes an EDGE, derived from the
+   * coupling rather than guessed. What still fails after the redrafts is the
+   * operator's: PRESENT checks the tickets again as they stand, and holds
+   * approval while any fails (A-1⁷).
    */
-  const inPlan = new Set(reviewed.tickets.map((t) => t.id));
-  /** Names DONE work already owns, even where this plan no longer redrafts it. */
-  const settledNames = allTickets(deps.root)
-    .filter((t) => t.state === "DONE" && !inPlan.has(t.id))
-    .flatMap((t) => t.provides.map((p) => contractKey(p)));
-  const contracts = checked(deps, reviewed.tickets, slices, settledNames);
-  const drafted = contracts.tickets;
-  for (const d of contracts.derived) {
+  const final = checkPlan(context, planned.tickets);
+  const drafted = final.tickets;
+  for (const d of final.derived) {
     deps.note?.(`${d.consumer} → ${d.provider}: edge derived from \`${d.contract}\` (A-1‴)`);
   }
-  if (contracts.findings.length > 0) {
-    deps.note?.(`contract checks: ${contracts.findings.length} finding(s) — ${contracts.findings.map((f) => f.tag).join(", ")}`);
+  if (final.failures.length > 0) {
+    deps.note?.(`checks: ${String(final.failures.length)} failure(s) remain after the redrafts, for the operator at PRESENT — ${final.failures.map(failureLine).join("; ")} (A-1⁷)`);
   }
 
   const ids = new Set(drafted.map((t) => t.id));
@@ -243,10 +231,9 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
   const written = writePlan(deps, drafted, slices);
 
   /**
-   * Every finding a review still held after its revision round, from BOTH
-   * levels: each slice's own review (and the normalisation that dropped an
-   * impossible edge), then the whole plan's. A finding that names a ticket the
-   * whole-plan revision has since replaced is dropped — it was answered.
+   * Every finding a slice's review still held after its revision round, with
+   * A-1″'s repairs of the draft that stands. A finding that names a ticket a
+   * later redraft has since replaced keeps its slice, so it can be found.
    */
   const live = new Set(drafted.map((t) => t.id));
   const held = planned.remaining.flatMap((r) =>
@@ -256,32 +243,20 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
     ),
   );
   /**
-   * A-1⁵ (PRDR-201): `contracts.findings` is NOT in this list.
-   *
-   * PRDR-196 put the checker's findings in front of the operator under their
-   * own heading precisely because one kind is proved and the other is
-   * judgement, and said that merging them discards the distinction that makes
-   * the first worth having. They were nonetheless also concatenated here, so
-   * every proof was printed twice — once as a proof and once as a judgement
-   * call "held after revision", which is the one thing it is not. Shown once,
-   * under the heading that says what it is.
+   * A-1⁵ (PRDR-201), A-1⁷ (PRDR-293): the checks' failures are NOT in this
+   * list. What a check proves is not a judgement held after revision, and it
+   * is not left for a session to read: it holds approval until the pack or the
+   * tickets answer it, and PRESENT names each one from the tickets as they
+   * stand.
    */
-  /* D-24′ (PRDR-209): the whole-plan review's leftovers survived its revision round, and are marked so. */
-  const findings = [...held, ...heldAs(reviewed.remaining, "after-revision"), ...written.findings];
+  const findings = [...held, ...written.findings];
   return {
     kind: "complete",
     outputs: {
       ...written,
       /* C-4⁵ (PRDR-292): each open one holds approval at PRESENT until the pack is amended. */
-      spec_defects: openDefects(deps.pack ?? null, [...planned.spec_defects, ...reviewed.spec_defects]) as unknown as Record<string, unknown>[],
+      spec_defects: openDefects(deps.pack ?? null, planned.spec_defects) as unknown as Record<string, unknown>[],
       review_findings: findings as unknown as Record<string, unknown>[],
-      /**
-       * PRDR-196: the deterministic checker's findings reach the operator.
-       *
-       * They were noted to the log and dropped here, so the only signal the
-       * literature calls reliable was the only one PRESENT never showed.
-       */
-      contract_findings: contracts.findings as unknown as Record<string, unknown>[],
       /**
        * PRDR-196: summed for PRESENT, because a measurement written to a cache
        * nobody reads is the defect this ticket is about, one directory over.
@@ -303,8 +278,24 @@ export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
         (a, r) => ({ resolved: a.resolved + r.resolved, survived: a.survived + r.survived, introduced: a.introduced + r.introduced }),
         { resolved: 0, survived: 0, introduced: 0 },
       ) as unknown as Record<string, unknown>,
-      derived_edges: contracts.derived as unknown as Record<string, unknown>[],
+      derived_edges: final.derived as unknown as Record<string, unknown>[],
     },
+  };
+}
+
+/**
+ * A-1⁷ (PRDR-293): what PLAN's checks read besides the tickets: the slices as
+ * SLICE assigned them (none where no slice was cut, since then nothing was
+ * assigned), the pack, the bootstrap's scaffold (A-1⁶), the gates, and the
+ * work already DONE, which provides its names and is sent no redraft.
+ */
+export function planContext(deps: PlanDeps): PlanContext {
+  return {
+    slices: deps.slices ?? [],
+    pack: deps.pack ?? null,
+    scaffold: bootstrapScaffold(deps.greenfield, deps.stack),
+    gates: deps.gates,
+    done: allTickets(deps.root).filter((t) => t.state === "DONE"),
   };
 }
 
@@ -415,16 +406,6 @@ export function readValidatedDraft(root: string, pack: Pack | null): { readonly 
   const issues = draftIssues(root, pack, parsed.value);
   if (issues.length > 0) throw new DraftRefusal(`PLAN's draft was refused: ${issues.join("; ")}`);
   return { tickets: [...parsed.value.tickets], spec_defects: [...parsed.value.spec_defects] };
-}
-
-/**
- * A-1‴, A-1⁵ and C-4⁵: the contract checks, and a name of a catalogued kind
- * that the pack's catalogue does not hold. Free, deterministic, and run twice:
- * before the whole-plan review and on what reaches disk.
- */
-function checked(deps: PlanDeps, tickets: readonly DraftedTicket[], slices: readonly SliceSpec[], settled: readonly string[]): ReturnType<typeof applyContracts> {
-  const result = applyContracts(tickets, slices.map((s) => s.id), settled, slices, bootstrapScaffold(deps.greenfield, deps.stack));
-  return { ...result, findings: [...result.findings, ...catalogueFindings(result.tickets, deps.pack ?? null)] };
 }
 
 function readDraft(root: string): unknown {

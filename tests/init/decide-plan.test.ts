@@ -106,7 +106,7 @@ describe("PRDR-282: every slice plans with the decision log (C-2¹²)", () => {
     /* D-10′ (PRDR-290): in an existing project the bindings read no log, so they stand, and planning re-runs from SLICE. */
     expect(vetoed.executed.slice(0, 2)).toEqual(["DECIDE", "SLICE"]);
     expect(stub.inputs, "the veto left every item settled, so DECIDE ran no session").toHaveLength(1);
-    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02")]);
   });
 });
 

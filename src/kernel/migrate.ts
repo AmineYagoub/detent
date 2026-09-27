@@ -110,10 +110,10 @@ function withCriteria(ticket: unknown): unknown {
 const ticketFile: Transform = (value, _deps, rel) => (NON_TICKET_FILES.has(path.posix.basename(rel)) ? value : (withCriteria(value) as Json));
 
 /**
- * C-3⁗, C-4⁵ (PRDR-292): a draft, a slice's cache and a slice the whole-plan
- * review had redrafted each trade `questions` for `spec_defects`, since no
- * planning stage asks, and each of their tickets names its criteria. What was
- * asked is dropped: none of it quoted the pack, so none of it is a defect.
+ * C-3⁗, C-4⁵ (PRDR-292): a draft and a slice's cache each trade `questions`
+ * for `spec_defects`, since no planning stage asks, and each of their tickets
+ * names its criteria. What was asked is dropped: none of it quoted the pack,
+ * so none of it is a defect.
  */
 function drafted(value: Json): Json {
   const rest: Json = { ...value };
@@ -124,9 +124,6 @@ function drafted(value: Json): Json {
     ...(Object.hasOwn(value, "spec_defects") ? {} : { spec_defects: [] }),
   };
 }
-
-const wholePlan: Transform = (value) =>
-  Array.isArray(value["redrafted"]) ? { ...value, redrafted: value["redrafted"].map((r) => (isJson(r) ? drafted(r) : r)) } : value;
 
 /** V-5′ (PRDR-295): an entry bound before packages was the root's. */
 const rooted = (entry: unknown): unknown => (isJson(entry) && !Object.hasOwn(entry, "package") ? { ...entry, package: "." } : entry);
@@ -163,10 +160,13 @@ const packaged: Transform = (value) => ({
  * migration runs on it.
  *
  * PLAN's draft and the tickets it writes changed shape too (PRDR-292): a
- * ticket gains `criterion_ids`, and a draft, each slice's cache and the
- * whole-plan review's cache trade `questions` for `spec_defects`. SLICE's
- * artifact lost `questions` as well and needs no step: it is removed before
- * every launch, and read only after one.
+ * ticket gains `criterion_ids`, and a draft and each slice's cache trade
+ * `questions` for `spec_defects`. SLICE's artifact lost `questions` as well
+ * and needs no step: it is removed before every launch, and read only after
+ * one. The whole-plan review's cache needs none either since PRDR-293 deleted
+ * the review: nothing reads `state/whole-plan.json`, and a state holding it
+ * keeps it as it was. The record of the redrafts A-1⁷'s checks send,
+ * `state/plan-checks.json`, is new in this event.
  *
  * Gates bind per package (PRDR-295, D-5′): `bindings.json` names every
  * package, and each binding and skip its own, the root's where it names none.
@@ -187,7 +187,6 @@ export const MIGRATIONS: readonly Migration[] = [
       ".detent/plan/*.json": ticketFile,
       ".detent/state/plan/*.json": drafted,
       ".detent/state/plan-draft.json": drafted,
-      ".detent/state/whole-plan.json": wholePlan,
       ".detent/bindings.json": packaged,
     },
   },

@@ -1,4 +1,4 @@
-import { contractKey, type ContractConsume, type PlanReview, type SliceSpec } from "../schemas/init.js";
+import { contractKey, type CheckFailure, type ContractConsume, type SliceSpec } from "../schemas/init.js";
 import type { Pack } from "../schemas/pack.js";
 import { catalogueIds } from "./plan-records.js";
 import type { DraftedTicket } from "./plan-write.js";
@@ -24,12 +24,17 @@ import type { DraftedTicket } from "./plan-write.js";
  * it DERIVES the missing dependency edge from the real coupling, so the plan
  * carries an edge the planner never thought to write. X-4′ recovers the same
  * fact at run time, one generation later; this is the plan knowing it first.
+ *
+ * A-1⁷ (PRDR-293): what they prove is a failure, not a report. Each names the
+ * slice it lies in and a key that stays the same across drafts, so a redraft
+ * is sent it once (`plan-checks.ts`), and its words cite nothing a drafter
+ * cannot read: they reach the redraft as they are.
  */
 
 export interface ContractResult {
   /** The tickets, with derived edges applied. */
   readonly tickets: DraftedTicket[];
-  readonly findings: PlanReview["findings"];
+  readonly findings: CheckFailure[];
   /** Edges the coupling implied and the planner did not declare. */
   readonly derived: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
 }
@@ -78,8 +83,8 @@ function reaches(edges: ReadonlyMap<string, ReadonlySet<string>>, from: string, 
  * implement against. The two used to disagree — this picked the first in draft
  * order, that one the last in ticket-id order — so a consumer could be blocked
  * on one ticket and handed a different, contradicting ticket's note. The
- * ambiguity is already reported as a `coherence` finding; what must not vary is
- * WHICH answer the two halves of the system give.
+ * ambiguity is a failure of its own, which holds approval (A-1⁷); what must not
+ * vary is WHICH answer the two halves of the system give while it stands.
  */
 export function resolveOwner(providers: readonly string[], self: string): string | undefined {
   return [...providers].filter((p) => p !== self).sort()[0];
@@ -102,7 +107,7 @@ export function applyContracts(
    * Absent means "not checkable" and is silent, which is not fail-open the way
    * an absent `sliceOrder` would be: there is nothing in the tickets to derive
    * an assignment from, so a caller without the specs genuinely cannot ask this
-   * question. Both production call sites in `plan.ts` pass it.
+   * question. `checkPlan`, its one production caller, passes it (A-1⁷).
    */
   assigned: readonly SliceSpec[] = [],
   /**
@@ -111,8 +116,9 @@ export function applyContracts(
    */
   scaffold?: { readonly owner: string; readonly files: readonly string[] },
 ): ContractResult {
-  const findings: PlanReview["findings"] = [];
+  const findings: CheckFailure[] = [];
   const derived: { consumer: string; provider: string; contract: string }[] = [];
+  const sliceOf = new Map(input.map((t) => [t.id, t.slice]));
 
   /** ---- the provider index, and what two owners of one name means ---------- */
   const owners = new Map<string, string[]>();
@@ -123,21 +129,22 @@ export function applyContracts(
     if (ids.length < 2) continue;
     const kind = key.slice(0, key.indexOf(":"));
     const name = key.slice(key.indexOf(":") + 1);
-    findings.push({
-      tag: "coherence",
-      ticket: ids[0] as string,
-      finding:
-        kind === "file"
-          ? `${ids.join(" and ")} each claim to own the ${NOUN[kind] ?? kind} \`${name}\`; a file two tickets both create is a conflict at run time, so one must own it and the others consume it`
-          : `${ids.join(" and ")} both provide the ${NOUN[kind] ?? kind} \`${name}\` — two definitions of one name, and nothing says which the consumers get`,
-    });
+    const finding =
+      kind === "file"
+        ? `${ids.join(" and ")} each claim to own the ${NOUN[kind] ?? kind} \`${name}\`; a file two tickets both create is a conflict at run time, so one must own it and the others consume it`
+        : `${ids.join(" and ")} both provide the ${NOUN[kind] ?? kind} \`${name}\` — two definitions of one name, and nothing says which the consumers get`;
+    /* A-1⁷: one failure for each owner's slice, each naming that slice's first owner, since each slice is sent it. */
+    const bySlice = new Map<string, string>();
+    for (const id of ids) if (!bySlice.has(sliceOf.get(id) ?? "")) bySlice.set(sliceOf.get(id) ?? "", id);
+    for (const [slice, owner] of bySlice) {
+      findings.push({ tag: "coherence", ticket: owner, finding, check: "contracts", slice, key: `contracts:two-providers:${key}:${slice}` });
+    }
   }
 
   /** ---- what each ticket leans on, and whether the plan guarantees it ------ */
   const edges = new Map<string, Set<string>>(input.map((t) => [t.id, new Set(t.depends_on)]));
   const order = sliceOrder.length > 0 ? sliceOrder : [...new Set(input.map((t) => t.slice))];
   const rank = new Map(order.map((id, i) => [id, i]));
-  const sliceOf = new Map(input.map((t) => [t.id, t.slice]));
   const settled = new Set(external);
   /** A slice's own order is the plan's; a ticket cannot be pushed behind work that comes after it. */
   const later = (consumer: string, provider: string): boolean => {
@@ -162,7 +169,7 @@ export function applyContracts(
       if (providers.length === 0) {
         /* Work already finished still owns its names, even when this plan no longer redrafts it. */
         if (settled.has(key)) continue;
-        findings.push({ tag: "dependency", ticket: t.id, finding: unownedMessage(t.id, c) });
+        findings.push({ tag: "dependency", ticket: t.id, finding: unownedMessage(c), check: "contracts", slice: t.slice, key: `contracts:unowned:${key}:${t.slice}`, unowned: key });
         continue;
       }
       const provider = resolveOwner(providers, t.id);
@@ -181,6 +188,9 @@ export function applyContracts(
           tag: "dependency",
           ticket: t.id,
           finding: `consumes the ${NOUN[c.kind] ?? c.kind} \`${c.id}\` from ${provider}, which the plan puts in a LATER slice (${sliceOf.get(provider)} after ${sliceOf.get(t.id)}) — either the name belongs earlier or this ticket belongs later; no edge was added, because one backwards would deadlock both slices`,
+          check: "contracts",
+          slice: t.slice,
+          key: `contracts:later:${key}:${t.slice}`,
         });
         continue;
       }
@@ -196,6 +206,9 @@ export function applyContracts(
           tag: "dependency",
           ticket: t.id,
           finding: `consumes the ${NOUN[c.kind] ?? c.kind} \`${c.id}\` from ${provider}, but ${provider} already depends on ${t.id} — the two tickets need each other, so one of them owns the wrong half`,
+          check: "graph",
+          slice: t.slice,
+          key: `graph:refused:${key}:${t.slice}`,
         });
         continue;
       }
@@ -215,37 +228,31 @@ export function applyContracts(
    * convention accused a complete fifteen-slice plan of dropping CI, the
    * runbook, traceability and the golden path; a loose one counted a non-goal
    * naming an item as EXCLUDED as coverage of it.
+   *
+   * A-1⁷ (PRDR-293): a slice whose tickets declare nothing fails for each item
+   * it was assigned. That was reported as "undeclared" instead, to spare a slice
+   * cached before the fields existed a false accusation; a failure is now sent
+   * to a redraft, which is what the report asked the operator to do, and every
+   * slice cached before PLAN's prompt changed misses its key and is planned
+   * again.
    */
   for (const slice of assigned) {
     const own = tickets.filter((t) => t.slice === slice.id);
     /* Not planned yet — C-2‴ plans slice by slice, and an unplanned slice is not a gap. */
     if (own.length === 0) continue;
     const wants = [
-      ...slice.baseline_items.map((id) => ({ id, kind: "baseline item" })),
-      ...slice.requirement_ids.map((id) => ({ id, kind: "requirement" })),
+      ...slice.baseline_items.map((id) => ({ id, kind: "baseline item", field: "baseline_ids" })),
+      ...slice.requirement_ids.map((id) => ({ id, kind: "requirement", field: "requirement_ids" })),
     ];
-    if (wants.length === 0) continue;
-    /**
-     * C-8: a slice cached before these fields existed declares nothing, and
-     * reading that as a plan that DROPPED its requirements turns a reused
-     * checkpoint into a false accusation — the exact error that produced this
-     * ticket. Undeclared is reported as undeclared.
-     */
-    if (own.every((t) => t.requirement_ids.length === 0 && t.baseline_ids.length === 0)) {
-      findings.push({
-        tag: "coverage",
-        finding:
-          `${slice.id} declares no coverage: ${String(wants.length)} assigned item(s) and no ticket names one. ` +
-          `Planned before A-1⁵ and reused from cache (C-8), or drafted without the fields — re-plan the slice to decide it.`,
-      });
-      continue;
-    }
     const sourced = new Set(own.flatMap((t) => [...t.requirement_ids, ...t.baseline_ids]));
     for (const want of wants) {
       if (sourced.has(want.id)) continue;
       findings.push({
         tag: "coverage",
-        finding: `${slice.id} was assigned ${want.kind} ${want.id} and no ticket in it declares delivering ${want.id} (A-1⁵).`,
+        finding: `${slice.id} was assigned ${want.kind} ${want.id}, and no ticket in it names ${want.id} in its \`${want.field}\``,
+        check: "coverage",
+        slice: slice.id,
+        key: `coverage:${slice.id}:${want.id}`,
       });
     }
   }
@@ -260,10 +267,10 @@ export function applyContracts(
  * the pack catalogues nothing of is named freely, and without a pack nothing
  * is catalogued.
  */
-export function catalogueFindings(tickets: readonly DraftedTicket[], pack: Pack | null): PlanReview["findings"] {
+export function catalogueFindings(tickets: readonly DraftedTicket[], pack: Pack | null): CheckFailure[] {
   if (pack === null) return [];
   const catalogued = catalogueIds(pack);
-  const findings: PlanReview["findings"] = [];
+  const findings: CheckFailure[] = [];
   for (const t of tickets) {
     for (const [verb, names] of [["provides", t.provides], ["consumes", t.consumes]] as const) {
       for (const c of names) {
@@ -274,6 +281,9 @@ export function catalogueFindings(tickets: readonly DraftedTicket[], pack: Pack 
           tag: "traceability",
           ticket: t.id,
           finding: `${verb} \`${contractKey(c)}\`, and the pack's catalogue holds no ${noun} \`${c.id}\` — a ${noun} is named by its catalogue id, so the ticket names another or the catalogue lacks one`,
+          check: "contracts",
+          slice: t.slice,
+          key: `contracts:catalogue:${contractKey(c)}:${t.slice}`,
         });
       }
     }
@@ -281,7 +291,7 @@ export function catalogueFindings(tickets: readonly DraftedTicket[], pack: Pack 
   return findings;
 }
 
-function unownedMessage(id: string, c: ContractConsume): string {
+function unownedMessage(c: ContractConsume): string {
   const noun = NOUN[c.kind] ?? c.kind;
   return c.kind === "file"
     ? `consumes the ${noun} \`${c.id}\`, which no ticket creates — either a ticket must own it or this one does`

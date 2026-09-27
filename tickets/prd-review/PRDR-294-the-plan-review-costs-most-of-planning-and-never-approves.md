@@ -71,3 +71,25 @@ ticket's first criterion gives the review a role of its own, and the prompt move
   words, and the two must agree.
 - A review session is a planner session: Read, Grep and Glob, a write to its artifact alone, and no
   reach into the root's `archive/`.
+
+## From PRDR-293
+
+The whole-plan review is gone (A-1⁸), so the review has one scope: `ReviewScope` in
+`src/init/plan-review.ts` is a slice, and `prompts/plan_review.md` judges `coherence` within the
+slice or against `plan_index`. `REVIEW_INSTRUCTION` says the same in its own words.
+- The checks run on a slice's draft before its review, and a failing draft is redrafted once with
+  its failures, so the review reads the redraft. C-4⁶'s "one read, after A-1⁷'s checks pass" is not
+  what runs: the review reads that draft whether or not the checks then pass, and what still fails
+  reaches PRESENT, which holds approval on it. Whether the read waits for the checks, or skips a
+  draft that still fails them, is this ticket's call.
+- After the revision the checks run again, and a failing revision is redrafted once. That redraft,
+  and every redraft the checks across the plan send, is judged by the checks alone and never
+  reviewed.
+- The review is handed nothing the checks proved, and its `coverage` and `dependency` tags overlap
+  A-1⁷'s families, so a read can still report what code already checks. Limiting it to judgement
+  (the redesign's decision 2) means deciding which of those tags it keeps.
+- `planningSessions` in `src/init/slice.ts` announces `4N + 4R + C`, where C is the redrafts the
+  checks send. One read and one revision make it `2N + R + C`. Two tests pin the numbers: the
+  formula case in `tests/init/slice-seed.test.ts`, and the price assertion
+  `1 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES)` in `tests/init/slicing-scale.test.ts`, with the
+  payload table beside it.

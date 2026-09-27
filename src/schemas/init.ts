@@ -314,7 +314,9 @@ export function requireEscalationBeforeUndecidable(
 /**
  * C-2‴ (PRDR-117) adds `coherence`: two tickets — usually in different slices —
  * that contradict each other, duplicate each other, or disagree about the
- * interface between them. The whole-plan review is where it is judged.
+ * interface between them. A slice's review judges it against the tickets of
+ * the slices it builds on. The whole-plan review that judged it across every
+ * slice is gone (A-1⁷, PRDR-293): a name two slices both provide is code's.
  */
 export const PLAN_FINDING_TAGS = ["sizing", "testability", "coverage", "shape", "traceability", "boundaries", "dependency", "coherence"] as const;
 
@@ -334,6 +336,23 @@ export const planReviewSchema = z.strictObject({
 });
 
 export type PlanReview = z.infer<typeof planReviewSchema>;
+
+/** A-1⁷ (PRDR-293): the five things code checks in a plan. */
+export type CheckFamily = "coverage" | "contracts" | "milestones" | "gates" | "graph";
+
+/**
+ * A-1⁷ (PRDR-293): what a plan check proved, in a finding's shape so it renders
+ * beside one. `slice` is where it lies, the slice a redraft for it is sent to;
+ * `key` names it across drafts, so a redraft is sent it once. A name nobody
+ * provides carries `unowned`, since the earliest slice that consumes it is the
+ * one sent a redraft for it across the plan.
+ */
+export type CheckFailure = PlanReview["findings"][number] & {
+  readonly check: CheckFamily;
+  readonly slice: string;
+  readonly key: string;
+  readonly unowned?: string;
+};
 
 /**
  * A-1‴ (PRDR-120) — what a ticket OWNS and what it LEANS ON.
@@ -515,10 +534,17 @@ export type HeldFinding = PlanReview["findings"][number] & {
  * from, and the slices it thickens. The slicer is told to place every
  * requirement id in exactly one slice, and every applicable production-baseline
  * item in one too, so a pack that never mentions backups still gets a backup
- * slice. On a pack, code refuses a cut that leaves a live id out, places one
- * twice or names one the seed does not hold (`cutIssue` in
- * `init/slice-seed.ts`, C-2¹⁵). Without a parse, and for the baseline items,
- * no code checks it.
+ * slice. Code checks the claim in three places:
+ * - On a pack, a cut that leaves a live id out, places one twice or names one
+ *   the seed does not hold is refused (`cutIssue` in `init/slice-seed.ts`,
+ *   C-2¹⁵).
+ * - Pack or none, a slicing that places a requirement id or a baseline item in
+ *   two slices is refused (`slicesSchema`, below; PRDR-293).
+ * - At PLAN, every id and item a slice holds must be named by one of its own
+ *   tickets, and no ticket may name one its slice does not hold (A-1⁷,
+ *   `init/plan-checks.ts`, PRDR-293).
+ * Which ids documents without a parse define, and which baseline items apply
+ * to a product, are the slicer's judgement: no code can list either.
  *
  * C-2⁸ (PRDR-291): it carries no ticket estimate. `expected_tickets` was a
  * guess, 308 and 554 for the same documents, and nothing read it but the
@@ -573,10 +599,17 @@ export const slicesSchema = z
   })
   .superRefine((value, ctx) => {
     const seen = new Set<string>();
+    /* PRDR-293: an id or baseline item lands in one slice, pack or none. */
+    const placed = new Map<string, string>();
     value.slices.forEach((slice, i) => {
       if (seen.has(slice.id)) ctx.addIssue({ code: "custom", path: ["slices", i, "id"], message: `duplicate slice id ${slice.id}` });
       for (const dep of slice.depends_on) {
         if (!seen.has(dep)) ctx.addIssue({ code: "custom", path: ["slices", i, "depends_on"], message: `${slice.id} depends on ${dep}, which is not an EARLIER slice` });
+      }
+      for (const id of new Set([...slice.requirement_ids, ...slice.baseline_items])) {
+        const first = placed.get(id);
+        if (first !== undefined) ctx.addIssue({ code: "custom", path: ["slices", i], message: `${id} is placed in ${first} and ${slice.id}: each id belongs in exactly one slice` });
+        else placed.set(id, slice.id);
       }
       seen.add(slice.id);
     });

@@ -56,7 +56,6 @@ const afterRevision = (slice: string): object => ({
 function stationaryReviewer(): (inputs: Record<string, unknown>) => object {
   const seen = new Map<string, number>();
   return (inputs) => {
-    if (inputs["scope"] === "whole") return APPROVE_PLAN;
     const id = sliceOf(inputs);
     const n = (seen.get(id) ?? 0) + 1;
     seen.set(id, n);
@@ -112,44 +111,22 @@ describe("PRDR-260 the remain line says what the round did, not only how many ar
     );
   });
 
-  it("decomposes the whole-plan count and says outright that it has no null", async () => {
+  it("on a slice its review approved, the churn line promises no number below it", async () => {
     const root = repo(DOCS);
     const notes: string[] = [];
-    let whole = 0;
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: twoSliceDraft,
-          review: (inputs) => {
-            if (inputs["scope"] !== "whole") return APPROVE_PLAN;
-            whole += 1;
-            return whole === 1
-              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
-              : { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "boundaries", ticket: "t-s02-002", finding: "now reaches across the seam" }] };
-          },
-        },
-        [],
-      ),
-    });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, []) });
     await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
 
-    expect(whole).toBe(2);
     /**
      * Both slices APPROVED here, so no revision followed either of them — and
      * the churn line is still emitted for both. Its old wording promised "the
      * null the number below is read against" on exactly this path, where there
-     * is no number below.
+     * is no number below. The whole-plan remain line this case also read went
+     * with the whole-plan review (PRDR-293).
      */
     expect(notes.join("\n")).toContain("s01 sample churn");
     expect(notes.join("\n")).not.toContain("the null the number below is read against");
-    /**
-     * The whole-plan review is a single draw — `plan-whole.ts` never calls
-     * `sampleReviewPlan` — so there is no null here at all. Saying so is what
-     * keeps the fix from becoming the drift it removes.
-     */
-    expect(notes.join("\n")).toMatch(
-      /whole-plan review after revision: 1 finding\(s\) remain — 1 handed, 1 left \(1 resolved, 1 introduced; no null — the whole-plan review is a single draw/,
-    );
+    expect(notes.join("\n")).not.toMatch(/finding\(s\) remain/);
   });
 });
 

@@ -9,20 +9,24 @@ Your inputs
 - `catalogue_ids`: the pack's catalogue ids, by the contract kind that names them.
 - `stack`: in a new project, the stack the decision log settled. Plan on it, and choose nothing about it.
 - `bound_slots`, `session_budget`, and `sizing_evidence` when a previous plan of this product measured its sessions.
-- When an earlier draft of this slice was reviewed or refused: `review_findings`, `keep_ids` or `previous_attempt`.
+- `review_findings`, when a review of an earlier draft of this slice asked for changes, and `previous_attempt`, when a draft was refused.
+- `check_failures` and `draft`, when Detent's checks failed on this slice's last draft: each failure with its check, the ticket it names where it names one, and the finding, and the tickets as they were drafted. Fix what each failure names, and keep what none names.
+- `keep_ids`: the ids of this slice's tickets that later slices depend on. Keep each one.
 
 What Detent refuses. A refused draft is relaunched once with the reason, and a second refusal stops planning.
 - A draft that is not exactly the `expected_output` shape.
 - A `criterion_ids` entry the pack does not define, or one whose `text` is not, word for word, one of that ticket's `acceptance_criteria`. Copy the text, and add criteria of your own beside it.
 - A spec defect quoting a passage that is not, word for word, in the record whose id it gives.
 
-What Detent reports to the operator who approves the plan
-- A requirement id or baseline item of the slice that no ticket names in `requirement_ids` or `baseline_ids`. Only those two lists count as delivering one; an id in prose does not.
-- A name two tickets provide, and a name a ticket consumes that no ticket provides.
-- A route, event, error code, setting or job named by anything but its catalogue id, where the pack catalogues that kind.
-- A `depends_on` entry naming no planned ticket, which is dropped, and a dependency cycle, which is broken at the edge that closes it.
+What Detent checks. A draft that fails a check is drafted once more, with `check_failures` and `draft`. What the redraft still fails holds approval of the plan until the pack or the tickets change.
+- Coverage: each requirement id and baseline item of the slice is named in some ticket's `requirement_ids` or `baseline_ids`. Only those two lists count as delivering one; an id in prose does not. Each criterion in `records` is named in the `criterion_ids` of a ticket in a slice holding a requirement it tests, and is due once the last such slice is drafted. No ticket names a requirement, baseline item or criterion its slice was not given.
+- Contracts: each name a ticket consumes is provided by a ticket in this slice or a slice before it, no name has two providers, and a route, event, error code, setting or job is named by its catalogue id where the pack catalogues that kind.
+- Milestones: no ticket delivering a requirement of one milestone depends, directly or through other tickets, on a ticket delivering a later milestone's.
+- Gates: every path in a ticket's `surface` lies in a package where a lint, typecheck or test gate is bound.
+- Graph: no two tickets need what the other provides, and no dependency cycle remains.
 
 What Detent does itself
+- It drops a `depends_on` entry naming no planned ticket, breaks a dependency cycle at the edge that closes it, and tells the operator of both.
 - It renames a ticket id another ticket already holds, or one that is not lowercase letters, digits, `-` and `_`, to the slice's next free `t-<slice>-NNN`.
 - It orders a consumer after the ticket that provides what it consumes, with a dependency edge.
 - It holds every ticket of a slice until the slices it depends on are done.

@@ -114,24 +114,23 @@ export async function sliceStage(deps: SliceDeps): Promise<PhaseOutcome> {
 
 /**
  * N-5′: what PLAN will spend, as the formula over the slice count, since how
- * many revisions it buys is not known before it runs. The slicer estimates no
- * ticket count (C-2⁸): its estimates were off by 58%. A slice is a draft and
- * PLAN_REVIEW_SAMPLES review reads, and each revision round its review asks
- * for is a redraft and the reads again. With more than one slice the whole
- * plan is reviewed once, and where that review faults slices, each is
- * redrafted and the plan is reviewed again. SLICE's own session has run and
- * is not counted: once C-4⁶ gives each slice one review read and A-1⁷
- * replaces the whole-plan review, this is N-5′'s `1 + 2N + R + C` less it.
+ * many revisions and redrafts it buys is not known before it runs. The slicer
+ * estimates no ticket count (C-2⁸): its estimates were off by 58%. A slice is
+ * a draft and PLAN_REVIEW_SAMPLES review reads, and each revision round its
+ * review asks for is a redraft and the reads again. Each redraft A-1⁷'s checks
+ * send is one session more: one for a slice's draft or revision that fails
+ * them, and one each time the checks across the plan send a slice failures it
+ * was not sent before. No session reviews the whole plan (PRDR-293). SLICE's
+ * own session has run and is not counted: once C-4⁶ gives each slice one
+ * review read, this is N-5′'s `1 + 2N + R + C` less it.
  */
 export function planningSessions(n: number): string {
   const k = String(1 + PLAN_REVIEW_SAMPLES);
-  const reads = `a draft and ${String(PLAN_REVIEW_SAMPLES)} review reads`;
+  const slices = n === 1 ? "1 slice takes" : `${String(n)} slices take`;
   const formula =
-    n === 1
-      ? `1 slice takes at least ${k} planner sessions, ${k} + ${k}R: ${reads}, and ${k} more for each of the R revision rounds its review asks for; one slice has no whole-plan review.`
-      : `${String(n)} slices take at least ${String(n * (1 + PLAN_REVIEW_SAMPLES) + 1)} planner sessions, ${k}N + 1: ${reads} per slice, and one ` +
-        `whole-plan review. Each of the R revision rounds a slice review asks for adds ${k}, and where the whole-plan review faults C slices, ` +
-        "their redrafts and one more whole-plan review add C + 1.";
+    `${slices} at least ${String(n * (1 + PLAN_REVIEW_SAMPLES))} planner sessions, ${k}N + ${k}R + C: a draft and ` +
+    `${String(PLAN_REVIEW_SAMPLES)} review reads per slice, ${k} more for each of the R revision rounds a slice review asks for, ` +
+    "and one for each of the C redrafts the plan's checks send (A-1⁷).";
   return `PLAN will now run to the end of the product: ${formula} It does not stop until the plan exists (C-2‴).`;
 }
 

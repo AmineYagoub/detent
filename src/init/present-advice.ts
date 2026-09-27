@@ -153,8 +153,3 @@ export function writeAdvice(root: string, findings: readonly HeldFinding[]): str
   writeFileSync(file, renderAdviceMarkdown(findings));
   return file;
 }
-
-/** Mark why a set of findings is still in front of the human (D-24′). */
-export function heldAs(findings: readonly HeldFinding[], kind: HeldKind): HeldFinding[] {
-  return findings.map((f) => ({ ...f, held: kind }));
-}

@@ -5,7 +5,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { DECISION_LOG_PATH } from "../../src/schemas/pack.js";
 import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import { LONE_CANDIDATE, repo } from "./plan-fixture.js";
-import { scriptedPlanner, ticket, oneSlice } from "./slicing-fixture.js";
+import { covering, scriptedPlanner, ticket, oneSlice } from "./slicing-fixture.js";
 import type { Json } from "./decide-fixture.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
@@ -25,7 +25,8 @@ const PACK_DOCS = ["README.md", DECISION_LOG_PATH, "docs/prd/01-lending.md", "do
 
 /** PRDR-291: on a pack SLICE places every live requirement, and each slice plans from the documents code picks (C-2⁸). */
 const LENDING_SLICE = oneSlice("lending");
-const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] });
+/* PRDR-293: the slice's ids and criteria are carried, so the draft passes A-1⁷'s checks and no redraft is sent. */
+const draft = (inputs: Record<string, unknown>): object => covering(inputs, [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])]);
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
 interface Seen {

@@ -118,13 +118,14 @@ describe("PRDR-202 the harnesses read a planned root the way the schema does", (
     }
   });
 
-  it("reports the undeclared slice the deterministic checker reports", () => {
-    const root = plannedRoot({ s01: [ticket("t-s01-001", "s01")] }, [spec("s01", { requirement_ids: ["R-1", "R-7"] })]);
+  /** A-1⁷ (PRDR-293): a slice whose tickets name nothing fails for each item, as the checks PLAN runs report it; "undeclared" is not a verdict any more. */
+  it("reports each item a slice's tickets leave unnamed, as the plan checks report it", () => {
+    /* A name nobody provides fails a check of another family, which a coverage report leaves out. */
+    const root = plannedRoot({ s01: [ticket("t-s01-001", "s01", { consumes: [{ kind: "config", id: "NOPE" }] })] }, [spec("s01", { requirement_ids: ["R-1", "R-7"] })]);
     try {
       const findings = coverageFindings(readPlannedRoot(root));
-      expect(findings).toHaveLength(1);
-      expect(findings[0]?.finding).toMatch(/declares no coverage/);
-      expect(findings[0]?.finding, "never named as dropped").not.toContain("R-7");
+      expect(findings.map((f) => f.key)).toEqual(["coverage:s01:R-1", "coverage:s01:R-7"]);
+      expect(findings[1]?.finding).toBe("s01 was assigned requirement R-7, and no ticket in it names R-7 in its `requirement_ids`");
     } finally {
       removeTree(root);
     }

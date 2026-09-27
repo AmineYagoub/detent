@@ -438,11 +438,11 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
         "amend the pack where each one quotes it and re-run `detent init` (C-4⁵).",
     );
   }
-  /* V-5′ (PRDR-295): and for a ticket writing where no package has a gate, since no gate could fail for it. */
-  if (shown.ungated > 0) {
+  /* A-1⁷ (PRDR-293): and for a check that still fails, a path no gate can fail among them (V-5′). */
+  if (shown.check_failures > 0) {
     return notReady(
-      `${String(shown.ungated)} path(s) the plan's tickets write have no gate that can fail — ` +
-        "declare their package's gates under `## Packages` in the pack, or give the package a command of its own, and re-run `detent init` (V-5′).",
+      `${String(shown.check_failures)} check(s) fail on the plan's tickets, and hold its approval — amend the pack where each ` +
+        "lies or edit the tickets, and re-run `detent init` (A-1⁷).",
     );
   }
   /**

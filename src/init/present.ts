@@ -11,7 +11,7 @@ import {
 } from "../schemas/records.js";
 import type { Skip } from "../adapter/bind.js";
 import type { Ticket } from "../schemas/ticket.js";
-import type { HeldFinding, PlanReview } from "../schemas/init.js";
+import type { CheckFailure, HeldFinding } from "../schemas/init.js";
 import { ADVICE_INLINE_MAX, renderHeldFindings, writeAdvice } from "./present-advice.js";
 import type { PresentQuestion } from "./questions.js";
 import { defectInterrupt, defectLines, specLines, type PresentedDefault, type PresentedDefect, type PresentedRisk } from "./present-spec.js";
@@ -19,7 +19,7 @@ import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
 import { bindingTable } from "./bind.js";
-import { ungatedInterrupt, ungatedLines, ungatedPaths, type UngatedPath } from "./present-gates.js";
+import { failureInterrupt, failureLines, presentFailures, type PresentChecks } from "./present-checks.js";
 import { ROOT_PACKAGE } from "../adapter/packages.js";
 import type { PhaseOutcome } from "./machine.js";
 
@@ -68,8 +68,10 @@ export interface PresentInput {
   readonly skips: readonly Skip[];
   /** V-5′ (PRDR-295): every package DETERMINE_VERIFICATION found; the root alone where absent. */
   readonly packages?: readonly string[];
-  /** V-5′: the paths no gate can fail, which `presentStage` works out; a caller rendering on its own passes none. */
-  readonly ungated?: readonly UngatedPath[];
+  /** A-1⁷ (PRDR-293): what the checks read besides the tickets and the gates; absent, no slice's coverage is checked. */
+  readonly checks?: PresentChecks;
+  /** A-1⁷: the checks that fail on the tickets as they stand, which `presentStage` works out; a caller rendering on its own passes none. */
+  readonly failures?: readonly CheckFailure[];
   readonly bootstrap: string | null;
   readonly assignments: Readonly<Record<string, string>>;
   /** C-2‴: the increments the plan was planned in. */
@@ -88,17 +90,6 @@ export interface PresentInput {
   readonly findings?: readonly HeldFinding[];
   /** D-24′ (PRDR-209): where the full list went when it did not fit on the screen. */
   readonly adviceFile?: string;
-  /**
-   * PRDR-196: what `applyContracts` PROVED, kept apart from what the review
-   * judged.
-   *
-   * These were computed on every run and never carried out of `plan.ts` — the
-   * log had them, the plan output did not, so the operator saw 74 findings from
-   * a paid session and none of the 7 a deterministic check had established for
-   * nothing. One kind is reliable and the other is judgement; merging them
-   * would throw away the distinction that makes the first kind worth having.
-   */
-  readonly contractFindings?: PlanReview["findings"];
   /**
    * PRDR-196: what the revision rounds did, summed over the slices.
    *
@@ -145,12 +136,12 @@ export interface PresentInput {
  */
 export function renderPresentation(input: PresentInput): string {
   const defects = input.specDefects ?? [];
-  const ungated = input.ungated ?? [];
+  const failures = input.failures ?? [];
   const lines = [
     defects.length > 0
       ? "Plan drafted, and not approvable while the spec defects below are open."
-      : ungated.length > 0
-        ? "Plan drafted, and not approvable while a ticket writes where no gate can fail."
+      : failures.length > 0
+        ? "Plan drafted, and not approvable while a check below fails."
         : "Plan ready for approval.",
     "",
     "Verification bindings:",
@@ -196,7 +187,7 @@ export function renderPresentation(input: PresentInput): string {
   if (answered.length > 0) {
     lines.push("", `Not asked again (${answered.length}) — the decision log already answers: ${answered.map((a) => `${a.id} by ${a.entry}`).join(", ")} (C-3‴).`);
   }
-  lines.push(...defectLines(defects), ...ungatedLines(ungated), ...specLines(input.defaults ?? [], input.risks ?? []));
+  lines.push(...defectLines(defects), ...failureLines(failures), ...specLines(input.defaults ?? [], input.risks ?? []));
   const edges = input.derivedEdges ?? [];
   if (edges.length > 0) {
     lines.push(
@@ -243,14 +234,6 @@ export function renderPresentation(input: PresentInput): string {
             `same baseline and the gap between them is not the revision's effect (C-4⁗″, PRDR-270).`,
       );
     }
-  }
-  const proved = input.contractFindings ?? [];
-  if (proved.length > 0) {
-    lines.push(
-      "",
-      `Contract checks (${String(proved.length)}) — proved by code from the tickets' own \`provides\`/\`consumes\`, no session and no judgement (A-1‴):`,
-    );
-    for (const f of proved) lines.push(`  ${f.tag}${f.ticket === undefined ? "" : ` (${f.ticket})`}: ${f.finding}`);
   }
   const findings = input.findings ?? [];
   if (findings.length > 0) lines.push(...renderHeldFindings(findings, input.adviceFile));
@@ -301,9 +284,9 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   /* D-24′ (PRDR-209): a wall goes to a file and the screen gets the summary; a short list stays inline. */
   const held = deps.findings ?? [];
   const adviceFile = held.length > ADVICE_INLINE_MAX ? writeAdvice(deps.root, held) : undefined;
-  /* V-5′ (PRDR-295): the paths no gate can fail, from the tickets and the bindings as they stand. */
-  const ungated = ungatedPaths(deps.tickets, deps.bindings, deps.packages ?? [ROOT_PACKAGE]);
-  const presentation = renderPresentation({ ...deps, ungated, ...(adviceFile === undefined ? {} : { adviceFile }) });
+  /* A-1⁷ (PRDR-293): the checks, on the tickets and the bindings as they stand. */
+  const failures = presentFailures(deps.tickets, deps.slices ?? [], deps.checks, { bindings: deps.bindings, packages: deps.packages ?? [ROOT_PACKAGE] });
+  const presentation = renderPresentation({ ...deps, failures, ...(adviceFile === undefined ? {} : { adviceFile }) });
   deps.print?.(presentation);
 
   /**
@@ -321,15 +304,15 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     plan_hash: planHash(deps.root),
     blocking: (deps.questions ?? []).filter((q) => q.blocking).length,
     spec_defects: (deps.specDefects ?? []).length,
-    ungated: ungated.length,
+    check_failures: failures.length,
   } satisfies Presentation);
 
   /** C-4⁵ (PRDR-292): an open spec defect holds approval, and the operator is told each one and how a re-run closes it. */
   const defective = defectInterrupt(presentation, deps.specDefects ?? []);
   if (defective !== null) return defective;
-  /** V-5′ (PRDR-295): so does a path no gate can fail. */
-  const unguarded = ungatedInterrupt(presentation, ungated);
-  if (unguarded !== null) return unguarded;
+  /** A-1⁷ (PRDR-293): so does a check that still fails, a path no gate can fail among them (V-5′). */
+  const failing = failureInterrupt(presentation, failures);
+  if (failing !== null) return failing;
 
   /**
    * C-3′ (PRDR-117): the whole plan is written and shown FIRST; a question no

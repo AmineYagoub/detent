@@ -372,9 +372,11 @@ describe("PRDR-300: what the migration keeps true", () => {
   /**
    * PRDR-292 (C-4⁵): the draft and the ticket changed shape in this event. A
    * ticket gains `criterion_ids`, and PLAN's draft and each slice's cache trade
-   * `questions` for `spec_defects`, since no planning stage asks.
+   * `questions` for `spec_defects`, since no planning stage asks. PRDR-293
+   * deleted the whole-plan review, so its cache is read by nothing and takes no
+   * step.
    */
-  it("carries a ticket to `criterion_ids`, and PLAN's draft and its two caches from `questions` to `spec_defects`", async () => {
+  it("carries a ticket to `criterion_ids`, and PLAN's draft and its slice caches from `questions` to `spec_defects`", async () => {
     const root = await richState();
     const ticketFile = path.join(stateDir(root), "plan", "t-1.json");
     const older = JSON.parse(readFileSync(ticketFile, "utf8")) as Record<string, unknown>;
@@ -403,10 +405,8 @@ describe("PRDR-300: what the migration keeps true", () => {
     const draft = planDraftSchema.parse(read(".detent/state/plan-draft.json"));
     expect(draft.spec_defects).toEqual([]);
     expect(draft.tickets[0]?.criterion_ids).toEqual([]);
-    const redrafted = (read(".detent/state/whole-plan.json")["redrafted"] as Record<string, unknown>[])[0];
-    expect(redrafted).not.toHaveProperty("questions");
-    expect(redrafted?.["spec_defects"]).toEqual([]);
-    expect((redrafted?.["tickets"] as Record<string, unknown>[])[0]?.["criterion_ids"]).toEqual([]);
+    const whole = read(".detent/state/whole-plan.json");
+    expect((whole["redrafted"] as Record<string, unknown>[])[0], "a file nothing reads is left as it was").toHaveProperty("questions");
     expect(read(".detent/plan/plan.json"), "the plan artifact is not a ticket").not.toHaveProperty("criterion_ids");
     expect(approvalState(root), "a ticket carrying no criterion is the ticket that was approved").toMatchObject({ approved: true, stale: false });
   });

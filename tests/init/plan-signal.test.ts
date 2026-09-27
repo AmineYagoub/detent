@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { presentStage } from "../../src/init/present.js";
 import { heldFindings, labelHeld, revisionOutcome } from "../../src/init/plan-signal.js";
 import type { PlanReview } from "../../src/schemas/init.js";
+import type { Binding } from "../../src/schemas/records.js";
+import type { Ticket } from "../../src/schemas/ticket.js";
+import { newTicket } from "../../src/kernel/tickets/mutations.js";
+import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { SampledReview } from "../../src/init/plan-sample.js";
 
 /**
@@ -55,13 +59,29 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
  * nobody.
  */
 describe("PRDR-196 what code proved reaches PRESENT, labelled as proved", () => {
-  const contractFindings = [
-    { tag: "coherence" as const, ticket: "t-s12-012", finding: "two tickets both create `plugin/skills/init/SKILL.md`" },
-  ];
+  /**
+   * PRDR-293: PRESENT proves it itself now, from the tickets as they stand, so
+   * two tickets that both own one file are the input rather than a finding
+   * handed in; and what it proves holds approval.
+   */
+  const owning = (id: string): Ticket =>
+    newTicket({ id, type: "feature", title: `t ${id}`, acceptance_criteria: ["it works"], surface: ["src/**"], provides: [{ kind: "file", id: "plugin/skills/init/SKILL.md", note: "the skill" }] });
+  const gate: Binding = {
+    schema_version: SCHEMA_VERSION,
+    package: ".",
+    slot: "test",
+    adapter: "make",
+    ref: "test",
+    resolved: "make test",
+    config_hash: "a".repeat(64),
+    executed_at: "2026-09-27T00:00:00.000Z",
+    approved_by: "auto",
+    status: "approved",
+  };
   const base = {
     root: "/tmp/x",
-    tickets: [],
-    bindings: [],
+    tickets: [] as Ticket[],
+    bindings: [gate],
     skips: [],
     bootstrap: null,
     assignments: {},
@@ -71,52 +91,32 @@ describe("PRDR-196 what code proved reaches PRESENT, labelled as proved", () => 
     derivedEdges: [],
     gateNotices: [],
   };
+  const proved = { ...base, tickets: [owning("t-s12-012"), owning("t-s12-013")] };
 
-  it("renders the contract findings, and says code proved them", async () => {
-    const outcome = await presentStage({ ...base, contractFindings });
+  it("renders what the checks prove, and says code proved them", async () => {
+    const outcome = await presentStage(proved);
     const message = outcome.kind === "interrupt" ? outcome.message : "";
     expect(message).toContain("plugin/skills/init/SKILL.md");
-    expect(message).toMatch(/proved by code|checked by code|no session/i);
+    expect(message).toMatch(/proved by code/i);
   });
 
   it("keeps them separate from the review's, because one kind is reliable and the other is judgement", async () => {
     const outcome = await presentStage({
-      ...base,
-      contractFindings,
+      ...proved,
       findings: [{ tag: "sizing" as const, ticket: "t-s01-012", finding: "larger than one implement session" }],
     });
     const message = outcome.kind === "interrupt" ? outcome.message : "";
     expect(message).toContain("larger than one implement session");
     expect(message).toContain("plugin/skills/init/SKILL.md");
     /* Two headings, not one merged list — the operator must be able to tell them apart. */
-    expect(message).toMatch(/Contract checks/i);
+    expect(message).toMatch(/Checks that still fail/i);
     expect(message).toMatch(/Review findings/i);
   });
 
   it("says nothing extra when code found nothing", async () => {
     const outcome = await presentStage({ ...base });
     const message = outcome.kind === "interrupt" ? outcome.message : "";
-    expect(message).not.toMatch(/Contract checks/i);
-  });
-
-  /**
-   * The audit of this ticket found `revision` written to every slice cache and
-   * read by nothing — a measurement stored where no one looks, which is one hop
-   * from the defect the ticket is about. PRESENT is where an operator decides,
-   * so it is where the number belongs.
-   */
-  it("reports what the revision rounds did, so the measurement has a reader", async () => {
-    const outcome = await presentStage({ ...base, revisions: { resolved: 4, survived: 11, introduced: 9 } });
-    const message = outcome.kind === "interrupt" ? outcome.message : "";
-    expect(message).toMatch(/revision/i);
-    expect(message).toContain("4");
-    expect(message).toContain("11");
-    expect(message).toContain("9");
-  });
-
-  it("says nothing about revisions when none ran", async () => {
-    const outcome = await presentStage({ ...base });
-    expect((outcome.kind === "interrupt" ? outcome.message : "")).not.toMatch(/resolved/i);
+    expect(message).not.toMatch(/Checks that still fail/i);
   });
 });
 

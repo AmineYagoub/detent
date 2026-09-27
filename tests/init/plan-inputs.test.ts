@@ -184,9 +184,15 @@ describe("PRDR-292: catalogue ids are the names of what a catalogue covers (A-1â
       if (sliceOfInputs(inputs) !== "s03") return base;
       return { ...base, tickets: base.tickets.map((t) => ({ ...t, provides: [...(contracts.provides ?? [])], consumes: [...(contracts.consumes ?? [])] })) };
     };
-  const contractFindings = (result: InitResult): string[] => ((result.outputs["PLAN"]?.["contract_findings"] ?? []) as { finding: string }[]).map((f) => f.finding);
+  /** PRDR-293: what the checks still find holds approval, and PRESENT names each; a plan that passes them is offered for approval. */
+  const contractFindings = (result: InitResult): string[] => (result.interrupt?.interrupt === "AWAIT_INFO" ? [...result.interrupt.items] : []);
+  const sentTo = (s: Seeded, slice: string): string =>
+    plans(s, slice)
+      .flatMap((i) => (i["check_failures"] as { finding: string }[] | undefined) ?? [])
+      .map((f) => f.finding)
+      .join("\n");
 
-  it("a name of a catalogued kind that its catalogue does not hold is a contract finding, and a catalogue id is not", async () => {
+  it("a name of a catalogued kind that its catalogue does not hold fails a check, and a catalogue id does not", async () => {
     const s = seeded(CONFORMING_PACK, {
       draft: naming({
         provides: [
@@ -199,6 +205,8 @@ describe("PRDR-292: catalogue ids are the names of what a catalogue covers (A-1â
       }),
     });
     const found = contractFindings(await s.init());
+    /* PRDR-293: the slice's redraft is sent them first, and this draft keeps them. */
+    expect(sentTo(s, "s03")).toContain("`route:POST /checkout`, and the pack's catalogue holds no route");
     expect(found.filter((f) => f.includes("POST /checkout") && f.includes("catalogue"))).toHaveLength(1);
     expect(found.filter((f) => f.includes("cart_missing") && f.includes("catalogue"))).toHaveLength(1);
     expect(found.filter((f) => f.includes("order.paid") && f.includes("catalogue"))).toHaveLength(1);
@@ -332,12 +340,18 @@ describe("PRDR-292: planning asks nothing, and reports what the pack leaves unse
     expect(result.interrupt?.items).toEqual([`[s03] gap: ${GAP.defect}`]);
   });
 
-  it("a spec defect a whole-plan redraft reports reaches PRESENT, and one two drafts of a slice report is listed once", async () => {
+  /** PRDR-293: the redraft the whole-plan review sent is gone; one the checks send reports a defect the same way. */
+  it("a spec defect a redraft the checks sent reports reaches PRESENT, and one two drafts of a slice report is listed once", async () => {
     const faulted = (takes: readonly number[]): Seeded =>
-      seeded(CONFORMING_PACK, { review: (take, inputs) => (inputs["scope"] === "whole" && take === 1 ? splitting("t-s03-001") : APPROVE_PLAN), draft: reporting("s03", [GAP], takes) });
+      seeded(CONFORMING_PACK, {
+        draft: (take, inputs) => {
+          const reported = reporting("s03", [GAP], takes)(take, inputs) as { tickets: Json[] };
+          return sliceOfInputs(inputs) === "s03" && take === 1 ? { ...reported, tickets: reported.tickets.map((t) => ({ ...t, consumes: [{ kind: "config", id: "NOPE" }] })) } : reported;
+        },
+      });
     const redrafted = faulted([2]);
     const result = await redrafted.init();
-    expect(plans(redrafted, "s03"), "s03 is drafted, and redrafted for the whole-plan review").toHaveLength(2);
+    expect(plans(redrafted, "s03"), "s03 is drafted, and redrafted once for the checks").toHaveLength(2);
     expect(result.interrupt?.items).toEqual([`[s03] gap: ${GAP.defect}`]);
     const twice = faulted([1, 2]);
     expect((await twice.init()).interrupt?.items).toEqual([`[s03] gap: ${GAP.defect}`]);

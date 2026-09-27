@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { LaunchBatch, LaunchOptions } from "./launch-batch.js";
 import { sizingEvidence } from "./sizing-evidence.js";
-import { PRODUCTION_BASELINE } from "./baseline.js";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
@@ -177,79 +176,42 @@ const REVIEW_INSTRUCTION =
   "cannot be met when the ticket runs. Name BOTH tickets in the finding — the one whose criterion reaches, and the one that " +
   "owns what it reaches for — because the remedy is an edge or a surface and either needs the pair). " +
   "An honest `approve` is a real verdict; do not manufacture findings, and a ticket with genuinely no boundary worth stating is " +
-  "not a finding. `coherence` (two tickets that contradict, duplicate, or disagree about their interface — judged when the " +
-  "whole plan is in view; see `scope_instruction` when present). The verdict is EXACTLY `approve` or `changes` — no other word " +
+  "not a finding. `coherence` (two tickets that contradict, duplicate, or disagree about their interface, here or against " +
+  "`plan_index`; see `scope_instruction` when present). The verdict is EXACTLY `approve` or `changes` — no other word " +
   "— and every finding's `tag` is one of the eight named here. Write EXACTLY the `expected_output` shape.";
 
 /**
  * C-2‴ (PRDR-117): what the reviewer is judging — one slice against its own
- * requirement set with the earlier slices' tickets in view, or the whole plan
- * across every slice, where `coherence` and cross-slice coverage are judged.
+ * requirement set, with the earlier slices' tickets in view.
+ *
+ * A-1⁷ (PRDR-293): the whole-plan review, the other kind of scope, is gone,
+ * and with it `already_found`, the list of what code had proved that it was
+ * handed with the instruction to treat each as handled. What code proves now
+ * goes to a redraft, and what survives one holds approval.
  */
-export type ReviewScope =
-  | {
-      readonly kind: "slice";
-      readonly slice: SliceSpec;
-      readonly planIndex: readonly {
-        readonly id: string;
-        readonly slice: string;
-        readonly title: string;
-        readonly surface: readonly string[];
-      }[];
-      /** PRDR-269: this is the review of a REVISED draft, so its draws get their own subtree. */
-      readonly revised?: boolean;
-    }
-  | {
-      readonly kind: "whole";
-      readonly slices: readonly SliceSpec[];
-      /**
-       * PRDR-193: what the mechanical union check already proved, handed to the
-       * review so its budget goes on what only judgement reaches.
-       *
-       * gate-312's whole-plan review spent a session finding `t-s02-003
-       * consumes a name no ticket provides` — which `applyContracts` emits
-       * verbatim for nothing — and said so itself, citing the checker by ticket
-       * id and noting the defects "should be corrected rather than discovered
-       * by it". That finding then paid for a redraft.
-       */
-      readonly known?: PlanReview["findings"];
-    };
+export interface ReviewScope {
+  readonly kind: "slice";
+  readonly slice: SliceSpec;
+  readonly planIndex: readonly {
+    readonly id: string;
+    readonly slice: string;
+    readonly title: string;
+    readonly surface: readonly string[];
+  }[];
+  /** PRDR-269: this is the review of a REVISED draft, so its draws get their own subtree. */
+  readonly revised?: boolean;
+}
 
 export function scopeInputs(scope: ReviewScope | undefined): Record<string, unknown> {
   if (scope === undefined) return {};
-  if (scope.kind === "slice") {
-    return {
-      scope: "slice",
-      slice: scope.slice,
-      plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })),
-      scope_instruction:
-        `This draft is ONE slice, \`${scope.slice.id}\` (${scope.slice.title}). Judge coverage against ITS ` +
-        "`requirement_ids` and `baseline_items` only (a PB-### item traces to `baseline:PB-###`, valid provenance); " +
-        "`plan_index` lists the earlier slices' tickets, for dependency findings that reach across slices.",
-    };
-  }
-  const carried = new Set(scope.slices.flatMap((s) => s.baseline_items));
-  const known = scope.known ?? [];
-  const base =
-    "This is the WHOLE plan across every slice, each ticket tagged with its slice. Add `coherence`: tickets that " +
-    "contradict each other, duplicate each other, or disagree about the interface between them — usually in different " +
-    "slices. Judge coverage across EVERY slice's `requirement_ids` and `baseline_items` (a PB-### item traces to " +
-    "`baseline:PB-###`, which is valid provenance). Name the ticket in every finding; the slice is known from it.";
-  /**
-   * PRDR-193: what code already proved, so this session does not pay to prove
-   * it again. Empty when the check found nothing, so a clean plan's instruction
-   * is unchanged.
-   */
-  const alreadyProved =
-    known.length === 0
-      ? ""
-      : ` \`already_found\` lists ${String(known.length)} finding(s) Detent's own contract check has ALREADY proved mechanically and will report regardless — do not restate them. Spend this session on what code cannot decide: whether two tickets' criteria contradict each other, whether a ticket is oversized, whether a slice's coverage is short. If one of them is wrong, say so; otherwise treat it as handled.`;
   return {
-    scope: "whole",
-    slices: scope.slices,
-    ...(known.length === 0 ? {} : { already_found: known }),
-    ...(carried.size === 0 ? {} : { production_baseline: PRODUCTION_BASELINE.filter((b) => carried.has(b.id)) }),
-    scope_instruction: `${base}${alreadyProved}`,
+    scope: "slice",
+    slice: scope.slice,
+    plan_index: scope.planIndex.map((t) => ({ id: t.id, slice: t.slice, title: t.title, surface: t.surface })),
+    scope_instruction:
+      `This draft is ONE slice, \`${scope.slice.id}\` (${scope.slice.title}). Judge coverage against ITS ` +
+      "`requirement_ids` and `baseline_items` only (a PB-### item traces to `baseline:PB-###`, valid provenance); " +
+      "`plan_index` lists the earlier slices' tickets, for dependency findings that reach across slices.",
   };
 }
 

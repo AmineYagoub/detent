@@ -9,7 +9,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { PLAN_FINDING_TAGS, slicesSchema, type SliceSpec } from "../../src/schemas/init.js";
 import { slicesFromOutputs, slicesSkeleton } from "../../src/init/slice.js";
-import { normaliseDraft } from "../../src/init/plan-slices.js";
+import { normaliseDraft } from "../../src/init/plan-normalise.js";
 import { renderPresentation } from "../../src/init/present.js";
 import { presentInputsFromOutputs } from "../../src/init/present-inputs.js";
 import { PRODUCTION_BASELINE } from "../../src/init/baseline.js";
@@ -20,9 +20,10 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
  * C-2‴ / C-2⁗ / C-3′ (PRDR-117) — the slicing layer.
  *
  * A product larger than one planning pass is planned by Detent itself, to the
- * end: SLICE cuts the pack, PLAN plans each slice with the earlier index in
- * view, and the whole plan is reviewed once for coherence. Nothing between
- * stops for a human, and no stage asks one anything (C-3⁗, C-4⁵).
+ * end: SLICE cuts the pack, and PLAN plans each slice with the earlier index in
+ * view. The whole plan was reviewed once for coherence until PRDR-293, which
+ * put code's checks across the plan in its place. Nothing between stops for a
+ * human, and no stage asks one anything (C-3⁗, C-4⁵).
  */
 
 const TWO_SLICES = {
@@ -82,13 +83,14 @@ function scriptedPlanner(script: Script, log: string[], seen: Record<string, unk
   };
 }
 
+/** Each slice's ids and baseline items are named by its tickets, as A-1⁷'s coverage check asks (PRDR-293). */
 const twoSliceDraft = (inputs: Record<string, unknown>): object =>
   sliceOf(inputs) === "s01"
     ? {
         schema_version: SCHEMA_VERSION,
-        tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])],
+        tickets: [{ ...ticket("t-s01-001"), requirement_ids: ["R1"] }, { ...ticket("t-s01-002", ["t-s01-001"]), baseline_ids: ["PB-001"] }],
       }
-    : { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s02-001", ["t-s01-002"]), ticket("t-s02-002")] };
+    : { schema_version: SCHEMA_VERSION, tickets: [{ ...ticket("t-s02-001", ["t-s01-002"]), requirement_ids: ["R2"] }, ticket("t-s02-002")] };
 
 const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 
@@ -103,33 +105,16 @@ const DOCS = { ...LONE_CANDIDATE, "prd-billing.md": "# billing\n" };
 const R = (slice: string): string[] => Array.from({ length: PLAN_REVIEW_SAMPLES }, () => `REVIEW:slice:${slice}`);
 
 describe("C-2‴ the product is planned slice by slice, to the end, without stopping", () => {
-  it("plans each slice with the earlier index in view, reviews the whole, revises the slice it faults, and writes slice order into the blockers", async () => {
+  it("plans each slice with the earlier index in view, and writes slice order into the blockers", async () => {
     const root = repo(DOCS);
     const log: string[] = [];
-    const notes: string[] = [];
     const seen: Record<string, unknown>[] = [];
-    let wholeReviews = 0;
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: twoSliceDraft,
-          review: (inputs) => {
-            if (inputs["scope"] !== "whole") return APPROVE_PLAN;
-            wholeReviews += 1;
-            return wholeReviews === 1
-              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s02-002", finding: "duplicates t-s01-002" }] }
-              : APPROVE_PLAN;
-          },
-        },
-        log,
-        seen,
-      ),
-    });
-    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log, seen) });
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
     expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
-    /** Every slice in turn, each reviewed as its own plan; then the whole; then only the faulted slice again; then the whole again. */
-    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02"), "REVIEW:whole", "PLAN:s02", "REVIEW:whole"]);
+    /** Every slice in turn, each reviewed as its own plan; no session reads the plan as one thing (PRDR-293). */
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", ...R("s02")]);
     /** The later slice drafts with the earlier slice's tickets in view, and the slice review with the same index. */
     const s02Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s02")!;
     expect(s02Draft["plan_index"]).toEqual([
@@ -139,10 +124,6 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(s02Draft["docs"]).toEqual(["prd-billing.md"]);
     const s01Draft = seen.find((i) => i["stage"] === "PLAN" && sliceOf(i) === "s01")!;
     expect((s01Draft["production_baseline"] as { id: string }[]).map((b) => b.id)).toEqual(["PB-001"]);
-    const redraft = seen.filter((i) => i["stage"] === "PLAN" && sliceOf(i) === "s02")[1]!;
-    expect((redraft["review_findings"] as { tag: string }[]).map((f) => f.tag)).toEqual(["coherence"]);
-    const whole = seen.find((i) => i["stage"] === "REVIEW_PLAN" && i["scope"] === "whole")!;
-    expect((whole["plan"] as { slice: string }[]).map((t) => t.slice)).toEqual(["s01", "s01", "s02", "s02"]);
 
     expect(allTickets(root).map((t) => t.id).sort()).toEqual(["t-s01-001", "t-s01-002", "t-s02-001", "t-s02-002"]);
     /** A ticket with its own edge into the slice it thickens keeps just that edge. */
@@ -162,8 +143,6 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     expect(message).toContain("s02  billing  — 2 ticket(s)");
     /** C-3⁗, C-4⁵: no planning stage asks, so nothing reaches PRESENT as a question. */
     expect(message).not.toContain("Open questions");
-    expect(notes.join("\n")).toContain("redrafting s02 billing for 1 whole-plan finding(s)");
-    expect(notes.join("\n")).toContain("whole-plan review after revision: approve");
   });
 
   it("C-2⁗: SLICE receives the production baseline unless the config opts out", async () => {
@@ -233,14 +212,14 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     });
   });
 
-  it("a finding a slice's own review still holds after its revision reaches the presentation — the single-slice case, where no whole-plan review runs", async () => {
+  it("a finding a slice's own review still holds after its revision reaches the presentation", async () => {
     const root = repo(DOCS);
     const held = { tag: "sizing", ticket: "t-s01-002", finding: "still larger than one session after the revision" };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           slices: { schema_version: SCHEMA_VERSION, slices: [TWO_SLICES.slices[0]!] },
-          draft: () => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])] }),
+          draft: twoSliceDraft,
           review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [held] }),
         },
         [],
@@ -248,45 +227,9 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
-    /** One slice means no whole-plan review, so the slice's own leftover is the ONLY finding there is. */
+    /** The slice's own leftover is the only finding there is. */
     expect(result.interrupt?.message).toContain("Review findings held after revision (1)");
     expect(result.interrupt?.message).toContain("sizing (t-s01-002): still larger than one session");
-  });
-
-  /**
-   * `wholePlanReview` guards the FIRST review's absence carefully and then, in
-   * the same function, read a null SECOND verdict as an empty finding list —
-   * printing "approve" for a re-review that never ran. A plan redrafted for
-   * coherence findings and then never re-checked reached the human as approved.
-   */
-  it("a whole-plan re-review that produced no verdict is reported, never read as approval", async () => {
-    const root = repo(DOCS);
-    const notes: string[] = [];
-    let whole = 0;
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: twoSliceDraft,
-          review: (inputs) => {
-            if (inputs["scope"] !== "whole") return APPROVE_PLAN;
-            whole += 1;
-            /* The first whole review faults a ticket, which forces the redraft. */
-            if (whole === 1) {
-              return { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] };
-            }
-            /* The re-review and its one relaunch both come back unusable. */
-            return { not: "a review at all" };
-          },
-        },
-        [],
-      ),
-    });
-    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
-
-    expect(notes.join("\n")).toContain("whole-plan review after revision: NO VERDICT");
-    expect(notes.join("\n")).not.toContain("whole-plan review after revision: approve");
-    /* And the human is told, rather than shown a plan that looks reviewed. */
-    expect(result.interrupt?.message).toContain("no usable verdict");
   });
 
   it("a dependency dropped as impossible is presented as a finding, not swallowed", async () => {
@@ -475,53 +418,42 @@ describe("PRDR-144 the PRESENT input builder, on shapes it did not write", () =>
 });
 
 /**
- * PRDR-193 — the free check runs before the paid one, and hands it the result.
+ * PRDR-193 — the free check runs before the paid one.
  *
- * `applyContracts` is deterministic and costs nothing; `wholePlanReview` is the
- * largest paid prompt `init` builds. The free one ran second, so the paid
- * session rediscovered what code proves. Observed live on gate-312, where the
- * review found `t-s02-003 consumes a name no ticket provides`, cited the
- * mechanical checker by ticket id, wrote that such defects "should be corrected
- * rather than discovered by it" — and then paid again to redraft the slice.
+ * `applyContracts` is deterministic and costs nothing, and it ran after the
+ * largest paid prompt `init` built, so that session rediscovered what code
+ * proves. Observed live on gate-312, where the whole-plan review found
+ * `t-s02-003 consumes a name no ticket provides`, cited the mechanical checker
+ * by ticket id, wrote that such defects "should be corrected rather than
+ * discovered by it", and then paid again to redraft the slice. PRDR-293 took
+ * the rest of the way: the checks run on each draft before its review, and
+ * what they prove goes straight to a redraft, with no session paid to confirm
+ * it.
  */
 describe("PRDR-193 code proves what it can before a session is paid to look", () => {
-  /** s02's ticket leans on a name nothing in the plan owns. */
+  /** s02's ticket leans on a name nothing in the plan owns, on its first draft. */
   const unprovidedDraft = (inputs: Record<string, unknown>): object =>
     sliceOf(inputs) === "s01"
-      ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] }
+      ? twoSliceDraft(inputs)
       : {
           schema_version: SCHEMA_VERSION,
-          tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
+          tickets: [{ ...ticket("t-s02-001"), requirement_ids: ["R2"], consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
         };
 
-  it("reports the mechanical findings BEFORE the review, and tells the review it did", async () => {
+  it("sends what code proves to a redraft before any review is paid to read the draft", async () => {
     const root = repo(DOCS);
-    const notes: string[] = [];
-    const wholeInputs: Record<string, unknown>[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: unprovidedDraft,
-          review: (inputs) => {
-            if (inputs["scope"] === "whole") wholeInputs.push(inputs);
-            return APPROVE_PLAN;
-          },
-        },
-        [],
-      ),
-    });
-    await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
+    const log: string[] = [];
+    let s02 = 0;
+    const draft = (inputs: Record<string, unknown>): object => {
+      if (sliceOf(inputs) !== "s02") return twoSliceDraft(inputs);
+      s02 += 1;
+      return s02 === 1 ? unprovidedDraft(inputs) : twoSliceDraft(inputs);
+    };
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft, review: () => APPROVE_PLAN }, log) });
+    const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
-    /* Proved by code, and said so before any whole-plan session ran. */
-    const joined = notes.join("\n");
-    expect(joined).toContain("contract checks before review");
-    expect(joined).toContain("not paid for");
-
-    /* And the paid session is handed the result rather than left to rediscover it. */
-    expect(wholeInputs.length).toBeGreaterThan(0);
-    const first = wholeInputs[0] ?? {};
-    expect(JSON.stringify(first["already_found"] ?? "")).toContain("t-s02-001");
-    expect(String(first["scope_instruction"])).toContain("do not restate");
+    expect(log).toEqual(["SLICE", "PLAN:s01", ...R("s01"), "PLAN:s02", "PLAN:s02", ...R("s02")]);
+    expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
   });
 });
 
@@ -539,34 +471,30 @@ describe("PRDR-194 the phase marker is fed by progress, not by every note", () =
     const root = repo(DOCS);
     const notes: string[] = [];
     const progress: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT, 
-      planner: scriptedPlanner(
-        {
-          draft: twoSliceDraft,
-          review: (inputs) =>
-            inputs["scope"] === "whole"
-              ? { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "coherence", ticket: "t-s01-001", finding: "duplicates t-s02-001" }] }
-              : APPROVE_PLAN,
-        },
-        [],
-      ),
-    });
+    let s01 = 0;
+    /* s01's first draft consumes a name nobody provides, so a redraft is sent: work that begins, with a note beside it. */
+    const draft = (inputs: Record<string, unknown>): object => {
+      const drafted = twoSliceDraft(inputs) as { tickets: Record<string, unknown>[] };
+      if (sliceOf(inputs) !== "s01" || (s01 += 1) > 1) return drafted;
+      return { ...drafted, tickets: drafted.tickets.map((t) => ({ ...t, consumes: [{ kind: "config", id: "NOPE" }] })) };
+    };
+    const backend = new MockBackend({ audit: CLEAN_AUDIT, planner: scriptedPlanner({ draft, review: () => APPROVE_PLAN }, []) });
     await runInit(
       root,
       planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t), progress: (t) => progress.push(t) }),
       { progress: (t) => progress.push(t) },
     );
 
-    /* Where work begins: the phases, the slices, the review, the redraft. */
+    /* Where work begins: the phases, the slices, the redraft. */
     const said = progress.join("\n");
     expect(said).toContain("PLAN");
     expect(said).toMatch(/planning s01/);
-    expect(said).toContain("whole-plan coherence review");
+    expect(said).toContain("redrafting s01 skeleton for the checks");
 
     /* And never the commentary `note` carries. */
-    expect(said).not.toMatch(/finding\(s\)/);
+    expect(said).not.toMatch(/check\(s\)/);
     expect(said).not.toMatch(/review:/);
-    expect(notes.join("\n")).toMatch(/finding\(s\)/);
+    expect(notes.join("\n")).toMatch(/its draft fails \d+ check\(s\)/);
   });
 });
 
@@ -593,25 +521,17 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
   it("is recorded by the run, not merely computable", async () => {
     const root = repo(DOCS);
     const notes: string[] = [];
-    let whole = 0;
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner(
         {
           draft: twoSliceDraft,
-          review: (inputs) => {
-            if (inputs["scope"] === "whole") {
-              whole += 1;
-              return APPROVE_PLAN;
-            }
-            /* A slice review that faults something forces the revision round. */
-            return { schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] };
-          },
+          /* A slice review that faults something forces the revision round. */
+          review: () => ({ schema_version: SCHEMA_VERSION, verdict: "changes", findings: [{ tag: "sizing", ticket: "t-s01-001", finding: "too big" }] }),
         },
         [],
       ),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) }));
-    expect(whole).toBeGreaterThan(0);
     expect(notes.join("\n")).toMatch(/revision: \d+ resolved, \d+ survived, \d+ introduced/);
     /**
      * And it reaches the operator. Measuring into a cache nobody reads is the
@@ -624,31 +544,30 @@ describe("PRDR-196 the revision round is measured, not assumed", () => {
   /**
    * PRDR-196 criterion 1, through the REAL pipeline.
    *
-   * `stages.test.ts` proves `presentStage` renders contract findings it is
-   * GIVEN. The hop that carries them out of `plan.ts` and into PRESENT's deps
-   * is its own surface, and it is the one that has broken five times on this
-   * line. The audit of this very ticket found it untested.
+   * The hop that carries what code proves to PRESENT is its own surface, and
+   * it is the one that broke five times on this line. PRDR-293: PRESENT proves
+   * it again from the tickets as written, and holds approval on it.
    */
-  it("carries the contract findings all the way to what PRESENT prints", async () => {
+  it("carries what the checks prove all the way to what PRESENT prints", async () => {
     const root = repo(DOCS);
-    /* s02's ticket leans on a name no ticket in the plan owns — a finding code proves. */
+    /* s02's ticket leans on a name no ticket in the plan owns, in every draft — a failure code proves. */
     const unprovided = (inputs: Record<string, unknown>): object =>
       sliceOf(inputs) === "s01"
-        ? { schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001")] }
+        ? twoSliceDraft(inputs)
         : {
             schema_version: SCHEMA_VERSION,
-            tickets: [{ ...ticket("t-s02-001"), consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
+            tickets: [{ ...ticket("t-s02-001"), requirement_ids: ["R2"], consumes: [{ kind: "symbol", id: "pkg/thing.Nobody" }] }],
           };
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: scriptedPlanner({ draft: unprovided, review: () => APPROVE_PLAN }, []),
     });
     const result = await runInit(root, planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS }));
 
-    expect(result.interrupt?.interrupt).toBe("AWAIT_APPROVAL");
+    expect(result.interrupt?.interrupt).toBe("AWAIT_INFO");
     const message = result.interrupt?.message ?? "";
-    expect(message).toMatch(/Contract checks/i);
+    expect(message).toMatch(/Checks that still fail/i);
     expect(message).toContain("pkg/thing.Nobody");
-    expect(message).toContain("no session and no judgement");
+    expect(message).toContain("proved by code");
   });
 
   /** A finding naming no ticket belongs to the plan; it cannot be matched, so it is not counted as survival. */

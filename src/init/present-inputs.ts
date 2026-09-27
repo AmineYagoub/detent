@@ -16,7 +16,7 @@ export function presentInputsFromOutputs(
   outputs: Readonly<Record<string, Record<string, unknown>>>,
 ): Pick<
   PresentInput,
-  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "contractFindings" | "revisions"
+  "slices" | "questions" | "defaults" | "risks" | "specDefects" | "answeredByLog" | "findings" | "derivedEdges" | "gateNotices" | "revisions"
 > {
   /**
    * PRDR-157: `?? []` only covered null and undefined, so any OTHER wrong type
@@ -101,7 +101,6 @@ export function presentInputsFromOutputs(
     specDefects: list<unknown>("PLAN", "spec_defects").filter(isPresentedDefect),
     answeredByLog,
     findings: list<PlanReview["findings"][number]>("PLAN", "review_findings").filter(isFinding),
-    contractFindings: list<PlanReview["findings"][number]>("PLAN", "contract_findings").filter(isFinding),
     ...(((v): v is { resolved: number; survived: number; introduced: number } =>
       typeof v === "object" && v !== null && typeof (v as { resolved?: unknown }).resolved === "number")(
       outputs["PLAN"]?.["revision_summary"],

@@ -10,7 +10,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult } from "../../src/sessions/mock.js";
 import { CONFORMING_PACK, commitRecord, packRepo } from "./pack-fixture.js";
 import { APPROVE_PLAN, BUDGETS, PROMPTS } from "./plan-fixture.js";
-import { inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
+import { covering, inputsOf, sliceOf, ticket } from "./slicing-fixture.js";
 
 /**
  * PRDR-291 — SLICE on a pack (C-2⁸): the pack fixture, conforming, with a
@@ -61,7 +61,7 @@ export interface Script {
   readonly additions?: (take: number, inputs: Json) => Json;
   /** PRDR-292: a slice's draft on that slice's n-th launch (1-based); one ticket delivering its requirements by default. */
   readonly draft?: (take: number, inputs: Json) => Json;
-  /** PRDR-292: a review's verdict on the n-th review launch of its scope, a slice's id or `whole`; approval by default. */
+  /** PRDR-292: a review's verdict on the n-th review launch of its slice; approval by default. */
   readonly review?: (take: number, inputs: Json) => Json;
 }
 
@@ -87,14 +87,12 @@ export const clear = (s: Seeded): void => {
   s.notes.splice(0);
 };
 
-/** Each slice's draft: one ticket delivering the slice's requirements. */
-export const draft = (inputs: Json): Json => {
-  const slice = inputs["slice"] as { readonly id: string; readonly requirement_ids: string[] };
-  return {
-    schema_version: SCHEMA_VERSION,
-    tickets: [{ ...ticket(`t-${slice.id}-001`), requirement_ids: slice.requirement_ids }],
-  };
-};
+/**
+ * Each slice's draft: one ticket delivering the slice's requirements and
+ * carrying, word for word, every criterion its records hold, so it passes
+ * A-1⁷'s checks (PRDR-293) and a case that is not about them sees no redraft.
+ */
+export const draft = (inputs: Json): Json => covering(inputs, [ticket(`t-${sliceOf(inputs)}-001`)]) as Json;
 
 /** The pack fixture as `files`, committed with the record that says it conforms, and a scripted planner over it. */
 export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK, script: Script = {}): Seeded {
@@ -131,7 +129,7 @@ export function seeded(files: Readonly<Record<string, string>> = CONFORMING_PACK
         artifact = (script.draft ?? ((_take: number, i: Json) => draft(i)))(drafts.get(slice) ?? 1, given);
       } else if (out === "plan-review.json") {
         log.push("REVIEW");
-        const scope = given["scope"] === "slice" ? sliceOf(given) : "whole";
+        const scope = given["scope"] === "slice" ? sliceOf(given) : String(given["scope"]);
         reviews.set(scope, (reviews.get(scope) ?? 0) + 1);
         artifact = (script.review ?? ((): Json => APPROVE_PLAN))(reviews.get(scope) ?? 1, given);
       } else {

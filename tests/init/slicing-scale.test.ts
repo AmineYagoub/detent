@@ -35,6 +35,12 @@ const SLICES = Array.from({ length: N_SLICES }, (_, i) => ({
   rationale: "",
 }));
 
+/** What a slice's first ticket names so the slice's requirement ids and baseline items are covered (A-1⁷). */
+const covers = (inputs: Record<string, unknown>): { requirement_ids: string[]; baseline_ids: string[] } => {
+  const slice = inputs["slice"] as { requirement_ids: string[]; baseline_items: string[] };
+  return { requirement_ids: slice.requirement_ids, baseline_ids: slice.baseline_items };
+};
+
 /** A planner that drafts a full slice each time, chaining the first ticket to the previous slice's last. */
 function scaledPlanner(seen: { stage: string; kb: number }[]) {
   return (spec: SessionSpec) => {
@@ -78,6 +84,8 @@ function scaledPlanner(seen: { stage: string; kb: number }[]) {
           non_goals: ["no migration of existing records", "no changes to the public schema"],
           surface: ["src/**", "tests/**"],
           depends_on: j === 0 ? previous : [`t-${id}-${String(j).padStart(3, "0")}`],
+          /* PRDR-293: the first ticket carries the slice's ids and baseline items, as A-1⁷'s coverage check asks. */
+          ...(j === 0 ? covers(inputs) : {}),
           risk_label: false,
         })),
       };
@@ -113,7 +121,7 @@ function fragilePlanner(drafted: string[], dieOn: string | null) {
       if (id === dieOn) throw new Error("simulated session failure");
       artifact = {
         schema_version: SCHEMA_VERSION,
-        tickets: [{ id: `t-${id}-001`, type: "feature", title: id, description: "", acceptance_criteria: ["x"], non_goals: [], surface: ["src/**"], depends_on: [], risk_label: false }],
+        tickets: [{ id: `t-${id}-001`, type: "feature", title: id, description: "", acceptance_criteria: ["x"], non_goals: [], surface: ["src/**"], depends_on: [], ...covers(inputs), risk_label: false }],
       };
     } else if (spec.artifactOut.endsWith("plan-review.json")) artifact = { schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] };
     else throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
@@ -170,68 +178,58 @@ describe("C-2‴ at product scale", () => {
     /**
      * The session count and the input growth are the run's real cost, so they
      * are asserted rather than left to be discovered on a paid run: one
-     * SLICE, one draft and one review per slice, one whole review.
+     * SLICE, and one draft and its reviews per slice.
      */
     const count = (stage: string): number => seen.filter((s) => s.stage === stage).length;
     expect(count("PLAN")).toBe(N_SLICES);
     /* C-4⁗″: k draws per slice — the cost this ticket buys, made visible at scale. */
     expect(count("REVIEW:slice")).toBe(N_SLICES * PLAN_REVIEW_SAMPLES);
-    expect(count("REVIEW:whole")).toBe(1);
+    /* PRDR-293: no session reads the plan as one thing; code's checks across the plan stand in its place. */
+    expect(count("REVIEW:whole")).toBe(0);
     /**
      * C-4⁗″ (PRDR-200): the price, in one number.
      *
-     * SLICE + (PLAN + k reviews) per slice + the whole-plan review.
-     * At twenty-five slices sampling takes init from 52 sessions to 102 — a
-     * slice that needs no revision now costs four sessions where it cost two.
-     * That is the cost of not handing the reviser findings no second read saw,
-     * and it belongs in the test that exists to price product scale.
+     * SLICE + (PLAN + k reviews) per slice. At twenty-five slices that is 101
+     * sessions; the whole-plan review made it 102 until PRDR-293 deleted it. A
+     * slice that needs no revision costs four sessions, which is the cost of
+     * not handing the reviser findings no second read saw, and it belongs in
+     * the test that exists to price product scale. A plan that passes A-1⁷'s
+     * checks buys no redraft, so this fixture, whose drafts pass, prices none.
      */
-    expect(seen).toHaveLength(1 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES) + 1);
+    expect(seen).toHaveLength(1 + N_SLICES * (1 + PLAN_REVIEW_SAMPLES));
 
     /**
-     * The whole-plan review carries every ticket, so its input grows with the
-     * product while every other stage stays slice-sized. It is the first thing
-     * that will strain a context window, and this is the tripwire.
+     * No stage carries every ticket in full since PRDR-293 deleted the
+     * whole-plan review, which did, and grew with the product to 484 KB here.
+     * What still grows with the product is the index of earlier tickets a
+     * slice's draft and review are handed, so the widest payloads are theirs,
+     * and this is the tripwire.
      */
     const widest = (stage: string): number => Math.max(...seen.filter((s) => s.stage === stage).map((s) => s.kb));
     /**
      * PRDR-160: every number below was measured through this test's own
-     * instrumentation, at 500 tickets, on one machine. The prior figures were
-     * recorded from nothing reproducible and were wrong by a third.
+     * instrumentation, at 500 tickets, on one machine; PRDR-293 measured them
+     * again when it deleted the whole-plan review's row (484.11 KB of a 600 KB
+     * bound).
      *
-     *   stage          this fixture   prior shape   bound   % of bound
-     *   SLICE              8.00 KB       8.00 KB    < 50       16%
-     *   PLAN             106.64 KB     106.64 KB   < 150     71.1%
-     *   REVIEW:slice     125.39 KB     116.25 KB   < 200     62.7%
-     *   REVIEW:whole     484.11 KB     255.59 KB   < 600     80.7%
+     *   stage          this fixture   bound   % of bound
+     *   SLICE              7.42 KB    < 50       14.8%
+     *   PLAN             106.17 KB   < 150       70.8%
+     *   REVIEW:slice     127.10 KB   < 200       63.6%
      *
-     * "Prior shape" is this fixture with `description: ""`, a single "it works"
-     * criterion and no non-goals — the content PRDR-143 replaced. Reproduce it
-     * by making those three edits and re-running. Note that PLAN does not move
-     * between the two: its payload is titles and ids, which PRDR-143 did not
-     * change.
+     * PRDR-143 gave this fixture realistic content — a description, three
+     * criteria, two non-goals — where it had carried an empty description and a
+     * single "it works" criterion. PLAN's index holds each earlier ticket's id,
+     * title, surface and what it provides, which that content does not reach.
      */
     expect(widest("SLICE")).toBeLessThan(50);
-    /** 71.1% of its bound. The next content increase reaches it before REVIEW:whole reaches 600. */
+    /** 70.8% of its bound: the payload nearest its bound. */
     expect(widest("PLAN")).toBeLessThan(150);
     /**
-     * PRDR-160: the second-largest payload, and it was asserted by nothing —
-     * in the file that calls itself the tripwire. Only REVIEW:whole was
-     * re-baselined when the fixture grew, so this one grew 8% unwatched.
+     * PRDR-160: this payload was asserted by nothing — in the file that calls
+     * itself the tripwire — and grew 8% unwatched when the fixture grew.
      */
     expect(widest("REVIEW:slice")).toBeLessThan(200);
-    /**
-     * PRDR-143: ~484 KB is roughly 120k tokens of JSON in one prompt variable.
-     *
-     * The number is recorded rather than merely raised, because it is a
-     * PRODUCT limit and not a test parameter: the whole-plan review is the one
-     * stage whose input grows with the entire product, and at this scale it is
-     * approaching what a single session can hold. The gate's own plan is ~205
-     * tickets (~200 KB), so there is headroom today. Making the review
-     * incremental — or scoping it to the slices a finding names — is the real
-     * answer, and it belongs with PRDR-144.
-     */
-    expect(widest("REVIEW:whole")).toBeLessThan(600);
   }, 120_000);
 
   it("a failure nine slices in costs those nine slices nothing: the re-run re-plans the one that died and the ones after it", async () => {

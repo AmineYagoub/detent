@@ -287,14 +287,15 @@ describe("V-5′ a ticket no gate can fail holds approval", () => {
     });
     expect(asked).toBe(0);
     expect(outcome.kind === "interrupt" ? outcome.interrupt : outcome.kind).toBe("AWAIT_INFO");
+    /* PRDR-293: a path no gate can fail is one of A-1⁷'s checks, named as each is. */
     expect(outcome.kind === "interrupt" ? outcome.items : []).toEqual([
-      "t1: web/src/** lies in web, which has no gate a ticket runs (lint, typecheck or test)",
-      "t3: admin/package.json makes admin a package, and no gate is bound for it",
+      "gates (t1): has `web/src/**` in its surface, which lies in web, where no gate a ticket runs (lint, typecheck or test) is bound: narrow the surface to where the ticket's work lies, or the package needs gates the operator declares",
+      "gates (t3): writes `admin/package.json`, which makes admin a package, and no gate is bound for it: a ticket there cannot be verified, so the package's gates are the operator's to declare before its tickets can run",
     ]);
     const message = outcome.kind === "interrupt" ? outcome.message : "";
     expect(message).toContain("## Packages");
     const shown = JSON.parse(readFileSync(path.join(stateDir(root), "plan", "presentation.json"), "utf8")) as Record<string, unknown>;
-    expect(shown["ungated"]).toBe(2);
+    expect(shown["check_failures"]).toBe(2);
   });
 
   it("a ticket already DONE, and one whose every path lies in a gated package, hold nothing", async () => {
@@ -331,7 +332,7 @@ describe("V-5′ a ticket no gate can fail holds approval", () => {
     });
     expect(asked).toBe(0);
     expect(outcome.exitCode).toBe(EXIT_NOT_READY);
-    expect(outcome.summary.reason).toContain("no gate that can fail");
+    expect(outcome.summary.reason).toContain("1 check(s) fail on the plan's tickets");
   }, 60_000);
 });
 

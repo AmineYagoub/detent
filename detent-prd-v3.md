@@ -314,6 +314,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   Without a parse it cuts the documents as this built it, and no slice carries an estimate.*
   *Amended by C-4⁷ (PRDR-292): on a pack a slice is drafted from its records, and the index a draft
   is shown names what each ticket provides.*
+  *Amended by A-1⁸ (PRDR-293): the whole-plan review is deleted; code's checks run across the plan
+  after every slice.*
 
 - **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
   ask for it. Detent carries a **production baseline** — fifteen items across six areas
@@ -326,6 +328,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `config.plan_baseline` is `production` by default; `none` opts out, in writing. Detent is
   used by people who will not write "and back it up" — the plan says it for them.
   *Amended by A-1⁷ (PRDR-278): baseline coverage is code's check, not the review's judgement.*
+  *Amended by A-1⁸ (PRDR-293): built.*
 
 - **A-1‴ (3.1.1, PRDR-120).** A ticket declares the interface it OWNS and the interfaces it
   LEANS ON. `provides` names what it brings into existence — a `symbol`, a `config` key, a
@@ -351,6 +354,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   fails blocks approval.*
   *Amended by C-4⁷ (PRDR-292): the kinds gain `error_code`, `setting` and `job`, and a kind the
   pack catalogues is named by its catalogue ids.*
+  *Amended by A-1⁸ (PRDR-293): built. What the checks prove is a failure, which a redraft is sent
+  and approval waits on, not a finding for the review.*
 
 - **A-1⁵ (3.1.1, PRDR-201).** A ticket declares the **requirement ids and production-baseline
   items it delivers**, in typed fields, so coverage is a set operation rather than a reading.
@@ -372,6 +377,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   after majority filtering; a set operation decides the same question exactly, for no session.
   *Amended by A-1⁷ (PRDR-278): coverage adds criterion ids, and a failure buys one targeted
   redraft and then blocks approval.*
+  *Amended by A-1⁸ (PRDR-293): built. A slice whose tickets name none of its items fails for each,
+  and nothing is reported as undeclared.*
 
 - **S-3⁸ (3.1.1, PRDR-121; renumbered from S-3′ by PRDR-287).** Symbol intelligence is an OPTIONAL adapter, discovered and never
   installed. `symbols: { enabled, command, pinned }` in config; absent or disabled, every stage
@@ -1012,6 +1019,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   notice.
   *Amended by A-1⁷ (PRDR-278): the cross-slice checks send the redrafts, where the whole-plan
   review did; the rule stands.*
+  *Amended by A-1⁸ (PRDR-293): built. Each redraft the checks send is checkpointed before the next
+  begins, in `state/plan-checks.json`.*
 
 - **C-4⁗′ (3.1.1, PRDR-118).** Every strict planning artifact gets the one relaunch PRDR-116
   gave the review — the validator's own words in the inputs, and only then a failure. The
@@ -1084,6 +1093,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   turns are byte-identical again. The whole-plan review is still drawn once; slice planning and
   the redrafts are still sequential; there is no knob.
   *Amended by C-4⁶ (PRDR-278): the draws are deleted with the sampling.*
+  *Amended by A-1⁸ (PRDR-293): the whole-plan review is deleted.*
 
 - **S-6′ (3.1.1, PRDR-205).** The sessions of one batch are handed **byte-identical first
   turns**, and the file each writes is still its own. S-6's stable prefix was never the whole
@@ -1178,6 +1188,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   that names nothing yields today's findings unchanged. The symbol and test-file findings on
   gate-313 were the plan's, and were right.
   *Amended by D-10′ (PRDR-278): the scaffold files come from DECIDE's stack entry.*
+  *Amended by A-1⁸ (PRDR-293): what the check proves is a failure, and no review is handed it.*
 
 - **D-24′ (3.1.1, PRDR-209).** The advice D-24 hands the human is rendered so a human can act
   on it. gate-313's PRESENT printed 144 held findings as one flat list, twice — once at init and
@@ -1938,6 +1949,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-4⁷ (PRDR-292): a slice cut from the pack has no documents, and PLAN drafts from
   the records its key reads. SLICE's job has its own prompt, which keys the cut and no slice's
   draft.*
+  *Amended by A-1⁸ (PRDR-293): the announcement counts no whole-plan review. N slices take at
+  least `4N`, `4N + 4R + C`, where C is the redrafts the checks send.*
 
 - **C-4⁵ (3.1.1, PRDR-278).** PLAN drafts from the pack's records, not from prose, and asks
   nothing.
@@ -2039,6 +2052,8 @@ the code does what the rules it amends describe, and each of those rules points 
     `spec_defects: []`. A transform may name every JSON file in one directory. An approval covers
     `criterion_ids` only where a ticket carries some, so a plan approved before the field is
     still approved after the migration.
+  *Amended by A-1⁸ (PRDR-293): the whole-plan review's cache takes no step, since nothing reads
+  it, and the catalogue-name finding is a failure a redraft is sent.*
 
 
 - **A-1⁷ (3.1.1, PRDR-278).** What code can prove about a plan, code checks, and a proved failure is
@@ -2072,6 +2087,69 @@ the code does what the rules it amends describe, and each of those rules points 
     is added only if run-time outcomes show tickets failing on contracts the checks passed (D-33).
   *Amended by V-5″ (PRDR-295): the gates check runs at PRESENT, over the whole plan, until
   PRDR-293 builds these checks, and no draft is redrafted for it.*
+  *Amended by A-1⁸ (PRDR-293): built.*
+
+- **A-1⁸ (3.1.1, PRDR-293).** A-1⁷ is built, in `src/init/plan-checks.ts`,
+  `src/init/plan-check-gates.ts`, `src/init/plan-redraft.ts`, `src/init/plan-cross.ts` and
+  `src/init/present-checks.ts`. This settles what A-1⁷ left to its ticket, and amends C-2‴'s
+  whole-plan review, C-2⁗'s, A-1‴'s, A-1⁵'s and A-1⁶'s findings, C-8⁗'s checkpoints, C-2¹⁵'s
+  announcement, C-7″'s refusal, V-5″'s approval, N-5′'s formula and F-3″'s event.
+  - **The checks** are one pure function over the plan, the slices, the pack's parse, the
+    scaffold, the gates and the work already DONE. Coverage: each requirement id and baseline
+    item a slice holds is named in one of its tickets' `requirement_ids` or `baseline_ids`, and
+    a slice whose tickets name none of them fails for each; A-1⁵'s "undeclared" report is gone.
+    A criterion that tests a live requirement is carried in some ticket's `criterion_ids`; it
+    falls to the last slice holding a requirement it tests, and is due once that slice is
+    drafted. No ticket names a requirement, baseline item or criterion its slice does not hold,
+    a criterion counting as held where it tests one of the slice's requirements. Contracts are
+    A-1‴'s, with C-4⁷'s catalogue names and a consumer whose provider lies in a later slice; a
+    name with two providers fails once in each owner's slice. Milestones: a ticket's milestone is
+    the earliest of the requirements it delivers, and it may not reach, through any chain of
+    edges, a ticket delivering a later milestone's; the nearest such ticket is named, with the
+    chain. Gates are V-5″'s check. The graph: an edge A-1‴ refuses because it would close a
+    cycle, and a cycle that remains, which only an edit of the tickets can make, since A-1″
+    breaks a drafted one first. DONE work provides its names, even where this plan no longer
+    drafts it, and no failure names a DONE ticket except a name with two providers, whose other
+    owner still has to yield. A failure's words cite no PRD mark, since a drafter reads them.
+  - **The redraft.** After a slice's draft, and after its revision, the failures that lie in the
+    slice send it one redraft, with `check_failures`, each failure's family, ticket and words,
+    and `draft`, the tickets as drafted. A-1″'s repairs apply to it as to a draft, and the spec
+    defects it reports are kept as a draft's are. The checks run again and what still fails is
+    noted. So a slice's own checks send it at most two redrafts. The slice's review reads its
+    draft after the first; a redraft sent after the revision, or across the plan, is judged by
+    the checks alone. The gate check runs at PLAN where bindings exist when PLAN runs, and at
+    PRESENT always.
+  - **Across the plan.** After every slice, reused or planned, the checks run over the slices so
+    far, and each failure is sent to one slice: a name nobody provides to the earliest slice that
+    consumes it, a name with two providers to each owner's slice, the rest to the slice they lie
+    in. A slice is sent a failure at most once, whether its own checks or these sent it, and the
+    set is checked again before each slice, since a redraft of one slice may answer or make what
+    another is sent. A pass runs at most three rounds. A redraft keeps each id later slices
+    depend on, handed to it as `keep_ids`, or it is discarded and the slice stands. Each redraft
+    is checkpointed before the next begins, in `.detent/state/plan-checks.json`, keyed by the
+    slice's own key, its draft, the failures, the ids it keeps and the tickets it builds on
+    (C-8⁗); a resumed PLAN reuses it, and `--replan` wipes the record with the slice caches
+    (C-8′).
+  - **Approval.** PRESENT runs the checks again on the tickets as they stand under
+    `.detent/plan/`, each ticket's blockers as its edges and its slice as `plan.json` lists it,
+    since the operator may answer a failure by editing a ticket. While any fails it lists each
+    and raises AWAIT_INFO before approval is offered, so `--approve` is not asked, and records
+    the count in `presentation.json` as `check_failures`, in place of V-5″'s `ungated`; `detent
+    run`'s deferred approval presents the plan and refuses while the count is not zero. PRDR-293
+    read "`detent approve` refuses the plan" as these two exits: `detent approve <id>` promotes a
+    ticket and approves no plan. A failure therefore never reaches the run phase, which reads the
+    review's findings as before; a failure an edit had cleared would reach it stale.
+  - **The whole-plan review is gone**, with its cache, `already_found` and the instruction to treat
+    what code proved as handled, and its line in the revision notes. The review prompt judges one
+    slice, and `coherence` within it or against `plan_index`.
+  - **Where an id lands.** `sliceSchema`'s doc-block names the three places code checks that each
+    id lands in exactly one slice: C-2¹⁵'s cut on a pack, `slicesSchema`, which now refuses an id
+    or a baseline item placed in two slices, pack or none, and these checks. Which ids documents
+    without a parse define, and which baseline items apply, remain the slicer's judgement.
+  - **Migration.** F-3″'s event drops its step for the whole-plan review's cache: nothing reads
+    `state/whole-plan.json`, and a state holding it keeps it as it was. `state/plan-checks.json`
+    is new. A presentation carrying `ungated` was written only by a build of the unreleased
+    3.1.1 line; it does not parse, and `run` sends the operator to `detent init`.
 
 - **C-4⁶ (3.1.1, PRDR-278).** Each slice gets one review read, by its own role, limited to judgement
   (planning decision 2). C-4″'s REVIEW_PLAN grew into three reads, a revision and three more reads
@@ -2123,6 +2201,8 @@ the code does what the rules it amends describe, and each of those rules points 
   defaults.*
   *Amended by C-4⁷ (PRDR-292): an open spec defect holds approval on both exits, and PRESENT lists
   each with the `file:line` of its passages.*
+  *Amended by A-1⁸ (PRDR-293): a check that fails holds approval on both exits; PRESENT checks the
+  tickets as they stand.*
   *Amended by V-5″ (PRDR-295): a path no gate can fail holds approval on both exits, and PRESENT
   lists each with its ticket and package.*
 
@@ -2274,6 +2354,8 @@ the code does what the rules it amends describe, and each of those rules points 
   execute-before-approve rule is unchanged.
   *Amended by V-5″ (PRDR-295): built. A-1⁷'s gate check runs at PRESENT until PRDR-293 builds
   A-1⁷.*
+  *Amended by A-1⁸ (PRDR-293): the gate check is one of A-1⁷'s, run after each draft and across
+  the plan.*
 
 - **OQ-4 resolved (3.1.1, PRDR-278).** v2's open question on workspace scoping is settled by D-5′
   and V-5′: gates bind per package.
@@ -2334,6 +2416,8 @@ the code does what the rules it amends describe, and each of those rules points 
     while the count is not zero, and a presentation written before the count counts none. This is
     the check A-1⁷ names; until PRDR-293 builds A-1⁷ it runs at PRESENT, over the whole plan, and
     no draft is redrafted for it.
+    *Amended by A-1⁸ (PRDR-293): a failing slice is redrafted for it, and its count is part of
+    `check_failures`.*
   - **Migration.** F-3″'s event carries `.detent/bindings.json` to packages: each binding and skip
     gains `package: "."`, and the file `packages: ["."]`. The approvals ledger, a ticket's accepted
     hashes and DETERMINE_VERIFICATION's checkpoint need no step, since what each held before
@@ -2359,6 +2443,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁵ (PRDR-291): SLICE announces the formula of planning as it is built, counting
   the sessions after its own. When C-4⁶ and A-1⁷ are built, that part of this one is
   `2N + R + C`.*
+  *Amended by A-1⁸ (PRDR-293): A-1⁷ is built. Until C-4⁶ is, SLICE announces at least `4N`
+  sessions, `4N + 4R + C`.*
 
 - **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
   specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes

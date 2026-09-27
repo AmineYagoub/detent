@@ -251,8 +251,12 @@ export const presentationSchema = z.strictObject({
   blocking: z.number().int().nonnegative(),
   /** C-4⁵ (PRDR-292): the spec defects PRESENT listed; while any is open, neither exit offers approval. Absent before them, and so none. */
   spec_defects: z.number().int().nonnegative().default(0),
-  /** V-5′ (PRDR-295): the paths PRESENT named that lie in no package with a gate; while any is, neither exit offers approval. Absent before packages, and so none. */
-  ungated: z.number().int().nonnegative().default(0),
+  /**
+   * A-1⁷ (PRDR-293): the checks PRESENT named as failing on the tickets as they
+   * stood, a path no gate can fail among them (V-5′); while any does, neither
+   * exit offers approval. Absent before the checks, and so none.
+   */
+  check_failures: z.number().int().nonnegative().default(0),
 });
 export type Presentation = z.infer<typeof presentationSchema>;
 

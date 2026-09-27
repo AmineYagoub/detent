@@ -1,28 +1,24 @@
 import path from "node:path";
-import { applyContracts } from "../src/init/contracts.js";
+import { checkPlan } from "../src/init/plan-checks.js";
 import { readPlannedRoot, runDirectly, type PlanCorpus } from "./plan-corpus.js";
-import type { PlanReview } from "../src/schemas/init.js";
+import type { CheckFailure } from "../src/schemas/init.js";
 
 /**
  * coverage-report — what A-1⁵ says about a plan already on disk.
  *
  * Not part of `detent`: no verb runs it and no gate does. It calls the
- * PRODUCTION `applyContracts` with the same four arguments `plan.ts` passes,
- * over a root that has already been planned. Zero sessions — the whole point
- * of PRDR-201 is that this question is decided rather than asked.
+ * PRODUCTION `checkPlan`, the checks PLAN and PRESENT run (A-1⁷), over a root
+ * that has already been planned, and keeps its coverage family. Zero sessions
+ * — the whole point of PRDR-201 is that this question is decided rather than
+ * asked. It reads no pack, so a criterion or a foreign id is not judged here:
+ * only what SLICE assigned each slice.
  *
  *   npx tsx scripts/coverage-report.ts <root> [<root> ...]
  */
 
-/** The coverage half of the contract check, over a corpus. Pure; the test drives this. */
-export function coverageFindings(corpus: PlanCorpus): PlanReview["findings"] {
-  const out = applyContracts(
-    corpus.tickets,
-    corpus.specs.map((s) => s.id),
-    [],
-    corpus.specs,
-  );
-  return out.findings.filter((f) => f.tag === "coverage");
+/** The coverage family of the plan checks, over a corpus. Pure; the test drives this. */
+export function coverageFindings(corpus: PlanCorpus): CheckFailure[] {
+  return checkPlan({ slices: corpus.specs, pack: null, done: [] }, corpus.tickets).failures.filter((f) => f.check === "coverage");
 }
 
 function report(root: string): void {

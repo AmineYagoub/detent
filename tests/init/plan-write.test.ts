@@ -8,7 +8,7 @@ import { allTickets, readTicket } from "../../src/kernel/tickets/readers.js";
 import { claim } from "../../src/kernel/tickets/mutations.js";
 import { ticketPath } from "../../src/kernel/tickets/paths.js";
 import { BOOTSTRAP_TICKET_ID, capstoneBlockers } from "../../src/init/plan-write.js";
-import { normaliseDraft } from "../../src/init/plan-slices.js";
+import { normaliseDraft } from "../../src/init/plan-normalise.js";
 import type { SliceSpec } from "../../src/schemas/init.js";
 import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, LONE_CANDIDATE, PROMPTS, decideDefaults, repo } from "./plan-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
