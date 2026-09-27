@@ -10,7 +10,8 @@ import { prepareAgents } from "./agents.js";
 import { planDraftPath, planStage } from "./plan.js";
 import { planOutputIntact } from "./plan-write.js";
 import { presentInputsFromOutputs, presentStage, type ApprovalDecision } from "./present.js";
-import { sliceStage, slicesFromOutputs, slicesPath } from "./slice.js";
+import { sliceStage, slicesFromOutputs } from "./slice.js";
+import { placement } from "./slice-seed.js";
 import { baselineDigest } from "./baseline.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
 import { readBindings } from "../adapter/drift.js";
@@ -259,31 +260,46 @@ function determinePhase(deps: PipelineDeps): PhaseHandler {
   };
 }
 
+/** C-2⁸: what a cut answers to besides the pack's ids: the baseline, the band and the prompt. */
+const sliceBasis = (deps: PipelineDeps): string =>
+  valueDigest([
+    deps.planBaseline ?? "production",
+    baselineDigest(),
+    /* C-2⁵′: re-cutting on a new band is the whole point of the knob. */
+    deps.sliceSize ?? { min: 12, max: 18 },
+    deps.prompts.hashes.planner,
+  ]);
+
 function slicePhase(deps: PipelineDeps): PhaseHandler {
   return {
     phase: "SLICE",
-    /** The CONTENTS of every document, the stack, the baseline and the prompt: any of them moving re-slices. */
+    /**
+     * C-2⁸ (PRDR-291): on a pack, the live requirement ids with their
+     * milestones, and the basis. An edit to what a requirement says re-cuts
+     * nothing, and the criteria counts that guide the cut do not key it.
+     * On a pack, re-running on the chain keeps the cut on record (C-2¹⁵).
+     * Without a parse, the CONTENTS of every document and the stack, as C-2‴
+     * keyed it, and each re-run cuts again.
+     */
     digest: (ctx) => {
       const docs = planningDocs(deps.root, ctx.outputs);
-      return `${contentsDigest(deps.root, docs)}|${valueDigest([
-        planningStack(deps.root, ctx.outputs),
-        deps.planBaseline ?? "production",
-        baselineDigest(),
-        /* C-2⁵′: re-cutting on a new band is the whole point of the knob. */
-        deps.sliceSize ?? { min: 12, max: 18 },
-        deps.prompts.hashes.planner,
-      ])}`;
+      const pack = planningPack(ctx.outputs);
+      const ids = pack === null ? [] : [...placement(pack, docs)].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      if (ids.length > 0) return valueDigest(["pack", ids, sliceBasis(deps)]);
+      return `${contentsDigest(deps.root, docs)}|${valueDigest([planningStack(deps.root, ctx.outputs), sliceBasis(deps)])}`;
     },
     run: async (ctx) =>
       await withInitJournal(deps.root, async (journal) => await sliceStage({
         root: deps.root,
         docs: planningDocs(deps.root, ctx.outputs),
         ...planningStack(deps.root, ctx.outputs),
+        pack: planningPack(ctx.outputs),
+        basis: sliceBasis(deps),
         baseline: deps.planBaseline ?? "production",
         sliceSize: deps.sliceSize ?? { min: 12, max: 18 },
         ...(deps.note === undefined ? {} : { note: deps.note }),
-        launch: async (inputs) => {
-          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut: slicesPath(deps.root) });
+        launch: async (inputs, artifactOut) => {
+          await launchInitSession(sessionDeps(deps, journal), { role: "planner", inputs, artifactOut });
         },
       })),
   };
@@ -323,6 +339,7 @@ function planPhase(deps: PipelineDeps): PhaseHandler {
         baseline: deps.planBaseline ?? "production",
         ...(deps.revisionRounds === undefined ? {} : { revisionRounds: deps.revisionRounds }),
         promptHash: deps.prompts.hashes.planner,
+        pack: planningPack(ctx.outputs),
         ...(deps.note === undefined ? {} : { note: deps.note }),
         /* PRDR-194: PLAN is the stage whose work has names worth recording — slices, redrafts, the coherence review. */
         ...(deps.progress === undefined ? {} : { progress: deps.progress }),

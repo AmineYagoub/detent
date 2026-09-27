@@ -477,12 +477,22 @@ export type HeldFinding = PlanReview["findings"][number] & {
  * The whole document pack, cut into ordered increments before any ticket is
  * drafted. A slice is what one planning pass can hold and what one human can
  * review: a goal, the requirement ids it delivers, the documents it planned
- * from, and the slices it thickens. Every requirement id in the pack lands in
- * exactly one slice; every applicable production-baseline item lands in one
- * too, so a pack that never mentions backups still gets a backup slice.
+ * from, and the slices it thickens. The slicer is told to place every
+ * requirement id in exactly one slice, and every applicable production-baseline
+ * item in one too, so a pack that never mentions backups still gets a backup
+ * slice. On a pack, code refuses a cut that leaves a live id out, places one
+ * twice or names one the seed does not hold (`cutIssue` in
+ * `init/slice-seed.ts`, C-2¹⁵). Without a parse, and for the baseline items,
+ * no code checks it.
+ *
+ * C-2⁸ (PRDR-291): it carries no ticket estimate. `expected_tickets` was a
+ * guess, 308 and 554 for the same documents, and nothing read it but the
+ * announcement that added it up. On a pack a slice's `docs` are code's (C-2¹⁵).
  */
+const SLICE_ID = /^s\d{2,3}$/;
+
 export const sliceSchema = z.strictObject({
-  id: z.string().regex(/^s\d{2,3}$/, "slice ids are s01, s02, … s999"),
+  id: z.string().regex(SLICE_ID, "slice ids are s01, s02, … s999"),
   title: nonEmptyString,
   goal: nonEmptyString,
   requirement_ids: z.array(nonEmptyString).default([]),
@@ -490,10 +500,35 @@ export const sliceSchema = z.strictObject({
   baseline_items: z.array(nonEmptyString).default([]),
   docs: z.array(nonEmptyString).default([]),
   depends_on: z.array(nonEmptyString).default([]),
-  expected_tickets: z.number().int().positive().default(20),
   rationale: z.string().default(""),
 });
 export type SliceSpec = z.infer<typeof sliceSchema>;
+
+/**
+ * C-2¹⁵ (PRDR-291): what a slice session that may only add writes, when the
+ * pack gained requirements a slicing already on record does not place. Each
+ * goes to a slice that exists, or to a new one, which follows the slice
+ * `after` names, or comes first where it is null. Nothing here can move,
+ * rename or remove what the record places: the shape has no field for it.
+ */
+export const sliceAdditionsSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  placed: z.array(z.strictObject({ requirement_id: nonEmptyString, slice: z.string().regex(SLICE_ID, "slice ids are s01, s02, … s999") })).default([]),
+  new_slices: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(SLICE_ID, "slice ids are s01, s02, … s999"),
+        after: z.string().regex(SLICE_ID, "slice ids are s01, s02, … s999").nullable(),
+        title: nonEmptyString,
+        goal: nonEmptyString,
+        requirement_ids: z.array(nonEmptyString).min(1, "a new slice places at least one requirement"),
+        depends_on: z.array(nonEmptyString).default([]),
+        rationale: z.string().default(""),
+      }),
+    )
+    .default([]),
+});
+export type SliceAdditions = z.infer<typeof sliceAdditionsSchema>;
 
 export const slicesSchema = z
   .strictObject({

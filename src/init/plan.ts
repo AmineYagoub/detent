@@ -17,6 +17,8 @@ import { allTickets, readTicket } from "../kernel/tickets/readers.js";
 import type { PhaseOutcome } from "./machine.js";
 import { previousAttemptInput, withOneRelaunch } from "./retry.js";
 import type { LaunchOptions } from "./launch-batch.js";
+import type { Pack } from "../schemas/pack.js";
+import { wholeProduct } from "./slice.js";
 
 /**
  * T-066 — PLAN generation and the bootstrap lifecycle (C-4, A-2).
@@ -120,6 +122,8 @@ export interface PlanDeps {
   readonly baseline?: "production" | "none";
   /** PRDR-082: the planner prompt hash, folded into every slice's cache key. */
   readonly promptHash?: string;
+  /** C-2⁸ (PRDR-291): the checker's parse VALIDATE handed on, whose records key each slice; null or absent where WRITE wrote no pack. */
+  readonly pack?: Pack | null;
 }
 
 /**
@@ -259,10 +263,7 @@ export async function draftPlan(
  * No stage here asks a human anything: questions ride to PRESENT.
  */
 export async function planStage(deps: PlanDeps): Promise<PhaseOutcome> {
-  const slices: readonly SliceSpec[] =
-    deps.slices !== undefined && deps.slices.length > 0
-      ? deps.slices
-      : [{ id: "s01", title: "the plan", goal: "everything the documents ask for", requirement_ids: [], baseline_items: [], docs: [...deps.docs], depends_on: [], expected_tickets: 20, rationale: "" }];
+  const slices: readonly SliceSpec[] = deps.slices !== undefined && deps.slices.length > 0 ? deps.slices : [wholeProduct(deps.docs)];
   const planned = await planSlices(deps, slices);
   /**
    * PRDR-193: the free check runs BEFORE the paid one.

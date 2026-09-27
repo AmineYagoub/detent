@@ -226,6 +226,16 @@ export function sliceCacheDir(root: string): string {
   return path.join(stateDir(root), "state", "plan");
 }
 
+/**
+ * C-2¹⁵ (PRDR-291): the slicing SLICE last cut from a pack, which a re-run
+ * keeps, adding only what the pack gained. Beside the slice caches rather
+ * than among them, as `whole-plan.json` is, and wiped with them by
+ * `--replan`, which re-derives every slice (C-8′).
+ */
+export function slicingRecordPath(root: string): string {
+  return path.join(stateDir(root), "state", "slicing.json");
+}
+
 /** Which files exist, not what they say. Sorted, POSIX, contents ignored. */
 export function listingDigest(paths: readonly string[]): string {
   return `listing:${[...paths].sort().join("\n")}`;
@@ -475,8 +485,11 @@ export async function runInit(
   }
   const retired = retiredIn(root);
   for (const r of retired) messages.push(r.why);
-  /* C-8′: a replan is a fresh planning session — every slice is drafted again (C-2‴). */
-  if (opts.replan === true) rmSync(sliceCacheDir(root), { recursive: true, force: true });
+  /* C-8′: a replan is a fresh planning session — the product sliced again, and every slice drafted again (C-2‴, C-2¹⁵). */
+  if (opts.replan === true) {
+    rmSync(sliceCacheDir(root), { recursive: true, force: true });
+    rmSync(slicingRecordPath(root), { force: true });
+  }
 
   initLayout(root);
 

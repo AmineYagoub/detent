@@ -28,8 +28,8 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 const TWO_SLICES = {
   schema_version: SCHEMA_VERSION,
   slices: [
-    { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], expected_tickets: 2, rationale: "" },
-    { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], expected_tickets: 2, rationale: "" },
+    { id: "s01", title: "skeleton", goal: "ping works", requirement_ids: ["R1"], baseline_items: ["PB-001"], docs: ["PRD.md"], depends_on: [], rationale: "" },
+    { id: "s02", title: "billing", goal: "invoices", requirement_ids: ["R2"], baseline_items: [], docs: ["prd-billing.md"], depends_on: ["s01"], rationale: "" },
   ],
   questions: [{ id: "sq1", question: "Which region hosts the data?", blocking: false, assumption: "eu-west-1" }],
 };
@@ -218,7 +218,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
   });
 
   it("the draft's ids and edges are normalised, not trusted: a colliding id is renamed, an edge to nothing planned becomes a dependency finding", () => {
-    const slice: SliceSpec = { id: "s02", title: "billing", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: ["s01"], expected_tickets: 2, rationale: "" };
+    const slice: SliceSpec = { id: "s02", title: "billing", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: ["s01"], rationale: "" };
     const earlier = [{ ...ticket("t-s01-001"), type: "feature" as const, slice: "s01" }];
     const notes: string[] = [];
     const out = normaliseDraft(
@@ -252,7 +252,7 @@ describe("C-2‴ the product is planned slice by slice, to the end, without stop
    * something else.
    */
   it("a duplicated id inside one slice: edges naming it mean the ticket that KEPT it, and the collision is a finding", () => {
-    const slice: SliceSpec = { id: "s02", title: "billing", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" };
+    const slice: SliceSpec = { id: "s02", title: "billing", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" };
     const out = normaliseDraft(
       slice,
       [

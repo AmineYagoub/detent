@@ -110,7 +110,7 @@ export const APPROVE_PLAN = { schema_version: SCHEMA_VERSION, verdict: "approve"
 export const ONE_SLICE = {
   schema_version: SCHEMA_VERSION,
   slices: [
-    { id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" },
+    { id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" },
   ],
   questions: [],
 };

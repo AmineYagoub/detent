@@ -62,3 +62,21 @@ ticket's to take up:
   it, since the record keeps no earlier copy to say which entry moved. An amendment that touches
   the log therefore re-validates widely. Holding an earlier copy of the log, or scoping by the
   amendment's own requirement ids, would narrow it.
+
+## From PRDR-291
+
+The scoped re-plan's machinery is built for an edit to the pack (C-2¹⁵). A slice's cache key is its
+requirement ids and their records, so an edit that changes one requirement re-plans only the slice
+that holds it. An edit to a decision, default, fact or catalogue entry re-plans only the slices
+whose requirements or criteria cite it, and an edit to the stack's entry re-plans every slice.
+
+SLICE keeps its cut on record in `.detent/state/slicing.json`:
+- an added requirement is placed by a session that may only add;
+- a withdrawn requirement leaves its slice;
+- a requirement whose milestone moved is placed again;
+- every other slice keeps its id, its members and its cache.
+
+What stays this ticket's is the amendment's path to that edit: the hold, the decision and the edit
+itself. So are C-8″'s guard, narrowed to the re-planned slices' tickets, and presenting the changed
+plan again. A PLAN session still reads whole documents until PRDR-292 lands, so an amendment that
+edits text no record holds re-plans nothing until then.

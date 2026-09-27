@@ -6,7 +6,7 @@ import type { PhaseHandler } from "../../src/init/machine.js";
 import { runInit, sliceCacheDir } from "../../src/init/machine.js";
 import { CLEAN_AUDIT, planningPipeline, APPROVE_PLAN, BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { okResult } from "../../src/sessions/mock.js";
-import { DOCS, MockBackend, R, TWO_SLICES, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
+import { DOCS, MockBackend, R, reworded, scriptedPlanner, sliceOf, twoSliceDraft } from "./slicing-fixture.js";
 
 /**
  * C-8 inside PLAN — what the slice cache will and will not reuse.
@@ -19,11 +19,18 @@ import { DOCS, MockBackend, R, TWO_SLICES, scriptedPlanner, sliceOf, twoSliceDra
  */
 
 describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", () => {
-  it("C-8 inside PLAN: an unchanged slice is reused from its cache when another slice's documents move; --replan re-plans every slice", async () => {
+  /**
+   * PRDR-291: SLICE cuts the product again whenever a document moves, and a
+   * model never writes its slices in the same words twice. This case held
+   * SLICE's output constant, and passed only because of it: the key hashed
+   * the whole slice, title and goal included. The slicer here rewords every
+   * take, so the reuse it asserts is the key's, not the fixture's.
+   */
+  it("C-8 inside PLAN: an unchanged slice is reused from its cache when another slice's documents move, though SLICE re-cut the product in new words; --replan re-plans every slice", async () => {
     const root = repo(DOCS);
     const log: string[] = [];
     const notes: string[] = [];
-    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
+    const backend = new MockBackend({ audit: CLEAN_AUDIT,  planner: scriptedPlanner({ slices: reworded, draft: twoSliceDraft, review: () => APPROVE_PLAN }, log) });
     const handlers = planningPipeline({ root, backend, prompts: PROMPTS, budgets: BUDGETS, note: (t) => notes.push(t) });
 
     await runInit(root, handlers);
@@ -36,7 +43,7 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
     notes.splice(0);
     await runInit(root, handlers);
     expect(log).toEqual(["SLICE", "PLAN:s02", ...R("s02"), "REVIEW:whole"]);
-    expect(notes.join("\n")).toContain("s01 skeleton: reused — nothing it read has changed (C-8)");
+    expect(notes.join("\n")).toContain("s01 skeleton, take 2: reused — nothing it read has changed (C-8)");
 
     /** C-8′: a replan is a fresh planning session — the cache is wiped, every slice drafted again. */
     log.splice(0);
@@ -170,11 +177,12 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
   it("C-8‴: an edit to one slice's document re-plans that slice alone", async () => {
     const root = repo(DOCS);
     const log: string[] = [];
+    let takes = 0;
     const backend = new MockBackend({ audit: CLEAN_AUDIT, 
       planner: (spec) => {
         const inputs = (JSON.parse(spec.promptVariable) as { inputs: Record<string, unknown> }).inputs;
         let artifact: object;
-        if (spec.artifactOut.endsWith("slices.json")) artifact = TWO_SLICES;
+        if (spec.artifactOut.endsWith("slices.json")) artifact = reworded((takes += 1));
         else if (spec.artifactOut.endsWith("plan-draft.json")) {
           log.push(`PLAN:${sliceOf(inputs)}`);
           artifact = twoSliceDraft(inputs);
@@ -192,8 +200,8 @@ describe("C-8 the slice cache: what a re-run reuses, and what it re-pays for", (
      * PRDR-118 pinned this on ANALYZE, a model act whose prose differed every
      * time: while the whole analysis was in every slice's cache key, that drift
      * re-planned the entire product for a typo. PRDR-290 folded ANALYZE into
-     * DECIDE, so nothing between the documents and the keys drifts but SLICE,
-     * which this planner writes the same way twice.
+     * DECIDE, which left SLICE, and this planner rewords SLICE's every take:
+     * no slice is keyed by its title or goal (PRDR-291).
      */
     log.splice(0);
     writeFileSync(path.join(root, "prd-billing.md"), "# billing, revised\n");

@@ -40,3 +40,29 @@ slice, and no code checks it.
 The redesign plan's §6. A proved defect needs no reviewer to confirm it, so it drives a redraft
 directly. The checks grow with the plan's size where the review grew with its text, and a failure
 that survives its one redraft is the operator's before approval, not a line in a report.
+
+## From PRDR-291
+
+On a pack, code checks SLICE's cut (`cutIssue` in `src/init/slice-seed.ts`):
+- every live requirement id in exactly one slice;
+- no id the seed does not hold;
+- milestone order.
+
+The doc-block on `sliceSchema` in `src/schemas/init.ts` says where. Two things stay with this
+ticket's sixth criterion. The first is the plan's coverage: whether each slice's tickets carry its
+ids (A-1⁷). The second is the same claim where there is no parse, and for the baseline items at
+all. There the slicer is told it, and no code checks it.
+
+SLICE announces the session formula of planning as built (`planningSessions` in
+`src/init/slice.ts`):
+- at least `4N + 1`: a draft and three review reads per slice, and one whole-plan review;
+- 4 more for each revision round;
+- `C + 1` more when the whole-plan review faults C slices.
+
+Deleting the whole-plan review changes that sentence, and the formula case in
+`tests/init/slice-seed.test.ts` pins it.
+
+The whole-plan review's cache key (`wholeKey` in `src/init/plan-whole.ts`) hashes the slices whole,
+titles and goals included, since the review reads them. A re-cut in new words re-runs it. On a pack
+that happens only when the band, the baseline or the prompt moves, since a cut on record keeps its
+slices' words otherwise.

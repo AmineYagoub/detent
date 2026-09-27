@@ -45,3 +45,28 @@ greenfield and null otherwise, where it was handed `analysis`, and no other part
 parse. The parse is VALIDATE's `pack` output; `planningPack` in `src/init/pipeline.ts` reads it and
 returns null where VALIDATE handed none, which is where the records this ticket drafts from do not
 exist.
+
+## From PRDR-291
+
+On a pack, a slice's cache key is its requirement ids and each one's record from the checker's
+parse (C-2¹⁵, `recordsOf` in `src/init/slice-key.ts`):
+- its text, kind, milestone, level and tags;
+- its criteria;
+- the decisions, defaults, facts and catalogue entries it and its criteria cite, read as the
+  checker reads a citation.
+
+Those are the records this ticket's first criterion hands PLAN, so the key and the inputs agree
+once it lands. Until then they do not. A PLAN session reads whole documents while its key reads
+records, so an edit to text no record holds re-plans nothing: prose around a requirement, an entry
+no requirement cites, a design document or an ADR. This ticket closes that gap, and it must land
+before a release carries PRDR-291.
+
+Each slice's documents on a pack are code's (`packDocs` in `src/init/slice.ts`): the module PRDs
+that hold its requirements and their criteria, and every document planning reads that is not a
+module PRD. With this ticket's first criterion, `docs` leaves the draft's inputs.
+
+SLICE's instructions are still in `prompts/planner.md`. Its `At SLICE` paragraph covers the seed,
+the session that may only add, and documents cut as they are. Splitting the prompt is this ticket's
+fifth criterion. Until then, an edit to PLAN's or the review's part of `prompts/planner.md` re-cuts
+the product and re-plans every slice, since SLICE's basis and every slice's key read the prompt's
+hash.

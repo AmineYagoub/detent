@@ -6,6 +6,7 @@ import {
   PRD_INDEX_PATH,
   REQUIREMENT_REFS,
   type CatalogueKind,
+  type Pack,
   type PackFinding,
 } from "../schemas/pack.js";
 import { sections, type Line } from "./pack-markdown.js";
@@ -363,6 +364,27 @@ function knownKeys(kind: CatalogueKind, entries: readonly { readonly id: string 
   if (kind !== "routes") return new Set(entries.map((e) => e.id));
   const keys = entries.flatMap((e) => routeUse(e.id) ?? []);
   return new Set([...keys, ...keys.map((k) => `${ANY} ${pathOf(k)}`), ...keys.map((k) => `${ANY} ${firstSegment(pathOf(k))}/`)]);
+}
+
+/**
+ * C-2⁸ (PRDR-291): the catalogue entries `text` uses, read by the phrasings
+ * above, each with the line its catalogue lists it on. A slice's key hashes
+ * them for each requirement, so an edit to an entry re-plans the slices whose
+ * requirements use it, and no other.
+ */
+export function catalogueEntriesUsed(pack: Pack, text: string): { readonly kind: CatalogueKind; readonly id: string; readonly line: number }[] {
+  const body = textOf(text.split("\n").map((t, i) => ({ n: i + 1, text: t })));
+  const out: { readonly kind: CatalogueKind; readonly id: string; readonly line: number }[] = [];
+  for (const kind of Object.keys(pack.catalogues) as CatalogueKind[]) {
+    const entries = pack.catalogues[kind];
+    if (entries.length === 0) continue;
+    const used = new Set(usesOf(kind, body, knownKeys(kind, entries)).flatMap((u) => u.keys));
+    for (const e of entries) {
+      const own = kind === "routes" ? (routeUse(e.id) ?? []).flatMap((k) => [k, `${ANY} ${pathOf(k)}`]) : [e.id];
+      if (own.some((k) => used.has(k))) out.push({ kind, id: e.id, line: e.line });
+    }
+  }
+  return out;
 }
 
 /**

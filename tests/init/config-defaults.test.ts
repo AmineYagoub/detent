@@ -81,7 +81,7 @@ describe("C-2⁵′ (PRDR-125) the slice band is configuration, not a constant i
           slicesPath(root),
           JSON.stringify({
             schema_version: SCHEMA_VERSION,
-            slices: [{ id: "s01", title: "t", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 10, rationale: "" }],
+            slices: [{ id: "s01", title: "t", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }],
             questions: [],
           }),
         );

@@ -127,7 +127,7 @@ describe("T-061 doc discovery (C-2 docs half)", () => {
 /** C-2‴: one slice over the whole pack — what SLICE produces for a small product. */
 const ONE_SLICE = {
   schema_version: SCHEMA_VERSION,
-  slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 3, rationale: "" }],
+  slices: [{ id: "s01", title: "the product", goal: "it works end to end", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }],
   questions: [],
 };
 

@@ -38,3 +38,12 @@ prediction and was kept.
 
 The redesign plan's §7. The operator decided the F-3 cost is worth paying, the scope is what a model
 can judge, and severity makes the loop's stop mean something.
+
+## From PRDR-291
+
+SLICE's announcement counts PLAN_REVIEW_SAMPLES review reads per slice, and the reads again after
+each revision (`planningSessions` in `src/init/slice.ts`). One review read per slice and no second
+review change it. With PRDR-293's deletion of the whole-plan review, the announcement's part of
+N-5′'s `1 + 2N + R + C` becomes `2N + R + C`: the 1 is SLICE's own session, which has already run
+when the announcement is made. The formula case in `tests/init/slice-seed.test.ts` pins the
+sentence.

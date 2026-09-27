@@ -65,7 +65,6 @@ const spec = (id: string, over: Record<string, unknown> = {}): Record<string, un
   baseline_items: [],
   docs: [],
   depends_on: [],
-  expected_tickets: 2,
   rationale: "",
   ...over,
 });

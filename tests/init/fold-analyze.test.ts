@@ -45,7 +45,6 @@ const SLICES = {
       baseline_items: [],
       docs: [],
       depends_on: [],
-      expected_tickets: 2,
       rationale: "",
     },
   ],
@@ -193,17 +192,17 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     expect(first.planned.backend.rolesLaunched().every((r) => r === "planner"), "no specification session: the pack conforms").toBe(true);
     expect(new Set(first.planned.artifacts), "no session writes an analysis").toEqual(new Set(["slices.json", "plan-draft.json", "plan-review.json"]));
     expect(outputsOf(root, "DETERMINE_VERIFICATION")["status"]).toBe("provisional");
-    expect(sliceInputs(first.planned)).toMatchObject({ greenfield: true });
     expect(draftInputs(first.planned)).toMatchObject({ greenfield: true });
   });
 
-  it("hands SLICE and PLAN the stack entry the decision log records, and no analysis", async () => {
+  /** PRDR-291: on a pack SLICE is handed the seed, and the entry keys every slice PLAN drafts (C-2⁸). */
+  it("hands PLAN the stack entry the decision log records, SLICE the seed, and neither an analysis", async () => {
     const root = conforming();
     const { planned } = await init(root);
-    for (const inputs of [sliceInputs(planned), draftInputs(planned)]) {
-      expect(inputs).toHaveProperty("stack", ENTRY);
-      expect(inputs).not.toHaveProperty("analysis");
-    }
+    expect(draftInputs(planned)).toHaveProperty("stack", ENTRY);
+    expect(sliceInputs(planned)).toHaveProperty("seed");
+    expect(sliceInputs(planned)).not.toHaveProperty("stack");
+    for (const inputs of [sliceInputs(planned), draftInputs(planned)]) expect(inputs).not.toHaveProperty("analysis");
   });
 
   it("binds the entry's documented commands, test_single among them, where an analysis had five slots (PRDR-115)", async () => {
@@ -228,7 +227,7 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     expect(bootstrap.description).not.toContain("ANALYZE");
   });
 
-  it("still reads an existing project's stack from the repository, and gives SLICE and PLAN none", async () => {
+  it("still reads an existing project's stack from the repository, and gives PLAN none", async () => {
     const root = repo({ ...LONE_CANDIDATE, ...RAW });
     const inputs: Json[] = [];
     const planner = scriptedPlanner({ slices: LENDING_SLICES, draft, review: approve }, [], inputs);
@@ -238,10 +237,10 @@ describe("PRDR-290: planning from a conforming pack, with no analysis (D-10′)"
     const test = (bound["bindings"] as Json[]).find((b) => b["slot"] === "test");
     expect(test).toMatchObject({ resolved: "npm run test", status: "approved" });
     expect(test?.["adapter"]).not.toMatch(/^greenfield:/u);
-    const slicing = inputs.find((i) => i["stage"] === "SLICE");
-    expect(slicing).toMatchObject({ greenfield: false });
-    expect(slicing).toHaveProperty("stack", null);
-    expect(slicing).not.toHaveProperty("analysis");
+    const drafting = inputs.find((i) => i["stage"] === "PLAN");
+    expect(drafting).toMatchObject({ greenfield: false });
+    expect(drafting).toHaveProperty("stack", null);
+    expect(inputs.find((i) => i["stage"] === "SLICE")).not.toHaveProperty("analysis");
   });
 });
 

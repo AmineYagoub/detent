@@ -89,7 +89,7 @@ describe("PRDR-282: every slice plans with the decision log (C-2¹²)", () => {
     expect(s02?.["docs"]).toEqual(["PRD.md", DECISION_LOG_PATH, "docs/roadmap.md", "prd-billing.md"].sort());
   });
 
-  it("replays a veto from DECIDE, never from AUDIT, and re-plans every slice until C-2⁸ narrows it", async () => {
+  it("replays a veto from DECIDE, never from AUDIT, and re-plans every slice where no parse narrows it (C-2⁸)", async () => {
     const root = repo(PROJECT);
     const log: string[] = [];
     const planner = scriptedPlanner({ slices: TWO_SLICES, draft: twoSliceDraft, review: () => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] }) }, log);

@@ -5,7 +5,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { DECISION_LOG_PATH } from "../../src/schemas/pack.js";
 import { MockBackend, type StageFn } from "../../src/sessions/mock.js";
 import { LONE_CANDIDATE, repo } from "./plan-fixture.js";
-import { scriptedPlanner, ticket } from "./slicing-fixture.js";
+import { scriptedPlanner, ticket, oneSlice } from "./slicing-fixture.js";
 import type { Json } from "./decide-fixture.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { writeTicket } from "../../src/kernel/tickets/mutations.js";
@@ -23,13 +23,8 @@ import { clean } from "./validate-fixture.js";
 const PROJECT = { ...LONE_CANDIDATE, ...RAW };
 const PACK_DOCS = ["README.md", DECISION_LOG_PATH, "docs/prd/01-lending.md", "docs/prd/index.md", "docs/research/verified-facts.md"];
 
-const LENDING_SLICE = {
-  schema_version: SCHEMA_VERSION,
-  slices: [
-    { id: "s01", title: "lending", goal: "loans work", requirement_ids: ["LND-F-001"], baseline_items: [], docs: ["docs/prd/01-lending.md"], depends_on: [], expected_tickets: 2, rationale: "" },
-  ],
-  questions: [],
-};
+/** PRDR-291: on a pack SLICE places every live requirement, and each slice plans from the documents code picks (C-2⁸). */
+const LENDING_SLICE = oneSlice("lending");
 const draft = (): object => ({ schema_version: SCHEMA_VERSION, tickets: [ticket("t-s01-001"), ticket("t-s01-002", ["t-s01-001"])], questions: [] });
 const approve = (): object => ({ schema_version: SCHEMA_VERSION, verdict: "approve", findings: [] });
 
@@ -61,7 +56,8 @@ describe("PRDR-283: the phases after WRITE plan from the pack (C-2⁶)", () => {
     expect(first.planned.every((i) => i["stage"] !== undefined), "D-10′ (PRDR-290): no planner session reads the documents for a stack before SLICE").toBe(true);
     expect(first.planned.find((i) => i["stage"] === "SLICE")?.["docs"]).toEqual(PACK_DOCS);
     const drafted = first.planned.find((i) => i["stage"] === "PLAN");
-    expect(drafted?.["docs"]).toEqual(["docs/prd/01-lending.md", DECISION_LOG_PATH]);
+    /* PRDR-291: on a pack a slice plans from the module PRDs its requirements live in and the pack's other documents, the log among them (C-2¹⁵). */
+    expect(drafted?.["docs"]).toEqual(PACK_DOCS);
   });
 
   /** PRDR-284: VALIDATE's record moved WRITE's key, so WRITE runs again, writing nothing; VALIDATE's key stands, and the planning chains from it. */

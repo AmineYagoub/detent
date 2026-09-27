@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { type HeldFinding, planQuestionSchema, type PlanQuestion, type PlanReview, type SliceSpec } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
-import { contentsDigest, sliceCacheDir } from "./machine.js";
-import { sessionBudget } from "./plan-review.js";
+import { sliceCacheDir } from "./machine.js";
+import { sliceKey } from "./slice-key.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { PLAN_REVISIONS } from "./plan-review.js";
 import { sampleReviewPlan, type SampledReview } from "./plan-sample.js";
@@ -20,8 +19,9 @@ import { noteUnitComplete } from "../kernel/ledger.js";
  *
  * Each slice is drafted with the earlier slices' ticket index in view, reviewed
  * as its own plan (PRDR-084), revised once, and cached under
- * `.detent/state/plan/<slice>.json` keyed by everything it read — so an edit
- * to one slice's documents re-plans that slice and reuses the rest (C-8).
+ * `.detent/state/plan/<slice>.json` keyed by what it read (`slice-key.ts`) —
+ * so an edit to one slice's requirements, or without a pack to its documents,
+ * re-plans that slice and reuses the rest (C-8, C-2⁸).
  * Nothing here stops for a human: questions accumulate for PRESENT.
  */
 
@@ -136,54 +136,6 @@ function readCache(root: string, sliceId: string): SliceCache | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Everything a slice's draft read that can meaningfully change it.
- *
- * C-8‴ (PRDR-118): this used to hash the whole ANALYZE artifact and the ids of
- * every ticket planned before it, which made the module's own promise false.
- * ANALYZE re-ran on any document edit and was a model act, so its prose drifted
- * every time — and with it every slice's key, so a typo in slice twelve's
- * document re-planned all twenty. The ids did the same thing transitively:
- * re-planning slice two changed slice three's key, and so on to the end.
- *
- * What actually determines a slice's plan is its own documents, its own spec,
- * the STACK the decision log settles (D-10′), the bindings, the budgets and the
- * prompt.
- * The earlier index matters only where this slice reached into it, and that is
- * checked separately as `external_deps` — precisely, and without cascading.
- */
-export function sliceKey(deps: PlanDeps, slice: SliceSpec, index: readonly DraftedTicket[]): string {
-  const docs = slice.docs.length > 0 ? slice.docs : deps.docs;
-  void index;
-  return createHash("sha256")
-    .update(
-      JSON.stringify([
-        slice,
-        contentsDigest(deps.root, docs),
-        deps.stack,
-        deps.greenfield,
-        deps.baseline ?? "production",
-        deps.boundSlots,
-        /**
-         * PRDR-186: what the planner READ, not the whole budgets object.
-         *
-         * `sessionBudget` derives the only three values a plan can depend on —
-         * `turns_per_stage`, `ticket_wall_clock_ms`, `sessions` — and they are
-         * what reaches the prompt as `session_budget`. Keying on the whole
-         * object put `run_spend_usd` in the key, so raising a spend cap
-         * mid-run discarded every slice already planned and re-paid for it.
-         * Observed: a live run five slices in, ~$70 of planning thrown away by
-         * an operational decision that cannot change what a plan should say.
-         * This module's own header calls the key "everything a slice's draft
-         * READ"; the cap is not something it read.
-         */
-        sessionBudget(deps.budgets),
-        deps.promptHash ?? "",
-      ]),
-    )
-    .digest("hex");
 }
 
 export const tagSlice = (tickets: readonly Omit<DraftedTicket, "slice">[], slice: string): DraftedTicket[] =>
@@ -345,7 +297,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[]): 
   mkdirSync(sliceCacheDir(deps.root), { recursive: true });
 
   for (const slice of slices) {
-    const key = sliceKey(deps, slice, index);
+    const key = sliceKey(deps, slice);
     const cached = readCache(deps.root, slice.id);
     const planned = new Set(index.map((t) => t.id));
     /** A cached slice that reaches into an earlier one is only valid while those tickets still exist. */

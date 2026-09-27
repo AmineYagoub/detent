@@ -91,15 +91,18 @@ where nothing can run yet, it proposes the commands the decision log's stack
 entry records (D-10′), and the bootstrap ticket proves them.
 
 `SLICE` (C-2‴) cuts the whole document set into ordered increments — the
-walking skeleton first — and `PLAN` then plans every slice in turn, one
-session-sized ticket set per slice, reviews each, reviews the whole plan for
-coherence and coverage, and revises what the reviews fault. Planning does not
-pause between slices: it runs to the end of the product, and the questions it
-could not answer ride to `PRESENT`. `SLICE` also places Detent's production
-baseline (C-2⁗ — secrets, auth, backups, health checks, CI gates, and the
-rest) into the slices where each item belongs, so the plan is production grade
-even when the documents never asked; `plan_baseline: "none"` in
-`.detent/config.json` opts a project out.
+walking skeleton first. On a pack (C-2⁸) code groups the requirement ids by
+milestone and module for it, refuses a cut that loses, repeats or invents
+one or delivers a milestone out of order, and keeps the cut from one run to
+the next, so an edited requirement re-plans only its own slice. `PLAN` then
+plans every slice in turn, one session-sized ticket set per slice, reviews
+each, reviews the whole plan for coherence and coverage, and revises what the
+reviews fault. Planning does not pause between slices: it runs to the end of
+the product, and the questions it could not answer ride to `PRESENT`.
+`SLICE` also places Detent's production baseline (C-2⁗ — secrets, auth,
+backups, health checks, CI gates, and the rest) into the slices where each
+item belongs, so the plan is production grade even when the documents never
+asked; `plan_baseline: "none"` in `.detent/config.json` opts a project out.
 
 ## The five presented decisions (C-5 — a closed set)
 

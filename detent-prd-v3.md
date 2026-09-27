@@ -308,6 +308,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   *Amended by C-2⁸, A-1⁷ and C-4⁶ (PRDR-278): SLICE is seeded by the pack and keyed by requirement
   ids, mechanical checks replace the whole-plan review, and each slice gets one `plan_review`
   read.*
+  *Amended by C-2¹⁵ (PRDR-291): on a pack SLICE is seeded by code and its cut kept on record.
+  Without a parse it cuts the documents as this built it, and no slice carries an estimate.*
 
 - **C-2⁗ (3.1.1, PRDR-117).** The plan is production grade whether or not the documents
   ask for it. Detent carries a **production baseline** — fifteen items across six areas
@@ -413,6 +415,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   band stays guidance rather than enforcement: `expected_tickets` is planning judgement (A-1),
   and a slice that ignores it is the reviewer's `sizing` finding.
   *Amended by C-2⁸ (PRDR-278): the slicer estimates no ticket count; the band stays its guidance.*
+  *Amended by C-2¹⁵ (PRDR-291): built. The announcement states the session formula for the slice
+  count.*
 
 - **S-5″ (3.1.1, PRDR-125).** The planner runs on `claude-opus-5`. S-5′ seated it on Fable 5.1
   on the strength of a probe; the first self-build gate measured it on real work, and the
@@ -977,6 +981,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   while earlier phases replay, and the phases after it chain from its key. WRITE does.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE restarts the chain too, directly after WRITE, whose key
   then reaches nothing.*
+  *Amended by C-2¹⁵ (PRDR-291): built. On a pack a slice's key hashes its requirements' records,
+  and without a parse the documents it plans from, as here; neither holds the slice's own words.*
 
 - **C-8⁗ (3.1.1, PRDR-199).** A checkpoint covers the expensive LOOP inside a phase, not only
   the phase. C-8 is stated per phase, and the whole-plan redraft is a loop inside PLAN: it
@@ -1745,6 +1751,8 @@ the code does what the rules it amends describe, and each of those rules points 
   keys slices by their requirement ids, so for now a veto re-plans every slice.*
   *Amended by C-2¹⁴ (PRDR-284): AWAIT_INFO at VALIDATE is built, for a blocker left at the
   ceiling and for a pack checker VALIDATE's writer cannot make green.*
+  *Amended by C-2¹⁵ (PRDR-291): on a pack a veto re-plans the slices whose requirements cite the
+  entry it edits, and every slice where it edits the stack's entry.*
 
 - **D-10′ (3.1.1, PRDR-278).** ANALYZE is folded into DECIDE, and D-10's order names DECIDE where it
   named ANALYZE: DISCOVER → AUDIT → DECIDE → WRITE → VALIDATE → DETERMINE_VERIFICATION → SLICE →
@@ -1816,6 +1824,8 @@ the code does what the rules it amends describe, and each of those rules points 
   - **C-8's AC**, inherited from v2, names ANALYZE as the phase an edited PRD.md replays from. An
     edit replays from the first phase on the chain whose key it moves, the standalone phases
     aside, and editing nothing re-executes nothing.
+  *Amended by C-2¹⁵ (PRDR-291): on a pack SLICE is handed the seed, and neither the stack nor
+  greenfield; the entry keys every slice PLAN drafts. Without a parse it is handed both, as here.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -1843,6 +1853,73 @@ the code does what the rules it amends describe, and each of those rules points 
     may only add, to an existing slice or a new one, and existing slices keep their ids and
     members. A removed requirement re-plans its slice. This is what makes C-8⁵'s scoped re-plan
     possible.
+  *Amended by C-2¹⁵ (PRDR-291): built. A slice's key adds the baseline items it carries, and
+  SLICE's job stays in the planner prompt until C-4⁵.*
+
+- **C-2¹⁵ (3.1.1, PRDR-291).** C-2⁸ is built, in `src/init/slice.ts`, `src/init/slice-seed.ts` and
+  `src/init/slice-key.ts`. This settles what C-2⁸ left to its ticket, and amends C-2‴'s SLICE
+  where there is no parse, C-2⁵′'s estimate, C-8‴'s key, C-2¹²'s and C-3⁗'s vetoes, D-10″'s
+  handoff to SLICE and N-5′'s announcement.
+  - **The seed** is built from the checker's parse VALIDATE hands on (C-2¹⁴). It holds each live
+    requirement, neither withdrawn nor in a document `plan_docs` leaves out (C-2″), grouped by
+    milestone in order, then by module code in the order the index registers the codes. Each
+    group carries its module's area, its ids in document order and how many criteria test them,
+    and each milestone its title.
+  - **The session** is handed the seed, the documents planning reads, the production baseline and
+    the band, and no stack: the entry keys every slice, and PLAN plans on it. Code refuses a cut
+    that leaves a live id out, places one in two slices, or names one the seed does not hold,
+    whether the pack does not define it, it is withdrawn, or it is in a document planning does not
+    read. It also refuses a slice holding a requirement of an earlier milestone than one a slice
+    before it holds, so a slice may span a milestone boundary and never go back across one. The
+    refusal names each defect, and the relaunch is told what was refused, not that its content
+    was sound.
+  - **Each slice's documents** are code's: the module PRDs holding its requirements and their
+    criteria, and every document planning reads that is not a module PRD, the decision log among
+    them (C-2¹²). Another module's PRD is left out.
+  - **The cut on record.** SLICE keeps its cut at `.detent/state/slicing.json`, with the milestone
+    each id had and the basis it was cut under: the baseline, the band and the prompt. SLICE runs
+    again whenever a phase before it on the chain does, and a cut on record under the same basis
+    is kept. An id no longer live, or whose milestone moved, leaves its slice. A slice left with
+    neither requirements nor baseline items goes, and so do the edges to it. The ids no kept slice
+    places go to a slice session that may only add, which is shown the slices in order, each with
+    its milestones, and those ids as a seed of their own. It writes `slice-additions.json`, placing
+    each id in an existing slice or in a new slice that follows the slice it names; the shape has
+    no field to move, rename or remove anything. Code refuses a placement of an id a slice already
+    holds, into a slice that does not exist, or under an id a slice has, and any merged cut the
+    checks above refuse. With nothing to add, no session runs. A cut on record under another
+    basis, or one that keeps no slice, is cut again whole. `--replan` removes the record with the
+    slice caches, so it still re-derives every slice (C-8′).
+  - **SLICE's key** on a pack is the live ids with their milestones, and the basis. An edit to what
+    a requirement says re-cuts nothing, and neither the criteria counts nor the documents' text
+    key it. Without a parse, where WRITE wrote no pack (C-2¹³) or the documents planning reads hold
+    no live requirement, SLICE cuts the documents as they are, is handed the stack, and is keyed
+    by the documents' contents and the stack, as C-2‴ built it. It keeps no record there.
+  - **A slice's cache key** is its sorted requirement ids and each one's record from the parse:
+    its text, kind, milestone, level and tags; its criteria; and the decisions, defaults, facts and
+    catalogue entries it and its criteria cite, read as the checker reads a citation (C-2¹⁰), a
+    catalogue entry by its row. With them come the baseline items the slice carries, with what each
+    is verified by, since PLAN drafts from them (C-2⁗) and C-2⁸'s list left them out; the stack;
+    greenfield; the baseline; the bindings; the session budget; and the prompt. Its title, goal,
+    rationale and slice-level `depends_on` are not in it. Without a parse, the contents of the
+    documents the slice plans from stand in for the records, as C-8‴ keyed them. So an edit to one
+    requirement re-plans its own slice, and a veto re-plans the slices whose requirements cite the
+    entry it edits, or every slice where it edits the stack's entry (C-3⁗). Until C-4⁵ hands PLAN
+    the records alone, a PLAN session still reads whole documents, and an edit to text no record
+    holds, such as prose around a requirement, an entry no requirement cites or a design document,
+    re-plans nothing.
+  - **No estimate.** `expected_tickets` is gone from the slice's shape and from every skeleton. A
+    SLICE checkpoint written before this build is never read, since SLICE's key moved with its
+    prompt, so no migration step runs. The announcement states the formula of planning as it is
+    built, counting the sessions PLAN runs after SLICE's own. N slices take at least `4N + 1`: a
+    draft and three review reads per slice, and one whole-plan review. Each of the R revision
+    rounds a slice review asks for adds four. Where the whole-plan review faults C slices, their
+    redrafts and one more whole-plan review add `C + 1`. One slice has no whole-plan review and
+    takes `4 + 4R`. When C-4⁶ and A-1⁷ are built, the announcement's part of N-5′'s
+    `1 + 2N + R + C` is `2N + R + C`; the 1 is SLICE's session.
+  - **The prompt.** SLICE's job stays in `prompts/planner.md`, rewritten for the seed, for the
+    session that may only add, and for documents cut as they are. One prompt per job is C-4⁵'s
+    (PRDR-292). Until it is built, an edit to PLAN's or the review's part of the planner prompt
+    re-cuts the product, as it re-plans every slice.
 
 - **C-4⁵ (3.1.1, PRDR-278).** PLAN drafts from the pack's records, not from prose, and asks
   nothing.
@@ -1961,6 +2038,8 @@ the code does what the rules it amends describe, and each of those rules points 
     specification phase: the pack is the founder's record, and a changed pack is re-validated by
     content (C-2⁷).
   *Amended by D-10″ (PRDR-290): `--replan`'s entry at DETERMINE_VERIFICATION is built.*
+  *Amended by C-2¹⁵ (PRDR-291): a slice is keyed by its requirements' records and a cut is kept on
+  record, which the scoped re-plan needs; the amendment path that ends in it is PRDR-286's.*
 
 - **X-3′ (3.1.1, PRDR-278).** X-3's table admits PREMISE_FALSIFIED from BLIND_FIX, INFORMED_FIX and
   REVIEW_FIX, each with IN_PROGRESS's outcome: hypotheses++, then a bug returns to DIAGNOSED, or
@@ -2109,6 +2188,9 @@ the code does what the rules it amends describe, and each of those rules points 
     slices revised and C the targeted redrafts. C-2‴'s pipeline took at least `4N + 3`, and
     ksar-cloud's 24 slices took 186; this takes 49 with no revision and 73 with every slice
     revised, plus redrafts. The figure is an estimate for the first run to measure.
+  *Amended by C-2¹⁵ (PRDR-291): SLICE announces the formula of planning as it is built, counting
+  the sessions after its own. When C-4⁶ and A-1⁷ are built, that part of this one is
+  `2N + R + C`.*
 
 - **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
   specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes
@@ -2364,6 +2446,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by D-10″ (PRDR-290): ANALYZE is gone. SLICE and every slice PLAN drafts read the log, and
   the stack entry reaches the bindings and the bootstrap directly, with no session's stack to
   write it over.*
+  *Amended by C-2¹⁵ (PRDR-291): on a pack every slice still reads the log, and is keyed by the
+  entries its requirements cite, so a veto re-plans those slices alone.*
 
 - **C-2¹³ (3.1.1, PRDR-283).** WRITE is built, in `src/init/write.ts` and the modules beside it,
   directly after DECIDE. This settles what C-2⁶ and C-2⁹ left to WRITE's ticket, and amends

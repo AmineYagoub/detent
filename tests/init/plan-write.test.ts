@@ -47,7 +47,6 @@ const SLICE = (id: string, dependsOn: string[] = []): SliceSpec => ({
   baseline_items: [],
   docs: [],
   depends_on: dependsOn,
-  expected_tickets: 5,
   rationale: "",
 });
 

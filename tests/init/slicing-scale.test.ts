@@ -32,7 +32,6 @@ const SLICES = Array.from({ length: N_SLICES }, (_, i) => ({
   baseline_items: i === 0 ? ["PB-001", "PB-012"] : [],
   docs: ["PRD.md"],
   depends_on: i === 0 ? [] : [`s${String(i).padStart(2, "0")}`],
-  expected_tickets: PER_SLICE,
   rationale: "",
 }));
 
@@ -100,7 +99,6 @@ const TEN = Array.from({ length: 10 }, (_, i) => ({
   baseline_items: [],
   docs: ["PRD.md"],
   depends_on: i === 0 ? [] : [`s${String(i).padStart(2, "0")}`],
-  expected_tickets: 2,
   rationale: "",
 }));
 

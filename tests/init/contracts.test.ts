@@ -213,7 +213,7 @@ describe("A-1‴ the four checks, each against a real ksar defect", () => {
           : spec.artifactOut.endsWith("plan-review.json")
             ? APPROVE_PLAN
             : spec.artifactOut.endsWith("slices.json")
-              ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], expected_tickets: 2, rationale: "" }], questions: [] }
+              ? { schema_version: SCHEMA_VERSION, slices: [{ id: "s01", title: "the product", goal: "g", requirement_ids: [], baseline_items: [], docs: [], depends_on: [], rationale: "" }], questions: [] }
               : null;
         if (artifact === null) throw new Error(`the planner was asked for ${spec.artifactOut}, which no planning stage writes`);
         writeFileSync(spec.artifactOut, `${JSON.stringify(artifact)}\n`);
@@ -346,7 +346,6 @@ describe("A-1⁵ coverage is a set operation over what the ticket declares", () 
       baseline_items: [],
       docs: [],
       depends_on: [],
-      expected_tickets: 2,
       rationale: "",
       ...over,
     }) as SliceSpec;
