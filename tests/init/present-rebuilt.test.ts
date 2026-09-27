@@ -203,7 +203,16 @@ describe("PRDR-296: the question list is gone; DECIDE owns questions (C-3⁗)", 
   });
 
   it("persists no question count, so a record carrying one is not this build's", () => {
-    const record = { schema_version: SCHEMA_VERSION, presentation: "Plan ready for approval.", plan_hash: "a".repeat(64), spec_defects: 0, check_failures: 0 };
+    const record = {
+      schema_version: SCHEMA_VERSION,
+      presentation: "Plan ready for approval.",
+      plan_hash: "a".repeat(64),
+      spec_defects: 0,
+      check_failures: 0,
+      /* N-5″ (PRDR-297): what made the plan, which PRESENT records beside the counts. */
+      builds: ["3.1.0+000000000000"],
+      pack_hash: null,
+    };
     expect(presentationSchema.safeParse(record).success).toBe(true);
     expect(presentationSchema.safeParse({ ...record, blocking: 0 }).success).toBe(false);
     /* A record without either count was written before it, and so with `blocking`. */

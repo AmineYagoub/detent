@@ -95,7 +95,9 @@ describe("T-069 C-5: the interrupt set is frozen at five", () => {
  * `makeTtyApproval` answers AWAIT_APPROVAL. The escalation in `cli/escalate.ts`
  * is C-10/X-8's, the re-baseline consent in `cli/verify.ts` is V-1's, and the
  * toolchain question `makeTtyToolchainApproval` puts before `run`'s first
- * session is PRDR-276's; none of them is a member of `INTERRUPTS`. So this is
+ * session is PRDR-276's, and the mixed-build question `makeTtyMixedBuilds` puts
+ * before the approval question is PRDR-297's, whose no leaves the plan at
+ * AWAIT_APPROVAL; none of them is a member of `INTERRUPTS`. So this is
  * an inventory of the places that can block on a human; it is not a proof that
  * the interrupt set is five. That proof is the `INTERRUPTS` tuple and the skill
  * assertion below.
@@ -144,8 +146,8 @@ const OPENS: Record<string, PromptSite> = {
   "cli/approve.ts": {
     constructs: ["node:readline", "createInterface(", ".question("],
     reason:
-      "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents — and PRDR-276's " +
-      "toolchain question, which is not one",
+      "C-7's approval prompt — AWAIT_APPROVAL, the one C-5 interrupt any of these five presents — PRDR-276's " +
+      "toolchain question, which is not one, and PRDR-297's mixed-build question, which is not one either",
   },
   "cli/decide.ts": {
     constructs: ["node:readline", "createInterface(", ".question("],
@@ -166,16 +168,16 @@ const OPENS: Record<string, PromptSite> = {
 /** Modules that hand an asker to something that will call it, and open no transport themselves. */
 const WIRES: Record<string, PromptSite> = {
   "cli/init.ts": {
-    constructs: ["makeTtyApproval", "makeTtyDecisions"],
+    constructs: ["makeTtyApproval", "makeTtyMixedBuilds", "makeTtyDecisions"],
     reason:
-      "C-7's first exit and C-3⁗'s DECIDE questions (PRDR-282) — the askers passed to the init pipeline behind " +
-      "this file's TTY gate",
+      "C-7's first exit, the mixed-build question before it (PRDR-297) and C-3⁗'s DECIDE questions (PRDR-282) — " +
+      "the askers passed to the init pipeline behind this file's TTY gate",
   },
   "cli/run.ts": {
-    constructs: ["makeTtyEscalation", "makeTtyApproval", "makeTtyToolchainApproval"],
+    constructs: ["makeTtyEscalation", "makeTtyApproval", "makeTtyMixedBuilds", "makeTtyToolchainApproval"],
     reason:
-      "C-10's escalation, C-7's second exit (PRDR-255) and the toolchain question (PRDR-276), all behind the one " +
-      "TTY gate the file computes once",
+      "C-10's escalation, C-7's second exit (PRDR-255), the mixed-build question before it (PRDR-297) and the " +
+      "toolchain question (PRDR-276), all behind the one TTY gate the file computes once",
   },
 };
 
@@ -206,7 +208,7 @@ describe("PRDR-256: every module that can block on a human is declared", () => {
       "`cli/run.ts` hands its TTY askers to the kernel and contains no `readline`, so the predicate this " +
         "replaces returned false for it — the check reported no offenders while two of the three live TTY " +
         "prompts were raised from a module it had never heard of",
-    ).toEqual(["makeTtyEscalation", "makeTtyApproval", "makeTtyToolchainApproval"]);
+    ).toEqual(["makeTtyEscalation", "makeTtyApproval", "makeTtyMixedBuilds", "makeTtyToolchainApproval"]);
   });
 
   it("every declared site exists, and still does what it is exempt for", () => {

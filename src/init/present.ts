@@ -25,6 +25,8 @@ import {
 } from "./present-spec.js";
 import { planLines, type PlannedSlice } from "./present-plan.js";
 import { spendLines, type PhaseSpend } from "./phase-spend.js";
+import { buildLines, type BuildShare } from "./plan-builds.js";
+import { isMixed } from "../kernel/build.js";
 import { planHash } from "./machine.js";
 import { symbolReminder } from "./symbol-reminder.js";
 import type { SymbolsConfig } from "../adapter/symbols.js";
@@ -108,6 +110,10 @@ export interface PresentInput {
   readonly unreviewed?: readonly UnreviewedSlice[];
   /** C-7‴ (PRDR-296): what `init` has spent on the root, by phase; reported, never capped (decision 16). */
   readonly spend?: readonly PhaseSpend[];
+  /** N-5″ (PRDR-297): the Detent builds that made the plan, and what each made (`plan-builds.ts`). */
+  readonly builds?: readonly BuildShare[];
+  /** N-5″: the hash of the pack the plan was planned from, or null without one. */
+  readonly packHash?: string | null;
   /** A-1‴: edges Detent derived from declared coupling rather than the planner writing them. */
   readonly derivedEdges?: readonly { readonly consumer: string; readonly provider: string; readonly contract: string }[];
   /**
@@ -175,6 +181,7 @@ export function renderPresentation(input: PresentInput): string {
     for (const e of edges) lines.push(`  ${e.consumer} → ${e.provider}   (${e.contract})`);
   }
   lines.push(...spendLines(input.spend ?? []));
+  lines.push(...buildLines(input.builds ?? [], input.packHash ?? null));
   lines.push("", "Bindings and tickets are overridable — edit them and re-run `detent init` (C-3b/C-8).");
   /** S-3″ (PRDR-121): shown only when this run produced evidence it would have helped. */
   const reminder = symbolReminder(input.symbols, [...findings, ...(input.reviewRisks ?? [])]);
@@ -196,13 +203,26 @@ export interface PresentDeps extends PresentInput {
   readonly ask?: (presentation: string) => Promise<ApprovalDecision>;
   /** C-7‴ (PRDR-296): shows the presentation before `ask` is put; nothing else prints it here. */
   readonly print?: (text: string) => void;
+  /**
+   * N-5″ (PRDR-297): put before `ask` where more than one build made the plan,
+   * as a toolchain install is asked (PRDR-276). Only a yes lets approval be
+   * offered; absent, the answer is no.
+   */
+  readonly acceptMixedBuilds?: (builds: readonly string[]) => Promise<boolean>;
   readonly now?: () => number;
 }
+
+/** N-5″ (PRDR-297): what either exit says where a plan more than one build made was not accepted. */
+export const MIXED_BUILDS_REFUSED =
+  "Not approved: more than one Detent build made this plan, or a part of it names no build, and that was not accepted. " +
+  "`detent init --replan` makes again everything the builds above made, with this build alone; or accept it — y at the " +
+  "question on a terminal, or `--accept-mixed-builds` beside `--approve` (N-5″).";
 
 export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
   /* A-1⁷ (PRDR-293): the checks, on the tickets and the bindings as they stand. */
   const failures = presentFailures(deps.tickets, deps.slices ?? [], deps.checks, { bindings: deps.bindings, packages: deps.packages ?? [ROOT_PACKAGE] });
   const presentation = renderPresentation({ ...deps, failures });
+  const made = { builds: (deps.builds ?? []).map((b) => b.build), pack_hash: deps.packHash ?? null };
 
   /**
    * C-7 (PRDR-255): the rendering is kept, so the second exit can replay it.
@@ -219,6 +239,7 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
     plan_hash: planHash(deps.root),
     spec_defects: (deps.specDefects ?? []).length,
     check_failures: failures.length,
+    ...made,
   } satisfies Presentation);
 
   /** C-4⁵ (PRDR-292): an open spec defect holds approval, and the operator is told each one and how a re-run closes it. */
@@ -237,10 +258,19 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
    */
   const shown = deps.ask !== undefined && deps.print !== undefined;
   if (shown) deps.print?.(presentation);
+  /* N-5″ (PRDR-297): a plan more than one build made is offered for approval only once that is accepted. */
+  if (deps.ask !== undefined && isMixed(made.builds) && !((await deps.acceptMixedBuilds?.(made.builds)) ?? false)) {
+    return {
+      kind: "interrupt",
+      interrupt: "AWAIT_APPROVAL",
+      message: shown ? MIXED_BUILDS_REFUSED : `${presentation}\n\n${MIXED_BUILDS_REFUSED}`,
+      items: deps.tickets.map((t) => t.id),
+    };
+  }
   const decision: ApprovalDecision = deps.ask === undefined ? { kind: "deferred" } : await deps.ask(presentation);
 
   if (decision.kind === "approved") {
-    recordApproval(deps.root, decision.by, deps.now?.() ?? Date.now());
+    recordApproval(deps.root, decision.by, deps.now?.() ?? Date.now(), made);
     return { kind: "complete", outputs: { approved: true, approved_by: decision.by } };
   }
 
@@ -262,7 +292,8 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
 }
 
 /**
- * C-7: approval is recorded with who, when, and the hash of what was approved.
+ * C-7: approval is recorded with who, when, and the hash of what was approved;
+ * N-5″ (PRDR-297) adds the builds that made it and the pack it was planned from.
  *
  * Exported for the second exit (PRDR-255). It stays the ONE writer of
  * `approval.json` on both exits, so the who/when/plan-hash record has a single
@@ -270,12 +301,19 @@ export async function presentStage(deps: PresentDeps): Promise<PhaseOutcome> {
  * `by` at every call site — there is no environment fallback on this path,
  * because an absent human is not an approving one (C-5).
  */
-export function recordApproval(root: string, approvedBy: string, nowMs: number): Approval {
+export function recordApproval(
+  root: string,
+  approvedBy: string,
+  nowMs: number,
+  made: { readonly builds: readonly string[]; readonly pack_hash: string | null },
+): Approval {
   const approval = approvalSchema.parse({
     schema_version: SCHEMA_VERSION,
     approved_by: approvedBy,
     at: new Date(nowMs).toISOString(),
     plan_hash: planHash(root),
+    builds: [...made.builds],
+    pack_hash: made.pack_hash,
   });
   writeFileSync(approvalPath(root), `${JSON.stringify(approval, null, 2)}\n`);
   return approval;

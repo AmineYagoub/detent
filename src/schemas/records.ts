@@ -104,6 +104,12 @@ export const checkpointSchema = z.strictObject({
   inputs_hash: sha256Hex,
   outputs: z.record(z.string(), z.unknown()),
   at: isoTimestamp,
+  /**
+   * N-5″ (PRDR-297): the Detent build that wrote it (`kernel/build.ts`), which
+   * PRESENT names (C-7″). Optional, so a checkpoint written before it is still
+   * reused; PRESENT counts one as a build of its own, unrecorded.
+   */
+  build: nonEmptyString.optional(),
 });
 export type Checkpoint = z.infer<typeof checkpointSchema>;
 
@@ -234,6 +240,14 @@ export const approvalSchema = z.strictObject({
   approved_by: nonEmptyString,
   at: isoTimestamp,
   plan_hash: sha256Hex,
+  /**
+   * N-5″ (PRDR-297): the Detent builds that made the plan, as PRESENT named
+   * them, and the hash of the pack it was planned from, or null without one.
+   * Optional, since a plan approved before them is still approved; its
+   * figures then name no build (C-7″).
+   */
+  builds: z.array(nonEmptyString).optional(),
+  pack_hash: sha256Hex.nullable().optional(),
 });
 export type Approval = z.infer<typeof approvalSchema>;
 
@@ -270,6 +284,15 @@ export const presentationSchema = z.strictObject({
    * exit offers approval.
    */
   check_failures: z.number().int().nonnegative(),
+  /**
+   * N-5″ (PRDR-297): the Detent builds that made the plan, as PRESENT named
+   * them. More than one, or one unrecorded, and neither exit approves without
+   * the operator accepting that (C-7″). Required, as the counts are: a record
+   * without them was written before them, and `detent init` presents again.
+   */
+  builds: z.array(nonEmptyString),
+  /** N-5″: the hash of the pack the plan was planned from, or null without one; the approval records it. */
+  pack_hash: sha256Hex.nullable(),
 });
 export type Presentation = z.infer<typeof presentationSchema>;
 

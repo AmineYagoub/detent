@@ -214,12 +214,19 @@ const recordSchema = z.strictObject({
   /** Each id the cut places, with the milestone it had then. */
   placement: z.record(z.string(), z.number().int().nonnegative()),
   slices: z.array(sliceSchema).min(1),
+  /**
+   * N-5″ (PRDR-297): the Detent builds whose sessions cut what stands, which
+   * PRESENT names: one that kept a cut keeps its builds, and one that added to
+   * it joins them. Absent on a cut recorded before it, which counts as unrecorded.
+   */
+  builds: z.array(z.string().min(1)).optional(),
 });
 
 export interface SlicingRecord {
   readonly basis: string;
   readonly placement: Readonly<Record<string, number>>;
   readonly slices: readonly SliceSpec[];
+  readonly builds?: readonly string[] | undefined;
 }
 
 /** The cut on record, or null: absent, or a shape this build does not read, which is cut again rather than trusted. */
@@ -234,7 +241,7 @@ export function readSlicing(root: string): SlicingRecord | null {
   }
 }
 
-export function writeSlicing(root: string, record: SlicingRecord): void {
+export function writeSlicing(root: string, record: SlicingRecord & { readonly builds: readonly string[] }): void {
   writeFileSync(slicingRecordPath(root), `${JSON.stringify({ schema_version: SCHEMA_VERSION, ...record }, null, 2)}\n`);
 }
 

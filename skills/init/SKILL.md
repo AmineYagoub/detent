@@ -178,10 +178,14 @@ decision yourself.
    bought: the human reads the tickets each one names before answering. The
    human answers approve, decline, or defer. Relay it on the re-invocation
    with exactly one flag: `--approve --by "<their name>"`, `--decline`, or
-   `--defer`. Approval is recorded with
-   who, when, and the hash of what was approved; a decline leaves the plan
-   READY-unapproved; a deferral hands presentation to the first `run`, which
-   shows the same text (C-7).
+   `--defer`. After what each phase cost, the summary names the Detent build
+   that made the plan (N-5″). Where it names more than one, or a part that
+   names no build, ask the human whether they accept that before they
+   approve, and relay `--accept-mixed-builds` beside `--approve` only on
+   their yes; without it the approval is refused. Approval is recorded with
+   who, when, and the hash of what was approved, and the builds that made it;
+   a decline leaves the plan READY-unapproved; a deferral hands presentation
+   to the first `run`, which shows the same text (C-7).
 
 ## Outcome
 

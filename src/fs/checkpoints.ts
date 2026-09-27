@@ -117,6 +117,8 @@ export function readCheckpoint(root: string, phase: string, expected: string): C
 
 export interface SaveOptions {
   readonly at?: string;
+  /** N-5″ (PRDR-297): the Detent build writing it (`kernel/build.ts`), which PRESENT names. */
+  readonly build?: string;
 }
 
 /** Persist a phase's outputs against the hash of what produced them (A-7). */
@@ -133,6 +135,7 @@ export function writeCheckpoint(
     inputs_hash: hash,
     outputs,
     at: opts.at ?? new Date().toISOString(),
+    ...(opts.build === undefined ? {} : { build: opts.build }),
   });
   const file = checkpointPath(root, phase);
   mkdirSync(path.dirname(file), { recursive: true });

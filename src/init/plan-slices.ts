@@ -13,6 +13,7 @@ import {
 } from "../schemas/init.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { sliceCacheDir } from "./machine.js";
+import { detentBuild } from "../kernel/build.js";
 import { sliceKey } from "./slice-key.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import type { DraftedTicket } from "./plan-write.js";
@@ -98,6 +99,8 @@ const sliceCacheSchema = z.strictObject({
    * where the slice passed its checks.
    */
   sent: z.array(z.string()).default([]),
+  /** N-5″ (PRDR-297): the Detent build that planned the slice, which PRESENT names; absent on a cache written before it. */
+  build: z.string().min(1).optional(),
 });
 type SliceCache = {
   readonly key: string;
@@ -217,6 +220,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
           unreviewed: read.unreviewed,
           external_deps: [...new Set(read.tickets.flatMap((t) => t.depends_on).filter((d) => !own.has(d)))],
           sent: [...mine],
+          build: detentBuild(),
         },
         null,
         2,

@@ -7,6 +7,7 @@ import { type CheckFailure, type PlanFinding, type SliceSpec, specDefectSchema, 
 import { cachedTicketSchema } from "./plan-cache.js";
 import { checkPlan, failureLine, type PlanContext } from "./plan-checks.js";
 import { redraftRecordPath } from "./machine.js";
+import { detentBuild } from "../kernel/build.js";
 import { draftAndRead, type PlanDeps } from "./plan.js";
 import { normaliseDraft, tagSlice } from "./plan-normalise.js";
 import { dependencyIndex } from "./plan-records.js";
@@ -52,6 +53,8 @@ const redraftsSchema = z.strictObject({
       tickets: z.array(cachedTicketSchema),
       spec_defects: z.array(specDefectSchema),
       findings: z.array(z.looseObject({ tag: z.string(), finding: z.string() })),
+      /** N-5″ (PRDR-297): the Detent build that drafted it, which PRESENT names; absent on one written before it. */
+      build: z.string().min(1).optional(),
     }),
   ),
 });
@@ -62,6 +65,7 @@ export interface Redraft {
   readonly tickets: DraftedTicket[];
   readonly spec_defects: SpecDefect[];
   readonly findings: PlanFinding[];
+  readonly build?: string;
 }
 
 export function readRedrafts(root: string): Redraft[] {
@@ -163,7 +167,7 @@ export async function crossSlicePass(
         deps.note?.(`redrafting ${slice.id} for ${String(failures.length)} failure(s) the checks across the plan found — ${failures.map(failureLine).join("; ")} (A-1⁷)`);
         const drafted = await draftAndRead(deps, { slice, planIndex: [...earlier, ...later], failures, draft, keepIds: keep });
         const normalised = normaliseDraft(slice, tagSlice(drafted.tickets, slice.id), earlier, deps.note, [...earlier, ...later]);
-        redraft = { key, slice: slice.id, tickets: normalised.tickets, spec_defects: [...drafted.spec_defects], findings: normalised.findings };
+        redraft = { key, slice: slice.id, tickets: normalised.tickets, spec_defects: [...drafted.spec_defects], findings: normalised.findings, build: detentBuild() };
       } else {
         deps.note?.(`${slice.id}: its redraft for the checks across the plan is reused — already written down (C-8⁗)`);
       }

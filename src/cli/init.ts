@@ -13,7 +13,7 @@ import type { SessionBackend } from "../sessions/backend.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { ensureConfig, decideSymbols, routingNote, type SymbolsDecision } from "../init/config.js";
 import { LIVE_AUTH_HINT, hasLiveBackendAuth } from "../sessions/live.js";
-import { makeFlagApproval, makeTtyApproval, type ApprovalFlag } from "./approve.js";
+import { makeFlagApproval, makeTtyApproval, makeTtyMixedBuilds, type ApprovalFlag } from "./approve.js";
 import { makeTtyDecisions } from "./decide.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
 import { migrateState, migrationNote } from "../kernel/migrate.js";
@@ -46,6 +46,8 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       decline: { type: "boolean", default: false },
       defer: { type: "boolean", default: false },
       by: { type: "string" },
+      /** N-5″ (PRDR-297): the answer to a plan more than one build made, given in advance; `--approve` needs it for such a plan. */
+      "accept-mixed-builds": { type: "boolean", default: false },
       "spend-cap-usd": { type: "string" },
       /** S-3⁗ (PRDR-208): the symbol-intelligence decision, as a flag. */
       symbols: { type: "boolean", default: false },
@@ -275,6 +277,17 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
         ? { askApproval: makeFlagApproval(approvalFlag, values.by ?? process.env["USER"] ?? "operator") }
         : interactive
           ? { askApproval: makeTtyApproval(process.env["USER"] ?? "operator") }
+          : {}),
+      /*
+       * N-5″ (PRDR-297): the flag is the answer given in advance and wins; a
+       * relayed `--decline` or `--defer` approves nothing, so it needs none;
+       * otherwise a terminal asks. Absent, a plan more than one build made is
+       * not offered for approval.
+       */
+      ...(values["accept-mixed-builds"] || (approvalFlag !== undefined && approvalFlag !== "approve")
+        ? { acceptMixedBuilds: async (): Promise<boolean> => true }
+        : approvalFlag === undefined && interactive
+          ? { acceptMixedBuilds: makeTtyMixedBuilds() }
           : {}),
       /* C-3⁗ (PRDR-282): DECIDE asks on a terminal; anywhere else it takes each recommended answer as a vetoable default (specification decision 9). */
       ...(interactive ? { askDecisions: makeTtyDecisions() } : {}),

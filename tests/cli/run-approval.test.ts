@@ -253,3 +253,88 @@ describe("C-7 `detent run` presents a plan that was never approved", () => {
     ).toBe(false);
   }, 60_000);
 });
+
+/**
+ * PRDR-297 (N-5″): the second exit asks what the first asks. The presentation
+ * `run` replays names the builds that made the plan, and a plan more than one
+ * made is offered for approval only once that is accepted.
+ */
+describe("PRDR-297 `detent run` approves a plan more than one build made only once that is accepted", () => {
+  const BUILDS = ["3.1.0+aaaaaaaaaaaa", "3.0.9+0123456789ab"];
+
+  async function mixed(root: string): Promise<void> {
+    rmSync(approvalPath(root), { force: true });
+    const stored = readBindings(root);
+    await presentStage({
+      root,
+      tickets: allTickets(root),
+      bindings: stored.bindings,
+      skips: stored.skips as never[],
+      bootstrap: null,
+      assignments: {},
+      builds: [
+        { build: BUILDS[0] ?? "", made: ["PLAN"] },
+        { build: BUILDS[1] ?? "", made: ["s02"] },
+      ],
+      packHash: "c".repeat(64),
+    });
+  }
+
+  it("asks before the approval question, and a no refuses without putting it", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    await mixed(root);
+
+    const asked: string[] = [];
+    const said = await runWith(root, {
+      acceptMixedBuilds: async (builds) => {
+        asked.push(`builds:${builds.join(",")}`);
+        return false;
+      },
+      approve: async () => {
+        asked.push("approve");
+        return { kind: "approved", by: "reviewer-human" };
+      },
+    });
+
+    expect(asked).toEqual([`builds:${BUILDS.join(",")}`]);
+    expect(said.code).toBe(2);
+    expect(said.out, "the plan was shown, with its builds").toContain(`  ${BUILDS[1] ?? ""}  s02`);
+    expect(said.out).toContain("more than one Detent build made this plan");
+    expect(existsSync(approvalPath(root))).toBe(false);
+  }, 60_000);
+
+  it("takes no answer for the builds as a no: an approver alone is never asked", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    await mixed(root);
+
+    let asked = 0;
+    const said = await runWith(root, {
+      approve: async (): Promise<ApprovalDecision> => {
+        asked += 1;
+        return { kind: "approved", by: "reviewer-human" };
+      },
+    });
+
+    expect(asked).toBe(0);
+    expect(said.code).toBe(2);
+    expect(said.out).toContain("more than one Detent build made this plan");
+    expect(existsSync(approvalPath(root))).toBe(false);
+  }, 60_000);
+
+  it("a yes puts the approval question, and the approval lists the builds and the pack", async () => {
+    const { root } = await makeRunRepo();
+    roots.push(root);
+    await mixed(root);
+
+    const said = await runWith(root, {
+      acceptMixedBuilds: async () => true,
+      approve: async () => ({ kind: "approved", by: "reviewer-human" }),
+    });
+
+    expect(said.code, "an approved plan with an empty pool completes (C-11)").toBe(0);
+    const approval = JSON.parse(readFileSync(approvalPath(root), "utf8")) as Record<string, unknown>;
+    expect(approval).toMatchObject({ approved_by: "reviewer-human", builds: BUILDS, pack_hash: "c".repeat(64) });
+  }, 60_000);
+});

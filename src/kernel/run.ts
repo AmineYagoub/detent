@@ -11,7 +11,9 @@ import { gateLabel } from "../adapter/packages.js";
 import { acquireRunLock, lockPhaseSuffix, runLockRefusal } from "./run-lock.js";
 import { migrateState, migrationNote } from "./migrate.js";
 import { approvalState } from "../init/machine.js";
-import { readPresentation, recordApproval, type ApprovalDecision } from "../init/present.js";
+import { MIXED_BUILDS_REFUSED, readPresentation, recordApproval, type ApprovalDecision } from "../init/present.js";
+import { isMixed } from "./build.js";
+import { recordPlanQuality } from "./plan-quality.js";
 import { NON_TICKET_FILES } from "./tickets/readers.js";
 import { ensureRunBranch, installTrailerHook } from "./git.js";
 import { RunJournal } from "./journal.js";
@@ -76,6 +78,8 @@ export interface RunOptions {
    * never an approving one, so nothing is ever synthesized from the environment.
    */
   readonly approve?: (presentation: string) => Promise<ApprovalDecision>;
+  /** N-5″ (PRDR-297): put before `approve` where more than one build made the plan, as `init` puts it; absent, the answer is no. */
+  readonly acceptMixedBuilds?: (builds: readonly string[]) => Promise<boolean>;
   /** C-13: resume announcements and similar user-facing notices. */
   readonly announce?: (message: string) => void;
   /**
@@ -365,7 +369,16 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       runBranch,
     );
     const driver = new Driver(opts, loaded, core);
-    return await driver.loop();
+    try {
+      return await driver.loop();
+    } finally {
+      /* N-5″ (PRDR-297): the run ends by recording the plan's figures; a record that cannot be made is said, and ends nothing. */
+      try {
+        recordPlanQuality(root, journal, new Date(opts.now?.() ?? Date.now()).toISOString());
+      } catch (err) {
+        opts.announce?.(`the plan's run-time outcomes were not recorded: ${(err as Error).message} (N-5″)`);
+      }
+    }
   } catch (err) {
     return {
       exitCode: EXIT_ERROR,
@@ -445,6 +458,8 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
    * without one. Nothing is synthesized from the environment.
    */
   if (opts.approve === undefined) return notReady(refusal);
+  /* N-5″ (PRDR-297): the presentation named the builds; a plan more than one made is offered only once that is accepted. */
+  if (isMixed(shown.builds) && !((await opts.acceptMixedBuilds?.(shown.builds)) ?? false)) return notReady(MIXED_BUILDS_REFUSED);
   const decision = await opts.approve(shown.presentation);
   if (decision.kind !== "approved") {
     return notReady(
@@ -453,7 +468,7 @@ async function offerDeferredApproval(opts: RunOptions, refusal: string): Promise
         : "approval deferred — the plan stays READY-unapproved (C-7) and the next `detent run` presents it again",
     );
   }
-  recordApproval(opts.root, decision.by, opts.now?.() ?? Date.now());
+  recordApproval(opts.root, decision.by, opts.now?.() ?? Date.now(), { builds: shown.builds, pack_hash: shown.pack_hash });
   return "ok";
 }
 

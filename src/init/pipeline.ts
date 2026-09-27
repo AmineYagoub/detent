@@ -19,9 +19,10 @@ import { allTickets } from "../kernel/tickets/readers.js";
 import type { Binding } from "../schemas/records.js";
 import { awaitDocsMessage, discoverDocs, docPatternsFor } from "./discover-docs.js";
 import { phaseSpend } from "./phase-spend.js";
+import { planBuilds } from "./plan-builds.js";
 import { contentsDigest, listingDigest, valueDigest, type PhaseHandler } from "./machine.js";
 import { launchInitSession, withInitJournal } from "./session.js";
-import { classifyPack, hasConformanceRecord, packDocuments, packNote } from "./pack.js";
+import { classifyPack, hasConformanceRecord, packDocuments, packNote, readConformanceRecord } from "./pack.js";
 import { CONFORMANCE_RECORD_PATH, DECISION_LOG_PATH } from "../schemas/pack.js";
 import { sessionDeps } from "./session-deps.js";
 import { auditPhase } from "./audit.js";
@@ -84,6 +85,8 @@ export interface PipelineDeps {
   readonly sandbox?: () => Promise<Sandbox>;
   /** C-7‴ (PRDR-296): shows PRESENT's rendering before `askApproval` is put; nothing else prints it. */
   readonly print?: (text: string) => void;
+  /** N-5″ (PRDR-297): put before `askApproval` where more than one build made the plan; absent, the answer is no. */
+  readonly acceptMixedBuilds?: (builds: readonly string[]) => Promise<boolean>;
 }
 
 /** The deps every init session launch shares — one place, so a new field cannot miss a call site. */
@@ -386,6 +389,7 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
       ]),
     run: async (ctx) => {
       const stored = readBindings(deps.root);
+      const inputs = presentInputsFromOutputs(ctx.outputs);
       return await presentStage({
         root: deps.root,
         tickets: allTickets(deps.root),
@@ -395,12 +399,16 @@ function presentPhase(deps: PipelineDeps): PhaseHandler {
         checks: presentChecks(deps.root, ctx.outputs),
         bootstrap: (ctx.outputs["PLAN"]?.["bootstrap"] as string | null | undefined) ?? null,
         assignments: (ctx.outputs["PREPARE_AGENTS"]?.["assignments"] as Record<string, string> | undefined) ?? {},
-        ...presentInputsFromOutputs(ctx.outputs),
+        ...inputs,
         /* C-7‴ (PRDR-296): read when PRESENT runs, and not in its digest, since every session moves it. */
         spend: phaseSpend(deps.root),
+        /* N-5″ (PRDR-297): read from what made the plan, which no build puts in a key (C-8). */
+        builds: planBuilds(deps.root, inputs.slices ?? []),
+        packHash: readConformanceRecord(deps.root)?.hash ?? null,
         ...(deps.symbols === undefined ? {} : { symbols: deps.symbols }),
         ...(deps.askApproval === undefined ? {} : { ask: deps.askApproval }),
         ...(deps.print === undefined ? {} : { print: deps.print }),
+        ...(deps.acceptMixedBuilds === undefined ? {} : { acceptMixedBuilds: deps.acceptMixedBuilds }),
       });
     },
   };

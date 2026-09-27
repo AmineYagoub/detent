@@ -3,6 +3,7 @@ import type { Ticket } from "../schemas/ticket.js";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { checkpointPath, readCheckpoint, writeCheckpoint } from "../fs/checkpoints.js";
+import { detentBuild } from "../kernel/build.js";
 import { initLayout, stateDir } from "../fs/layout.js";
 import { git } from "../kernel/git.js";
 import { NON_TICKET_FILES } from "../kernel/tickets/readers.js";
@@ -147,9 +148,10 @@ export interface PhaseHandler {
  * everything it reads, so it re-runs when that moves and only then (C-2¹¹,
  * C-2¹², C-2¹³, C-2¹⁴). It entered at ANALYZE until D-10′ folded that into
  * DECIDE (PRDR-290): planning begins here, where the stack DECIDE recorded is
- * bound.
+ * bound. What it makes again is what PRESENT names the builds of (N-5″,
+ * `plan-builds.ts`).
  */
-const REPLAN_FROM: InitPhase = "DETERMINE_VERIFICATION";
+export const REPLAN_FROM: InitPhase = "DETERMINE_VERIFICATION";
 
 /**
  * PRDR-087: a stale approval means the PRESENTATION is out of date, not the
@@ -614,7 +616,7 @@ export async function runInit(
     /* C-2¹³: the phases after it are looked up under the key it left, which is the one they chained from if it stands. */
     if (restarts) replaying = false;
     outputs[phase] = outcome.outputs;
-    writeCheckpoint(root, phase, key, outcome.outputs, { at: new Date(now()).toISOString() });
+    writeCheckpoint(root, phase, key, outcome.outputs, { at: new Date(now()).toISOString(), build: detentBuild() });
     executed.push(phase);
     for (const r of takesOver) for (const file of r.files) rmSync(path.join(stateDir(root), "state", file), { force: true });
   }

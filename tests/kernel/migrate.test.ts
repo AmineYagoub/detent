@@ -392,7 +392,7 @@ describe("PRDR-300: what the migration keeps true", () => {
       ".detent/state/whole-plan.json": `${JSON.stringify({ schema_version: SCHEMA_VERSION, key: "k", findings: [], plan_wide_unclaimed: [], redrafted: [{ slice: "s01", tickets: [{ ...drafted, slice: "s01" }], questions: asked }] })}\n`,
     });
     /* Approved as a build before this one approved it, over a ticket with no `criterion_ids`. */
-    recordApproval(root, "the operator", Date.parse("2026-09-26T00:00:00Z"));
+    recordApproval(root, "the operator", Date.parse("2026-09-26T00:00:00Z"), { builds: [], pack_hash: null });
     age(root);
     migrateState(root, DEPS);
     const read = (rel: string): Record<string, unknown> => JSON.parse(readFileSync(path.join(root, ...rel.split("/")), "utf8")) as Record<string, unknown>;

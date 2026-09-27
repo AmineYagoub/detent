@@ -2292,6 +2292,8 @@ the code does what the rules it amends describe, and each of those rules points 
   lists the repairs code made and counts the minors.*
   *Amended by C-7‴ (PRDR-296): built, but for the mixed builds, which PRDR-297 builds with N-5′'s
   record of the build that wrote each checkpoint.*
+  *Amended by N-5″ (PRDR-297): the mixed builds are built. PRESENT names the builds of what
+  `--replan` makes again, not the specification phases', whose pack its hash names.*
 
 - **C-7‴ (3.1.1, PRDR-296).** C-7″ is built, in `src/init/present.ts`, `src/init/present-plan.ts`,
   `src/init/present-spec.ts`, `src/init/phase-spend.ts` and `src/kernel/ledger-rows.ts`, but for
@@ -2330,6 +2332,8 @@ the code does what the rules it amends describe, and each of those rules points 
     the plan again. `spec_defects` and `check_failures` are required, since a record without
     them was written before them, and so with `blocking`. A ledger row without `phase` reads as
     before.
+  *Amended by N-5″ (PRDR-297): its mixed builds are built, and `presentation.json` requires
+  `builds` and `pack_hash` beside the counts.*
 
 - **C-8⁵ (3.1.1, PRDR-278).** Re-planning on the pack is scoped to what changed.
   - **The scoped re-plan** that an approved amendment ends in (X-4⁷): only the slices whose
@@ -2577,6 +2581,58 @@ the code does what the rules it amends describe, and each of those rules points 
   sessions, `4N + 4R + C`.*
   *Amended by C-4⁸ (PRDR-294): C-4⁶ is built, and SLICE announces at least `2N` sessions,
   `2N + R + C`.*
+  *Amended by N-5″ (PRDR-297): built. An experiment on a copy of the project is a practice, and
+  no code enforces it; a checkpoint an experiment writes names its build, which PRESENT names.*
+
+- **N-5″ (3.1.1, PRDR-297).** N-5′ is built, in `src/kernel/outcomes.ts`,
+  `src/kernel/plan-quality.ts`, `src/kernel/build.ts`, `src/init/plan-builds.ts` and
+  `src/cli/status.ts`, and so are C-7″'s mixed builds. D-33 is the rule the figures serve; it was
+  stated with PRDR-278, and this adds nothing to it. This settles what N-5′ and C-7″ left to their
+  ticket, and amends F-4's checkpoint, C-7's approval record, PRDR-255's replay and C-13's
+  `detent status`.
+  - **Per ticket**, counted from `transitions.jsonl` and the ledger alone: its stops for a human,
+    less each the pool returned after an outage (PRDR-112); its falsifications by cause, a false
+    premise, a ticket larger than one session or a dependency found; its budget breaches; whether
+    it was DONE in its first generation, where a generation an outage's requeue opened counts as
+    the same one; its review rounds, each review that reached a verdict; its cost, the ledger rows
+    that name it; and its wall-clock at work, from each line that leaves it working to the line
+    after it, so time in the pool, on a human or blocked is not counted. A ticket's figures are
+    all its lines and rows, whichever plan it was in: no line or row marks the plan it ran under.
+  - **Per slice and per plan**, summed over the plan's tickets as `plan.json`'s slices hold them,
+    with the tickets no slice holds apart, and beside them the builds that made the plan and the
+    pack's hash, as the approval records them, or PRESENT where the plan is not approved.
+    `detent status` shows them, then what `init` spent by phase, as PRESENT does (C-7‴). A run
+    ends by appending them, each ticket's too, with the build that ran it, to its journal as a
+    `plan_quality` event, beside the `config` event it began with (PRDR-092), whether its loop
+    returned or threw; a record that cannot be made is announced, and ends nothing. They are not
+    in `detent report`, whose metrics are §14's table, key for key (T-053). Nothing gates on a
+    figure.
+  - **The build** is the version and the first twelve hex digits of a sha256 over the source
+    under `src/`, the prompts and `package.json`, so an edited tree is a build of its own, which is
+    what an experiment is. It is in no checkpoint's key: a build that changes nothing a phase reads
+    reuses its checkpoint (C-8).
+  - **What records it:** every checkpoint (F-4); the cut SLICE keeps, as the builds whose sessions
+    cut what stands, so one that keeps a cut keeps its builds and one that adds to it joins them;
+    each slice's cache; and each redraft the checks across the plan used. A record written before
+    the field counts as a build of its own, unrecorded, which may have been several.
+  - **What PRESENT names:** the builds of what `detent init --replan` makes again, the phases from
+    DETERMINE_VERIFICATION to PREPARE_AGENTS, the cut, each slice's cache and each redraft, each
+    with what it made; so that flag makes a plan one build's, whole. The specification phases are
+    not among them: the pack is the founder's document set, which its hash names, and INIT_FS and
+    DISCOVER write nothing the plan holds. Counting them would call every plan made after an
+    upgrade mixed, and a question put to every plan is answered unread.
+  - **Mixed builds** (planning decision 8): more than one build, or any part unrecorded, and
+    approval is offered only once that is accepted. On a terminal a `[y/N]` follows the
+    presentation, before the approval question, at `init` and at `run`'s deferred approval
+    (PRDR-255); off one, `--approve` needs `--accept-mixed-builds` beside it, or the approval is
+    refused. A relayed `--decline` or `--defer` approves nothing, and needs none. The plugin's
+    skill asks the human, and relays the flag only on a yes.
+  - **Records.** `presentation.json` requires `builds` and `pack_hash`, as it requires the counts:
+    a record without them was written before them, and `detent init` presents again.
+    `approval.json` gains both, optional, so a plan approved before them stays approved, and its
+    figures name no build.
+  - **Migration.** None. Each new field is optional where a record outlives the build that wrote
+    it, and required only in `presentation.json`, which no released build wrote.
 
 - **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
   specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes

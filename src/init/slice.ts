@@ -8,6 +8,7 @@ import { DECISION_LOG_PATH, type Pack } from "../schemas/pack.js";
 import { PRODUCTION_BASELINE } from "./baseline.js";
 import type { DecidedStack } from "./decide-log.js";
 import type { PhaseOutcome } from "./machine.js";
+import { detentBuild, UNRECORDED_BUILD } from "../kernel/build.js";
 import { previousAttemptInput, refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
 import {
   additionsSkeleton,
@@ -203,7 +204,11 @@ async function seededCut(deps: SliceDeps, pack: Pack, ids: Placement): Promise<C
   const since = record !== null && record.basis === basis ? sinceRecord(record, ids) : null;
   if (since?.kept.length === 0) deps.note?.("SLICE: no slice on record keeps a requirement the pack still holds, so the product is cut again (C-2⁸)");
   let cut: Cut;
+  /** N-5″ (PRDR-297): who cut what stands: the record's builds for the cut it keeps, and this one for what it adds or cuts afresh. */
+  let builds: readonly string[] = [detentBuild()];
   if (record !== null && since !== null && since.kept.length > 0) {
+    const kept = record.builds ?? [UNRECORDED_BUILD];
+    builds = since.added.length === 0 ? kept : [...new Set([...kept, detentBuild()])];
     if (since.removed.length > 0) {
       deps.note?.(`SLICE: ${since.removed.join(", ")} left the cut on record, and the slices that held ${since.removed.length === 1 ? "it" : "them"} are planned again (C-2⁸)`);
     }
@@ -217,7 +222,7 @@ async function seededCut(deps: SliceDeps, pack: Pack, ids: Placement): Promise<C
     if (attempt.value === null) throw new Error(`SLICE produced no usable slices artifact: ${attempt.issue}`);
     cut = attempt.value;
   }
-  writeSlicing(deps.root, { basis, placement: Object.fromEntries(ids), slices: [...cut.slices] });
+  writeSlicing(deps.root, { basis, placement: Object.fromEntries(ids), slices: [...cut.slices], builds });
   return cut;
 }
 

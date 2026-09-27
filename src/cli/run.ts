@@ -5,7 +5,7 @@ import { buildLiveBackend } from "../sessions/live.js";
 import { MockBackend } from "../sessions/mock.js";
 import { loadPromptSet } from "../sessions/prompts.js";
 import { makeTtyEscalation } from "./escalate.js";
-import { makeTtyApproval, makeTtyToolchainApproval } from "./approve.js";
+import { makeTtyApproval, makeTtyMixedBuilds, makeTtyToolchainApproval } from "./approve.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import type { ApprovalDecision } from "../init/present.js";
 import { noteRunPhase } from "../kernel/run-lock.js";
@@ -44,6 +44,8 @@ export interface RunMainDeps {
    * test and both are supplied at composition instead.
    */
   readonly approve?: (presentation: string) => Promise<ApprovalDecision>;
+  /** N-5″ (PRDR-297): the mixed-build asker, overridable for the same reason as `approve`. */
+  readonly acceptMixedBuilds?: (builds: readonly string[]) => Promise<boolean>;
   /**
    * PRDR-276: the toolchain asker, and the probe and installer behind it,
    * overridable for the same reason as `approve` — the real ones read stdin,
@@ -187,6 +189,10 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
      */
     ...(interactive || mainDeps.approve !== undefined
       ? { approve: mainDeps.approve ?? makeTtyApproval(process.env["USER"] ?? "operator") }
+      : {}),
+    /* N-5″ (PRDR-297): asked where C-7's approval is, before it, and only where the builds are mixed. */
+    ...(interactive || mainDeps.acceptMixedBuilds !== undefined
+      ? { acceptMixedBuilds: mainDeps.acceptMixedBuilds ?? makeTtyMixedBuilds() }
       : {}),
     /**
      * PRDR-276: the toolchain question, answered as C-7's is. The flag is the

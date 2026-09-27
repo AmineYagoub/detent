@@ -66,3 +66,22 @@ export function makeTtyToolchainApproval(): (message: string) => Promise<boolean
     }
   };
 }
+
+/**
+ * N-5″ (PRDR-297): the mixed-build question, asked on a terminal after the
+ * presentation has named each build and what it made, and before the approval
+ * question. Asked as a toolchain install is (PRDR-276): only an explicit yes
+ * accepts, because a plan whose parts came from different builds, one of them
+ * possibly an experiment, is not one to approve by default (planning decision 8).
+ */
+export function makeTtyMixedBuilds(): (builds: readonly string[]) => Promise<boolean> {
+  return async () => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const answer = (await rl.question("\nAccept that the builds above made this plan? [y/N] ")).trim().toLowerCase();
+      return answer === "y" || answer === "yes";
+    } finally {
+      rl.close();
+    }
+  };
+}

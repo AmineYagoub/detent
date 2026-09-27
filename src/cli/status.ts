@@ -2,6 +2,9 @@ import { allTickets } from "../kernel/tickets/readers.js";
 import type { State } from "../schemas/states.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { stateVersionRefusal } from "../kernel/migrate.js";
+import { planQuality } from "../kernel/plan-quality.js";
+import type { Totals } from "../kernel/outcomes.js";
+import { phaseSpend, spendLines } from "../init/phase-spend.js";
 
 /**
  * T-053 — `detent status` and the C-13 vocabulary.
@@ -54,8 +57,12 @@ function statusLines(tickets: readonly Ticket[]): StatusLine[] {
 
 /** The terminal rendering. C-13's AC snapshots this: no internal state names. */
 export function renderStatus(root: string): string {
+  return `${[...ticketLines(root), ...outcomeLines(root)].join("\n")}\n`;
+}
+
+function ticketLines(root: string): string[] {
   const lines = statusLines(allTickets(root));
-  if (lines.length === 0) return "no tickets\n";
+  if (lines.length === 0) return ["no tickets"];
   const byLabel = new Map<UserLabel, StatusLine[]>();
   for (const line of lines) {
     byLabel.set(line.label, [...(byLabel.get(line.label) ?? []), line]);
@@ -71,7 +78,52 @@ export function renderStatus(root: string): string {
       out.push(`  ${line.id} — ${line.title} (${line.sessions} sessions${extra})`);
     }
   }
-  return `${out.join("\n")}\n`;
+  return out;
+}
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${String(n)} ${n === 1 ? one : many}`;
+
+function duration(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (ms < 60_000) return `${String(Math.round(ms / 1000))}s`;
+  return minutes < 60 ? `${String(minutes)}m` : `${String(Math.floor(minutes / 60))}h ${String(minutes % 60)}m`;
+}
+
+function figures(t: Totals): string {
+  return [
+    `${plural(t.tickets, "ticket")}: ${String(t.done)} done, ${String(t.first_generation)} in their first generation`,
+    `${String(t.escalations)} escalated to you`,
+    `falsified: ${String(t.falsified.premise)} premise, ${String(t.falsified.oversized)} oversized, ${String(t.falsified.dependency)} dependency`,
+    plural(t.budget_breaches, "budget breach", "budget breaches"),
+    plural(t.review_rounds, "review round"),
+    `$${t.cost_usd.toFixed(4)}`,
+    `${duration(t.work_ms)} at work`,
+  ].join(" · ");
+}
+
+/**
+ * N-5″ (PRDR-297): how the plan is running, per plan and per slice, with the
+ * builds that made it and its pack; then what `init` spent by phase (C-7‴).
+ * Reported, and nothing stops for either (D-33, specification decision 16).
+ */
+function outcomeLines(root: string): string[] {
+  try {
+    const quality = planQuality(root);
+    const out: string[] = [];
+    if (quality !== null) {
+      const made =
+        quality.made === null || quality.made.builds.length === 0
+          ? "the builds that made it are not recorded"
+          : `made by ${quality.made.builds.join(", ")}, ${quality.made.pack_hash === null ? "without a pack" : `from pack ${quality.made.pack_hash.slice(0, 12)}`}`;
+      out.push("", "Run-time outcomes (N-5″) — reported, and nothing stops for them:", `  plan  ${figures(quality.plan)}`, `        ${made}`);
+      for (const s of quality.slices) out.push(`  ${s.id}  ${s.title} — ${figures(s)}`);
+      if (quality.outside !== null) out.push(`  outside any slice — ${figures(quality.outside)}`);
+      if (quality.unreadable > 0) out.push(`  ${plural(quality.unreadable, "line")} of transitions.jsonl could not be read, and ${quality.unreadable === 1 ? "is" : "are"} not counted.`);
+    }
+    return [...out, ...spendLines(phaseSpend(root))];
+  } catch (err) {
+    return ["", `Run-time outcomes and spend are not shown: ${(err as Error).message}`];
+  }
 }
 
 export function main(argv: readonly string[]): number {
