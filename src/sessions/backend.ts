@@ -26,17 +26,19 @@ export interface SessionSpec {
   readonly cwd: string;
   /** Where the session writes its artifact. Artifacts are the interface (P2). */
   readonly artifactOut: string;
-  /** Advisory until T-046 wires real enforcement (S-2/S-3). */
+  /** What the session may use without asking: its role's tools and rules (S-1), enforced beside the D-21 hook. */
   readonly allowedTools: readonly string[];
   /**
-   * C-4⁵ (PRDR-292): the built-in tools the session has at all, where its role
-   * is given fewer than the platform's. `allowedTools` grants without asking
-   * and removes nothing: in the default mode the platform grants read-only Bash
-   * whatever it names, and planner sessions ran it 2,846 times in the planning
-   * audit. Absent, the session has the platform's tools.
+   * C-4⁵ (PRDR-292): the built-in tools the session has at all. `allowedTools`
+   * grants without asking and removes nothing: in the default mode the platform
+   * grants read-only Bash whatever it names, and planner sessions ran it 2,846
+   * times in the planning audit. S-1⁵ (PRDR-302): absent, the SDK backend
+   * derives it from `allowedTools` (`builtinTools`), so every session has the
+   * built-in tools its role names and no others; a spec names its own only
+   * where its role's set is fixed by name, as the planning roles' is.
    */
   readonly tools?: readonly string[];
-  /** S-1: `"plan"` for the read-only roles, empty otherwise. */
+  /** S-1′: `"plan"` for an artifact-less session (doctor's smoke), empty otherwise: a read-only role writes its artifact. */
   readonly permissionMode: "" | "plan";
   /** Model routing per role; empty means the backend's default. */
   readonly model: string;

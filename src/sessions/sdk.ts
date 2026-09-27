@@ -146,6 +146,15 @@ function serversOf(spec: SessionSpec): Pick<Options, "mcpServers"> {
  * - `hooks.PreToolUse` (D-21/PRDR-050): containment that allow rules cannot
  *   shadow.
  */
+/**
+ * S-1⁵ (PRDR-302): the built-in tools an allowlist names: each rule's
+ * specifier names its tool (`Write(//x)` is Write, `Bash(git add:*)` is Bash),
+ * and an MCP server's tool is no built-in, so it is left to its server.
+ */
+export function builtinTools(allowed: readonly string[]): string[] {
+  return [...new Set(allowed.filter((t) => !t.startsWith("mcp__")).map((t) => t.replace(/\(.*$/su, "")))];
+}
+
 /** PRDR-237: `onEffort` is handed to the containment hook, the one layer that sees the settled level. */
 export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffort?: (level: string) => void): Options {
   return {
@@ -164,8 +173,14 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     env: buildSessionEnv(),
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
-    /* C-4⁵ (PRDR-292): the base set, where a role has fewer tools than the platform's; what it leaves out the model never sees. */
-    ...(spec.tools === undefined ? {} : { tools: [...spec.tools] }),
+    /**
+     * C-4⁵, S-1⁵ (PRDR-292, PRDR-302): the base set of built-in tools, which
+     * what it leaves out the model never sees. The allowlist alone does not
+     * bind a read-only shell command, which the default mode approves before
+     * any allow rule is read, so every session is given the built-in tools its
+     * allowlist names, and a spec that names its own keeps it.
+     */
+    tools: [...(spec.tools ?? builtinTools(spec.allowedTools))],
     /**
      * S-3⁸ (PRDR-121): the optional symbol server, when the adapter granted
      * one. Its READ tools are in `allowedTools`; nothing else it exposes is

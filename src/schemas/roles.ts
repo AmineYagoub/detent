@@ -211,3 +211,52 @@ export type SessionState = keyof typeof ROLE_FOR_STATE;
 export function roleForState(state: SessionState): RoleId {
   return ROLE_FOR_STATE[state];
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * Tool surfaces per role (S-3): the surface, never the containment.
+ *
+ * S-1⁵ (PRDR-302): here, with the roles, and not in `sessions/guard.ts`, so
+ * that both drivers read one list. The kernel may not import the sessions
+ * layer (ARCH-1), so it kept a copy it called advisory, of a set it said the
+ * SDK backend composed; the backend applied the copy as given, and the copy
+ * had lost S-3⁵'s `git rm`. The SDK backend gives each session the built-in
+ * tools its allowlist names and no others (`builtinTools`).
+ */
+
+const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"] as const;
+const WRITE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;
+
+/**
+ * X-6/S-3: research adds WebSearch plus a domain-scoped WebFetch rule per
+ * configured docs domain. The `WebFetch(domain:…)` specifier form is composed
+ * here and VERIFIED against the pinned backend by `doctor` (T-050) — an
+ * unrecognized form must fail loudly there, never no-op silently (PRDR-050).
+ * The domains parameter has no config home yet — that gap is PRDR-062.
+ */
+export function researchTools(docsDomains: readonly string[]): string[] {
+  return [...READ_ONLY_TOOLS, "WebSearch", ...docsDomains.map((d) => `WebFetch(domain:${d})`)];
+}
+
+/**
+ * S-1‴ (PRDR-281): `audit` reads the repository, dependency sources at their
+ * pinned versions included, and reaches the web under the research role's
+ * network rules, so it gets the research role's surface.
+ *
+ * S-1‴ (PRDR-282, PRDR-283, PRDR-284): `spec_write` is not a read-only role,
+ * but what it writes is its task's, so the role's tools are the read tools.
+ * DECIDE's task writes its artifact alone, with the one artifact rule every
+ * init session carries. WRITE's and VALIDATE's fixes declare the pack's paths
+ * as their surface and get Edit and Write for them, which the hook confines
+ * (`InitSessionRequest`'s `surface`). `archive/` is in neither: code moves the
+ * originals (C-2¹³). `spec_review`, VALIDATE's reviewers, is read-only: the
+ * role's tools are the read tools, and a reviewer whose round has a sandbox is
+ * given the scratch tool per session, never per role (`InitSessionRequest`'s
+ * `scratch`, S-1⁗), since a machine with no sandbox gives it none.
+ */
+export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
+  if (role === "research" || role === "audit") return researchTools(docsDomains);
+  if ((READ_ONLY_ROLES as ReadonlySet<string>).has(role) || role === "spec_write") return [...READ_ONLY_TOOLS];
+  /* S-3⁵ (PRDR-213): three verbs — the guard judges `git rm` per pathspec (judgeGitRm). */
+  return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"];
+}

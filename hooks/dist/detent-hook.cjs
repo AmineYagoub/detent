@@ -1594,6 +1594,27 @@ function readGitRm(command) {
   return { ok: true, paths };
 }
 
+// src/schemas/roles.ts
+var ROLE_IDS = [
+  "planner",
+  "diagnose",
+  "implement",
+  "blind_fix",
+  "informed_fix",
+  "review_fix",
+  "research",
+  "review",
+  "audit",
+  "spec_write",
+  "spec_review",
+  "plan_review"
+];
+var PLANNER_PROMPTS = { SLICE: "slice", PLAN: "plan" };
+var PROMPT_IDS = [
+  ...Object.values(PLANNER_PROMPTS),
+  ...ROLE_IDS.filter((r) => r !== "planner")
+];
+
 // src/sessions/guard.ts
 var asciiFold = (s) => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
 function matchAny(rel, patterns, opts = {}) {

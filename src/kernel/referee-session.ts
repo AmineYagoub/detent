@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import picomatch from "picomatch";
-import { ARTIFACT_ONLY_ROLES, promptOf, READ_ONLY_ROLES, roleForState, type RoleId, type SessionState } from "../schemas/roles.js";
+import { ARTIFACT_ONLY_ROLES, promptOf, READ_ONLY_ROLES, roleForState, toolsForRole, type RoleId, type SessionState } from "../schemas/roles.js";
 import type { Ticket } from "../schemas/ticket.js";
 import { STRUCTURAL_PROTECTED, coversProtected, isConcreteRepoPath, repoPathKey } from "../schemas/common.js";
 import { artifactWriteRule, prefixHash, stablePrefix, type SessionSpec } from "../sessions/backend.js";
@@ -566,14 +566,12 @@ export class SessionArm {
 
   private toolsFor(role: RoleId): readonly string[] {
     /**
-     * The referee's advisory copy; the SDK backend composes the enforced set
-     * (sessions/guard.ts), including domain-scoped WebFetch once PRDR-062
-     * gives docs domains a config home.
+     * S-1⁵ (PRDR-302): the guard's list, the one the plugin build writes into
+     * each agent file, so the drivers give a role the same tools (ARCH-2). This
+     * was a copy called advisory, of a set it said the SDK backend composed;
+     * the backend applied it as given, and it had lost S-3⁵'s `git rm`.
      */
-    if (READ_ONLY_ROLES.has(role)) {
-      return role === "research" ? ["Read", "Grep", "Glob", "WebSearch"] : ["Read", "Grep", "Glob"];
-    }
-    return ["Read", "Grep", "Glob", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"];
+    return toolsForRole(role);
   }
 }
 

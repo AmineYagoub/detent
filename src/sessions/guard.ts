@@ -68,7 +68,11 @@ export interface GuardDecision {
    * `allowedTools`: every `Bash` call was permitted despite the allowlist
    * granting only `Bash(git add:*)` and `Bash(git commit:*)`, because a bash
    * call names no path and fell through to the old blanket allow. Abstaining
-   * returns the decision to the allowlist, where it belongs.
+   * returns the decision to the SDK's own order, where the MODE comes before
+   * the allow rules: the default mode approves a read-only shell command that
+   * no allowlist names. What binds such a call is the session's base set of
+   * built-in tools, which the SDK backend derives from its allowlist (S-1⁵,
+   * PRDR-302): a role given no shell has none to call.
    */
   readonly decision: "allow" | "deny" | "abstain";
   readonly reason: string;
@@ -306,8 +310,9 @@ export function guardToolUse(
   const target = pathOf(toolInput);
   /**
    * A tool call naming no path is not this guard's business — it governs WHERE
-   * a mutation lands. Abstaining hands it back to the allowlist rather than
-   * granting it, which is what an `allow` here did.
+   * a mutation lands. Abstaining hands it back to the SDK's permission order
+   * rather than granting it, which is what an `allow` here did; the session's
+   * base set decides whether it has the tool at all (S-1⁵).
    */
   if (target === null) return { decision: "abstain", reason: "no path in tool input — the allowlist decides" };
 
@@ -482,41 +487,9 @@ export async function stopGate(
 /*
  * ---------------------------------------------------------------------------
  * Tool surfaces per role (S-3): the surface, never the containment.
- */
-
-const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"] as const;
-const WRITE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;
-
-/**
- * X-6/S-3: research adds WebSearch plus a domain-scoped WebFetch rule per
- * configured docs domain. The `WebFetch(domain:…)` specifier form is composed
- * here and VERIFIED against the pinned backend by `doctor` (T-050) — an
- * unrecognized form must fail loudly there, never no-op silently (PRDR-050).
- * The domains parameter has no config home yet — that gap is PRDR-062.
- */
-export function researchTools(docsDomains: readonly string[]): string[] {
-  return [...READ_ONLY_TOOLS, "WebSearch", ...docsDomains.map((d) => `WebFetch(domain:${d})`)];
-}
-
-/**
- * S-1‴ (PRDR-281): `audit` reads the repository, dependency sources at their
- * pinned versions included, and reaches the web under the research role's
- * network rules, so it gets the research role's surface.
  *
- * S-1‴ (PRDR-282, PRDR-283, PRDR-284): `spec_write` is not a read-only role,
- * but what it writes is its task's, so the role's tools are the read tools.
- * DECIDE's task writes its artifact alone, with the one artifact rule every
- * init session carries. WRITE's and VALIDATE's fixes declare the pack's paths
- * as their surface and get Edit and Write for them, which the hook confines
- * (`InitSessionRequest`'s `surface`). `archive/` is in neither: code moves the
- * originals (C-2¹³). `spec_review`, VALIDATE's reviewers, is read-only: the
- * role's tools are the read tools, and a reviewer whose round has a sandbox is
- * given the scratch tool per session, never per role (`InitSessionRequest`'s
- * `scratch`, S-1⁗), since a machine with no sandbox gives it none.
+ * S-1⁵ (PRDR-302): defined with the roles (`src/schemas/roles.ts`), below
+ * every layer, so the kernel gives a `run` session the same list the plugin
+ * build writes into each agent file; re-exported here for this layer's callers.
  */
-export function toolsForRole(role: string, docsDomains: readonly string[] = []): string[] {
-  if (role === "research" || role === "audit") return researchTools(docsDomains);
-  if (READ_ONLY_STAGES.has(role) || role === "spec_write") return [...READ_ONLY_TOOLS];
-  /* S-3⁵ (PRDR-213): three verbs — the guard judges `git rm` per pathspec (judgeGitRm). */
-  return [...WRITE_TOOLS, "Bash(git add:*)", "Bash(git rm:*)", "Bash(git commit:*)"];
-}
+export { researchTools, toolsForRole } from "../schemas/roles.js";

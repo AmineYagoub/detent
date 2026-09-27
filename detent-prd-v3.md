@@ -479,6 +479,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   is reserved for a mutating call the guard positively cleared, and `abstain` omits the
   decision so the allowlist decides. The plugin hook renders an abstention as silence, matching
   D-29's rule that a hook may narrow what the permission rules grant and never widen it.
+  *Amended by S-1⁵ (PRDR-302): the permission mode decides before the allowlist, and approves a
+  read-only command no allow rule names, so a session's base set of built-in tools is what binds.*
 
 - **V-3′ / S-5⁗ / R-10′ (3.1.1, PRDR-141; S-5⁗ renumbered from S-5′ by PRDR-287).** Five features were implemented, tested, documented
   and unreachable, and each is now wired at its ENTRY POINT or its claim withdrawn.
@@ -2590,6 +2592,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-4⁸ (PRDR-294): `plan_review` is built, with the planner's tools, and is not
   stop-gated. The migration routes it by an existing config's planner where the config routes
   one, and by the default where it does not.*
+  *Amended by S-1⁵ (PRDR-302): every role's tools bind under the headless driver too: a session is
+  given the built-in tools its allowlist names and no others.*
 
 - **S-5⁵ (3.1.1, PRDR-278).** `init`'s default routing, with every role's model and effort; effort
   routing is stated in the PRD here for the first time (S-4‴ found it in neither PRD):
@@ -3304,6 +3308,22 @@ the code does what the rules it amends describe, and each of those rules points 
     until it ends, and its round's directory stays. The record does not say whether a round could
     simulate.
 
+- **S-1⁵ (3.1.1, PRDR-302).** A headless session's built-in tools are the ones its role was given.
+  S-1‴ sets tools per role and the plugin's agent files bind them, but the SDK backend passed a base
+  set of built-in tools for the planning roles alone (C-4⁵), and ran every other session in the
+  `default` mode with its allowlist. That mode approves a read-only shell command before any allow
+  rule is read, and the containment hook abstains on a call that names no path (S-2‴), so the
+  allowlist bound what it granted and nothing it left out: on tabachir's first live `init`, AUDIT's
+  survey, on a role whose allowlist is Read, Grep, Glob, WebSearch and its artifact's write, ran
+  `wc`, `ls` and `git log`. Now every session is given the built-in tools its allowlist names and
+  no others: a rule's specifier names its tool, an MCP server's tools are left to their server, and a
+  spec that names its own base set keeps it. A read-only role has no shell, and what the base set
+  leaves out the model never sees, as C-4⁵ made true for the planners. The roles' lists move beside
+  the roles (`src/schemas/roles.ts`), below every layer, so the kernel gives a `run` session the list
+  the plugin build writes into each agent file (ARCH-2): the kernel had kept a copy, which ARCH-1's
+  import rule forced and which had lost S-3⁵'s `git rm`. A write role keeps the mode's approval of a
+  read-only command, since its git verbs are Bash.
+
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
 - **C-1′** `init` and `run` are the plugin's two commands (`/detent:init`, `/detent:run`), and Detent registers skills so the model invokes the right phase from natural intent ("plan this repo", "keep going"). The headless driver exposes the same two as the retained CLI verbs. C-1's git-root rule and the five C-5 interrupts are unchanged; interrupts are surfaced as the plugin's **presented decisions**, still a closed set of five.
@@ -3323,6 +3343,8 @@ S-1…S-7 are inherited from v2 §8, reconciled to the two drivers:
   unrecognized form). Plan mode remains for artifact-less sessions (doctor's smoke).
   Read-only-ness is the allowlist plus the D-21 hook, not a mode that contradicts P2's
   artifact interface. Found by T-140's first live read-only session.
+  *Amended by S-1⁵ (PRDR-302): and the base set of built-in tools, derived from the allowlist,
+  since the mode approves a read-only command the allowlist does not name.*
   *Amended by S-1⁗ (PRDR-285): a `spec_review` session whose round has a sandbox is also given
   the tool that runs a script in the round's scratch directory, sandboxed, beside its one write rule.*
 - **S-2′/D-21** Containment is the `PreToolUse` hook under **both** drivers — the headless driver wires it when constructing sessions; the plugin ships it as a plugin hook. It denies outside `surface[]`, denies protected globs, preserves the surface-expansion lever, and (D-28) denies ledger-bypassing ambient billable tools. A hook deny binds over every allow rule and permission mode.
