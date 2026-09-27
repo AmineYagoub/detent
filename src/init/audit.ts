@@ -7,6 +7,7 @@ import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { isGreenfield } from "./greenfield.js";
 import { checkClaims, claimBriefSkeletons, type AuditResearch, type CheckedClaim } from "./audit-claims.js";
 import { auditedDocuments, auditKey } from "./audit-key.js";
+import { dropKeptSurvey, keepSurvey, readKeptSurvey } from "./audit-survey.js";
 import { checkSurvey, type Dropped, type SurveyCheck } from "./audit-passages.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
 import type { PipelineDeps } from "./pipeline.js";
@@ -25,7 +26,8 @@ import { launchInitSession, withInitJournal } from "./session.js";
  * contradictions, gaps, drift from the code, and the external claims, and then
  * a session per claim, four at a time (C-2¹⁶), that checks it against a
  * primary source. Code checks every passage and every source the sessions
- * cite (C-2¹¹).
+ * cite (C-2¹¹). The checked survey is kept until the phase completes, so a
+ * run stopped during the checks is re-run on the same claims (C-2¹⁷).
  *
  * It runs on a raw document set only. A conforming pack's checker stands for
  * it (specification decision 6). A changed pack is never audited as a raw
@@ -68,6 +70,8 @@ export interface AuditStageDeps {
   readonly pool: number;
   readonly launch: (inputs: Json, artifactOut: string) => Promise<{ readonly toolCalls: number }>;
   readonly note?: (text: string) => void;
+  /** C-2¹⁷ (PRDR-305): the key AUDIT's checkpoint is looked up by, which the survey is kept under until the phase completes. */
+  readonly key: string;
 }
 
 function readSurvey(
@@ -149,8 +153,19 @@ export function auditNotes(found: Found, pool: number): string[] {
   return notes;
 }
 
-export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
-  const greenfield = isGreenfield(deps.stackMarkers);
+/** C-2¹⁷ (PRDR-305): the survey a stopped run checked, where nothing AUDIT's key covers has moved since. */
+function keptSurvey(deps: AuditStageDeps): SurveyCheck | null {
+  const kept = readKeptSurvey(deps.root, deps.key);
+  if (kept !== null) {
+    deps.note?.(
+      `AUDIT's survey is the one an earlier run checked, kept while nothing it read has moved: its ${count(kept.kept.claims.length, "claim")} ` +
+        "are checked from where that run stopped, and each one already briefed answers from the cache (C-2¹⁷)",
+    );
+  }
+  return kept;
+}
+
+async function surveyAnew(deps: AuditStageDeps, greenfield: boolean): Promise<SurveyCheck> {
   const artifactOut = surveyPath(deps.root);
   const survey = await withOneRelaunch<SurveyCheck>({ stage: "AUDIT's survey", note: deps.note }, async (previous) => {
     rmSync(artifactOut, { force: true });
@@ -168,8 +183,15 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
     return readSurvey(artifactOut, deps.root, { documents: deps.documents, greenfield, strict: previous === null });
   });
   if (survey.value === null) throw new Error(`AUDIT's survey produced no usable artifact: ${survey.issue ?? "unusable"}`);
+  /* C-2¹⁷ (PRDR-305): kept until the phase completes, and a unit of work, as a brief is (X-1⁵). */
+  keepSurvey(deps.root, deps.key, survey.value);
+  noteUnitComplete(deps.root);
+  return survey.value;
+}
 
-  const { kept, dropped, unread } = survey.value;
+export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
+  const greenfield = isGreenfield(deps.stackMarkers);
+  const { kept, dropped, unread } = keptSurvey(deps) ?? (await surveyAnew(deps, greenfield));
   const checked = await checkClaims(kept.claims, {
     root: deps.root,
     documents: deps.documents,
@@ -199,6 +221,8 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
     research: checked.research,
   };
   for (const text of auditNotes(found, deps.pool)) deps.note?.(text);
+  /* C-2¹⁷ (PRDR-305): the checkpoint the machine writes next stands for the kept survey. */
+  dropKeptSurvey(deps.root);
   /* X-1⁵ (C-2⁶): a completed AUDIT is a unit of work. */
   noteUnitComplete(deps.root);
   return { kind: "complete", outputs: { ran: true, greenfield, documents: [...deps.documents], ...found } };
@@ -212,11 +236,12 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
     const kind = (ctx.outputs["DISCOVER"]?.["pack"] as { readonly kind?: unknown } | undefined)?.kind;
     return typeof kind === "string" ? kind : "raw";
   };
+  const keyOf = (ctx: Ctx): string => auditKey(deps.root, docsOf(ctx), [packOf(ctx), markersOf(ctx), deps.prompts.hashes.audit]);
   return {
     phase: "AUDIT",
     /** C-2¹¹: an answer written to the decision log re-runs DISCOVER, and must not re-run this. */
     standalone: true,
-    digest: (ctx) => auditKey(deps.root, docsOf(ctx), [packOf(ctx), markersOf(ctx), deps.prompts.hashes.audit]),
+    digest: keyOf,
     run: async (ctx) => {
       const pack = packOf(ctx);
       if (pack !== "raw") {
@@ -239,6 +264,7 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
             documents: auditedDocuments(docsOf(ctx)),
             stackMarkers: markersOf(ctx),
             pool: deps.budgets.planning_research_tool_calls,
+            key: keyOf(ctx),
             ...(deps.note === undefined ? {} : { note: deps.note }),
             launch: async (inputs, artifactOut) => {
               const result = await launchInitSession(sessionDeps(deps, journal, "AUDIT"), { role: "audit", inputs, artifactOut });

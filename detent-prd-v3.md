@@ -2962,6 +2962,9 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-3⁵ (PRDR-298): planning research is deleted, and `research/planning` leaves the
   layout, so AUDIT's briefs are the only research `init` commits.*
   *Amended by C-2¹⁶ (PRDR-304): the claims are checked four at a time.*
+  *Amended by C-2¹⁷ (PRDR-305): a stopped AUDIT keeps its checked survey, so a re-run checks the
+  claims as the stopped run worded them, and a claim it briefed pays nothing. Until then a re-run
+  surveyed again, and a claim the new survey worded afresh missed its brief.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -3359,6 +3362,23 @@ the code does what the rules it amends describe, and each of those rules points 
   for any batch. The size is a constant, not a config key, until a run-time outcome asks for
   another (D-33). No other phase's sessions are batched: VALIDATE's reviewers still run one after
   another (C-2¹⁴).
+  *Amended by C-2¹⁷ (PRDR-305): "a re-run pays for none of them again" holds from here. Until then
+  a re-run surveyed again, and a claim the new survey worded afresh missed its brief.*
+
+- **C-2¹⁷ (3.1.1, PRDR-305).** AUDIT keeps its checked survey until the phase completes. Its
+  checkpoint is written when it completes, and the claim checks after the survey run for hours on a
+  large document set, so a run stopped between the two, by a signal, a usage limit longer than
+  `init` waits, or a failed claim session, surveyed again on the next `init`. A new survey words its
+  claims afresh, and a brief is committed under the hash of its claim's words, so the briefs the
+  stopped run paid for answered none of them: tabachir's relaunch onto C-2¹⁶'s build surveyed again,
+  where the first survey had taken 38 turns and $9.10. Now the survey, once code has checked it, is kept at
+  `.detent/state/audit-survey-kept.json` with the key AUDIT's checkpoint is looked up by, and a run
+  of AUDIT whose key has not moved launches no survey: the operator is told so, and the kept
+  survey's claims are checked, each one already briefed answering from the cache. A moved key, or a
+  file this build does not read, is surveyed again. A kept survey is a unit of work (X-1⁵), code
+  writes it, and the structural floor keeps every session out of it (SEC-3′). The phase's
+  completion removes it, and its checkpoint stands for it from then on. A session in flight when a
+  run stops is not kept: its spend is lost with it (S-4).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
