@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
 import { UNRECORDED_BUILD, buildOf, detentBuild, isMixed } from "../../src/kernel/build.js";
+import type * as Build from "../../src/kernel/build.js";
 import { readConformanceRecord } from "../../src/init/pack.js";
 import { redraftRecordPath } from "../../src/init/machine.js";
 import { buildLines, planBuilds, type BuildShare } from "../../src/init/plan-builds.js";
@@ -74,6 +76,22 @@ describe("PRDR-297: every planning record names the build that wrote it (N-5″)
       expect(moved.has(now), `${file} moved the build`).toBe(false);
       moved.add(now);
     }
+  });
+
+  /*
+   * PRDR-311 (N-5‴): tabachir's `init` loaded 247a2b9 at 08:56 and wrote its
+   * first checkpoint at 09:52, from a checkout that had moved on in between.
+   * The stamp named that tree, 517b414e313b, which never ran; 65e7283f323d,
+   * the build that did, was named nowhere.
+   */
+  it("is the tree the process loaded, not the tree as it stands at the first stamp (PRDR-311)", async () => {
+    const tree = tmpTree({ "package.json": '{"version":"9.9.9"}\n', "src/kernel/build.ts": readFileSync("src/kernel/build.ts", "utf8"), "prompts/p.md": "p\n" });
+    roots.push(tree);
+    const loaded = buildOf(tree);
+    const copy = (await import(pathToFileURL(path.join(tree, "src", "kernel", "build.ts")).href)) as typeof Build;
+    writeTree(tree, { "prompts/p.md": "edited after the process loaded\n" });
+    expect(copy.buildOf(tree), "the tree itself moved").not.toBe(loaded);
+    expect(copy.detentBuild()).toBe(loaded);
   });
 
   it("counts a record that names no build as a build of its own, and never as the one build", () => {

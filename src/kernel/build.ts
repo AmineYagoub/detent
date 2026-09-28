@@ -46,11 +46,18 @@ export function buildOf(tree: string): string {
   return `${typeof version === "string" ? version : "unversioned"}+${hash.digest("hex").slice(0, 12)}`;
 }
 
-let running: string | undefined;
+/**
+ * N-5‴ (PRDR-311): digested when this module is first imported, which is
+ * while the process loads: the CLI and the referee reach it by static imports
+ * through the init machine. A digest taken at the first stamp named the tree as
+ * it stood then, and tabachir's `init` wrote its first checkpoint an hour after
+ * loading, from a checkout that had moved on, so its checkpoints named a build
+ * that never ran.
+ */
+const running = buildOf(TREE);
 
 /** The running build, the same for every call in a process. */
 export function detentBuild(): string {
-  running ??= buildOf(TREE);
   return running;
 }
 

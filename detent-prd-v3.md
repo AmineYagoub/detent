@@ -2791,6 +2791,19 @@ the code does what the rules it amends describe, and each of those rules points 
     figures name no build.
   - **Migration.** None. Each new field is optional where a record outlives the build that wrote
     it, and required only in `presentation.json`, which no released build wrote.
+  *Amended by N-5‴ (PRDR-311): the build is digested when the process loads, not when it first
+  stamps a record.*
+
+- **N-5‴ (3.1.1, PRDR-311).** The build a process stamps is the tree it loaded. N-5″ digested the
+  tree the first time a record was stamped and kept that digest, so a tree edited between the load
+  and the first stamp was the build every record named. On tabachir's test run, `init` loaded
+  `247a2b9` (`3.1.0+65e7283f323d`) at 08:56 and first stamped AUDIT's checkpoint at 09:52, from a
+  checkout that meanwhile held another ticket and part of a third: AUDIT and DECIDE name
+  `3.1.0+517b414e313b`, a tree that never ran. A late digest can hide a mix of builds, two
+  processes naming the one tree both stamped, or invent one, a restart on the loaded build naming
+  what the first process stamped. The digest is now taken when `src/kernel/build.ts` is first
+  imported, which the CLI and the referee do statically as they load. An edit made while the
+  imports resolve can still slip in; an edit made after the load moves no stamp.
 
 - **N-7′ (3.1.1, PRDR-278).** The self-build keeps `detent-prd-v3.md` as its only input and runs the
   specification phase headless (specification decision 9): AUDIT reads the whole PRD, DECIDE takes
