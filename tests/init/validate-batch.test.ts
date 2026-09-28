@@ -12,7 +12,8 @@ import { inputsOf } from "./slicing-fixture.js";
 import type { Json } from "./decide-fixture.js";
 import { PROMPTS, repo } from "./plan-fixture.js";
 import { appliesAll, initThroughValidate, review, type Reviewers } from "./validate-fixture.js";
-import { RAW, WROTE, packFor, write, type Write } from "./write-fixture.js";
+import { RAW } from "./write-fixture.js";
+import { ALL, CODES, prdOf, wide } from "./validate-wide-fixture.js";
 
 /**
  * PRDR-313 — VALIDATE reviews four areas at once, and keeps each review as it
@@ -24,21 +25,6 @@ import { RAW, WROTE, packFor, write, type Write } from "./write-fixture.js";
  * ran, so a stop anywhere in that day lost all of them. The fixture's pack has
  * seven areas: the foundations and six module PRDs, each its own area.
  */
-
-const CODES = ["LND", "BRW", "RTN", "FEE", "MBR", "INV"];
-/** Lending keeps its name, which the writer fixture edits. */
-const prdOf = (i: number): string => (i === 0 ? "docs/prd/01-lending.md" : `docs/prd/0${String(i + 1)}-${(CODES[i] ?? "").toLowerCase()}.md`);
-
-/** WRITE's fixture pack, Lending in an area of its own name, and five more module PRDs cloned from it under their own codes and areas. */
-function widePack(inputs: Json): Record<string, string> {
-  const base = packFor(inputs);
-  const lending = base["docs/prd/01-lending.md"] ?? "";
-  const rows = CODES.map((code, i) => `| ${code} | Area ${code} | [${path.posix.basename(prdOf(i))}](${path.posix.basename(prdOf(i))}) | M1 |`);
-  const index = (base["docs/prd/index.md"] ?? "").replace("| LND | Lending | [01-lending.md](01-lending.md) | M1 |", rows.join("\n"));
-  const modules = Object.fromEntries(CODES.map((code, i) => [prdOf(i), lending.replaceAll("LND", code).replace("# 01 — Lending", `# 0${String(i + 1)} — ${code}`)]));
-  return { ...base, "docs/prd/index.md": index, ...modules };
-}
-const wide = (): Write => write((_, inputs) => ({ files: widePack(inputs), artifact: WROTE() }));
 
 /** A minor finding at the area's first requirement, so the writer's inputs show the merge's order. */
 const minorAt = (file: string): Json => ({
@@ -93,7 +79,6 @@ function holding(failing: string | null = null): Holding {
 
 const keptFile = (root: string): string => path.join(stateDir(root), "state", "validate", "reviews-kept.json");
 const areasOf = (r: Reviewers): unknown[] => r.inputs.map((i) => i["area"]);
-const ALL = ["foundations", ...CODES.map((c) => `Area ${c}`)];
 
 describe("PRDR-313 VALIDATE reviews four areas at once, and merges what they found in the areas' order (C-2²³)", () => {
   it("never has more than four reviewers in flight, starts them in the areas' order, and hands the writer their findings in that order", async () => {

@@ -3293,6 +3293,10 @@ the code does what the rules it amends describe, and each of those rules points 
   own, and their findings are merged in the areas' order; "one after another" held until then.
   Each review is kept as it lands and is a progress mark, so a round stopped before its record is
   carried on from the reviews it kept.*
+  *Amended by C-2²⁴ (PRDR-314): a round's writer is a batch of at most 20 findings to a session,
+  one session after another, and a batch whose fixes fail the checks is undone alone; "one
+  `spec_write` session applies the round's findings" and "undoes every fix of the round" held until
+  then. The checker's writer before any round is still one session.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
 
@@ -3538,6 +3542,28 @@ the code does what the rules it amends describe, and each of those rules points 
   already moved is done again first. Spend is read at each launch (D-25), and what a batch can run
   past a reading is one batch (D-28′). The size is a constant, as AUDIT's is, until a run-time
   outcome asks for another (D-33).
+- **C-2²⁴ (3.1.1, PRDR-314).** VALIDATE's writer takes a round's findings in batches. C-2¹⁴ gave
+  one `spec_write` session every finding of the round, and undid every fix of the round when that
+  session's second attempt left the checker red or no requirement standing. On tabachir's test
+  clone the first two of 26 reviews reported 23 findings each, about 2 KB apiece, so the first
+  round would have handed one session some 600 findings, over a megabyte of them before it read a
+  document, and one fix among them that dropped a criterion's line would have undone the other
+  599. The findings are independent edits, each with its exact fix. Now the round's findings, in
+  the order their ids give them, are cut into as few batches of at most `VALIDATE_FIX_BATCH` (20)
+  as that allows, as even as can be, and each batch is one writer session, given only its batch.
+  The batches run one after another, each on the pack the batch before it left, since two writers
+  editing one document would lose each other's edits. Each is checked as C-2¹⁴ checks the writer
+  and relaunched once with the list, and a batch whose second attempt leaves the checker red or no
+  requirement standing is undone alone, its findings left `undone`, and the next batch goes on
+  from the pack as it was before it. Every batch starts green, since the round does and a batch
+  either leaves the pack green or is undone. An account unusable twice, or a session that fails,
+  undoes every batch of the round and fails the phase, as a failed writer did, and the pack is then
+  as the round's kept reviews read it, so a re-run takes them all (C-2²³). The round records what
+  changed since its writer began, and the next round verifies one diff of every batch that stood.
+  A batch that stands is a unit of work (X-1⁵), and the operator is told how many batches the
+  writer takes. The checker's writer before any round is still one session over all the checker's
+  findings: a batch of them would read the checker red on the findings the others hold. The size
+  is a constant until a run-time outcome asks for another (D-33).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

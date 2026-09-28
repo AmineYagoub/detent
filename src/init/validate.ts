@@ -17,7 +17,8 @@ import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { countsOf, mergeFindings, type Finding, type Outcome } from "./validate-checks.js";
 import { dropKeptReviews, reviewRound, type KeptRoundDeps } from "./validate-kept.js";
-import { diffPath, fixFindings, type Fixed, type ReviewTask, type Shown } from "./validate-round.js";
+import { diffPath, fixBatches, fixFindings, type Fixed } from "./validate-fix.js";
+import type { ReviewTask, Shown } from "./validate-round.js";
 import { offeredNote, withRoundScratch } from "./validate-scratch.js";
 import { areaOf, areasOf, reviewable, scopeOf, type Area } from "./validate-scope.js";
 import { handoff, packDigest } from "./write.js";
@@ -178,7 +179,8 @@ async function checkerFirst(deps: ValidateStageDeps): Promise<PhaseOutcome | nul
   if (found.length === 0) return null;
   const findings = found.map((f, n) => ({ id: `CHECK-${String(n + 1)}`, rule: f.rule, at: at(f), text: f.text, message: f.message }));
   deps.note?.(`VALIDATE: the pack checker is red, with ${plural(found.length, "blocking finding")}; its writer fixes them before any round (C-2⁶)`);
-  const fixed = await fixFindings(deps, "the checker", findings, "checker");
+  /* C-2²⁴ (PRDR-314): one session, since a batch of the checker's findings would read the checker red on the others'. */
+  const fixed = await fixFindings(deps, "the checker", [findings], "checker");
   if (fixed.stood) return null;
   const left = blocking().map((f) => `${at(f)} [${f.rule}] ${f.message}`);
   return {
@@ -220,7 +222,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
     const fixed: Fixed =
       findings.length === 0
         ? { outcome: new Map(), changed: [], diff: null, stood: true }
-        : await fixFindings(deps, `round ${String(r)}`, findings.map(({ id, severity, category, places, why, fix }) => ({ id, severity, category, places, why, fix })), "review");
+        : await fixFindings(deps, `round ${String(r)}`, fixBatches(findings.map(({ id, severity, category, places, why, fix }) => ({ id, severity, category, places, why, fix }))), "review");
     const ends = counts.blocker + counts.major === 0;
     const open = openOf(findings, fixed.outcome, r >= deps.ceiling);
     rounds.push({ round: r, counts, open, changed: [...fixed.changed] });

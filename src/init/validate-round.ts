@@ -1,8 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { z } from "zod";
-import { STATE_DIR, stateDir } from "../fs/layout.js";
+import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { DECISION_LOG_PATH, PACK_PATHS, PACK_PRECEDENCE, type OPEN_REASONS, type PackFinding } from "../schemas/pack.js";
 import { fixArtifactSchema, reviewArtifactSchema, type FindingPlace, type FixArtifact, type ReviewFinding } from "../schemas/validate.js";
@@ -162,13 +161,12 @@ export async function reviewArea(
 /** What the writer is given for one finding: its id, and what its source says of it, a reviewer's finding or the checker's. */
 export type ToFix = { readonly id: string } & Readonly<Record<string, unknown>>;
 
-export interface Fixed {
+/** What one writer session left (C-2²⁴): each finding's outcome, the documents its fixes changed, and whether they stood. */
+export interface BatchFixed {
   readonly outcome: ReadonlyMap<string, Outcome>;
-  /** The pack's documents the fixes changed, which stand. */
+  /** The pack's documents its fixes changed, which stand. */
   readonly changed: readonly string[];
-  /** The diff of those changes, repo-relative; null when nothing changed. */
-  readonly diff: string | null;
-  /** Whether the fixes stand: false when the checker was still red on them, and they were undone. */
+  /** Whether its fixes stand: false when the checker was still red on them, or no requirement stood, and they were undone. */
   readonly stood: boolean;
 }
 
@@ -185,14 +183,15 @@ const logState = (root: string): { readonly view: LogView; readonly text: string
 });
 
 /**
- * One writer over `findings`, labelled `label` (a round, or the checker's).
- * Checked as WRITE's session is: the log keeps what it held, a default it adds
- * is cited, a requirement stands, and the checker is green (C-2¹³). A first
- * attempt with anything wrong is relaunched with the list; the second keeps
- * what stands, and undoes every fix when the checker is still red. An artifact
- * that is unusable twice fails the phase, with the pack as it was.
+ * One writer session over `findings`, its notes under `stage`: the checker's
+ * findings, or one batch of a round's (C-2²⁴, `validate-fix.ts`). Checked as
+ * WRITE's session is: the log keeps what it held, a default it adds is cited,
+ * a requirement stands, and the checker is green (C-2¹³). A first attempt
+ * with anything wrong is relaunched with the list; the second keeps what
+ * stands, and undoes every fix it made when the checker is still red. An
+ * artifact that is unusable twice undoes them too, and fails the phase.
  */
-export async function fixFindings(deps: RoundDeps, label: string, findings: readonly ToFix[], source: "checker" | "review"): Promise<Fixed> {
+export async function fixBatch(deps: RoundDeps, stage: string, findings: readonly ToFix[], source: "checker" | "review"): Promise<BatchFixed> {
   const before = snapshot(deps.root, []);
   const logBefore = logState(deps.root);
   const ids = findings.map((f) => f.id);
@@ -211,7 +210,6 @@ export async function fixFindings(deps: RoundDeps, label: string, findings: read
     precedence: [...PACK_PRECEDENCE],
     expected_output: fixSkeleton(),
   };
-  const stage = `VALIDATE's writer, ${label}`;
   let result: RetriedAttempt<Attempt>;
   try {
     result = await withOneRelaunch<Attempt>({ stage, note: deps.note }, async (previous) => {
@@ -225,17 +223,22 @@ export async function fixFindings(deps: RoundDeps, label: string, findings: read
   }
   if (result.value === null) {
     rollback(deps.root, before);
-    throw new Error(`${stage}: no usable account of the fixes: ${result.issue ?? "unusable"}; the pack is as it was before it ran`);
+    throw new Error(`${stage}: no usable account of the fixes: ${result.issue ?? "unusable"}; the pack is as it was before the writer ran`);
   }
   const { artifact, green, holds, blocking } = result.value;
   if (!green || !holds) {
     rollback(deps.root, before);
     const why = holds ? `its fixes left the pack checker red: ${blocking.join("; ")}` : "its fixes left the pack holding no requirement";
-    deps.note?.(`${stage}: ${why}, so every fix of ${label} is undone (C-2¹⁴)`);
-    return { outcome: new Map(ids.map((id) => [id, { left: "undone", reason: why }])), changed: [], diff: null, stood: false };
+    deps.note?.(`${stage}: ${why}, so every fix it made is undone (C-2¹⁴)`);
+    return { outcome: new Map(ids.map((id) => [id, { left: "undone", reason: why }])), changed: [], stood: false };
   }
-  const changed = [...new Set([...before.files.keys(), ...packPathFiles(deps.root)])].filter((rel) => changedSince(deps.root, before, rel)).sort();
-  return { outcome: outcomes(artifact, ids, changed.length > 0), changed, diff: changed.length === 0 ? null : writeDiff(deps.root, label, before, changed), stood: true };
+  const changed = changedFiles(deps.root, before);
+  return { outcome: outcomes(artifact, ids, changed.length > 0), changed, stood: true };
+}
+
+/** The pack's files that no longer hold the bytes `before` holds, sorted. */
+export function changedFiles(root: string, before: Snapshot): string[] {
+  return [...new Set([...before.files.keys(), ...packPathFiles(root)])].filter((rel) => changedSince(root, before, rel)).sort();
 }
 
 function evaluate(
@@ -265,44 +268,4 @@ function evaluate(
   if (a.strict && issues.length > 0) return { value: null, issue: issues.join("; ") };
   for (const issue of owing) deps.note?.(`${stage}: ${issue}`);
   return { value: { artifact: read.value, green: blocking.length === 0, holds, blocking }, issue: null };
-}
-
-/** Where the diff of the writer labelled `label` is kept, repo-relative: the next round's reviewers read it, and so does a round that carries on after a stop. */
-export function diffPath(label: string): string {
-  return `${STATE_DIR}/state/validate/${label.replace(/[^a-z0-9]+/giu, "-").toLowerCase()}.diff`;
-}
-
-/**
- * The diff of one writer's changes, for the next round's reviewers: the
- * snapshot's bytes and the tree's, side by side under `.detent/`, compared by
- * `git diff --no-index`, which exits 1 when they differ.
- */
-function writeDiff(root: string, label: string, before: Snapshot, changed: readonly string[]): string {
-  const rel = diffPath(label);
-  const file = path.join(root, ...rel.split("/"));
-  const work = file.replace(/\.diff$/u, "");
-  rmSync(work, { recursive: true, force: true });
-  for (const side of ["before", "after"]) mkdirSync(path.join(work, side), { recursive: true });
-  for (const rel of changed) {
-    const was = before.files.get(rel);
-    const now = path.join(root, ...rel.split("/"));
-    const put = (side: string, bytes: Buffer): void => {
-      const to = path.join(work, side, ...rel.split("/"));
-      mkdirSync(path.dirname(to), { recursive: true });
-      writeFileSync(to, bytes);
-    };
-    if (was !== undefined) put("before", was);
-    if (existsSync(now)) put("after", readFileSync(now));
-  }
-  let text: string;
-  try {
-    text = execFileSync("git", ["diff", "--no-index", "--no-color", "--", "before", "after"], { cwd: work, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  } catch (err) {
-    const { status, stdout } = err as { status?: unknown; stdout?: unknown };
-    if (status !== 1 || typeof stdout !== "string") throw err;
-    text = stdout;
-  }
-  rmSync(work, { recursive: true, force: true });
-  writeFileSync(file, text);
-  return rel;
 }
