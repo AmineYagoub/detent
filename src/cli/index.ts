@@ -38,7 +38,7 @@ const VERBS: Record<string, Verb> = {
 
 const USAGE = `detent <command>
 
-  init [root]          prepare a project: discover, analyze, plan, approve
+  init [root]          prepare a project: discover, audit, decide, write, validate, plan, approve
   run [root]           execute the approved plan
   status [root]        show ticket status (C-13 vocabulary)
   report [root]        emit the §14 metrics
@@ -61,6 +61,11 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (handler === undefined) {
     process.stderr.write(`unknown command: ${verb}\n\n${USAGE}`);
     return 2;
+  }
+  /* PRDR-307: every verb's options are strict, so `--help` after one was refused as unknown. */
+  if (rest.some((arg) => arg === "--help" || arg === "-h")) {
+    process.stdout.write(USAGE);
+    return 0;
   }
   return await handler(rest);
 }

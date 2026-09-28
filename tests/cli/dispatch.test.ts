@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli/index.js";
+import { INIT_PHASES } from "../../src/schemas/init.js";
 
 /** The `detent` dispatcher (C-3, C-14): a routing table, nothing more. */
 
@@ -84,6 +85,42 @@ describe("PRDR-141 the sanctioned drift recovery is reachable", () => {
       expect(out.mock.calls.join("")).toContain("verify");
     } finally {
       out.mockRestore();
+    }
+  });
+});
+
+/**
+ * PRDR-307 — the usage line names the phases `init` runs.
+ *
+ * It said "discover, analyze, plan, approve" after D-10″ folded ANALYZE into
+ * DECIDE (PRDR-290), and named none of the four phases that judge and rewrite
+ * the documents before anything plans. A phase word it names is one of
+ * `INIT_PHASES`, and `--help` after a verb shows it.
+ */
+describe("PRDR-307 the usage line names the phases init runs", () => {
+  const usage = async (argv: readonly string[]): Promise<{ code: number; text: string }> => {
+    const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      const code = await main(argv);
+      return { code, text: out.mock.calls.join("") };
+    } finally {
+      out.mockRestore();
+    }
+  };
+
+  it("names DISCOVER, the four spec phases and PLAN, and no phase that is gone", async () => {
+    const { text } = await usage(["--help"]);
+    const line = text.split("\n").find((l) => l.trimStart().startsWith("init ")) ?? "";
+    const named = (line.split(":")[1] ?? "").split(",").map((w) => w.trim().toUpperCase());
+    expect(named.filter((w) => w !== "APPROVE")).toEqual(["DISCOVER", "AUDIT", "DECIDE", "WRITE", "VALIDATE", "PLAN"]);
+    for (const phase of named.filter((w) => w !== "APPROVE")) expect(INIT_PHASES as readonly string[], phase).toContain(phase);
+  });
+
+  it("shows the usage for --help or -h after a verb, and runs nothing", async () => {
+    for (const flag of ["--help", "-h"]) {
+      const { code, text } = await usage(["init", flag]);
+      expect(code, flag).toBe(0);
+      expect(text, flag).toContain("detent <command>");
     }
   });
 });
