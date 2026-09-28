@@ -468,6 +468,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   surface, beside its artifact; `archive/` is code's to write.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE's reviewers keep their one artifact, and its writer
   declares the pack's paths as WRITE's session does.*
+  *Amended by C-2²³ (PRDR-313): each of VALIDATE's reviewers writes an artifact of its own,
+  numbered by its area, since a round's reviewers run at once.*
 
 - **S-2‴ (3.1.1, PRDR-122).** The containment hook ABSTAINS on a call it does not govern; it
   does not allow it. A hook decision runs before every other permission step, so `allow` is
@@ -1113,6 +1115,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   another (C-2¹⁴).*
   *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are a batch, four at a time, and this bounds
   them.*
+  *Amended by C-2²³ (PRDR-313): VALIDATE's reviewers are a batch, four at a time, and this bounds
+  them too.*
 
 - **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
   independent by construction — that independence is what the threshold rests on — and they ran
@@ -2356,6 +2360,8 @@ the code does what the rules it amends describe, and each of those rules points 
     cache written before misses, and the slice is planned again. PLAN's checkpoint keys on the
     same prompt, so PLAN runs again too.
   *Amended by C-3⁵ (PRDR-298): the told path and the first-response signal are deleted.*
+  *Amended by C-2²³ (PRDR-313): VALIDATE's reviewers run four at a time, through the helper AUDIT's
+  checks use; the deleted launch batch stays deleted.*
 
 - **C-7″ (3.1.1, PRDR-278).** PRESENT shows what the operator decides on, and approval is refused
   while the plan is proved wrong. ksar-cloud's PRESENT printed 457 held findings, a revision
@@ -3283,6 +3289,10 @@ the code does what the rules it amends describe, and each of those rules points 
   round without one says why; VALIDATE no longer says once per run that none can.*
   *Amended by D-10″ (PRDR-290): DETERMINE_VERIFICATION, SLICE and PLAN read the stack entry from
   the parse, and nothing else in it is read yet (C-2⁸, C-4⁵).*
+  *Amended by C-2²³ (PRDR-313): a round's reviewers run four at a time, each with an artifact of its
+  own, and their findings are merged in the areas' order; "one after another" held until then.
+  Each review is kept as it lands and is a progress mark, so a round stopped before its record is
+  carried on from the reviews it kept.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
 
@@ -3394,6 +3404,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁸ (PRDR-306): a check session is given up to five claims of one topic and writes a
   brief for each, so the batch is four sessions, not four claims. "Each session is given one claim
   and writes one brief" held until then.*
+  *Amended by C-2²³ (PRDR-313): VALIDATE's reviewers are batched as well, four at a time, through
+  the same helper. "VALIDATE's reviewers still run one after another" held until then.*
 
 - **C-2¹⁷ (3.1.1, PRDR-305).** AUDIT keeps its checked survey until the phase completes. Its
   checkpoint is written when it completes, and the claim checks after the survey run for hours on a
@@ -3502,6 +3514,30 @@ the code does what the rules it amends describe, and each of those rules points 
   its anchor and title kept, and WRITE says how many links it repointed and in which documents.
   The checker for the record runs afterwards. A link that breaks some other way is still the
   founder's to fix, and a pack an earlier build wrote is not repointed.
+- **C-2²³ (3.1.1, PRDR-313).** VALIDATE reviews four areas at once, and keeps each review as it
+  lands. C-2¹⁴ ran one reviewer per area, one after another, into one artifact, and held what they
+  found in memory until the round's writer ran. Tabachir's test clone has 26 areas, and its first
+  reviewer, the foundations, was still reading after half an hour: a round would have taken most
+  of a day, and a stop anywhere in it would have lost every review the round had paid for. Nothing
+  in a round needs the order. Each reviewer reads the foundations and its own documents, and
+  nothing is merged until all have reported. Now a round's reviewers run as AUDIT's checks do
+  (C-2¹⁶): `VALIDATE_REVIEW_BATCH` at once, the next starting as each ends, through the helper
+  AUDIT's checks use, which moves to `src/init/batches.ts`. Each writes an artifact of its own,
+  numbered by its area, and may write only that one. Their findings are merged in the areas'
+  order, whatever order the reviewers end in, so the writer and the record see what a sequential
+  round showed them. A reviewer that fails lets those in flight end, each kept, and then fails the
+  phase. Each review is kept as it lands, at `.detent/state/validate/reviews-kept.json`, under a
+  digest of what its reviewer read: the round, its area, the foundations and its documents with their
+  contents, the heuristic reports, the findings it verifies, the diff with its contents, and the
+  `spec_review` prompt's hash. A re-run of the round takes each kept review whose digest holds,
+  says how many, and reviews the rest. A kept review is a unit of work (X-1⁵). Code writes the
+  file, and the structural floor keeps every session out of it (SEC-3′). A file this build does
+  not read is not trusted, and its areas are reviewed again. Once the round's record is written,
+  the record stands for its reviews, and the file is removed. The writer's work is not kept: a
+  re-run after a stop during the writer runs it again, and a review whose documents its edits had
+  already moved is done again first. Spend is read at each launch (D-25), and what a batch can run
+  past a reading is one batch (D-28′). The size is a constant, as AUDIT's is, until a run-time
+  outcome asks for another (D-33).
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

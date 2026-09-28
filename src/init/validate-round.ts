@@ -19,8 +19,8 @@ import { changedSince, packPathFiles, restoreFile, rollback, snapshot, type Snap
 
 /**
  * C-2¹⁴ (PRDR-284) — the sessions of one VALIDATE round: a `spec_review`
- * reviewer per area, one after another, and one `spec_write` writer that
- * applies what they found.
+ * reviewer per area, up to four at once (C-2²³, `validate-kept.ts`), and one
+ * `spec_write` writer that applies what they found.
  *
  * A reviewer reads its area's documents after the foundations and reports
  * each defect at its `file:line`, quoted, with the exact fix. In a round after
@@ -33,8 +33,9 @@ import { changedSince, packPathFiles, restoreFile, rollback, snapshot, type Snap
 
 type Json = Record<string, unknown>;
 
-export function reviewArtifactPath(root: string): string {
-  return path.join(stateDir(root), "state", "review-artifact.json");
+/** C-2²³ (PRDR-313): each reviewer's own, by its area's index, since a round's reviewers run at once. */
+export function reviewArtifactPath(root: string, area: number): string {
+  return path.join(stateDir(root), "state", `review-artifact-${String(area)}.json`);
 }
 
 export function fixArtifactPath(root: string): string {
@@ -120,8 +121,15 @@ function readArtifact<T>(file: string, schema: z.ZodType<T>): { readonly value: 
  * read named. With the round's scratch directory it may simulate (S-1⁗), and
  * a simulation's findings are checked as every other is.
  */
-export async function reviewArea(deps: RoundDeps, round: number, task: ReviewTask, pack: readonly string[], scratch: ScratchGrant | null): Promise<ReviewFinding[]> {
-  const out = reviewArtifactPath(deps.root);
+export async function reviewArea(
+  deps: RoundDeps,
+  round: number,
+  task: ReviewTask,
+  pack: readonly string[],
+  scratch: ScratchGrant | null,
+  area: number,
+): Promise<ReviewFinding[]> {
+  const out = reviewArtifactPath(deps.root, area);
   const verify = task.previous !== null;
   const inputs: Json = {
     task: verify ? "verify" : "review",

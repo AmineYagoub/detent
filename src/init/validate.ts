@@ -3,7 +3,6 @@ import path from "node:path";
 import { discover as discoverStack } from "../adapter/discover/index.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
 import { PACK_PATHS, isModulePrd, type ConformanceRecord, type PackFinding } from "../schemas/pack.js";
-import type { ReviewFinding } from "../schemas/validate.js";
 import type { Sandbox } from "../sessions/sandbox.js";
 import { probeSandbox } from "../sessions/sandbox-probe.js";
 import { isGreenfield } from "./greenfield.js";
@@ -17,7 +16,8 @@ import type { PipelineDeps } from "./pipeline.js";
 import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { countsOf, mergeFindings, type Finding, type Outcome } from "./validate-checks.js";
-import { diffPath, fixFindings, reviewArea, type Fixed, type ReviewTask, type RoundDeps, type Shown } from "./validate-round.js";
+import { dropKeptReviews, reviewRound, type KeptRoundDeps } from "./validate-kept.js";
+import { diffPath, fixFindings, type Fixed, type ReviewTask, type Shown } from "./validate-round.js";
 import { offeredNote, withRoundScratch } from "./validate-scratch.js";
 import { areaOf, areasOf, reviewable, scopeOf, type Area } from "./validate-scope.js";
 import { handoff, packDigest } from "./write.js";
@@ -53,7 +53,7 @@ import { handoff, packDigest } from "./write.js";
 type Round = ConformanceRecord["rounds"][number];
 type Open = Round["open"][number];
 
-export interface ValidateStageDeps extends RoundDeps {
+export interface ValidateStageDeps extends KeptRoundDeps {
   readonly patterns: readonly string[];
   /**
    * `spec_validation_rounds` (X-1): the round a validation stops at. One that
@@ -213,11 +213,8 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
       const offered = offeredNote(sandbox);
       if (offered !== null) deps.note?.(offered);
     }
-    const reported = await withRoundScratch(deps.root, r, sandbox, deps.note, async (scratch) => {
-      const found: { area: number; findings: ReviewFinding[] }[] = [];
-      for (const task of tasks) found.push({ area: areas.indexOf(task.area), findings: await reviewArea(deps, r, task, docs.filter(reviewable), scratch) });
-      return found;
-    });
+    /* C-2²³ (PRDR-313): up to four at once, each review kept as it lands, merged in the areas' order. */
+    const reported = await withRoundScratch(deps.root, r, sandbox, deps.note, async (scratch) => await reviewRound(deps, r, tasks, areas, docs.filter(reviewable), scratch));
     const findings = mergeFindings(r, reported);
     const counts = countsOf(findings);
     const fixed: Fixed =
@@ -228,6 +225,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
     const open = openOf(findings, fixed.outcome, r >= deps.ceiling);
     rounds.push({ round: r, counts, open, changed: [...fixed.changed] });
     save(deps, rounds, false);
+    dropKeptReviews(deps.root);
     noteUnitComplete(deps.root);
     const left = (kind: Outcome["left"]) => [...fixed.outcome.values()].filter((o) => o.left === kind).length;
     deps.note?.(
@@ -304,6 +302,7 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
           greenfield: isGreenfield(discoverStack(deps.root).stack.markers),
           patterns,
           ceiling: deps.budgets.spec_validation_rounds,
+          reviewPrompt: deps.prompts.hashes.spec_review,
           today: (deps.now?.() ?? new Date()).toISOString().slice(0, 10),
           note: deps.note,
           sandbox: deps.sandbox ?? (async () => await probeSandbox({ root: deps.root })),

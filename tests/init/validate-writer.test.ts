@@ -234,7 +234,7 @@ describe("PRDR-284: VALIDATE's sessions and what they may write (S-1‴, S-5⁵)
     expect(w.inputs[0], "the writer is told where it may write, and which document wins").toMatchObject({ pack_paths: [...PACK_PATHS], precedence: [...PACK_PRECEDENCE] });
     const reviewer = seen.backend?.calls.find((c) => c.role === "spec_review")?.spec;
     expect(reviewer?.allowedTools.filter((tool) => !tool.startsWith("Write(")).sort(), "no Edit, no Write but its artifact's, no Bash").toEqual(["Glob", "Grep", "Read"]);
-    expect(reviewer?.policy?.surface).toEqual([".detent/state/review-artifact.json"]);
+    expect(reviewer?.policy?.surface, "the first reviewer is the foundations', area 0 (C-2²³)").toEqual([".detent/state/review-artifact-0.json"]);
     const fixer = seen.backend?.calls.filter((c) => c.role === "spec_write").at(-1)?.spec;
     expect(fixer?.allowedTools).toEqual(expect.arrayContaining(["Edit", "Write"]));
     expect(fixer?.policy?.surface).toEqual([".detent/state/fix-artifact.json", ...PACK_PATHS]);
