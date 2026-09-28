@@ -14,11 +14,10 @@ import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
  * nothing, and many of the 48 unverified were claims no source could settle.
  * The user's decision (D-34): one session sorts the claims first, and only a
  * claim a decision in the documents rests on and a primary source could
- * settle is checked, up to five of a topic to a session.
+ * settle is checked. D-34′ (PRDR-317) checks each in a session of its own, as
+ * C-2¹¹ did, since checks given five claims of a topic found fewer of the
+ * claims that were wrong.
  */
-
-/** C-2¹⁸: at most this many claims, all of one topic, to a check session (D-34). */
-export const AUDIT_CLAIMS_PER_SESSION = 5;
 
 /** A claim without a brief, and the hash its brief would be committed under. */
 export interface Pending {
@@ -26,8 +25,8 @@ export interface Pending {
   readonly hash: string;
 }
 
-/** What triage decided for a claim. A claim it did not sort is checked alone, as every claim was before it. */
-export type Sorted = { readonly kind: "check"; readonly topic: string } | { readonly kind: ClaimTriage };
+/** What triage decided for a claim: checked, or why not. A claim it did not sort is checked, as every claim was before it. */
+export type Sorted = "check" | ClaimTriage;
 
 /** Where the triage session writes, before anything has checked it, cleared before each launch (D-19). */
 export function triagePath(root: string): string {
@@ -42,7 +41,6 @@ export function triageSkeleton(): Record<string, unknown> {
         claim_hash: "<the claim's claim_hash, exactly as given>",
         load_bearing: true,
         checkable: true,
-        topic: "<what one source would settle with it: one law, one licence family, one platform's policy>",
         why: "<one sentence on both judgments>",
       },
     ],
@@ -98,7 +96,7 @@ const claims = (n: number): string => `${String(n)} claim${n === 1 ? "" : "s"}`;
  * The triage session's entries for `pending`. What the first attempt sorts
  * stands, and the claims it left unsorted, and only they, go to one relaunch
  * with the validator's words (C-2¹⁹, PRDR-308). A claim still unsorted is
- * checked alone, and said. What each attempt sorts is kept with the survey
+ * checked, and said. What each attempt sorts is kept with the survey
  * and is a unit of work (X-1⁵), as a brief is.
  */
 async function triageSession(pending: readonly Pending[], deps: TriageDeps, counted: (toolCalls: number) => void): Promise<Map<string, TriageEntry>> {
@@ -122,19 +120,17 @@ async function triageSession(pending: readonly Pending[], deps: TriageDeps, coun
     }
   }
   if (asked.length > 0) {
-    deps.note?.(`AUDIT's triage left ${claims(asked.length)} unsorted, so ${asked.length === 1 ? "it is" : "they are"} checked alone (C-2¹⁸)`);
+    deps.note?.(`AUDIT's triage left ${claims(asked.length)} unsorted, so ${asked.length === 1 ? "it is" : "they are"} checked (C-2¹⁸)`);
   }
   return entries;
 }
 
-const topicKey = (topic: string): string => topic.trim().toLowerCase().replace(/\s+/gu, " ");
-
-/** How `entry` sorts a claim. An unsorted claim's topic is its own, so it is checked alone. */
-export function sortedAs(entry: TriageEntry | undefined, hash: string): Sorted {
-  if (entry === undefined) return { kind: "check", topic: `\0${hash}` };
-  if (!entry.load_bearing) return { kind: "not_load_bearing" };
-  if (!entry.checkable) return { kind: "uncheckable" };
-  return { kind: "check", topic: topicKey(entry.topic) };
+/** How `entry` sorts a claim. A claim the triage did not sort is checked. */
+export function sortedAs(entry: TriageEntry | undefined): Sorted {
+  if (entry === undefined) return "check";
+  if (!entry.load_bearing) return "not_load_bearing";
+  if (!entry.checkable) return "uncheckable";
+  return "check";
 }
 
 /** Sort `pending`: by what an earlier run kept, and by one triage session for the rest. */
@@ -142,18 +138,5 @@ export async function sortClaims(pending: readonly Pending[], deps: TriageDeps, 
   const kept = deps.triaged ?? {};
   const untriaged = pending.filter((p) => !Object.hasOwn(kept, p.hash));
   const fresh = untriaged.length === 0 ? new Map<string, TriageEntry>() : await triageSession(untriaged, deps, counted);
-  return new Map(pending.map((p) => [p.hash, sortedAs(Object.hasOwn(kept, p.hash) ? kept[p.hash] : fresh.get(p.hash), p.hash)]));
-}
-
-/** The claims to check, by topic in the order each first appears, at most `AUDIT_CLAIMS_PER_SESSION` to a group. */
-export function checkGroups(claims: readonly (Pending & { readonly topic: string })[]): Pending[][] {
-  const byTopic = new Map<string, Pending[]>();
-  for (const { topic, ...pending } of claims) {
-    const group = byTopic.get(topic) ?? [];
-    group.push(pending);
-    byTopic.set(topic, group);
-  }
-  return [...byTopic.values()].flatMap((group) =>
-    Array.from({ length: Math.ceil(group.length / AUDIT_CLAIMS_PER_SESSION) }, (_, i) => group.slice(i * AUDIT_CLAIMS_PER_SESSION, (i + 1) * AUDIT_CLAIMS_PER_SESSION)),
-  );
+  return new Map(pending.map((p) => [p.hash, sortedAs(Object.hasOwn(kept, p.hash) ? kept[p.hash] : fresh.get(p.hash))]));
 }

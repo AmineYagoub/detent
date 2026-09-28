@@ -27,8 +27,8 @@ import { launchInitSession, withInitJournal } from "./session.js";
  * contradictions, gaps, drift from the code, and the external claims; a triage
  * that sorts the claims by whether a decision rests on each and a source could
  * settle it (C-2¹⁸); and sessions that check those that are both against a
- * primary source, up to five of a topic to a session and four sessions at a
- * time (C-2¹⁶). Code checks every passage and every source the sessions cite
+ * primary source, one claim to a session (D-34′) and four sessions at a time
+ * (C-2¹⁶). Code checks every passage and every source the sessions cite
  * (C-2¹¹). The checked survey and its triage are kept until the phase
  * completes, so a run stopped during the checks is re-run on the same claims
  * (C-2¹⁷).
@@ -223,9 +223,9 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
         { task: "triage", claims: claims.map(given), documents: [...deps.documents], expected_output: triageSkeleton(), ...refusedAttemptInput(previous, "triage") },
         out,
       ),
-    launch: async (claims, out, previous) =>
+    launch: async (claim, out, previous) =>
       await deps.launch(
-        { task: "verify_claims", claims: claims.map(given), hierarchy: HIERARCHY, ...claimBriefsSkeleton(), ...refusedAttemptInput(previous, "set of briefs") },
+        { task: "verify_claims", claims: [given(claim)], hierarchy: HIERARCHY, ...claimBriefsSkeleton(), ...refusedAttemptInput(previous, "set of briefs") },
         out,
       ),
   });

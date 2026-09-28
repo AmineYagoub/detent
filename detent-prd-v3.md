@@ -60,7 +60,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
 | D-31 | **`init` judges the documents before it plans from them.** A specification phase, AUDIT, DECIDE, WRITE and VALIDATE, turns the discovered documents into a validated pack with a fixed schema, a conformance record and a deterministic checker, inside `init` and with no switch (C-2⁶, C-2⁷). Only money, legal and policy questions are asked, once and early; every other gap is a vetoable default, and off a TTY every recommended answer is taken (C-3⁗). A session that proves the pack wrong files an amendment, and fix sessions may too (X-3′, X-4⁷). | PRDR-278 (3.1.1); the operator's sixteen decisions of 2026-09-26, in `docs/plan-specification-phase.md` §2. Trials on other projects kept hitting contradictions in the PRD, and a rule that is consistent but wrong passes every gate, because the code and its tests both follow it. The ksarjs specification turned a raw PRD into 2,024 requirements and 1,144 criteria through the same four steps, and its validation found what no build would have: a rounding defect a simulation caught, a race, a security hole left by omission, and a forfeiture rule that was consistent and wrong. |
 | D-32 | **Planning is built on the pack.** SLICE is seeded by code and keyed by requirement ids (C-2⁸); PLAN drafts from pack records and asks nothing (C-4⁵); code checks what code can prove, drives one targeted redraft and blocks approval on what still fails (A-1⁷); one `plan_review` read per slice judges what code cannot (C-4⁶); ANALYZE is folded into DECIDE (D-10′); and gates bind per package (D-5′). | PRDR-278 (3.1.1); the operator's ten decisions of 2026-09-26, in `docs/plan-planning-redesign.md` §2, after `docs/planning-phase-audit-2026-09-26.md`. September's 79 planning tickets delivered about 19 results a live run could see, nearly all plumbing. ksar-cloud's approved plan was never reviewed whole (1.55M tokens against a 1M limit), kept 34 defects code had proved, and spent 78% of its planning on a review whose 151 verdicts were all `changes`. The pack alone would not fix that: ksar-cloud's documents were already half a pack. Planning decision 1 put this in the same amendment as D-31, and planning decision 4 pauses ksar-cloud's plan until the new planner re-plans it, as the baseline for later changes. |
 | D-33 | **Run-time outcomes decide which planning mechanisms stay.** A mechanism that claims to improve plans names the outcome it should move, among escalations to NEEDS_HUMAN, falsifications by cause, budget breaches, first-generation DONE, review rounds, and cost or wall-clock per ticket (N-5′), and a measured run in which that outcome does not move is grounds to remove it. Reviewer finding counts are not an outcome. | PRDR-278 (3.1.1); planning decision 3. September judged its planning patches by reviewer finding counts, and its own experiments showed those counts track how much the reviewer writes. |
-| D-34 | **AUDIT checks only what a decision rests on and a source could settle.** A triage sorts the survey's claims first. A claim a decision in the documents rests on, and that a primary source could settle, is checked, up to five of one topic to a session. A load-bearing claim no source could settle goes to DECIDE, and a claim nothing rests on is recorded and not checked. The checks keep the `audit` role's routing (C-2¹⁸). | PRDR-306 (3.1.1); the user's four decisions of 2026-09-28, taken during tabachir's test run. By 08:06 AUDIT had checked 138 claims, one session apiece on claude-opus-5-5 at max, for $426. DECIDE is given only the claims that are not confirmed, so the 77 confirmed changed nothing it was given. Many of the 48 unverified were claims no source could settle, and the 13 wrong ones, about $40 of checks, were the payoff. The user kept the model at max: the triage and the grouping do the saving. |
+| D-34 | **AUDIT checks only what a decision rests on and a source could settle.** A triage sorts the survey's claims first. A claim a decision in the documents rests on, and that a primary source could settle, is checked, up to five of one topic to a session. A load-bearing claim no source could settle goes to DECIDE, and a claim nothing rests on is recorded and not checked. The checks keep the `audit` role's routing (C-2¹⁸). | PRDR-306 (3.1.1); the user's four decisions of 2026-09-28, taken during tabachir's test run. By 08:06 AUDIT had checked 138 claims, one session apiece on claude-opus-5-5 at max, for $426. DECIDE is given only the claims that are not confirmed, so the 77 confirmed changed nothing it was given. Many of the 48 unverified were claims no source could settle, and the 13 wrong ones, about $40 of checks, were the payoff. The user kept the model at max: the triage and the grouping do the saving. *Amended by D-34′ (PRDR-317): each claim checked has a session of its own, since grouped checks found fewer of the wrong claims; the triage stays.* |
 
 ---
 
@@ -2996,6 +2996,8 @@ the code does what the rules it amends describe, and each of those rules points 
   unchecked, and a claim nothing rests on is recorded and not checked.*
   *Amended by C-2²⁵ (PRDR-315): a passage whose quote starts on one other line of its document
   stands on that line, and is not refused; "at its `file:line`" is the line code finds.*
+  *Amended by D-34′ (PRDR-317): each claim a triage sends to a check has a session of its own
+  again.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -3417,6 +3419,8 @@ the code does what the rules it amends describe, and each of those rules points 
   and writes one brief" held until then.*
   *Amended by C-2²³ (PRDR-313): VALIDATE's reviewers are batched as well, four at a time, through
   the same helper. "VALIDATE's reviewers still run one after another" held until then.*
+  *Amended by D-34′ (PRDR-317): a check session is given one claim again, so the batch is four
+  claims. C-2¹⁸'s "up to five claims of one topic" held until then.*
 
 - **C-2¹⁷ (3.1.1, PRDR-305).** AUDIT keeps its checked survey until the phase completes. Its
   checkpoint is written when it completes, and the claim checks after the survey run for hours on a
@@ -3475,6 +3479,8 @@ the code does what the rules it amends describe, and each of those rules points 
   sorted every claim again.*
   *Amended by C-2²⁰ (PRDR-309): the triage is told that an absence claim is checkable, and
   load-bearing wherever the absent rule would bind the plan.*
+  *Amended by D-34′ (PRDR-317): each claim to check has a `verify_claims` session of its own, and
+  the triage is asked no `topic`. "Grouped checks", and `topic` under "Triage", held until then.*
 
 - **C-2¹⁹ (3.1.1, PRDR-308).** AUDIT reads its triage one entry at a time. C-2¹⁸ held the triage
   artifact to one schema, so an entry whose `claim_hash` was not a sha256 digest refused every
@@ -3598,6 +3604,26 @@ the code does what the rules it amends describe, and each of those rules points 
   what should change, the finding quotes the pack's passage and names the context document in
   `why`. The new prompt moves every kept review's key (C-2²³), so a stopped round on an earlier
   prompt is reviewed again.
+- **D-34′ (3.1.1, PRDR-317).** AUDIT checks each claim in a session of its own again. D-34 made
+  two savings at once: a triage decides which claims are worth a check (C-2¹⁸), and a check
+  session took up to five claims of one topic. The A/B test the user asked for ran tabachir's 145
+  claims both ways, on `claude-opus-5-5` at `max`, four sessions at a time. Arm A checked each
+  claim in a session of its own: 145 sessions, $453.47. Arm B triaged, then checked 107 claims in
+  65 grouped sessions: $203.02 with the triage. Of the 107 claims both arms checked, A found 11
+  wrong and B found 8, with 6 in common. B left four of A's eleven unverified, among them that
+  Chargily is a payment channel approved for online sales, which Law 18-05 Art. 27 contradicts,
+  and confirmed a fifth. It spent about 28 turns a claim against A's 51. The user's decision of
+  2026-09-28: quality comes before cost. Each claim the triage sends to a check, one load-bearing
+  and checkable or one it left unsorted, is now checked in a `verify_claims` session given that
+  claim alone, `AUDIT_CLAIM_BATCH` of them at a time (C-2¹⁶); `AUDIT_CLAIMS_PER_SESSION` is gone.
+  The triage is asked no `topic`, and its schema refuses one as it refuses any unknown key (P2).
+  The session still writes the `briefs` envelope, which holds one brief, read as before. A brief
+  missing or refused is asked for once more with the validator's words. Two briefs for its claim
+  leave it with neither, and a brief for a claim it was not given is refused. The triage, its kept
+  entries (C-2¹⁷, C-2¹⁹) and C-2²⁰'s rule for absence claims stand. The prompt's hash is in
+  AUDIT's key (C-2¹¹), so a survey kept by an earlier build is surveyed again. On tabachir, C-2²⁰'s
+  triage sends 117 claims to a check: about $366 at arm A's $3.13 a claim, with the triage on
+  top, against A's $453 and B's $203. The figure is reported, not a limit.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

@@ -4,13 +4,14 @@ import { describe, expect, it } from "vitest";
 import { stateDir, writeArtifact } from "../../src/fs/layout.js";
 import { claimHash } from "../../src/init/audit-claims.js";
 import { keepSurvey, keepTriage, keptSurveyPath, readKeptTriage } from "../../src/init/audit-survey.js";
+import { triageSkeleton } from "../../src/init/audit-triage.js";
 import { openItems } from "../../src/init/decide-items.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { readProgressMark } from "../../src/kernel/ledger.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
-import type { TriageEntry } from "../../src/schemas/audit.js";
+import { triageEntrySchema, type TriageEntry } from "../../src/schemas/audit.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, resultFromSdk, type StageFn } from "../../src/sessions/mock.js";
 import { briefsOf, claimsGiven, triageOf, type Judged, type Json } from "./audit-fixture.js";
@@ -24,9 +25,9 @@ import { inputsOf } from "./slicing-fixture.js";
  * claude-opus-5-5 at max, for $426: the 77 confirmed changed nothing
  * downstream, and many of the 48 unverified were claims no source could
  * settle. The user's decision (D-34): check only what a decision in the
- * documents rests on and a primary source could settle, up to five claims of
- * a topic to a session; send a load-bearing claim no source can settle to
- * DECIDE, and record one nothing rests on.
+ * documents rests on and a primary source could settle; send a load-bearing
+ * claim no source can settle to DECIDE, and record one nothing rests on. Since
+ * D-34′ (PRDR-317) each claim checked has a session of its own.
  */
 
 const PRD = ["# Toolshed", "", "Borrowing is free in the MVP.", "", "Payments use the Stripe API, and a refund returns the card fee.", ""].join("\n");
@@ -39,13 +40,7 @@ const UNCHECKABLE = claim("Most toolshed members would rather pay by card.", "to
 const REFUNDS = Array.from({ length: 7 }, (_, n) => claim(`A Stripe refund rule, number ${String(n)}.`));
 const PAYOUT = claim("Stripe pays out daily in the US.");
 
-/** The last refund's topic is worded apart from the others, as a session may word it: one topic all the same. */
-const JUDGED = (c: Json): Judged =>
-  c["claim"] === NOTHING["claim"]
-    ? { load_bearing: false }
-    : c["claim"] === UNCHECKABLE["claim"]
-      ? { checkable: false }
-      : { topic: c["claim"] === PAYOUT["claim"] ? "Stripe payouts" : c["claim"] === REFUNDS[6]!["claim"] ? "  stripe  REFUNDS " : "Stripe refunds" };
+const JUDGED = (c: Json): Judged => (c["claim"] === NOTHING["claim"] ? { load_bearing: false } : c["claim"] === UNCHECKABLE["claim"] ? { checkable: false } : {});
 
 const brief = (c: Json): Json => ({
   schema_version: SCHEMA_VERSION,
@@ -117,15 +112,15 @@ const recorded = (root: string, c: Json): Json | undefined => (auditOutputs(root
 const firstMark = (marks: readonly [string, number | null][], task: string): number => marks.find(([t]) => t === task)?.[1] ?? 0;
 
 describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34)", () => {
-  it("checks only what a decision rests on and a source could settle, five of a topic to a session", async () => {
+  it("checks only what a decision rests on and a source could settle, each claim in a session of its own", async () => {
     const root = repo({ "PRD.md": PRD });
     const notes: string[] = [];
     const stub = audit([NOTHING, UNCHECKABLE, ...REFUNDS, PAYOUT]);
 
     await initThroughAudit(root, stub, notes);
 
-    expect(tasks(stub)).toEqual(["survey", "triage", "verify_claims", "verify_claims", "verify_claims"]);
-    expect(checked(stub)).toEqual([REFUNDS.slice(0, 5).map((c) => c["claim"]), REFUNDS.slice(5).map((c) => c["claim"]), [PAYOUT["claim"]]]);
+    expect(tasks(stub)).toEqual(["survey", "triage", ...Array.from({ length: 8 }, () => "verify_claims")]);
+    expect(checked(stub)).toEqual([...REFUNDS, PAYOUT].map((c) => [c["claim"]]));
     expect(recorded(root, NOTHING)).toMatchObject({ verdict: "unverified", checked: false, triage: "not_load_bearing" });
     expect(recorded(root, UNCHECKABLE)).toMatchObject({ verdict: "unverified", checked: false, triage: "uncheckable" });
     expect(recorded(root, PAYOUT)).toMatchObject({ verdict: "confirmed", checked: true });
@@ -160,16 +155,21 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
     expect(recorded(root, PAYOUT)).toMatchObject({ verdict: "confirmed", checked: true });
   });
 
-  it("asks once more, alone, for a brief a group left out, and records the claim unchecked when it is left out again", async () => {
+  it("asks once more for a claim its session left without a brief, and records it unchecked when it is left out again", async () => {
     const root = repo({ "PRD.md": PRD });
-    const [first, left, third] = REFUNDS;
-    const stub = audit([first!, left!, third!], { check: (i) => briefsOf(i, (c) => (c["claim"] === left!["claim"] ? null : brief(c))) });
+    const notes: string[] = [];
+    const [first, left] = REFUNDS;
+    const stub = audit([first!, left!], { check: (i) => briefsOf(i, (c) => (c["claim"] === left!["claim"] ? null : brief(c))) });
 
-    await initThroughAudit(root, stub);
+    await initThroughAudit(root, stub, notes);
 
-    expect(checked(stub)).toEqual([[first!["claim"], left!["claim"], third!["claim"]], [left!["claim"]]]);
+    const sessions = stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claims" && claimsGiven(inputsOf(s) as Json)[0]?.["claim"] === left!["claim"]);
+    expect(sessions).toHaveLength(2);
+    expect(String((inputsOf(sessions[1]!)["previous_attempt"] as Json | undefined)?.["issue"])).toMatch(/no usable brief for/u);
+    expect(checked(stub).filter(([c]) => c === first!["claim"])).toEqual([[first!["claim"]]]);
     expect(recorded(root, left!)).toMatchObject({ verdict: "unverified", checked: false });
-    expect(recorded(root, third!)).toMatchObject({ verdict: "confirmed", checked: true });
+    expect(recorded(root, first!)).toMatchObject({ verdict: "confirmed", checked: true });
+    expect(notes.join("\n")).toContain(`AUDIT's check of "${String(left!["claim"])}" left no usable brief`);
   });
 
   it("checks alone a claim the relaunched triage still leaves out, and says so", async () => {
@@ -185,20 +185,24 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
     expect(notes.join("\n")).toMatch(/triage left 1 claim unsorted/u);
   });
 
-  it("takes neither of two briefs for one claim, and asks for it again alone", async () => {
+  it("takes neither of two briefs for its one claim, and asks for it again", async () => {
     const root = repo({ "PRD.md": PRD });
     const [first, second] = REFUNDS;
     const hashed = (c: Json): Json => ({ ...c, claim_hash: claimHash(String(c["claim"]), String(c["subject"])) });
     const wrong = { ...brief(hashed(first!)), verdict: "wrong", correction: "Stripe keeps it." };
+    const isFirst = (i: Json): boolean => claimsGiven(i)[0]?.["claim"] === first!["claim"];
     const stub = audit([first!, second!], {
-      check: (i, n) => (n === 0 ? { schema_version: SCHEMA_VERSION, briefs: [brief(hashed(first!)), wrong, brief(hashed(second!))] } : { schema_version: SCHEMA_VERSION, briefs: [wrong] }),
+      check: (i) =>
+        !isFirst(i)
+          ? briefsOf(i, brief)
+          : { schema_version: SCHEMA_VERSION, briefs: i["previous_attempt"] === undefined ? [brief(hashed(first!)), wrong] : [wrong] },
     });
 
     await initThroughAudit(root, stub);
 
-    expect(checked(stub)).toEqual([[first!["claim"], second!["claim"]], [first!["claim"]]]);
-    const again = stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claims")[1]!;
-    expect(String((inputsOf(again)["previous_attempt"] as Json | undefined)?.["issue"])).toMatch(/another brief already checked, so neither stands/u);
+    const firsts = stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claims" && isFirst(inputsOf(s) as Json));
+    expect(firsts).toHaveLength(2);
+    expect(String((inputsOf(firsts[1]!)["previous_attempt"] as Json | undefined)?.["issue"])).toMatch(/another brief already checked, so neither stands/u);
     expect(recorded(root, first!)).toMatchObject({ verdict: "wrong", checked: true });
     expect(recorded(root, second!)).toMatchObject({ verdict: "confirmed", checked: true });
   });
@@ -225,7 +229,7 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
 
   it("adds what a triage sorts to what is kept, and keeps nothing where no survey is kept under the key", () => {
     const root = repo({ "PRD.md": PRD });
-    const entry = (hash: string): TriageEntry => ({ claim_hash: hash, load_bearing: true, checkable: true, topic: "Stripe", why: "a price rests on it" });
+    const entry = (hash: string): TriageEntry => ({ claim_hash: hash, load_bearing: true, checkable: true, why: "a price rests on it" });
     mkdirSync(path.dirname(keptSurveyPath(root)), { recursive: true });
     keepTriage(root, "k", { ["a".repeat(64)]: entry("a".repeat(64)) });
     expect(readKeptTriage(root, "k")).toEqual({});
@@ -312,3 +316,50 @@ describe("PRDR-309 the triage is told an absence claim is load-bearing and check
   });
 });
 
+/**
+ * PRDR-317 — each claim the triage sends to a check has a session of its own
+ * (D-34′).
+ *
+ * The A/B test on tabachir's 145 claims ran the checks both ways on one model
+ * and effort. Of the 107 claims both arms checked, a session per claim found 11
+ * wrong and grouped checks 8: the groups left four of the eleven unverified and
+ * confirmed a fifth, at about 28 turns a claim against 51. The user's decision:
+ * quality comes before cost.
+ */
+describe("PRDR-317 each claim sent to a check has a session of its own (D-34′)", () => {
+  const asked = (triageSkeleton()["claims"] as Json[])[0] ?? {};
+  /** A triage that fills in its skeleton, as a session does, so what the skeleton asks every entry answers alike. */
+  const filled = (i: Json): Json => ({
+    schema_version: SCHEMA_VERSION,
+    claims: claimsGiven(i).map((c) => ({ ...asked, claim_hash: c["claim_hash"], load_bearing: true, checkable: true, why: "a refund rule rests on it, and Stripe's documentation settles it" })),
+  });
+
+  it("checks three claims one source could settle in three sessions, each given its one claim", async () => {
+    const root = repo({ "PRD.md": PRD });
+    const three = REFUNDS.slice(0, 3);
+    const stub = audit(three, { triage: filled });
+
+    await initThroughAudit(root, stub);
+
+    expect(tasks(stub)).toEqual(["survey", "triage", "verify_claims", "verify_claims", "verify_claims"]);
+    expect(checked(stub)).toEqual(three.map((c) => [c["claim"]]));
+    for (const c of three) expect(recorded(root, c)).toMatchObject({ verdict: "confirmed", checked: true });
+  });
+
+  it("asks the triage for no topic, and refuses an entry that names one", () => {
+    expect(Object.keys(asked).sort()).toEqual(["checkable", "claim_hash", "load_bearing", "why"]);
+    const entry = { claim_hash: "a".repeat(64), load_bearing: true, checkable: true, why: "a price rests on it" };
+    expect(triageEntrySchema.safeParse(entry).success).toBe(true);
+    expect(triageEntrySchema.safeParse({ ...entry, topic: "Stripe refunds" }).success).toBe(false);
+  });
+
+  it("tells the triage and the check that each claim checked has a session of its own", () => {
+    const prompt = (loadPromptSet().prompts as Readonly<Record<string, string>>)["audit"] ?? "";
+    const task = (name: string): string => prompt.split("\n").find((line) => line.startsWith(`\`${name}\``)) ?? "";
+    expect(task("triage")).not.toMatch(/`topic`/u);
+    expect(task("triage")).toMatch(/is checked, each in a session of its own/u);
+    expect(task("verify_claims")).toMatch(/check the one claim in `claims`/u);
+    expect(task("verify_claims")).toMatch(/write its brief as the one entry of `briefs`/u);
+    expect(task("verify_claims")).not.toMatch(/share a topic/u);
+  });
+});

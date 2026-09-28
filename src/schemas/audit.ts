@@ -8,10 +8,10 @@ import { EXTERNAL_TIER, requireLocalSearchBeforeWeb } from "./init.js";
  * The survey reads the documents, and the code in an existing project, and
  * writes what it found without checking any of it: contradictions, gaps, drift
  * and the external claims. A triage sorts the claims (C-2¹⁸, PRDR-306), and
- * each one a decision rests on and a source could settle is checked, up to five
- * of a topic to a session, in a brief of C-3a's format with a verdict in place
- * of an answer. Every finding is anchored to a passage, and code checks each
- * one (C-2¹¹).
+ * each one a decision rests on and a source could settle is checked in a
+ * session of its own (D-34′, PRDR-317), in a brief of C-3a's format with a
+ * verdict in place of an answer. Every finding is anchored to a passage, and
+ * code checks each one (C-2¹¹).
  */
 
 /** A quote, verbatim apart from whitespace, from the line it starts on. */
@@ -119,14 +119,14 @@ export function requireEscalationBeforeUnverified(
 
 /**
  * C-2¹⁸ (PRDR-306): one claim as the triage sorted it. `load_bearing` says a
- * decision in the documents rests on it, `checkable` that a primary source
- * could settle it, and `topic` names what one source would settle with it.
+ * decision in the documents rests on it, and `checkable` that a primary source
+ * could settle it. Nothing groups the claims since D-34′ (PRDR-317), so an
+ * entry names no topic.
  */
 export const triageEntrySchema = z.strictObject({
   claim_hash: sha256Hex,
   load_bearing: z.boolean(),
   checkable: z.boolean(),
-  topic: nonEmptyString,
   why: nonEmptyString,
 });
 export type TriageEntry = z.infer<typeof triageEntrySchema>;

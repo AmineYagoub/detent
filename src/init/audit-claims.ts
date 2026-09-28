@@ -8,7 +8,7 @@ import { claimBriefSchema, claimBriefsSchema, type Claim, type ClaimBrief, type 
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { sourceIssue } from "./audit-passages.js";
 import { inBatches } from "./batches.js";
-import { checkGroups, sortClaims, type Pending, type Sorted, type TriageDeps } from "./audit-triage.js";
+import { sortClaims, type Pending, type TriageDeps } from "./audit-triage.js";
 
 /**
  * C-2⁶, C-2¹¹ (PRDR-281) — the external claims the survey found, each worth
@@ -22,8 +22,9 @@ import { checkGroups, sortClaims, type Pending, type Sorted, type TriageDeps } f
  * to stay within, because a session told a number checks less. The calls are
  * counted, and reported against `planning_research_tool_calls`.
  *
- * C-2¹⁸ (PRDR-306): a triage decides which claims are worth a check, and a
- * check session takes up to five claims of one topic (`audit-triage.ts`).
+ * C-2¹⁸ (PRDR-306): a triage decides which claims are worth a check
+ * (`audit-triage.ts`), and each is checked in a session of its own (D-34′,
+ * PRDR-317).
  */
 
 const normal = (text: string): string => text.trim().toLowerCase().replace(/\s+/gu, " ");
@@ -38,7 +39,7 @@ export function auditBriefPath(root: string, hash: string): string {
   return path.join(stateDir(root), "research", "audit", `${hash}.json`);
 }
 
-/** D-19's rule: a check session's own file, keyed by the first claim it checks and cleared before each launch. */
+/** D-19's rule: a check session's own file, keyed by the claim it checks and cleared before each launch. */
 export function claimArtifactPath(root: string, hash: string): string {
   return path.join(stateDir(root), "state", `audit-claim-${hash.slice(0, 12)}.json`);
 }
@@ -46,8 +47,8 @@ export function claimArtifactPath(root: string, hash: string): string {
 /**
  * The shapes a claim's brief takes, one per verdict, as a planning question
  * is handed both of its arms (PRDR-264): a session with no shape for a result
- * reports it by writing nothing. A `verify_claims` session is handed them once,
- * for every brief it writes (C-2¹⁸).
+ * reports it by writing nothing. A `verify_claims` session is handed them in
+ * `brief_shapes` (C-2¹⁸).
  */
 export function claimBriefSkeletons(claim: string, hash: string): Record<string, Record<string, unknown>> {
   const base = {
@@ -107,8 +108,8 @@ export interface AuditResearch {
 export interface CheckClaimsDeps extends TriageDeps {
   /** The documents being checked; none of them is a source that can settle a claim. */
   readonly documents: readonly string[];
-  /** One `verify_claims` session for `claims`, which share a topic (C-2¹⁸). */
-  readonly launch: (claims: readonly Pending[], artifactOut: string, previous: { readonly issue: string } | null) => Promise<{ readonly toolCalls: number }>;
+  /** The `verify_claims` session for `claim`, which is given it alone (D-34′). */
+  readonly launch: (claim: Pending, artifactOut: string, previous: { readonly issue: string } | null) => Promise<{ readonly toolCalls: number }>;
 }
 
 /** One brief, read with every check a brief gets, save which claim it is for. */
@@ -139,7 +140,8 @@ function cachedBrief(hash: string, deps: CheckClaimsDeps): ClaimBrief | null {
 /**
  * The briefs a `verify_claims` session wrote for `asked`, each taken or
  * refused on its own. Two briefs for one claim leave it with neither, since
- * nothing says which the session meant, and it is asked for again.
+ * nothing says which the session meant, and it is asked for again. A session
+ * is given one claim (D-34′), and may still write a brief for another.
  */
 function readBriefs(file: string, asked: readonly Pending[], deps: CheckClaimsDeps): { briefs: Map<string, ClaimBrief>; issue: string | null } {
   const briefs = new Map<string, ClaimBrief>();
@@ -178,48 +180,42 @@ const settled = (hash: string, brief: ClaimBrief): Verdict => ({
 type Tally = { -readonly [K in keyof AuditResearch]: AuditResearch[K] };
 
 /**
- * One group's verdicts. A brief missing or refused is asked for once more, in
- * a session given only the claims still without one and the validator's
+ * One claim's verdict, from a `verify_claims` session of its own (D-34′). A
+ * brief missing or refused is asked for once more, with the validator's
  * words. A claim left without a brief twice is recorded unverified and
- * unchecked, and never ends the phase. Each brief taken is committed on its
- * own hash, and is a unit of work.
+ * unchecked, and never ends the phase. The brief taken is committed on the
+ * claim's hash, and is a unit of work.
  */
-async function checkGroup(group: readonly Pending[], deps: CheckClaimsDeps, tally: Tally): Promise<Map<string, Verdict>> {
-  const verdicts = new Map<string, Verdict>();
-  const artifactOut = claimArtifactPath(deps.root, group[0]?.hash ?? "");
-  let asked = [...group];
+async function checkClaim(pending: Pending, deps: CheckClaimsDeps, tally: Tally): Promise<Verdict> {
+  const { claim, hash } = pending;
+  const artifactOut = claimArtifactPath(deps.root, hash);
   let previous: { readonly issue: string } | null = null;
-  for (let attempt = 0; attempt < 2 && asked.length > 0; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     rmSync(artifactOut, { force: true });
-    const result = await deps.launch(asked, artifactOut, previous);
+    const result = await deps.launch(pending, artifactOut, previous);
     tally.sessions += 1;
     tally.tool_calls += result.toolCalls;
-    const read = readBriefs(artifactOut, asked, deps);
-    for (const [hash, brief] of read.briefs) {
+    const read = readBriefs(artifactOut, [pending], deps);
+    const brief = read.briefs.get(hash);
+    if (brief !== undefined) {
       /* SEC-4 (PRDR-252): the brief is committed, and it carries a model's own prose. */
       const clean = claimBriefSchema.parse(scrubJson(brief));
       writeArtifact(deps.root, path.posix.join("research", "audit", `${hash}.json`), clean);
       /* C-2¹¹, X-1⁵: a brief is a unit of work, as a slice's checkpoint is. */
       noteUnitComplete(deps.root);
-      verdicts.set(hash, settled(hash, clean));
+      return settled(hash, clean);
     }
-    asked = asked.filter((p) => !read.briefs.has(p.hash));
     previous = { issue: read.issue ?? "no usable brief" };
-    if (attempt === 0 && asked.length > 0) {
-      deps.note?.(`AUDIT's check left ${String(asked.length)} claim(s) without a usable brief (${previous.issue}) — relaunching once for those alone, with the validator's own words (C-4⁗′)`);
-    }
+    if (attempt === 0) deps.note?.(`AUDIT's check of "${claim.claim}" left no usable brief (${previous.issue}) — relaunching once, with the validator's own words (C-4⁗′)`);
   }
-  for (const { claim, hash } of asked) {
-    deps.note?.(`AUDIT could not check "${claim.claim}" (${claim.subject}), so it is recorded as unverified and unchecked (C-2¹¹)`);
-    verdicts.set(hash, { claim_hash: hash, verdict: "unverified", checked: false });
-  }
-  return verdicts;
+  deps.note?.(`AUDIT could not check "${claim.claim}" (${claim.subject}), so it is recorded as unverified and unchecked (C-2¹¹)`);
+  return { claim_hash: hash, verdict: "unverified", checked: false };
 }
 
 /**
- * C-2¹⁶ (PRDR-304): how many check sessions AUDIT runs at once. The groups are
- * independent, each session writes its own briefs under its own surface
- * (S-1″), and a phase's launches share its one journal (PRDR-203), so a batch
+ * C-2¹⁶ (PRDR-304): how many check sessions AUDIT runs at once. The checks are
+ * independent, each session writes its brief under its own surface (S-1″),
+ * and a phase's launches share its one journal (PRDR-203), so a batch
  * shortens the phase and changes nothing a check is given. Spend is still
  * read at each launch (D-25), and what the batch can run past a reading is
  * one batch (D-28′).
@@ -232,9 +228,10 @@ export const AUDIT_CLAIM_BATCH = 4;
  * wrong in both, and WRITE is given each place (C-2¹³). A committed brief
  * answers first, whatever a triage would say. The rest are triaged (C-2¹⁸):
  * one nothing rests on, or no source could settle, is recorded unverified and
- * unchecked with why, and the others are checked in topic groups, in batches
- * (C-2¹⁶). The verdicts are recorded in the survey's order whatever order
- * they end in, so neither the checkpoint nor WRITE depends on scheduling.
+ * unchecked with why, and the others are checked, each in a session of its
+ * own (D-34′), in batches (C-2¹⁶). The verdicts are recorded in the survey's
+ * order whatever order they end in, so neither the checkpoint nor WRITE
+ * depends on scheduling.
  */
 export async function checkClaims(
   claims: readonly Claim[],
@@ -267,14 +264,14 @@ export async function checkClaims(
     tally.tool_calls += toolCalls;
   };
   const sorted = await sortClaims(pending, deps, counted);
-  const toCheck: (Pending & { readonly topic: string })[] = [];
+  const toCheck: Pending[] = [];
   for (const p of pending) {
-    const sort: Sorted = sorted.get(p.hash) ?? { kind: "check", topic: `\0${p.hash}` };
-    if (sort.kind === "check") toCheck.push({ ...p, topic: sort.topic });
-    else record(p.hash, { claim_hash: p.hash, verdict: "unverified", checked: false, triage: sort.kind });
+    const sort = sorted.get(p.hash) ?? "check";
+    if (sort === "check") toCheck.push(p);
+    else record(p.hash, { claim_hash: p.hash, verdict: "unverified", checked: false, triage: sort });
   }
-  await inBatches(checkGroups(toCheck), AUDIT_CLAIM_BATCH, async (group) => {
-    for (const [hash, verdict] of await checkGroup(group, deps, tally)) record(hash, verdict);
+  await inBatches(toCheck, AUDIT_CLAIM_BATCH, async (p) => {
+    record(p.hash, await checkClaim(p, deps, tally));
   });
   return { claims: out, research: tally };
 }

@@ -3,7 +3,8 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 /**
  * PRDR-306 — how a stub answers AUDIT's check sessions (C-2¹⁸). A triage
  * session sorts the claims it was given, and a `verify_claims` session writes
- * one brief per claim. Shared by every test that drives AUDIT.
+ * a brief for the claim it was given (D-34′). Shared by every test that drives
+ * AUDIT.
  */
 
 export type Json = Record<string, unknown>;
@@ -14,10 +15,9 @@ export const claimsGiven = (inputs: Json): Json[] => (Array.isArray(inputs["clai
 export interface Judged {
   readonly load_bearing?: boolean;
   readonly checkable?: boolean;
-  readonly topic?: string;
 }
 
-/** A triage: every claim load-bearing and checkable, each its own topic, unless `judge` says otherwise. */
+/** A triage: every claim load-bearing and checkable, unless `judge` says otherwise. */
 export function triageOf(inputs: Json, judge: (claim: Json) => Judged = () => ({})): Json {
   return {
     schema_version: SCHEMA_VERSION,
@@ -25,7 +25,6 @@ export function triageOf(inputs: Json, judge: (claim: Json) => Judged = () => ({
       claim_hash: c["claim_hash"],
       load_bearing: true,
       checkable: true,
-      topic: String(c["claim_hash"]),
       why: "a decision in the documents rests on it, and a primary source could settle it",
       ...judge(c),
     })),
