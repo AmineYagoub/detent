@@ -8,6 +8,7 @@ import { openItems } from "../../src/init/decide-items.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { readProgressMark } from "../../src/kernel/ledger.js";
+import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { TriageEntry } from "../../src/schemas/audit.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
@@ -290,3 +291,24 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
     expect(recorded(root, NOTHING)).toMatchObject({ triage: "not_load_bearing" });
   });
 });
+
+/**
+ * PRDR-309 — the triage is told an absence claim is load-bearing and checkable.
+ *
+ * On the A/B copy the triage marked "No Algerian rule requires a private tool
+ * to store its data in Algeria" as nothing resting on it, since "the absence
+ * of a rule is not something a primary source confirms". Arm A's check had
+ * found two rules that bind the project. One source that shows the rule
+ * refutes such a claim, and a rule that exists binds the plan whatever route
+ * the documents took.
+ */
+describe("PRDR-309 the triage is told an absence claim is load-bearing and checkable", () => {
+  it("says so in the triage task, beside what makes a claim checkable", () => {
+    const prompt = (loadPromptSet().prompts as Readonly<Record<string, string>>)["audit"] ?? "";
+    const triage = prompt.split("\n").find((line) => line.startsWith("`triage`")) ?? "";
+    expect(triage).toMatch(/A claim that a rule, limit or obligation does not exist/u);
+    expect(triage).toMatch(/is checkable, since one primary source that shows the rule proves it wrong/u);
+    expect(triage).toMatch(/load-bearing wherever such a rule would bind what the documents plan, even when the documents reach that decision by another route/u);
+  });
+});
+

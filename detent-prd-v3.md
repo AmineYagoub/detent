@@ -3429,6 +3429,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁹ (PRDR-308): the triage's entries are read one by one, and its relaunch is given
   only the claims left unsorted. Until then one refused entry refused them all, and the relaunch
   sorted every claim again.*
+  *Amended by C-2²⁰ (PRDR-309): the triage is told that an absence claim is checkable, and
+  load-bearing wherever the absent rule would bind the plan.*
 
 - **C-2¹⁹ (3.1.1, PRDR-308).** AUDIT reads its triage one entry at a time. C-2¹⁸ held the triage
   artifact to one schema, so an entry whose `claim_hash` was not a sha256 digest refused every
@@ -3441,6 +3443,18 @@ the code does what the rules it amends describe, and each of those rules points 
   validator's words, and what it sorts joins what stood; a claim still unsorted is checked alone,
   and said. What each attempt sorts is kept with the survey (C-2¹⁷) and is a unit of work (X-1⁵).
   The prompt is unchanged, so AUDIT's key does not move.
+
+- **C-2²⁰ (3.1.1, PRDR-309).** AUDIT's triage checks an absence claim. The A/B test the user asked
+  for ran the 145 claims arm A had checked one session apiece through C-2¹⁸'s triage. Of A's 14
+  wrong claims it would have left three unchecked, and one bears on the project: "No Algerian rule
+  requires a private tool to store its data in Algeria", which the triage judged unconfirmable and
+  decided on other grounds. A's check had found two rules that bind the project, Law 18-05 Art. 8
+  on hosting an online shop in Algeria and ARPCE's specifications for cloud hosting. The `triage`
+  task now says that a claim that a rule, limit or obligation does not exist is checkable, since
+  one primary source that shows the rule proves it wrong, and load-bearing wherever such a rule
+  would bind what the documents plan, even when the documents reach that decision by another
+  route. The prompt's hash is in AUDIT's key (C-2¹¹), so a project whose AUDIT completed on the
+  earlier prompt audits again on its next `init`.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 
