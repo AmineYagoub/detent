@@ -192,9 +192,17 @@ describe("PRDR-279: the greenfield stack entry (D-10′) and declared packages (
     expect(parse(withFile("docs/founder-decisions.md", log), false).problems).toEqual([]);
   });
 
-  it("refuses a greenfield stack that declares no gate command for the root package", () => {
+  /*
+   * PRDR-310 (C-2²¹): PRDR-279 refused this "since without one nothing can
+   * bind"; D-10″ binds it from the language's conventional commands, and DECIDE
+   * records only the commands the documents name. Tabachir's names none.
+   */
+  it("accepts a greenfield stack that declares no gate command for the root package, which its language's commands bind (D-10″)", () => {
     const log = DECISION_LOG.replace("| . | test | `pnpm test` |\n| . | lint | `pnpm lint` |\n", "");
-    expect(messages(parse(withFile("docs/founder-decisions.md", log)).problems)).toMatch(/gate command/u);
+    const { pack, problems } = parse(withFile("docs/founder-decisions.md", log));
+    expect(problems).toEqual([]);
+    expect(pack.stack?.gates).toEqual({});
+    expect(pack.packages.map((p) => p.path)).toEqual(["dashboard"]);
   });
 
   it("parses declared packages with each one's gate commands", () => {

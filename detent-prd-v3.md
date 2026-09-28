@@ -1798,6 +1798,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁴ (PRDR-284): a red checker blocks every phase after VALIDATE. A change's
   re-validation also reviews what the last validation left open, and reads a changed decision
   log or facts file as reaching every document that cites an entry of it.*
+  *Amended by C-2²¹ (PRDR-310): the checker refuses a greenfield log that has no stack entry, and
+  not one whose entry names no gate command.*
 
 - **C-3⁗ (3.1.1, PRDR-278).** Questions move to DECIDE, before anything is planned. C-3′ asked the
   one batch at PRESENT, after the whole plan was drafted on assumptions, so a decision counted in
@@ -1964,6 +1966,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-4⁷ (PRDR-292): on a pack PLAN is handed the parse's records and reads no document,
   the planner reads one prompt per job, and no stage is handed `open_questions`.*
   *Amended by C-3⁵ (PRDR-298): `src/init/plan-research.ts` is deleted, with its tests.*
+  *Amended by C-2²¹ (PRDR-310): the checker no longer refuses an entry that names no gate
+  command, so a checked pack reaches the language's commands too.*
 
 - **C-2⁸ (3.1.1, PRDR-278).** SLICE is seeded by code, and a slice is its requirement ids. C-2‴'s
   SLICE re-derived the pack's structure from prose and keyed each slice by the model's own words:
@@ -3455,6 +3459,18 @@ the code does what the rules it amends describe, and each of those rules points 
   would bind what the documents plan, even when the documents reach that decision by another
   route. The prompt's hash is in AUDIT's key (C-2¹¹), so a project whose AUDIT completed on the
   earlier prompt audits again on its next `init`.
+
+- **C-2²¹ (3.1.1, PRDR-310).** The checker does not ask a greenfield stack for a gate command.
+  PRDR-279 built a rule that refused a stack entry naming no command for the root package, "since
+  without one nothing can bind". D-10″ then bound such an entry from its language's conventional
+  commands, and stopped for `test` with AWAIT_SETUP_CONSENT where the language has none. DECIDE's
+  session is told to record only the commands the documents name, so on tabachir's test clone,
+  whose documents name none, the checker refused WRITE's pack for it. The relaunch invented four `npm` rows, WRITE's
+  guard put DECIDE's log back, and VALIDATE's writer, under the same guard, could not clear the
+  finding: every such project stopped at VALIDATE. The checker now refuses a greenfield log that
+  has no stack entry, and asks nothing of the entry's commands; a conforming pack whose entry
+  names none is planned, and its root package is bound from the language. The grammar relaxes
+  within the 3.1.1 line, whose one F-3 event its shapes extend, so no version moves.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

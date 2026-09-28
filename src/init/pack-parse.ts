@@ -126,17 +126,22 @@ function requireDocuments(pack: Pack, problems: Problems): void {
  * D-10′: in greenfield the stack is a decision, and a pack without it cannot
  * bind a gate. Skipped when ## Stack itself was refused: that finding already
  * names what the entry lacks, and a second one would say it is missing.
+ *
+ * C-2²¹ (PRDR-310): an entry need declare no gate command. DECIDE's session
+ * is told to record only the commands the documents name, and an entry that
+ * names no `test` binds its language's conventional commands, or stops for
+ * `test` where the language has none (D-10″): the binder asks, so the checker
+ * does not.
  */
 function requireStack(pack: Pack, problems: Problems): void {
-  const at = { rule: "stack", file: DECISION_LOG_PATH, line: 0, text: "" };
-  if (pack.stack === null) {
-    problems.push({
-      ...at,
-      message: "a greenfield pack records its stack entry under ## Stack (D-10′): the decision that settled it, the language, the toolchain and the scaffold files",
-    });
-  } else if (Object.keys(pack.stack.gates).length === 0) {
-    problems.push({ ...at, message: "a greenfield stack declares a gate command for the root package (`.`) under ## Packages" });
-  }
+  if (pack.stack !== null) return;
+  problems.push({
+    rule: "stack",
+    file: DECISION_LOG_PATH,
+    line: 0,
+    text: "",
+    message: "a greenfield pack records its stack entry under ## Stack (D-10′): the decision that settled it, the language, the toolchain and the scaffold files",
+  });
 }
 
 /* ---------------------------------------------------------------------------

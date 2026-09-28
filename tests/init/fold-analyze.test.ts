@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { writeCheckpoint } from "../../src/fs/checkpoints.js";
 import { stateDir } from "../../src/fs/layout.js";
-import { determineVerification } from "../../src/init/bind.js";
+import { GREENFIELD_COMMANDS, determineVerification } from "../../src/init/bind.js";
 import type { DecideAsk } from "../../src/init/decide.js";
 import { runInit, type InitOptions, type PhaseHandler } from "../../src/init/machine.js";
 import { checkPack } from "../../src/init/pack-check.js";
@@ -272,6 +272,19 @@ describe("PRDR-290: in a new project, no stack entry leaves nothing to bind (D-1
     expect(outcome.items, "the stack, where a stack with no gate command asks for `test`").toEqual(["stack"]);
     expect(outcome.message).toContain("## Stack");
     expect(outcome.message).toContain(DECISION_LOG_PATH);
+  });
+});
+
+describe("PRDR-310: a stack that names no gate command binds its language's (C-2²¹, D-10″)", () => {
+  it("plans a conforming pack whose log declares no command for the root package, and binds TypeScript's conventional commands", async () => {
+    const root = conforming(DECISION_LOG.replace("| . | test | `pnpm test` |\n| . | lint | `pnpm lint` |\n", ""));
+    const { reachedPhase } = await init(root);
+    expect(reachedPhase, "PRESENT asks for approval").toBe("PRESENT");
+    const bindings = outputsOf(root, "DETERMINE_VERIFICATION")["bindings"] as Json[];
+    expect(bindings.map((b) => [b["package"], b["slot"], b["resolved"], b["status"], b["adapter"]])).toEqual([
+      ...Object.entries(GREENFIELD_COMMANDS["typescript"] ?? {}).map(([slot, command]) => [".", slot, command, "provisional", "greenfield:typescript"]),
+      ["dashboard", "test", "pnpm test", "provisional", "declared"],
+    ]);
   });
 });
 
