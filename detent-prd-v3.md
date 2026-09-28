@@ -2860,6 +2860,8 @@ the code does what the rules it amends describe, and each of those rules points 
   kind, and DECIDE and WRITE route on the classification too.*
   *Amended by C-2¹⁴ (PRDR-284): VALIDATE routes on the classification, which it takes again when
   it runs, and a written pack's record may hold the rounds of a validation that stopped.*
+  *Amended by C-2²² (PRDR-312): WRITE repoints every link to an original it archives, so the
+  context it leaves where it is still resolves.*
 
 - **C-2¹⁰ (3.1.1, PRDR-280).** The checker is built, in `src/init/pack-check.ts`: a TypeScript port
   of ksarjs's `check_pack.py`, generalized to C-2⁹'s grammar. This settles what C-2⁷ left to its
@@ -3162,6 +3164,8 @@ the code does what the rules it amends describe, and each of those rules points 
   cannot make green blocks planning.*
   *Amended by D-10″ (PRDR-290): ANALYZE is gone. SLICE and PLAN read the documents, and
   DETERMINE_VERIFICATION, SLICE and PLAN the markers.*
+  *Amended by C-2²² (PRDR-312): the checker the record holds reads the documents after the links
+  to the archived originals are repointed.*
 
 - **C-2¹⁴ (3.1.1, PRDR-284).** VALIDATE is built, in `src/init/validate.ts` and the modules
   beside it, directly after WRITE. This settles what C-2⁶ and C-2⁷ left to VALIDATE's ticket, and
@@ -3484,6 +3488,20 @@ the code does what the rules it amends describe, and each of those rules points 
   has no stack entry, and asks nothing of the entry's commands; a conforming pack whose entry
   names none is planned, and its root package is bound from the language. The grammar relaxes
   within the 3.1.1 line, whose one F-3 event its shapes extend, so no version moves.
+- **C-2²² (3.1.1, PRDR-312).** WRITE repoints the links its archiving breaks. C-2⁹ moves the
+  originals WRITE rewrote into the pack to `archive/` and leaves context where it is. The checker
+  reads context documents for relative links (C-2¹⁰), and VALIDATE's writer may write only the
+  pack's paths, so a README's link to the PRD that WRITE moved was a blocking finding no session
+  could clear. On tabachir's test clone, 80 links in 8 context documents broke. VALIDATE's writer,
+  asked to fix them, fixed none, and after its second attempt code would have undone the round and
+  stopped with AWAIT_INFO. WRITE's own check ran the checker before the move, while the originals
+  still stood, and missed it. Now, once the originals are archived, code repoints every relative
+  link to one, in every document the checker reads, to the original's place under `archive/`. It
+  reads a link as the checker does: fenced blocks and inline code are text, and a link with a
+  scheme is not relative. A relative link stays relative and a link from the root stays one, with
+  its anchor and title kept, and WRITE says how many links it repointed and in which documents.
+  The checker for the record runs afterwards. A link that breaks some other way is still the
+  founder's to fix, and a pack an earlier build wrote is not repointed.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

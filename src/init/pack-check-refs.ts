@@ -174,10 +174,11 @@ export function sectionRefs(ctx: CheckContext): PackFinding[] {
  */
 
 export const LINK = /\]\(\s*<?([^()<>#\s]+)>?(?:#[^()\s]*)?(?:\s+"[^"]*")?\s*\)/u;
-const SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
+/** A link with a scheme (`https:`, `mailto:`) is not relative: no rule resolves it, and WRITE repoints none (C-2²²). */
+export const SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
 
 /** Inline code spans become spaces of the same length: a link shown in backticks is text, and offsets stay true. */
-const withoutCode = (body: string): string => body.replace(/`[^`\n]*`/gu, (span) => " ".repeat(span.length));
+export const withoutCode = (body: string): string => body.replace(/`[^`\n]*`/gu, (span) => " ".repeat(span.length));
 
 /**
  * A relative link reaches a file or directory inside the repository,

@@ -19,6 +19,7 @@ import { refusedAttemptInput, withOneRelaunch } from "./retry.js";
 import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { checkerIssues, citeIssues, holdsRequirement, logIssues, resolveLists, type Cited, type ListPlan } from "./write-checks.js";
+import { repointLinks, type Repointed } from "./write-links.js";
 import { archiveOriginal, changedSince, restoreFile, rollback, snapshot, type Snapshot } from "./write-tree.js";
 
 /**
@@ -181,16 +182,29 @@ function evaluate(a: Attempt): { value: Written | null; issue: string | null } {
 
 const names = (rels: readonly string[]): string => (rels.length === 0 ? "none" : rels.join(", "));
 
+function repointNote(repointed: readonly Repointed[]): string {
+  const links = repointed.reduce((n, r) => n + r.links, 0);
+  const one = links === 1;
+  return (
+    `WRITE: ${String(links)} link${one ? "" : "s"} in ${String(repointed.length)} document${repointed.length === 1 ? "" : "s"} named an original it moved, ` +
+    `and now name${one ? "s" : ""} its place in archive/: ${names(repointed.map((r) => r.file))} (C-2²²)`
+  );
+}
+
 /** The originals archived, the record written, and what the operator is told. */
 function apply(deps: WriteStageDeps, before: Snapshot, written: Written, greenfield: boolean): PhaseOutcome {
   const rewritten = written.plan.rewritten.map((rel) => ({ path: rel, original: archiveOriginal(deps.root, before, rel) }));
   const archived = written.plan.archive.map((rel) => ({ from: rel, to: archiveOriginal(deps.root, before, rel) }));
-  const checker = checkPack(deps.root, packDocuments(deps.root), { greenfield });
+  /* C-2²² (PRDR-312): the move broke every link to what it moved, so the links follow it before the checker reads them. */
+  const documents = packDocuments(deps.root);
+  const repointed = repointLinks(deps.root, documents, new Map(archived.map((m) => [m.from, m.to])));
+  const checker = checkPack(deps.root, documents, { greenfield });
   writeConformanceRecord(deps.root, conformanceRecord(deps.root, { checker, rounds: [], date: deps.today, validated: false }));
   const blocking = checker.findings.filter((f) => f.blocks).length;
   const notes = [
     `WRITE wrote the pack: it archived ${names(archived.map((m) => m.from))}, kept ${names(written.plan.context)} as context, and rewrote ` +
       `${names(rewritten.map((r) => r.path))} in place, keeping each original in archive/. The conformance record says the pack is not validated (C-2¹³)`,
+    ...(repointed.length === 0 ? [] : [repointNote(repointed)]),
     ...written.plan.notes,
     ...written.owing.map((issue) => `WRITE: ${issue}; the pack goes to planning without it (C-2⁶)`),
     ...(checker.green ? [] : [`WRITE: the pack checker is red, with ${String(blocking)} blocking finding${blocking === 1 ? "" : "s"}; the pack goes to planning as it stands (C-2¹³)`]),
@@ -202,6 +216,7 @@ function apply(deps: WriteStageDeps, before: Snapshot, written: Written, greenfi
     ran: true,
     archived,
     rewritten,
+    repointed,
     context: [...written.plan.context],
     added_defaults: [...written.added],
     checker_green: checker.green,
