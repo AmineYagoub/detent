@@ -9,6 +9,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { SessionSpec } from "../../src/sessions/backend.js";
 import { guardToolUse } from "../../src/sessions/guard.js";
 import { MockBackend, okResult, resultFromSdk, type StageFn } from "../../src/sessions/mock.js";
+import { briefsOf, claimsGiven, triageOf } from "./audit-fixture.js";
 import { BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { inputsOf } from "./slicing-fixture.js";
 
@@ -68,20 +69,20 @@ interface Audit {
   readonly marks: (number | null)[];
 }
 
-/** A survey of `claims`, and a brief for every claim but the ones `failing` names, whose sessions fail. */
+/** A survey of `claims`, a triage that checks each alone (C-2¹⁸), and a brief for every claim but the ones `failing` names, whose sessions fail. */
 function audit(root: string, claims: readonly Json[], failing: ReadonlySet<string> = new Set()): Audit {
   const specs: SessionSpec[] = [];
   const marks: (number | null)[] = [];
   const stage: StageFn = (spec) => {
     specs.push(spec);
     const inputs = inputsOf(spec) as Json;
-    if (inputs["task"] === "survey") {
-      writeFileSync(spec.artifactOut, `${JSON.stringify(survey(claims))}\n`);
+    if (inputs["task"] === "survey" || inputs["task"] === "triage") {
+      writeFileSync(spec.artifactOut, `${JSON.stringify(inputs["task"] === "survey" ? survey(claims) : triageOf(inputs))}\n`);
       return okResult({ turns: 3 });
     }
     marks.push(readProgressMark(root).spent);
-    if (failing.has(String(inputs["claim"]))) return CRASH;
-    writeFileSync(spec.artifactOut, `${JSON.stringify(brief(inputs))}\n`);
+    if (claimsGiven(inputs).some((c) => failing.has(String(c["claim"])))) return CRASH;
+    writeFileSync(spec.artifactOut, `${JSON.stringify(briefsOf(inputs, brief))}\n`);
     return okResult({ turns: 3 });
   };
   return { stage, specs, marks };
@@ -115,8 +116,9 @@ describe("PRDR-305 AUDIT keeps its checked survey until it completes (C-2¹⁷)"
     const second = audit(root, REWORDED);
     await initThroughAudit(root, second, notes);
 
-    expect(tasks(second)).toEqual(["verify_claim"]);
-    expect(inputsOf(second.specs[0]!)["claim"]).toBe(PAYOUT.claim);
+    /* PRDR-306: nor a triage, which is kept with the survey (C-2¹⁸). */
+    expect(tasks(second)).toEqual(["verify_claims"]);
+    expect(claimsGiven(inputsOf(second.specs[0]!) as Json).map((c) => c["claim"])).toEqual([PAYOUT.claim]);
     expect(auditClaims(root).map((c) => [c["claim"], c["verdict"], c["checked"]])).toEqual([
       [REFUND.claim, "confirmed", true],
       [PAYOUT.claim, "confirmed", true],
@@ -139,7 +141,7 @@ describe("PRDR-305 AUDIT keeps its checked survey until it completes (C-2¹⁷)"
     const second = audit(root, REWORDED);
     await initThroughAudit(root, second);
 
-    expect(tasks(second)).toEqual(["survey", "verify_claim", "verify_claim"]);
+    expect(tasks(second)).toEqual(["survey", "triage", "verify_claims", "verify_claims"]);
     expect(auditClaims(root).map((c) => c["claim"])).toEqual(REWORDED.map((c) => c.claim));
   });
 

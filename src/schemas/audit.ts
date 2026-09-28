@@ -3,13 +3,15 @@ import { SCHEMA_VERSION, nonEmptyString, sha256Hex } from "./common.js";
 import { EXTERNAL_TIER, requireLocalSearchBeforeWeb } from "./init.js";
 
 /**
- * C-2⁶, C-2¹¹ (PRDR-281) — what AUDIT's two sessions write.
+ * C-2⁶, C-2¹¹ (PRDR-281) — what AUDIT's sessions write.
  *
  * The survey reads the documents, and the code in an existing project, and
  * writes what it found without checking any of it: contradictions, gaps, drift
- * and the external claims. Each claim then gets a session of its own, which
- * writes a brief in C-3a's format with a verdict in place of an answer. Every
- * finding is anchored to a passage, and code checks each one (C-2¹¹).
+ * and the external claims. A triage sorts the claims (C-2¹⁸, PRDR-306), and
+ * each one a decision rests on and a source could settle is checked, up to five
+ * of a topic to a session, in a brief of C-3a's format with a verdict in place
+ * of an answer. Every finding is anchored to a passage, and code checks each
+ * one (C-2¹¹).
  */
 
 /** A quote, verbatim apart from whitespace, from the line it starts on. */
@@ -114,6 +116,43 @@ export function requireEscalationBeforeUnverified(
       `docs and code. Consult the outside world and record a tier ${String(EXTERNAL_TIER)}+ source before concluding that`,
   });
 }
+
+/**
+ * C-2¹⁸ (PRDR-306): one claim as the triage sorted it. `load_bearing` says a
+ * decision in the documents rests on it, `checkable` that a primary source
+ * could settle it, and `topic` names what one source would settle with it.
+ */
+export const triageEntrySchema = z.strictObject({
+  claim_hash: sha256Hex,
+  load_bearing: z.boolean(),
+  checkable: z.boolean(),
+  topic: nonEmptyString,
+  why: nonEmptyString,
+});
+export type TriageEntry = z.infer<typeof triageEntrySchema>;
+
+/** C-2¹⁸: what the triage session writes, one entry per claim it was given. */
+export const claimTriageSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  claims: z.array(triageEntrySchema),
+});
+
+/**
+ * C-2¹⁸: why a claim was kept from a check. A load-bearing claim no source
+ * could settle is `uncheckable`, and DECIDE settles it; one nothing rests on is
+ * `not_load_bearing`, and is recorded only (D-34).
+ */
+export const CLAIM_TRIAGE = ["uncheckable", "not_load_bearing"] as const;
+export type ClaimTriage = (typeof CLAIM_TRIAGE)[number];
+
+/**
+ * C-2¹⁸: what a `verify_claims` session writes. Each brief is read on its own
+ * (`claimBriefSchema`), so one the validator refuses leaves the others standing.
+ */
+export const claimBriefsSchema = z.strictObject({
+  schema_version: z.literal(SCHEMA_VERSION),
+  briefs: z.array(z.unknown()),
+});
 
 /** C-3a's brief format with a verdict in place of an answer, keyed by the claim and its subject (C-2¹¹). */
 export const claimBriefSchema = z

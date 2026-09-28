@@ -6,6 +6,7 @@ import { runInit } from "../../src/init/machine.js";
 import { buildPipeline, type PipelineDeps } from "../../src/init/pipeline.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
+import { briefsOf, triageOf } from "./audit-fixture.js";
 import { BUDGETS, PROMPTS } from "./plan-fixture.js";
 import { inputsOf } from "./slicing-fixture.js";
 
@@ -53,7 +54,8 @@ export const auditFinds =
   (verdict: "confirmed" | "wrong" = "wrong", survey: Json = SURVEY): StageFn =>
   (spec) => {
     const inputs = inputsOf(spec) as Json;
-    writeFileSync(spec.artifactOut, `${JSON.stringify(inputs["task"] === "survey" ? survey : brief(inputs, verdict))}\n`);
+    const out = inputs["task"] === "survey" ? survey : inputs["task"] === "triage" ? triageOf(inputs) : briefsOf(inputs, (c) => brief(c, verdict));
+    writeFileSync(spec.artifactOut, `${JSON.stringify(out)}\n`);
     return okResult({ turns: 3 });
   };
 

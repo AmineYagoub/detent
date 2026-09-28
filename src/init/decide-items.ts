@@ -10,7 +10,8 @@ import type { LogView } from "./decide-log.js";
  * code, or an external claim that is wrong or unverified, all places of one
  * claim being one item since they share one verdict. In greenfield with no
  * stack in the decision log, the stack is an item too (D-10′). A confirmed
- * claim is not open.
+ * claim is not open, and neither is one AUDIT's triage found nothing in the
+ * documents rests on (C-2¹⁸, D-34): it is recorded, and nothing is decided on it.
  *
  * Each item has an id for the session (`C1`, `G1`, `R1`, `K1`, `stack`), which
  * only this run's inputs define, and a content key, which names it across runs:
@@ -91,7 +92,7 @@ export function openItems(audit: Json | undefined, opts: { readonly stackOpen: b
   }
   const claims = new Map<string, Json[]>();
   for (const c of list(audit?.["claims"])) {
-    if (c["verdict"] === "confirmed") continue;
+    if (c["verdict"] === "confirmed" || c["triage"] === "not_load_bearing") continue;
     const places = claims.get(text(c["claim_hash"])) ?? [];
     places.push(c);
     claims.set(text(c["claim_hash"]), places);

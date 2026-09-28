@@ -14,6 +14,7 @@ import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { artifactWriteRule, type SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { writeTree } from "../helpers.js";
+import { briefsOf, claimsGiven, triageOf } from "./audit-fixture.js";
 import { BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { inputsOf } from "./slicing-fixture.js";
 
@@ -67,20 +68,31 @@ interface Audit {
   readonly specs: SessionSpec[];
 }
 
-/** One stub for both tasks; each answer is picked by the attempt it is. */
+/**
+ * One stub for every task; each answer is picked by the attempt it is, a
+ * claim's by its own. The triage checks every claim alone, as a claim was
+ * checked before C-2¹⁸ (PRDR-306), and a check with no brief writes nothing.
+ */
 function audit(answers: {
   readonly survey?: (attempt: number, inputs: Json) => Json | null;
-  readonly verify?: (attempt: number, inputs: Json) => Json | null;
+  readonly verify?: (attempt: number, claim: Json) => Json | null;
 }): Audit {
   const specs: SessionSpec[] = [];
   const attempts = new Map<string, number>();
+  const next = (key: string): number => {
+    const n = attempts.get(key) ?? 0;
+    attempts.set(key, n + 1);
+    return n;
+  };
+  const verify = answers.verify ?? ((_, c) => brief(c, "wrong"));
   const stage: StageFn = (spec) => {
     specs.push(spec);
     const inputs = inputsOf(spec) as Json;
-    const key = inputs["task"] === "survey" ? "survey" : String(inputs["claim_hash"]);
-    const n = attempts.get(key) ?? 0;
-    attempts.set(key, n + 1);
-    const answer = inputs["task"] === "survey" ? (answers.survey ?? (() => survey()))(n, inputs) : (answers.verify ?? ((_, i) => brief(i, "wrong")))(n, inputs);
+    const briefs = (): Json | null => {
+      const written = briefsOf(inputs, (c) => verify(next(String(c["claim_hash"])), c));
+      return (written["briefs"] as Json[]).length === 0 ? null : written;
+    };
+    const answer = inputs["task"] === "survey" ? (answers.survey ?? (() => survey()))(next("survey"), inputs) : inputs["task"] === "triage" ? triageOf(inputs) : briefs();
     if (answer !== null) writeFileSync(spec.artifactOut, `${JSON.stringify(answer)}\n`);
     return okResult({ turns: 3 });
   };
@@ -221,7 +233,7 @@ describe("PRDR-281: every external claim is checked, and carries its source and 
     const root = repo(DOCS);
     const stub = audit({ verify: (n, i) => brief(i, "unverified", n === 0 ? { sources_consulted: [{ tier: 1, ref: "PRD.md" }] } : {}) });
     await initThroughAudit(root, stub);
-    const verifies = stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claim");
+    const verifies = stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claims");
     expect(verifies).toHaveLength(2);
     expect(String((inputsOf(verifies[1] as SessionSpec)["previous_attempt"] as Json | undefined)?.["issue"])).toMatch(/tier 3/u);
   });
@@ -266,14 +278,14 @@ describe("PRDR-281: every external claim is checked, and carries its source and 
     const twice = [CLAIM, { ...CLAIM, passage: elsewhere }];
     const stub = audit({ survey: () => survey({ claims: twice }) });
     await initThroughAudit(root, stub);
-    expect(stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claim")).toHaveLength(1);
+    expect(stub.specs.filter((s) => inputsOf(s)["task"] === "verify_claims")).toHaveLength(1);
     const claims = auditOutputs(root)["claims"] as Json[];
     expect(claims.map((c) => [c["passage"], c["verdict"], c["correction"]])).toEqual([
       [FEE, "wrong", "Stripe keeps the processing fee when a payment is refunded."],
       [elsewhere, "wrong", "Stripe keeps the processing fee when a payment is refunded."],
     ]);
-    /* The second place is answered by the first check, not by the cache the first check wrote. */
-    expect(auditOutputs(root)["research"]).toMatchObject({ sessions: 1, cache_hits: 0 });
+    /* The second place is answered by the first check, not by the cache the first check wrote; the other session is the triage (C-2¹⁸). */
+    expect(auditOutputs(root)["research"]).toMatchObject({ sessions: 2, cache_hits: 0 });
   });
 
   it("checks a cached claim again when the file its verdict cites has gone", async () => {
@@ -282,7 +294,7 @@ describe("PRDR-281: every external claim is checked, and carries its source and 
     rmSync(path.join(root, "node_modules"), { recursive: true });
     const again = audit({});
     await initThroughAudit(root, again);
-    expect(again.specs.map((s) => inputsOf(s)["task"])).toEqual(["survey", "verify_claim"]);
+    expect(again.specs.map((s) => inputsOf(s)["task"])).toEqual(["survey", "triage", "verify_claims"]);
   });
 
   it("commits each brief, keyed by the claim and its subject, and pays nothing for it on a re-run", async () => {
@@ -306,7 +318,7 @@ describe("PRDR-281: AUDIT's sessions (S-1‴, S-5⁵, C-2⁶)", () => {
     const stub = audit({});
     const notes: string[] = [];
     await initThroughAudit(root, stub, notes, { audit: "claude-opus-5-5" });
-    expect(stub.specs).toHaveLength(2);
+    expect(stub.specs).toHaveLength(3);
     for (const spec of stub.specs) {
       expect(spec.role).toBe("audit");
       expect(spec.model).toBe("claude-opus-5-5");
@@ -315,11 +327,13 @@ describe("PRDR-281: AUDIT's sessions (S-1‴, S-5⁵, C-2⁶)", () => {
       expect(JSON.stringify(inputsOf(spec))).not.toMatch(/tool_call_budget|share/u);
     }
     expect(Object.keys(inputsOf(stub.specs[0] as SessionSpec))).toContain("expected_output");
-    expect(Object.keys(inputsOf(stub.specs[1] as SessionSpec))).toEqual(
-      expect.arrayContaining(["expected_output", "expected_output_if_wrong", "expected_output_if_unverified", "hierarchy", "passage", "subject"]),
-    );
-    expect(auditOutputs(root)["research"]).toEqual({ sessions: 1, cache_hits: 0, tool_calls: 3 });
-    expect(notes.join("\n")).toMatch(/3 tool call.*planning_research_tool_calls/su);
+    expect(Object.keys(inputsOf(stub.specs[1] as SessionSpec))).toEqual(expect.arrayContaining(["claims", "documents", "expected_output"]));
+    const check = inputsOf(stub.specs[2] as SessionSpec) as Json;
+    expect(Object.keys(check)).toEqual(expect.arrayContaining(["brief_shapes", "claims", "expected_output", "hierarchy"]));
+    expect(Object.keys(check["brief_shapes"] as Json).sort()).toEqual(["confirmed", "unverified", "wrong"]);
+    expect(Object.keys(claimsGiven(check)[0] ?? {}).sort()).toEqual(["claim", "claim_hash", "passage", "subject"]);
+    expect(auditOutputs(root)["research"]).toEqual({ sessions: 2, cache_hits: 0, tool_calls: 6 });
+    expect(notes.join("\n")).toMatch(/6 tool calls.*planning_research_tool_calls/su);
   });
 
   it("marks progress when it completes, for the no-progress breaker (X-1⁵)", async () => {

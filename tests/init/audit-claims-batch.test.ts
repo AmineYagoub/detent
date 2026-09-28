@@ -8,6 +8,7 @@ import { buildPipeline } from "../../src/init/pipeline.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { SessionBackend } from "../../src/sessions/backend.js";
 import { okResult, resultFromSdk } from "../../src/sessions/mock.js";
+import { briefsOf, claimsGiven, triageOf } from "./audit-fixture.js";
 import { BUDGETS, PROMPTS, repo } from "./plan-fixture.js";
 import { inputsOf } from "./slicing-fixture.js";
 
@@ -19,6 +20,8 @@ import { inputsOf } from "./slicing-fixture.js";
  * lets the held ones end last-first: a batch is seen whole, and ends out of
  * the order it began in. On tabachir's first live `init` the survey found 132
  * claims, and each waited for the one before it, about six minutes apiece.
+ * The triage checks every claim alone (C-2¹⁸, PRDR-306), so a session is a
+ * claim here, as it was when this was written.
  */
 
 type Json = Record<string, unknown>;
@@ -83,21 +86,21 @@ function holding(claims: readonly Json[], failing: ReadonlySet<string> = new Set
     checkVersion: async () => {},
     run: async (spec) => {
       const inputs = inputsOf(spec) as Json;
-      if (inputs["task"] === "survey") {
-        writeFileSync(spec.artifactOut, `${JSON.stringify(survey(claims))}\n`);
+      if (inputs["task"] === "survey" || inputs["task"] === "triage") {
+        writeFileSync(spec.artifactOut, `${JSON.stringify(inputs["task"] === "survey" ? survey(claims) : triageOf(inputs))}\n`);
         return okResult({ turns: 3 });
       }
-      const claim = String(inputs["claim"]);
-      launched.push(claim);
-      given.push(inputs);
+      const group = claimsGiven(inputs);
+      launched.push(...group.map((c) => String(c["claim"])));
+      given.push(...group);
       inFlight += 1;
       max = Math.max(max, inFlight);
       await hold();
       inFlight -= 1;
-      if (failing.has(claim)) {
+      if (group.some((c) => failing.has(String(c["claim"])))) {
         return resultFromSdk({ subtype: "success", is_error: true, result: "the session crashed", total_cost_usd: 0.5, modelUsage: {}, num_turns: 3 });
       }
-      writeFileSync(spec.artifactOut, `${JSON.stringify(brief(inputs))}\n`);
+      writeFileSync(spec.artifactOut, `${JSON.stringify(briefsOf(inputs, brief))}\n`);
       return okResult({ turns: 3 });
     },
   };

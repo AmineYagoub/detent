@@ -5,9 +5,10 @@ import { noteUnitComplete } from "../kernel/ledger.js";
 import { auditSurveySchema } from "../schemas/audit.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { isGreenfield } from "./greenfield.js";
-import { checkClaims, claimBriefSkeletons, type AuditResearch, type CheckedClaim } from "./audit-claims.js";
+import { checkClaims, claimBriefsSkeleton, type AuditResearch, type CheckedClaim } from "./audit-claims.js";
 import { auditedDocuments, auditKey } from "./audit-key.js";
-import { dropKeptSurvey, keepSurvey, readKeptSurvey } from "./audit-survey.js";
+import { dropKeptSurvey, keepSurvey, keepTriage, readKeptSurvey, readKeptTriage } from "./audit-survey.js";
+import { triageSkeleton, type Pending } from "./audit-triage.js";
 import { checkSurvey, type Dropped, type SurveyCheck } from "./audit-passages.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
 import type { PipelineDeps } from "./pipeline.js";
@@ -22,12 +23,15 @@ import { launchInitSession, withInitJournal } from "./session.js";
  * ANALYZE read the documents to plan from them, not to doubt them, so a
  * contradiction became an assumption and an external claim was taken as
  * written, both met again only by the session that built on them. AUDIT reads
- * them first, in two steps under one role and one prompt: a survey that finds
- * contradictions, gaps, drift from the code, and the external claims, and then
- * a session per claim, four at a time (C-2¹⁶), that checks it against a
- * primary source. Code checks every passage and every source the sessions
- * cite (C-2¹¹). The checked survey is kept until the phase completes, so a
- * run stopped during the checks is re-run on the same claims (C-2¹⁷).
+ * them first, under one role and one prompt: a survey that finds
+ * contradictions, gaps, drift from the code, and the external claims; a triage
+ * that sorts the claims by whether a decision rests on each and a source could
+ * settle it (C-2¹⁸); and sessions that check those that are both against a
+ * primary source, up to five of a topic to a session and four sessions at a
+ * time (C-2¹⁶). Code checks every passage and every source the sessions cite
+ * (C-2¹¹). The checked survey and its triage are kept until the phase
+ * completes, so a run stopped during the checks is re-run on the same claims
+ * (C-2¹⁷).
  *
  * It runs on a raw document set only. A conforming pack's checker stands for
  * it (specification decision 6). A changed pack is never audited as a raw
@@ -121,20 +125,32 @@ interface Found {
  */
 export function auditNotes(found: Found, pool: number): string[] {
   const at = (p: { readonly file: string; readonly line: number }): string => `${p.file}:${String(p.line)}`;
+  const confirmed = found.claims.filter((c) => c.verdict === "confirmed");
   const wrong = found.claims.filter((c) => c.verdict === "wrong");
-  const unverified = found.claims.filter((c) => c.verdict === "unverified");
+  /* C-2¹⁸: a claim nothing rests on is recorded, and is not one DECIDE is given. */
+  const recordedOnly = found.claims.filter((c) => c.triage === "not_load_bearing");
+  const uncheckable = found.claims.filter((c) => c.triage === "uncheckable");
+  const unverified = found.claims.filter((c) => c.verdict === "unverified" && c.triage !== "not_load_bearing");
+  const unchecked = (c: CheckedClaim): string => (c.checked ? "" : c.triage === "uncheckable" ? ", which no source could settle" : ", never checked");
   const notes = [
     [
       `AUDIT found ${count(found.contradictions.length, "contradiction")}, ${count(found.gaps.length, "gap")}, ` +
         `${count(found.drift.length, "drift finding")} and ${count(found.claims.length, "external claim")} ` +
-        `(${String(found.claims.length - wrong.length - unverified.length)} confirmed, ${String(wrong.length)} wrong, ` +
-        `${String(unverified.length)} unverified). DECIDE sorts what they leave open before anything plans (C-2¹²).`,
+        `(${String(confirmed.length)} confirmed, ${String(wrong.length)} wrong, ${String(unverified.length)} unverified` +
+        `${recordedOnly.length === 0 ? "" : `, ${String(recordedOnly.length)} not checked`}). DECIDE sorts what they leave open before anything plans (C-2¹²).`,
       ...listed("contradictions", found.contradictions, (c) => `${c.topic}: ${c.passages.map(at).join(" vs ")}`),
       ...listed("drift", found.drift, (d) => `${at(d.passage)}: ${d.finding}`),
       ...listed("wrong", wrong, (c) => `${c.claim} (${at(c.passage)}): ${c.correction ?? ""} [${c.source ?? ""}]`),
-      ...listed("unverified", unverified, (c) => `${c.claim} (${at(c.passage)})${c.checked ? "" : ", never checked"}`),
+      ...listed("unverified", unverified, (c) => `${c.claim} (${at(c.passage)})${unchecked(c)}`),
     ].join("\n"),
   ];
+  if (recordedOnly.length + uncheckable.length > 0) {
+    notes.push(
+      `AUDIT's triage (C-2¹⁸): ${count(found.claims.length - recordedOnly.length - uncheckable.length, "claim")} checked, ` +
+        `${String(uncheckable.length)} that a decision rests on and no source could settle, which DECIDE settles, ` +
+        `and ${String(recordedOnly.length)} that nothing rests on, recorded and not checked`,
+    );
+  }
   if (found.claims.length > 0) {
     const r = found.research;
     notes.push(
@@ -192,22 +208,23 @@ async function surveyAnew(deps: AuditStageDeps, greenfield: boolean): Promise<Su
 export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
   const greenfield = isGreenfield(deps.stackMarkers);
   const { kept, dropped, unread } = keptSurvey(deps) ?? (await surveyAnew(deps, greenfield));
+  const given = (p: Pending): Json => ({ claim: p.claim.claim, claim_hash: p.hash, subject: p.claim.subject, passage: p.claim.passage });
   const checked = await checkClaims(kept.claims, {
     root: deps.root,
     documents: deps.documents,
     ...(deps.note === undefined ? {} : { note: deps.note }),
-    launch: async (claim, hash, out, previous) =>
+    triaged: readKeptTriage(deps.root, deps.key),
+    keepTriage: (entries) => {
+      keepTriage(deps.root, deps.key, entries);
+    },
+    triage: async (claims, out, previous) =>
       await deps.launch(
-        {
-          task: "verify_claim",
-          claim: claim.claim,
-          claim_hash: hash,
-          subject: claim.subject,
-          passage: claim.passage,
-          hierarchy: HIERARCHY,
-          ...claimBriefSkeletons(claim.claim, hash),
-          ...refusedAttemptInput(previous, "claim brief"),
-        },
+        { task: "triage", claims: claims.map(given), documents: [...deps.documents], expected_output: triageSkeleton(), ...refusedAttemptInput(previous, "triage") },
+        out,
+      ),
+    launch: async (claims, out, previous) =>
+      await deps.launch(
+        { task: "verify_claims", claims: claims.map(given), hierarchy: HIERARCHY, ...claimBriefsSkeleton(), ...refusedAttemptInput(previous, "set of briefs") },
         out,
       ),
   });
