@@ -2,9 +2,8 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
-import { claimTriageSchema, type Claim, type ClaimTriage, type TriageEntry } from "../schemas/audit.js";
+import { claimTriageSchema, triageEntrySchema, type Claim, type ClaimTriage, type TriageEntry } from "../schemas/audit.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
-import { withOneRelaunch } from "./retry.js";
 
 /**
  * C-2¹⁸ (PRDR-306) — AUDIT's triage: which claims are worth a check.
@@ -50,6 +49,11 @@ export function triageSkeleton(): Record<string, unknown> {
   };
 }
 
+/**
+ * C-2¹⁹ (PRDR-308): the entries a triage session wrote for `given`, each
+ * taken or refused on its own, as a brief is. Two entries for one claim leave
+ * it with neither, since nothing says which the session meant.
+ */
 function readTriage(file: string, given: ReadonlySet<string>): { entries: Map<string, TriageEntry>; issue: string | null } {
   const entries = new Map<string, TriageEntry>();
   if (!existsSync(file)) return { entries, issue: "the session wrote no artifact" };
@@ -61,12 +65,19 @@ function readTriage(file: string, given: ReadonlySet<string>): { entries: Map<st
   }
   const parsed = parseArtifact(claimTriageSchema, raw);
   if (!parsed.ok) return { entries, issue: parsed.reason === "invalid" ? parsed.issues.join("; ") : parsed.reason };
+  const twice = new Set<string>();
   const issues: string[] = [];
-  for (const entry of parsed.value.claims) {
-    if (!given.has(entry.claim_hash)) issues.push(`${entry.claim_hash} is not a claim you were given`);
-    else if (entries.has(entry.claim_hash)) issues.push(`${entry.claim_hash} is sorted twice`);
-    else entries.set(entry.claim_hash, entry);
-  }
+  parsed.value.claims.forEach((item, i) => {
+    const at = `entry ${String(i + 1)}`;
+    const entry = triageEntrySchema.safeParse(item);
+    if (!entry.success) issues.push(`${at}: ${entry.error.issues.map((x) => `${x.path.join(".") || "<entry>"}: ${x.message}`).join("; ")}`);
+    else if (!given.has(entry.data.claim_hash)) issues.push(`${at}: ${entry.data.claim_hash} is not a claim you were given`);
+    else if (entries.has(entry.data.claim_hash) || twice.has(entry.data.claim_hash)) {
+      twice.add(entry.data.claim_hash);
+      issues.push(`${at}: ${entry.data.claim_hash} is sorted twice, so neither entry stands`);
+    } else entries.set(entry.data.claim_hash, entry.data);
+  });
+  for (const hash of twice) entries.delete(hash);
   const unsorted = [...given].filter((hash) => !entries.has(hash));
   if (unsorted.length > 0) issues.push(`these claims are not sorted: ${unsorted.join(", ")}`);
   return { entries, issue: issues.length === 0 ? null : issues.join("; ") };
@@ -81,29 +92,37 @@ export interface TriageDeps {
   readonly note?: ((text: string) => void) | undefined;
 }
 
+const claims = (n: number): string => `${String(n)} claim${n === 1 ? "" : "s"}`;
+
 /**
- * The triage session's entries for `pending`, strict on the first attempt so
- * the relaunch hears everything, and on the second keeping what stands. A
- * claim it still leaves out is checked alone, and said. What it wrote is kept
- * with the survey, and is a unit of work (X-1⁵), as a brief is.
+ * The triage session's entries for `pending`. What the first attempt sorts
+ * stands, and the claims it left unsorted, and only they, go to one relaunch
+ * with the validator's words (C-2¹⁹, PRDR-308). A claim still unsorted is
+ * checked alone, and said. What each attempt sorts is kept with the survey
+ * and is a unit of work (X-1⁵), as a brief is.
  */
 async function triageSession(pending: readonly Pending[], deps: TriageDeps, counted: (toolCalls: number) => void): Promise<Map<string, TriageEntry>> {
-  const given = new Set(pending.map((p) => p.hash));
   const out = triagePath(deps.root);
-  const attempt = await withOneRelaunch<Map<string, TriageEntry>>({ stage: "AUDIT's triage", note: deps.note }, async (previous) => {
+  const entries = new Map<string, TriageEntry>();
+  let asked = [...pending];
+  let previous: { readonly issue: string } | null = null;
+  for (let attempt = 0; attempt < 2 && asked.length > 0; attempt += 1) {
     rmSync(out, { force: true });
-    counted((await deps.triage(pending, out, previous)).toolCalls);
-    const read = readTriage(out, given);
-    return previous === null && read.issue !== null ? { value: null, issue: read.issue } : { value: read.entries, issue: read.issue };
-  });
-  const entries = attempt.value ?? new Map<string, TriageEntry>();
-  const unsorted = pending.length - entries.size;
-  if (unsorted > 0) {
-    deps.note?.(`AUDIT's triage left ${String(unsorted)} claim${unsorted === 1 ? "" : "s"} unsorted, so ${unsorted === 1 ? "it is" : "they are"} checked alone (C-2¹⁸)`);
+    counted((await deps.triage(asked, out, previous)).toolCalls);
+    const read = readTriage(out, new Set(asked.map((p) => p.hash)));
+    if (read.entries.size > 0) {
+      for (const [hash, entry] of read.entries) entries.set(hash, entry);
+      deps.keepTriage?.(Object.fromEntries(read.entries));
+      noteUnitComplete(deps.root);
+    }
+    asked = asked.filter((p) => !read.entries.has(p.hash));
+    previous = { issue: read.issue ?? "unsorted" };
+    if (attempt === 0 && asked.length > 0) {
+      deps.note?.(`AUDIT's triage sorted all but ${claims(asked.length)} (${previous.issue}) — relaunching once for those alone, with the validator's own words (C-4⁗′)`);
+    }
   }
-  if (entries.size > 0) {
-    deps.keepTriage?.(Object.fromEntries(entries));
-    noteUnitComplete(deps.root);
+  if (asked.length > 0) {
+    deps.note?.(`AUDIT's triage left ${claims(asked.length)} unsorted, so ${asked.length === 1 ? "it is" : "they are"} checked alone (C-2¹⁸)`);
   }
   return entries;
 }

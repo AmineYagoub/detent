@@ -3426,6 +3426,21 @@ the code does what the rules it amends describe, and each of those rules points 
     (C-2¹¹), so a survey kept by an earlier build is surveyed again.
   - **Routing.** Unchanged: the triage and the checks are `audit` sessions, on `claude-opus-5-5` at
     `max` (S-5⁵). AUDIT's research counts the triage's session and calls with the checks'.
+  *Amended by C-2¹⁹ (PRDR-308): the triage's entries are read one by one, and its relaunch is given
+  only the claims left unsorted. Until then one refused entry refused them all, and the relaunch
+  sorted every claim again.*
+
+- **C-2¹⁹ (3.1.1, PRDR-308).** AUDIT reads its triage one entry at a time. C-2¹⁸ held the triage
+  artifact to one schema, so an entry whose `claim_hash` was not a sha256 digest refused every
+  entry, and the relaunch sorted every claim again. On the A/B copy of tabachir's test clone, six of
+  145 entries carried cut hashes (four of eight characters, two short by one or two), and the 139
+  that stood were thrown away with them, after an attempt that cost $8.32. Now each entry is read
+  on its own, as a brief is: an entry the schema refuses, one for a claim the session was not
+  given, and two for one claim, which leave it with neither, are named in the issue, and every
+  other entry stands. The claims left unsorted, and only they, go to one relaunch with the
+  validator's words, and what it sorts joins what stood; a claim still unsorted is checked alone,
+  and said. What each attempt sorts is kept with the survey (C-2¹⁷) and is a unit of work (X-1⁵).
+  The prompt is unchanged, so AUDIT's key does not move.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

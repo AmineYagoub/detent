@@ -131,10 +131,14 @@ export const triageEntrySchema = z.strictObject({
 });
 export type TriageEntry = z.infer<typeof triageEntrySchema>;
 
-/** C-2¹⁸: what the triage session writes, one entry per claim it was given. */
+/**
+ * C-2¹⁸: what the triage session writes, one entry per claim it was given.
+ * Each entry is read on its own (`triageEntrySchema`), so one the validator
+ * refuses leaves the others standing (C-2¹⁹, PRDR-308).
+ */
 export const claimTriageSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
-  claims: z.array(triageEntrySchema),
+  claims: z.array(z.unknown()),
 });
 
 /**

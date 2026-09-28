@@ -237,6 +237,27 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
     expect(readKeptTriage(root, "another key")).toEqual({});
   });
 
+  /** PRDR-308: on the A/B copy six of 145 entries carried cut hashes, and the 139 beside them were thrown away. */
+  it("keeps every entry that stands when one is refused, and asks again for that claim alone (C-2¹⁹)", async () => {
+    const root = repo({ "PRD.md": PRD });
+    const cut = (i: Json): Json => {
+      const sorted = triageOf(i, JUDGED);
+      return { ...sorted, claims: (sorted["claims"] as Json[]).map((e, n) => (n === 1 ? { ...e, claim_hash: String(e["claim_hash"]).slice(0, 8) } : e)) };
+    };
+    const stub = audit([NOTHING, UNCHECKABLE, PAYOUT], { triage: (i, n) => (n === 0 ? cut(i) : triageOf(i, JUDGED)) });
+    const notes: string[] = [];
+
+    await initThroughAudit(root, stub, notes);
+
+    expect(notes.join("\n")).toMatch(/triage sorted all but 1 claim \(entry 2: claim_hash/u);
+    const triages = stub.specs.filter((s) => inputsOf(s)["task"] === "triage");
+    expect(triages.map((s) => claimsGiven(inputsOf(s) as Json).map((c) => c["claim"]))).toEqual([[NOTHING["claim"], UNCHECKABLE["claim"], PAYOUT["claim"]], [UNCHECKABLE["claim"]]]);
+    expect(String((inputsOf(triages[1]!)["previous_attempt"] as Json | undefined)?.["issue"])).toMatch(/entry 2/u);
+    expect(recorded(root, NOTHING)).toMatchObject({ triage: "not_load_bearing" });
+    expect(recorded(root, UNCHECKABLE)).toMatchObject({ triage: "uncheckable" });
+    expect(checked(stub)).toEqual([[PAYOUT["claim"]]]);
+  });
+
   it("checks every claim alone when the triage cannot be read twice, and says so", async () => {
     const root = repo({ "PRD.md": PRD });
     const notes: string[] = [];
