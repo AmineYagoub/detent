@@ -139,6 +139,8 @@ export async function reviewArea(
     documents: [...task.documents],
     heuristic: task.heuristic.map((f) => ({ file: f.file, line: f.line, text: f.text, report: f.message })),
     ...(verify ? { previous: task.previous, diff: task.diff } : {}),
+    /* PRDR-316: what its places are checked against, so it can tell a pack document from context. */
+    pack: [...pack],
     simulation: simulationInput(scratch),
     precedence: [...PACK_PRECEDENCE],
     expected_output: reviewSkeleton(),

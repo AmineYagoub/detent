@@ -3302,6 +3302,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2²⁵ (PRDR-315): a place whose quote starts on one other line of its document stands
   on that line, and the finding is kept with it; only a quote found nowhere, or on more than one
   other line, is refused.*
+  *Amended by C-2²⁶ (PRDR-316): each reviewer is given `pack`, the documents a finding may quote,
+  and told that any other document is context, read and never quoted.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
 
@@ -3584,6 +3586,18 @@ the code does what the rules it amends describe, and each of those rules points 
   A passage is only ever looked for in its own document, and one VALIDATE's reviewer places outside
   the pack is still refused. The operator is told once per artifact which places moved,
   `file:from → to`. A kept survey's shape is unchanged: it holds the corrected lines.
+- **C-2²⁶ (3.1.1, PRDR-316).** VALIDATE's reviewer is told which documents it may quote. C-2¹⁴'s
+  check keeps a finding only when every place it quotes is in one of the pack's documents, but
+  the `spec_review` prompt never said so, and the reviewer was not given the list. Pack documents
+  link to the README and the contributing guides WRITE keeps as context (C-2⁹), and the prompt
+  says to read any document a passage leads to: on tabachir's test run a review of the area
+  about the repository's files quoted 13 passages in 8 contributing guides, and was relaunched
+  whole. Now each reviewer is given `pack`, the pack's documents its places are checked against,
+  and the prompt says a finding quotes only those. Any other document is context, read where a
+  passage leads and never reviewed or quoted. Where the pack disagrees with one and the pack is
+  what should change, the finding quotes the pack's passage and names the context document in
+  `why`. The new prompt moves every kept review's key (C-2²³), so a stopped round on an earlier
+  prompt is reviewed again.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

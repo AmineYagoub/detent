@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DECISION_LOG_PATH, PACK_PATHS, PACK_PRECEDENCE } from "../../src/schemas/pack.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import type { MockBackend } from "../../src/sessions/mock.js";
+import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { repo } from "./plan-fixture.js";
 import type { Json } from "./decide-fixture.js";
 import { LENDING, PACK, RAW, WROTE, read, write } from "./write-fixture.js";
@@ -239,5 +240,27 @@ describe("PRDR-284: VALIDATE's sessions and what they may write (S-1‴, S-5⁵)
     const fixer = seen.backend?.calls.filter((c) => c.role === "spec_write").at(-1)?.spec;
     expect(fixer?.allowedTools).toEqual(expect.arrayContaining(["Edit", "Write"]));
     expect(fixer?.policy?.surface).toEqual([".detent/state/fix-artifact.json", ...PACK_PATHS]);
+  });
+});
+
+/**
+ * PRDR-316 — the reviewer is told which documents it may quote. Code refuses a
+ * place outside the pack's documents (C-2¹⁴), and on tabachir's test run a
+ * review about the repository's files quoted 13 passages in 8 contributing
+ * guides and was relaunched whole: it was never told the rule, nor the list.
+ */
+describe("PRDR-316: the reviewer is told which documents it may quote (C-2¹⁴)", () => {
+  it("gives each reviewer `pack`, the documents its places are checked against, and no context document among them", async () => {
+    const root = repo(RAW);
+    const r = clean();
+    await initThroughValidate(root, { reviewers: r });
+    for (const inputs of r.inputs) expect(inputs["pack"]).toEqual(["docs/founder-decisions.md", "docs/prd/01-lending.md", "docs/prd/index.md", "docs/research/verified-facts.md"]);
+  });
+
+  it("tells the reviewer to quote only `pack`, and what to do with a context document", () => {
+    const prompt = (loadPromptSet().prompts as Readonly<Record<string, string>>)["spec_review"] ?? "";
+    expect(prompt).toMatch(/A finding quotes only documents in `pack`: code refuses a place in any other/u);
+    expect(prompt).toMatch(/is context: read it where a passage leads you, but it is not reviewed, and never quoted/u);
+    expect(prompt).toMatch(/quote the pack's passage, and name the context document in `why`/u);
   });
 });
