@@ -175,13 +175,14 @@ describe("PRDR-284: what the writer leaves open (C-2¹⁴)", () => {
 });
 
 describe("PRDR-284: a reviewer's finding stands where it says (C-2¹⁴)", () => {
-  it("relaunches a review whose quote is not at its line, and keeps the finding the second attempt places", async () => {
+  it("relaunches a review whose quote the pack does not hold, and keeps the finding the second attempt places", async () => {
     const root = repo(RAW);
+    const reworded = "A late return MUST block new loans until it is back";
     const r = reviewers((call, inputs) =>
-      review(inputs, inputs["area"] !== "Lending" || inputs["round"] !== 1 ? [] : [finding(call === 1 ? { places: [{ ...LATE_RULE, line: 7 }] } : {})]),
+      review(inputs, inputs["area"] !== "Lending" || inputs["round"] !== 1 ? [] : [finding(call === 1 ? { places: [{ ...LATE_RULE, quote: reworded }] } : {})]),
     );
     await initThroughValidate(root, { reviewers: r, writer: appliesAll() });
-    expect((r.inputs[2]?.["previous_attempt"] as Json)["issue"]).toBe(`${LENDING_PRD}:7 does not hold "${LATE_RULE.quote}", whitespace aside`);
+    expect((r.inputs[2]?.["previous_attempt"] as Json)["issue"]).toBe(`${LENDING_PRD}:6 does not hold "${reworded}", whitespace aside`);
     expect(record(root).rounds[0]?.counts.major).toBe(1);
   });
 

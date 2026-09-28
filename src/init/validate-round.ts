@@ -7,6 +7,7 @@ import { DECISION_LOG_PATH, PACK_PATHS, PACK_PRECEDENCE, type OPEN_REASONS, type
 import { fixArtifactSchema, reviewArtifactSchema, type FindingPlace, type FixArtifact, type ReviewFinding } from "../schemas/validate.js";
 import type { ScratchGrant } from "../sessions/sandbox.js";
 import { decisionLogFile, nextId, readDecisionLog, type LogView } from "./decide-log.js";
+import { movedNote } from "./audit-passages.js";
 import { checkPack } from "./pack-check.js";
 import { packDocuments } from "./pack.js";
 import { refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
@@ -150,6 +151,7 @@ export async function reviewArea(
     if (read.value === null) return { value: null, issue: read.issue };
     const checked = checkReview(deps.root, read.value, { pack, documents: task.documents, previous: (task.previous ?? []).map((p) => p.id) });
     if (previous === null && checked.issues.length > 0) return { value: null, issue: checked.issues.join("; ") };
+    if (checked.moved.length > 0) deps.note?.(movedNote(stage, checked.moved));
     for (const d of checked.dropped) deps.note?.(`${stage}: a finding at ${d} stands on nothing, so it is dropped (C-2¹⁴)`);
     if (checked.unread.length > 0) deps.note?.(`${stage}: the reviewer did not read ${checked.unread.join(", ")}, so this round did not review ${checked.unread.length === 1 ? "it" : "them"} (C-2¹⁴)`);
     return { value: [...checked.kept], issue: null };

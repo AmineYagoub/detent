@@ -105,7 +105,7 @@ describe("PRDR-281: a survey is checked against the documents it was given", () 
       drift: [{ passage: FREE, code_checked: ["src/borrow.js", "src"], finding: "f" }],
     });
     const check = checkSurvey(root, written, { documents: ["PRD.md"], greenfield: false });
-    expect(check).toEqual({ issues: [], kept: written, dropped: [], unread: [] });
+    expect(check).toEqual({ issues: [], kept: written, dropped: [], unread: [], moved: [] });
   });
 
   it("names the documents it did not read", () => {

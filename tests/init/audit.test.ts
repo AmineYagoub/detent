@@ -180,11 +180,11 @@ describe("PRDR-281: AUDIT reads the documents before anything plans from them", 
 describe("PRDR-281: a quoted passage must be at its file:line", () => {
   it("relaunches a survey whose passage is not there, naming it, and keeps the corrected one", async () => {
     const root = repo(DOCS);
-    const moved = { ...PAID, line: 2 };
-    const stub = audit({ survey: (n) => survey(n === 0 ? { contradictions: [{ topic: "t", passages: [FREE, moved], why: "w" }] } : {}) });
+    const reworded = { ...PAID, quote: "Borrowing costs two dollars a day." };
+    const stub = audit({ survey: (n) => survey(n === 0 ? { contradictions: [{ topic: "t", passages: [FREE, reworded], why: "w" }] } : {}) });
     await initThroughAudit(root, stub);
     const second = inputsOf(stub.specs[1] as SessionSpec);
-    expect(String((second["previous_attempt"] as Json | undefined)?.["issue"])).toContain("docs/roadmap.md:2");
+    expect(String((second["previous_attempt"] as Json | undefined)?.["issue"])).toContain("docs/roadmap.md:4");
     expect((auditOutputs(root)["contradictions"] as Json[])[0]?.["passages"]).toEqual([FREE, PAID]);
     expect(auditOutputs(root)["dropped"]).toEqual([]);
   });
@@ -199,6 +199,17 @@ describe("PRDR-281: a quoted passage must be at its file:line", () => {
     expect(out["contradictions"]).toEqual([]);
     expect(out["dropped"]).toEqual([expect.objectContaining({ kind: "contradiction", passage: "PRD.md:3" })]);
     expect(notes.join("\n")).toMatch(/dropped 1 finding/u);
+  });
+
+  it("PRDR-315: keeps a claim one line off at the line that holds its quote, relaunches no survey, and says where it moved (C-2²⁵)", async () => {
+    const root = repo(DOCS);
+    const notes: string[] = [];
+    const stub = audit({ survey: () => survey({ claims: [{ ...CLAIM, passage: { ...FEE, line: 4 } }] }) });
+    await initThroughAudit(root, stub, notes);
+    expect(stub.specs.filter((s) => inputsOf(s)["task"] === "survey"), "one survey, not relaunched").toHaveLength(1);
+    expect((auditOutputs(root)["claims"] as Json[])[0]?.["passage"]).toEqual(FEE);
+    expect(auditOutputs(root)["dropped"]).toEqual([]);
+    expect(notes.join("\n")).toContain("AUDIT's survey: 1 quote was not on the line it named, and stands on the one line that holds it: PRD.md:4 → 5 (C-2²⁵)");
   });
 
   it("finds a quote across whitespace and line breaks, from the line it starts on", async () => {

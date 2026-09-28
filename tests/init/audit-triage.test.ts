@@ -230,7 +230,7 @@ describe("PRDR-306 AUDIT triages its claims before it checks any (C-2¹⁸, D-34
     keepTriage(root, "k", { ["a".repeat(64)]: entry("a".repeat(64)) });
     expect(readKeptTriage(root, "k")).toEqual({});
 
-    keepSurvey(root, "k", { issues: [], kept: { schema_version: SCHEMA_VERSION, documents_read: [], contradictions: [], gaps: [], drift: [], claims: [] }, dropped: [], unread: [] });
+    keepSurvey(root, "k", { issues: [], kept: { schema_version: SCHEMA_VERSION, documents_read: [], contradictions: [], gaps: [], drift: [], claims: [] }, dropped: [], unread: [], moved: [] });
     keepTriage(root, "k", { ["a".repeat(64)]: entry("a".repeat(64)) });
     keepTriage(root, "k", { ["b".repeat(64)]: entry("b".repeat(64)) });
 

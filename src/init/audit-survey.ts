@@ -58,7 +58,7 @@ const writeKept = (root: string, kept: Kept): void => {
 /** The survey kept under `key`, or null. */
 export function readKeptSurvey(root: string, key: string): SurveyCheck | null {
   const kept = readKept(root, key);
-  return kept === null ? null : { issues: [], kept: kept.kept, dropped: kept.dropped, unread: kept.unread };
+  return kept === null ? null : { issues: [], kept: kept.kept, dropped: kept.dropped, unread: kept.unread, moved: [] };
 }
 
 /** A survey kept anew keeps no triage: its claims are sorted afresh. */

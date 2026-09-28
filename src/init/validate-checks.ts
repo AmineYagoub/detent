@@ -1,6 +1,6 @@
 import type { ReviewArtifact, ReviewFinding, FixArtifact } from "../schemas/validate.js";
 import type { SEVERITIES } from "../schemas/pack.js";
-import { passageAt } from "./audit-passages.js";
+import { lineOf, moveOf } from "./audit-passages.js";
 
 /**
  * C-2¹⁴ (PRDR-284) — what code checks of VALIDATE's sessions: that each
@@ -30,6 +30,8 @@ export interface ReviewCheck {
   readonly dropped: readonly string[];
   /** The documents the reviewer was given to review and does not list as read. */
   readonly unread: readonly string[];
+  /** Each place of a kept finding that stands on another line than it named, as `file:from → to` (C-2²⁵). */
+  readonly moved: readonly string[];
 }
 
 const where = (p: { readonly file: string; readonly line: number }): string => `${p.file}:${String(p.line)}`;
@@ -38,7 +40,8 @@ const where = (p: { readonly file: string; readonly line: number }): string => `
  * Check a review against what its reviewer was given: every place in one of
  * the pack's documents, its quote at its line, whitespace aside; every
  * document it was asked to review read; and, in a verification, `previous`
- * naming one of the findings it was given.
+ * naming one of the findings it was given. A quote on one other line of its
+ * document stands there, the finding kept with that line (C-2²⁵).
  */
 export function checkReview(
   root: string,
@@ -47,20 +50,33 @@ export function checkReview(
 ): ReviewCheck {
   const issues: string[] = [];
   const dropped: string[] = [];
+  const moved: string[] = [];
   const unread = given.documents.filter((d) => !review.documents_read.includes(d));
   if (unread.length > 0) issues.push(`the review did not read every document it was given: ${unread.join(", ")}`);
-  const kept = review.findings.filter((f) => {
-    const wrong = f.places.flatMap((p) => {
-      if (!given.pack.includes(p.file)) return [`${where(p)} is not in one of the pack's documents`];
-      return passageAt(root, p) ? [] : [`${where(p)} does not hold ${JSON.stringify(p.quote)}, whitespace aside`];
+  const kept: ReviewFinding[] = [];
+  for (const f of review.findings) {
+    const wrong: string[] = [];
+    const shifts: string[] = [];
+    const places = f.places.map((p) => {
+      if (!given.pack.includes(p.file)) {
+        wrong.push(`${where(p)} is not in one of the pack's documents`);
+        return p;
+      }
+      const line = lineOf(root, p);
+      if (line === null) wrong.push(`${where(p)} does not hold ${JSON.stringify(p.quote)}, whitespace aside`);
+      else if (line !== p.line) shifts.push(moveOf(p, line));
+      return line === null ? p : { ...p, line };
     });
     if (f.previous !== null && !given.previous.includes(f.previous)) wrong.push(`\`previous\` names ${f.previous}, which is not a finding you were given`);
-    if (wrong.length === 0) return true;
+    if (wrong.length === 0) {
+      kept.push({ ...f, places });
+      moved.push(...shifts);
+      continue;
+    }
     issues.push(...wrong);
     dropped.push(`${f.places.map(where).join(", ")}: ${wrong.join("; ")}`);
-    return false;
-  });
-  return { issues, kept, dropped, unread };
+  }
+  return { issues, kept, dropped, unread, moved };
 }
 
 const RANK: Readonly<Record<Severity, number>> = { blocker: 0, major: 1, minor: 2 };

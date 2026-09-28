@@ -2994,6 +2994,8 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by C-2¹⁸ (PRDR-306): a triage decides which claims are checked, and a check session
   takes up to five claims of one topic. A load-bearing claim no source could settle goes to DECIDE
   unchecked, and a claim nothing rests on is recorded and not checked.*
+  *Amended by C-2²⁵ (PRDR-315): a passage whose quote starts on one other line of its document
+  stands on that line, and is not refused; "at its `file:line`" is the line code finds.*
 
 - **C-2¹² (3.1.1, PRDR-282).** DECIDE is built, in `src/init/decide.ts` and the modules beside it,
   directly after AUDIT. This settles what C-2⁶ and C-3⁗ left to DECIDE's ticket, and amends C-8's
@@ -3297,6 +3299,9 @@ the code does what the rules it amends describe, and each of those rules points 
   one session after another, and a batch whose fixes fail the checks is undone alone; "one
   `spec_write` session applies the round's findings" and "undoes every fix of the round" held until
   then. The checker's writer before any round is still one session.*
+  *Amended by C-2²⁵ (PRDR-315): a place whose quote starts on one other line of its document stands
+  on that line, and the finding is kept with it; only a quote found nowhere, or on more than one
+  other line, is refused.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
 
@@ -3564,6 +3569,21 @@ the code does what the rules it amends describe, and each of those rules points 
   writer takes. The checker's writer before any round is still one session over all the checker's
   findings: a batch of them would read the checker red on the findings the others hold. The size
   is a constant until a run-time outcome asks for another (D-33).
+- **C-2²⁵ (3.1.1, PRDR-315).** A quote one line from where it says stands on the line that holds
+  it. Code checks each passage an AUDIT survey or a VALIDATE reviewer quotes at the line it names,
+  and C-2¹¹ and C-2¹⁴ refused the artifact for any passage not there, dropping it on the second
+  attempt. On tabachir's test run two of VALIDATE's first four reviews were refused for a quote
+  that was word for word in its document one line away, `:11` for a requirement on line 10 and
+  `:57` for a decision on line 58, and each relaunch was a whole review again. The check exists to
+  catch a sentence no document holds; a quote on exactly one line of its document is not
+  invented, and code can find its line. Now a passage whose quote does not start on the line it
+  names, and starts, whitespace aside, on exactly one other line of its document, stands on that
+  line: the finding, claim, gap, contradiction or drift finding is kept with the line corrected, and
+  the writer, the record, DECIDE and the next round see the corrected line. A quote found nowhere,
+  or on more than one other line, is refused as before, since which one was meant cannot be told.
+  A passage is only ever looked for in its own document, and one VALIDATE's reviewer places outside
+  the pack is still refused. The operator is told once per artifact which places moved,
+  `file:from → to`. A kept survey's shape is unchanged: it holds the corrected lines.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

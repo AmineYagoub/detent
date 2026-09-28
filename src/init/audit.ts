@@ -9,7 +9,7 @@ import { checkClaims, claimBriefsSkeleton, type AuditResearch, type CheckedClaim
 import { auditedDocuments, auditKey } from "./audit-key.js";
 import { dropKeptSurvey, keepSurvey, keepTriage, readKeptSurvey, readKeptTriage } from "./audit-survey.js";
 import { triageSkeleton, type Pending } from "./audit-triage.js";
-import { checkSurvey, type Dropped, type SurveyCheck } from "./audit-passages.js";
+import { checkSurvey, movedNote, type Dropped, type SurveyCheck } from "./audit-passages.js";
 import type { PhaseHandler, PhaseOutcome } from "./machine.js";
 import type { PipelineDeps } from "./pipeline.js";
 import { refusedAttemptInput, withOneRelaunch } from "./retry.js";
@@ -199,6 +199,7 @@ async function surveyAnew(deps: AuditStageDeps, greenfield: boolean): Promise<Su
     return readSurvey(artifactOut, deps.root, { documents: deps.documents, greenfield, strict: previous === null });
   });
   if (survey.value === null) throw new Error(`AUDIT's survey produced no usable artifact: ${survey.issue ?? "unusable"}`);
+  if (survey.value.moved.length > 0) deps.note?.(movedNote("AUDIT's survey", survey.value.moved));
   /* C-2¹⁷ (PRDR-305): kept until the phase completes, and a unit of work, as a brief is (X-1⁵). */
   keepSurvey(deps.root, deps.key, survey.value);
   noteUnitComplete(deps.root);

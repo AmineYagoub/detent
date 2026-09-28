@@ -41,18 +41,18 @@ describe("PRDR-284: a finding stands on what the pack says (C-2¹⁴)", () => {
     expect(checked.dropped).toEqual([]);
   });
 
-  it("refuses a quote that is not at its line, and a place outside the pack's documents, and drops the finding", () => {
+  it("refuses a quote the pack does not hold, and a place outside the pack's documents, and drops the finding", () => {
     const root = packRepo();
-    const moved = found({ places: [{ ...STORE, line: 6 }] });
+    const reworded = found({ places: [{ ...STORE, line: 6, quote: "The catalog MUST keep every product with a title and a price" }] });
     const readme = found({ places: [{ file: "README.md", line: 3, quote: "A small shop." }] });
-    const checked = checkReview(root, review([moved, readme, found()]), given);
+    const checked = checkReview(root, review([reworded, readme, found()]), given);
     expect(checked.kept).toEqual([found()]);
     expect(checked.issues).toEqual([
-      `${CATALOG}:6 does not hold "The catalog MUST store every product with a title and a price in minor units", whitespace aside`,
+      `${CATALOG}:6 does not hold "The catalog MUST keep every product with a title and a price", whitespace aside`,
       "README.md:3 is not in one of the pack's documents",
     ]);
     expect(checked.dropped).toEqual([
-      `${CATALOG}:6: ${CATALOG}:6 does not hold "The catalog MUST store every product with a title and a price in minor units", whitespace aside`,
+      `${CATALOG}:6: ${CATALOG}:6 does not hold "The catalog MUST keep every product with a title and a price", whitespace aside`,
       "README.md:3: README.md:3 is not in one of the pack's documents",
     ]);
   });
