@@ -1,3 +1,5 @@
+import type { CacheLifetime } from "../schemas/cache-lifetime.js";
+
 /**
  * T-052 — the allowlisted session environment (SEC-4).
  *
@@ -79,27 +81,39 @@ const BACKEND_VARS = [
 
 export const SESSION_ENV_ALLOWLIST: readonly string[] = [...RUNTIME_VARS, ...NETWORK_VARS, ...GIT_VARS, ...BACKEND_VARS];
 
-/** S-6: the value Detent sets on the TTL carrier when nothing else did. */
+/** S-6: the value Detent sets on a one-hour session's TTL carrier when nothing else did (S-6″: a five-minute session needs none). */
 export const EXTENDED_CACHE_HEADER = "anthropic-beta: extended-cache-ttl-2025-04-11";
+
+/** S-6″ (PRDR-320): the runtime's own switch for the main conversation's cache lifetime, `5m` or `1h`. */
+export const CACHE_TTL_VAR = "CLAUDE_CODE_PROMPT_CACHE_TTL";
 
 /**
  * Build a session's environment: allowlisted inheritance plus Detent's own
  * additions. Everything else — cloud credentials, tokens, deploy keys — never
  * crosses into a session.
+ *
+ * S-6″ (PRDR-320): the prompt cache's lifetime is set here, per session, as
+ * `CLAUDE_CODE_PROMPT_CACHE_TTL`, which the runtime reads before its own rule
+ * (one hour on a subscription, five minutes on an API key), so a kind of
+ * session gets the lifetime its measured gaps call for on either account. An
+ * operator's own value, and the runtime's other cache switches, are not on the
+ * allowlist and never reach a session: the per-kind table is a measured choice.
  */
 export function buildSessionEnv(
   parent: NodeJS.ProcessEnv = process.env,
   detentSet: Readonly<Record<string, string>> = {},
+  cacheTtl: CacheLifetime = "1h",
 ): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of SESSION_ENV_ALLOWLIST) {
     const value = parent[key];
     if (value !== undefined) env[key] = value;
   }
-  /** S-6: request the extended cache lifetime unless the operator already did. */
-  if (env["ANTHROPIC_CUSTOM_HEADERS"] === undefined) {
+  /** S-6: a one-hour session requests the extended lifetime unless the operator already set headers; a five-minute one needs no header. */
+  if (cacheTtl === "1h" && env["ANTHROPIC_CUSTOM_HEADERS"] === undefined) {
     env["ANTHROPIC_CUSTOM_HEADERS"] = EXTENDED_CACHE_HEADER;
   }
+  env[CACHE_TTL_VAR] = cacheTtl;
   for (const [key, value] of Object.entries(detentSet)) env[key] = value;
   return env;
 }

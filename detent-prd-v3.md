@@ -3723,6 +3723,18 @@ they need a real second round first.
   gap passes four minutes is not given five, which keeps the triage at one hour though five minutes
   measured 2.6% cheaper on it. `run`'s roles and planning keep one hour until their gaps are
   measured.
+  *Built by PRDR-320. The table is `FIVE_MINUTE_KINDS` in `src/schemas/cache-lifetime.ts`: `audit`'s
+  `verify_claims` and `spec_write`'s `write` and `fix`, keyed by the role and the `task` its inputs
+  name. Planning's sessions name a `stage`, so they get one hour, as does every `run` role. A test
+  reads init's source and fails if a five-minute kind names a task init does not send, which is what
+  a rename would leave behind. The session's result says the lifetime it ran at and its writes at
+  each, summed once per response from the usage the stream carries, a broken stream's included. The
+  ledger row keeps them as `cache_ttl`, `cache_creation_5m_input_tokens` and
+  `cache_creation_1h_input_tokens`. `scripts/cache-gaps.ts` measures a project's transcripts again
+  and gives five minutes only under 240 seconds at the 99th percentile, and only where five is
+  cheaper. On tabachir's 231 transcripts it gives the table above. Live on the new build, a claim
+  check wrote its 5,698 cache tokens at five minutes and a review its 5,385 at one hour, and their
+  ledger rows say so.*
 
 - **X-8″ (3.1.1, PRDR-318).** A usage limit costs no finished work. X-8′'s headless driver backs off
   1, 5 and 15 minutes and exits, whatever reset the limit names, while `init` waits for the stated

@@ -3,6 +3,7 @@ import type { Options, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec } from "./backend.js";
 import { guardToolUse, stopGate, type GuardPolicy } from "./guard.js";
 import { buildSessionEnv } from "./env.js";
+import { StreamUsage } from "./stream-usage.js";
 import { SCRATCH_SERVER } from "./sandbox.js";
 import { scratchServer } from "./scratch-server.js";
 
@@ -178,8 +179,11 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
      * `git commit -m "$AWS_SECRET_ACCESS_KEY"` matches the prefix allowlist.
      * It also carries S-6's extended cache header, which had likewise never
      * been requested by any run.
+     *
+     * S-6″ (PRDR-320): and the cache lifetime of the session's kind, one hour
+     * where the spec names none.
      */
-    env: buildSessionEnv(),
+    env: buildSessionEnv(process.env, {}, spec.cacheTtl ?? "1h"),
     permissionMode: spec.permissionMode === "plan" ? "plan" : "default",
     allowedTools: [...spec.allowedTools],
     /**
@@ -445,6 +449,8 @@ export class ClaudeCodeBackend implements SessionBackend {
     let mcpFailures: { name: string; status: string }[] | null = null;
     /** PRDR-237: the level the turns actually ran at; null means no tool call reported one. */
     let settledEffort: string | null = null;
+    /** S-6″ (PRDR-320): the cache writes each response carried, by lifetime. */
+    const usage = new StreamUsage();
     try {
       const stream = query({
         prompt: fullPrompt(spec),
@@ -472,6 +478,7 @@ export class ClaudeCodeBackend implements SessionBackend {
         }
         if ((message as { type?: string }).type === "assistant") {
           observedTurns += 1;
+          usage.add(message);
         }
         if ((message as { type?: string }).type === "result") {
           result = parseResultMessage(message);
@@ -496,18 +503,22 @@ export class ClaudeCodeBackend implements SessionBackend {
        * here is a crash — transport death, or the doctor probe's own
        * one-turn bound — never a budget event.
        */
-      return parseResultMessage({
-        type: "result",
-        subtype: "error_during_execution",
-        is_error: true,
-        num_turns: observedTurns,
-        total_cost_usd: 0,
-        usage: { input_tokens: 0, output_tokens: 0 },
-        result: (err as Error).message,
-      });
+      return {
+        ...parseResultMessage({
+          type: "result",
+          subtype: "error_during_execution",
+          is_error: true,
+          num_turns: observedTurns,
+          total_cost_usd: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          result: (err as Error).message,
+        }),
+        cacheTtl: spec.cacheTtl ?? "1h",
+        cacheWrites: usage.cacheWrites(),
+      };
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
-    const out = result ?? parseResultMessage({});
+    const out = { ...(result ?? parseResultMessage({})), cacheTtl: spec.cacheTtl ?? "1h", cacheWrites: usage.cacheWrites() };
     const observed = settledEffort === null ? out : { ...out, effort: settledEffort };
     return mcpFailures === null ? observed : { ...observed, mcpFailures };
   }

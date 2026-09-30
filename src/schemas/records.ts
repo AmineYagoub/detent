@@ -4,6 +4,7 @@ import { SCHEMA_VERSION, isoTimestamp, nonEmptyString, sha256Hex } from "./commo
 import { countersSchema, reviewTags } from "./ticket.js";
 import { GATE_SLOTS } from "./gates.js";
 import { requireLocalSearchBeforeWeb } from "./init.js";
+import { CACHE_LIFETIMES } from "./cache-lifetime.js";
 
 /** A-3 Hypothesis (X-4). A root cause is inadmissible as prose. */
 export const hypothesisSchema = z.strictObject({
@@ -183,6 +184,15 @@ export const ledgerRowSchema = z.strictObject({
    * before the field.
    */
   phase: nonEmptyString.optional(),
+  /**
+   * S-6″ (PRDR-320): the cache lifetime the session ran with, and what it
+   * wrote at each, summed from its responses' usage. Optional, never
+   * defaulted: a row written before the fields did not record them, and a zero
+   * would say it wrote nothing at either lifetime.
+   */
+  cache_ttl: z.enum(CACHE_LIFETIMES).optional(),
+  cache_creation_5m_input_tokens: z.number().int().nonnegative().optional(),
+  cache_creation_1h_input_tokens: z.number().int().nonnegative().optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 

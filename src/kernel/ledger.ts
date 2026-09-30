@@ -196,6 +196,16 @@ export function noProgressReport(evidence: BreakerEvidence): string {
   );
 }
 
+/** S-6″ (PRDR-320): the lifetime a session ran with and its writes at each, where the backend reported them. */
+function cacheFields(result: SessionResult): Partial<Pick<LedgerRow, "cache_ttl" | "cache_creation_5m_input_tokens" | "cache_creation_1h_input_tokens">> {
+  return {
+    ...(result.cacheTtl === undefined ? {} : { cache_ttl: result.cacheTtl }),
+    ...(result.cacheWrites === undefined
+      ? {}
+      : { cache_creation_5m_input_tokens: result.cacheWrites["5m"], cache_creation_1h_input_tokens: result.cacheWrites["1h"] }),
+  };
+}
+
 /**
  * X-1 (PRDR-173): record a billed session outside a run.
  *
@@ -230,6 +240,7 @@ export function recordOutOfBandSpend(root: string, role: string, result: Session
     cache_creation_input_tokens: perModel.length > 0 ? sum((u) => u.cacheCreationInputTokens) : result.cacheCreationInputTokens,
     turns: result.turns,
     models: result.perModel === undefined ? [] : Object.keys(result.perModel).sort(),
+    ...cacheFields(result),
   });
   /**
    * PRDR-179: the caller must already have a state directory.
@@ -485,6 +496,7 @@ export class SpendLedger {
       models: Object.keys(result.perModel ?? {}).sort(),
       ...(result.crashed === true ? { partial: "crash" as const } : {}),
       ...(phase === undefined ? {} : { phase }),
+      ...cacheFields(result),
     });
     this.journal.appendLedger(row);
     this.accumulated += row.cost_estimate_usd;

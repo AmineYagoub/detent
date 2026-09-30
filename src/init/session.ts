@@ -19,6 +19,7 @@ import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
 import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
 import { scrub } from "../kernel/scrub.js";
 import { effortDowngrade, modelFallback, settledLevels } from "../kernel/session-effort.js";
+import { cacheLifetime } from "../schemas/cache-lifetime.js";
 
 /** Init has no ticket; this names the pipeline in the ledger and journal. */
 export const INIT_TICKET = "init";
@@ -143,6 +144,17 @@ const PLANNER_TOOLS: readonly string[] = ["Read", "Grep", "Glob", "Write"];
 /** C-4⁵, C-4⁸ (PRDR-292, PRDR-294): the roles that plan, the drafter's and the review's, which a planning session's limits bind. */
 const PLANNING_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["planner", "plan_review"]);
 
+/**
+ * S-6″ (PRDR-320): the task an init session's inputs name, which with its role
+ * is its kind. Planning's sessions name a `stage` instead, and no stage has
+ * five minutes, so they get one hour; a five-minute kind is a `task` init
+ * sends, which `tests/init/session-cache.test.ts` reads from the source.
+ */
+function taskOf(inputs: Readonly<Record<string, unknown>>): string | undefined {
+  const named = inputs["task"];
+  return typeof named === "string" ? named : undefined;
+}
+
 function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
   /* C-4⁵ (PRDR-292): no Detent PRD id in what a model reads; the prompts name none either. */
   const preamble = JSON.stringify({ phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below." }, null, 2);
@@ -178,6 +190,8 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
     ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
+    /** S-6″ (PRDR-320): the cache lifetime of the session's kind, its role and the task its inputs name. */
+    cacheTtl: cacheLifetime(request.role, taskOf(request.inputs)),
     ...(request.scratch === undefined ? {} : { scratch: request.scratch }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write

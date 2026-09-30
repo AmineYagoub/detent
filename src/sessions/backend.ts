@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { CacheLifetime } from "../schemas/cache-lifetime.js";
 import type { PromptId, RoleId } from "../schemas/roles.js";
 import type { GuardPolicy } from "./guard.js";
 import type { ScratchGrant } from "./sandbox.js";
@@ -48,6 +49,12 @@ export interface SessionSpec {
    * existed — that invisibility is the point of the default.
    */
   readonly effort?: string;
+  /**
+   * S-6″ (PRDR-320): the prompt cache's lifetime for this kind of session,
+   * which the backend sets in the session's environment. Absent is one hour,
+   * as S-6 gave every session.
+   */
+  readonly cacheTtl?: CacheLifetime;
   /**
    * X-1″ (PRDR-106): no ceiling by default. The referee and init never set
    * one; the doctor probe bounds itself to a single turn, and that is the
@@ -159,6 +166,14 @@ export interface SessionResult {
    * means the session reported nothing either way — never read as success.
    */
   readonly mcpFailures?: readonly { readonly name: string; readonly status: string }[];
+  /** S-6″ (PRDR-320): the cache lifetime the session ran with. Absent where the backend sets none, as the mock's. */
+  readonly cacheTtl?: CacheLifetime;
+  /**
+   * S-6″ (PRDR-320): what the session wrote to the cache at each lifetime,
+   * summed from the usage its responses carried, each response once. Absent
+   * where the backend reports no stream.
+   */
+  readonly cacheWrites?: Readonly<Record<CacheLifetime, number>>;
 }
 
 export interface SessionBackend {
