@@ -8,6 +8,7 @@ import { claimBriefSchema, claimBriefsSchema, type Claim, type ClaimBrief, type 
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { sourceIssue } from "./audit-passages.js";
 import { inBatches } from "./batches.js";
+import type { Estimator } from "./progress.js";
 import { sortClaims, type Pending, type TriageDeps } from "./audit-triage.js";
 
 /**
@@ -108,6 +109,8 @@ export interface AuditResearch {
 export interface CheckClaimsDeps extends TriageDeps {
   /** The documents being checked; none of them is a source that can settle a claim. */
   readonly documents: readonly string[];
+  /** N-5⁗ (PRDR-325): says what the checks will cost before they run, and keeps their progress; absent, neither. */
+  readonly estimate?: Estimator | undefined;
   /** The `verify_claims` session for `claim`, which is given it alone (D-34′). */
   readonly launch: (claim: Pending, artifactOut: string, previous: { readonly issue: string } | null) => Promise<{ readonly toolCalls: number }>;
 }
@@ -270,8 +273,18 @@ export async function checkClaims(
     if (sort === "check") toCheck.push(p);
     else record(p.hash, { claim_hash: p.hash, verdict: "unverified", checked: false, triage: sort });
   }
-  await inBatches(toCheck, AUDIT_CLAIM_BATCH, async (p) => {
-    record(p.hash, await checkClaim(p, deps, tally));
+  const step = deps.estimate?.begin({
+    phase: "AUDIT",
+    step: "AUDIT's claim checks",
+    said: `AUDIT: ${String(toCheck.length)} claim${toCheck.length === 1 ? "" : "s"} to check, a session each, ${String(AUDIT_CLAIM_BATCH)} at once`,
+    units: toCheck.map(() => ({ role: "audit", task: "verify_claims" })),
+    atOnce: AUDIT_CLAIM_BATCH,
   });
+  await inBatches(toCheck, AUDIT_CLAIM_BATCH, async (p) => {
+    const unit = step?.start();
+    record(p.hash, await checkClaim(p, deps, tally));
+    unit?.done();
+  });
+  step?.end();
   return { claims: out, research: tally };
 }

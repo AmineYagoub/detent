@@ -3824,13 +3824,30 @@ they need a real second round first.
   times a unit's figure, and the wall clock divided by the sessions run at once (X-1⁸). The figure
   is the median of this project's ledger rows for the same kind of session, model and effort when
   there are at least five, and otherwise Detent's measured figure, which the note names with the
-  build and the project that measured it; the first are tabachir's, a claim check at $3.13 and 7.8
+  build and the project that measured it; the first are tabachir's, a claim check at $2.86 and 7.8
   minutes and a review at $9.64 and 31.5 minutes. During `init`, `detent status` shows the phase,
   the units done and left, the spend so far and an estimated finish from the same figures. No
   estimate stops, asks or waits (cost decision 1, PRDR-191, PRDR-265). Tabachir's test run spent
   $534 and 9.6 hours in AUDIT before DECIDE asked the user anything, and nothing said beforehand how
   many claims would be checked or what that would cost. `run` is not estimated: its units, tickets,
   have no measured figure under the redesign yet.
+  *Built by PRDR-325. `src/init/estimate.ts` holds the figures and the arithmetic, and
+  `src/init/progress.ts` the notes and the progress. An `init` session's ledger row now names its
+  `task`, the `effort` its role was routed to, and its `duration_ms`, and a session's own figure is
+  the median cost and length of this project's rows of the same role and task whose models include
+  the routed model at the routed effort, crashed rows and rows with no length left out. A slice is
+  not one session: its figure is the median of what this project's planned slices spent, from the
+  ledger, and how long each took, kept in `state/slice-figures.json` per route of the planner and
+  the plan review. Detent has measured no slice yet, nor a writer's batch, nor the verifying review
+  of a round after the first: each says it has no estimate until this project has five of its own.
+  The first figures are medians, as every figure is: PRDR-318 quoted a claim check at $3.13, which
+  was no median; tabachir's 171 claim-check rows give $2.86. The wall clock is the number of
+  batches, as many units to a batch as the step runs at once, times a unit's length. The step's
+  progress is `state/init-progress.json`, written as it begins, counted as each unit is done, and
+  removed as it ends. `detent status` shows it with an estimated finish while the process that began
+  it holds the run lock, and as the step a stopped `init` left otherwise; `detent init` clears that
+  as it starts. A figure that cannot be read gives no estimate, and a progress file that cannot be
+  written gives no progress; neither stops the step.*
 
 - **N-8 (3.1.1, PRDR-318).** Evaluation sets, and the bar a lower model or effort level must pass
   (D-35). The sets come from tabachir's test run and are kept outside this public repository, where

@@ -68,7 +68,8 @@ export interface InitSessionDeps {
   /**
    * PRDR-189: the clock the reset is measured against. AGENTS.md requires an
    * injectable seam wherever a decision reads the time, and "how long until the
-   * limit resets" is a decision.
+   * limit resets" is a decision. N-5⁗ (PRDR-325): and the one a session's
+   * length on its ledger row is read from, which a later estimate uses.
    */
   readonly now?: () => Date;
   /** PRDR-185: what an operator is told while init waits out a backend outage. */
@@ -352,12 +353,15 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest, re
     ...(resume === undefined ? {} : { resumes: resume }),
   });
   const spec = initSessionSpec(deps, request);
+  const clock = deps.now ?? ((): Date => new Date());
+  const began = clock().getTime();
   const result = await deps.backend.run(resume === undefined ? spec : { ...spec, resume: { sessionId: resume } });
+  const durationMs = clock().getTime() - began;
   if (result.resume?.refused !== undefined) {
     deps.note?.(`${request.role}: the runtime would not resume session ${result.resume.sessionId} (${scrub(result.resume.refused)}), so it was launched afresh (X-8″)`);
   }
   recordRan(deps, request.role, routed, result);
-  ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString(), deps.phase);
+  ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString(), { phase: deps.phase, task: taskOf(request.inputs), effort: routed, durationMs });
   journal.appendTicketEvent(INIT_TICKET, {
     stage: request.role,
     event: "end",

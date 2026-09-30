@@ -162,6 +162,18 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
     if (why !== null) unreviewed.push({ slice: sliceId, reason: why });
   };
 
+  /* N-5⁗ (PRDR-325): the slices no checkpoint answers for, counted before the first is planned. */
+  const toPlan = slices.filter((slice) => {
+    const cached = readCache(deps.root, slice.id);
+    return cached === null || cached.key !== sliceKey(deps, slice);
+  });
+  const step = deps.estimate?.begin({
+    phase: "PLAN",
+    step: "PLAN's slices",
+    said: `PLAN: ${String(toPlan.length)} of ${String(slices.length)} slice${slices.length === 1 ? "" : "s"} to plan, one at a time${toPlan.length === slices.length ? "" : `, the other ${String(slices.length - toPlan.length)} reused as they stand`}`,
+    units: toPlan.map(() => "slice" as const),
+    atOnce: 1,
+  });
   for (const slice of slices) {
     const key = sliceKey(deps, slice);
     const cached = readCache(deps.root, slice.id);
@@ -195,6 +207,7 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
     const flying = inFlightTickets(deps.root, sliceScope(deps.root, slice.id));
     if (flying.length > 0) throw new SliceInFlightError(flying);
     replanned.push(slice.id);
+    const unit = step?.start();
     deps.progress?.(`planning ${slice.id} ${slice.title}`);
     deps.note?.(`planning ${slice.id} ${slice.title} (${index.length} ticket(s) planned before it)`);
     const drafted = await draftAndRead(deps, { slice, planIndex: index });
@@ -246,12 +259,14 @@ export async function planSlices(deps: PlanDeps, slices: readonly SliceSpec[], c
      * completed VALIDATE round (C-2⁶, PRDR-284).
      */
     noteUnitComplete(deps.root);
+    unit?.done();
     index.push(...read.tickets);
     defects.push(...found.map((d) => ({ ...d, slice: slice.id })));
     sent.set(slice.id, mine);
     record(slice.id, read.repairs, read.findings, read.unreviewed);
     await across();
   }
+  step?.end();
   /* C-8⁗: what this run did not use belongs to a plan that no longer exists. */
   writeRedrafts(deps.root, used);
   return { tickets: index, spec_defects: defects, findings, risks, unreviewed, replanned };

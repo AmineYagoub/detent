@@ -107,16 +107,23 @@ export async function reviewRound(
       `VALIDATE round ${String(round)}: ${String(reused)} of ${String(tasks.length)} reviews are the ones a stopped run kept, since nothing their reviewers read has moved (C-2²³)`,
     );
   }
-  await inBatches(
-    slots.filter((s) => s.findings === undefined),
-    VALIDATE_REVIEW_BATCH,
-    async (slot) => {
-      const findings = await reviewArea(deps, round, slot.task, pack, scratch, slot.area);
-      keep(deps.root, { key: slot.key, round, area: slot.task.area.name, findings });
-      /* X-1⁵: a kept review is a unit of work, as a kept brief is. */
-      noteUnitComplete(deps.root);
-      slot.findings = findings;
-    },
-  );
+  const toReview = slots.filter((s) => s.findings === undefined);
+  const step = deps.estimate?.begin({
+    phase: "VALIDATE",
+    step: `VALIDATE round ${String(round)}'s reviews`,
+    said: `VALIDATE round ${String(round)}: ${String(toReview.length)} area${toReview.length === 1 ? "" : "s"} to review, a session each, ${String(VALIDATE_REVIEW_BATCH)} at once`,
+    units: toReview.map((s) => ({ role: "spec_review", task: s.task.previous === null ? "review" : "verify" })),
+    atOnce: VALIDATE_REVIEW_BATCH,
+  });
+  await inBatches(toReview, VALIDATE_REVIEW_BATCH, async (slot) => {
+    const unit = step?.start();
+    const findings = await reviewArea(deps, round, slot.task, pack, scratch, slot.area);
+    keep(deps.root, { key: slot.key, round, area: slot.task.area.name, findings });
+    /* X-1⁵: a kept review is a unit of work, as a kept brief is. */
+    noteUnitComplete(deps.root);
+    slot.findings = findings;
+    unit?.done();
+  });
+  step?.end();
   return slots.map((s) => ({ area: s.area, findings: [...(s.findings ?? [])] }));
 }

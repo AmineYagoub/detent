@@ -15,6 +15,7 @@ import type { PipelineDeps } from "./pipeline.js";
 import { refusedAttemptInput, withOneRelaunch } from "./retry.js";
 import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
+import { estimator, type Estimator } from "./progress.js";
 
 /**
  * C-2⁶, C-2¹¹ (PRDR-281) — AUDIT: the documents are judged before anything
@@ -76,6 +77,8 @@ export interface AuditStageDeps {
   readonly note?: (text: string) => void;
   /** C-2¹⁷ (PRDR-305): the key AUDIT's checkpoint is looked up by, which the survey is kept under until the phase completes. */
   readonly key: string;
+  /** N-5⁗ (PRDR-325): what the claim checks will cost, said before they run. */
+  readonly estimate?: Estimator | undefined;
 }
 
 function readSurvey(
@@ -214,6 +217,7 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
     root: deps.root,
     documents: deps.documents,
     ...(deps.note === undefined ? {} : { note: deps.note }),
+    estimate: deps.estimate,
     triaged: readKeptTriage(deps.root, deps.key),
     keepTriage: (entries) => {
       keepTriage(deps.root, deps.key, entries);
@@ -284,6 +288,7 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
             pool: deps.budgets.planning_research_tool_calls,
             key: keyOf(ctx),
             ...(deps.note === undefined ? {} : { note: deps.note }),
+            estimate: estimator(deps),
             launch: async (inputs, artifactOut) => {
               const result = await launchInitSession(sessionDeps(deps, journal, "AUDIT"), { role: "audit", inputs, artifactOut });
               /* C-3a's proxy: a turn is one call's worth, as S-4 has no per-call counter. */

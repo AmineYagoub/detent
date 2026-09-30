@@ -22,6 +22,7 @@ import type { ReviewTask, Shown } from "./validate-round.js";
 import { offeredNote, withRoundScratch } from "./validate-scratch.js";
 import { areaOf, areasOf, reviewable, scopeOf, type Area } from "./validate-scope.js";
 import { handoff, packDigest } from "./write.js";
+import { estimator } from "./progress.js";
 
 /**
  * C-2⁶, C-2¹⁴ (PRDR-284) — VALIDATE: the pack is checked, then reviewed in
@@ -307,6 +308,7 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
           reviewPrompt: deps.prompts.hashes.spec_review,
           today: (deps.now?.() ?? new Date()).toISOString().slice(0, 10),
           note: deps.note,
+          estimate: estimator(deps),
           sandbox: deps.sandbox ?? (async () => await probeSandbox({ root: deps.root })),
           review: async (inputs, artifactOut, scratch) => {
             await launchInitSession(launch, { role: "spec_review", inputs, artifactOut, ...(scratch === null ? {} : { scratch }) });

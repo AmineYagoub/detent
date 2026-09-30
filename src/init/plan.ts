@@ -74,6 +74,7 @@ void DRAFT_MAPPING_IS_TOTAL;
 
 export { BOOTSTRAP_TICKET_ID } from "./plan-write.js";
 import { BOOTSTRAP_TICKET_ID, bootstrapScaffold, writePlan, type DraftedTicket, type WriteDeps } from "./plan-write.js";
+import type { Estimator } from "./progress.js";
 
 export function planDraftPath(root: string): string {
   return path.join(stateDir(root), "state", "plan-draft.json");
@@ -118,6 +119,8 @@ export interface PlanDeps {
    * gate can fail.
    */
   readonly gates?: Gates;
+  /** N-5⁗ (PRDR-325): what planning the slices will cost, said before it starts, and its progress. */
+  readonly estimate?: Estimator | undefined;
 }
 
 /**

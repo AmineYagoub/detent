@@ -65,6 +65,13 @@ detent init
 - **PREPARE_AGENTS**: assigns roles and, where configured, models per ticket.
 - **PRESENT**: shows you the slices, the tickets and the milestone of each, the decision log (every decision, and every default, marked vetoable), every risk VALIDATE left open, every blocker and major the plan's review found, with its fix, since no reviewer read the revision it bought, any slice no reviewer read, every spec defect planning found, and what each specification phase and planning cost, which is reported and never capped. It names the Detent build that made the plan and the pack it was planned from; a plan more than one build made, or with a part written before builds were recorded, is approved only once you accept that, with y at a `[y/N]` on a terminal or `--accept-mixed-builds` beside `--approve`, and `detent init --replan` makes it again with one build. Then it stops for your approval. The plan is printed once, and `detent run` shows that same text when approval was deferred. To veto a default, edit its row in the log and run `detent init` again. A spec defect holds approval, on a terminal or not, until you amend the pack where it quotes it and run `detent init` again; the slice that reported it is then planned again. So does a check that still fails after its redraft: PRESENT checks the tickets as they stand, so amend the pack, or edit the tickets under `.detent/plan/`, and run `detent init` again.
 
+Before each costly step, AUDIT's claim checks, each VALIDATE round's reviews and its writer's
+batches, and PLAN's slices, `init` says how many it will run and what they should cost and how
+long they should take: the units times a unit's figure, run as many at once as the step runs them.
+The figure is the median of this project's own sessions of the kind once there are five, and
+otherwise Detent's measured figure, which the note names with the run that measured it; a kind
+nothing has measured yet is said to have no estimate. An estimate informs, and nothing waits for it.
+
 ```bash
 detent run
 ```
@@ -186,6 +193,9 @@ falsifications by cause, budget breaches, review rounds, cost and time at work,
 with the builds that made the plan and its pack; then what `init` spent on each
 phase. A run records the same figures in its journal when it ends. They are
 evidence for deciding which planning mechanisms stay, and they gate nothing.
+While `init` is in a costly step, `detent status` shows the step, the units done
+and left, what they have spent so far, and an estimated finish from the figures
+its note gave; after a stop, it shows the step the stop left and how far it got.
 
 ## License
 

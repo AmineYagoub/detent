@@ -141,6 +141,16 @@ export function noteRunPhase(root: string, phase: string): void {
   }
 }
 
+/**
+ * N-5⁗ (PRDR-325): who holds the root, while they hold it: a lock whose holder
+ * is verifiably dead on this host is no one's, and `detent status` reads the
+ * step that holder left as stopped.
+ */
+export function liveRunLock(root: string, alive: (pid: number) => boolean = pidAlive, host: string = hostname()): RunLockInfo | null {
+  const held = readLock(root);
+  return held === null || runLockBreakable(held, alive, host) ? null : held;
+}
+
 /** How a stale lock's holder is described when one is broken or refused (PRDR-190). */
 export function lockPhaseSuffix(info: RunLockInfo | null): string {
   return info?.phase == null ? "" : `, which was: ${info.phase}`;

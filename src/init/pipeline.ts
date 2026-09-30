@@ -33,6 +33,7 @@ import { validatePhase } from "./validate.js";
 import { isGreenfield } from "./greenfield.js";
 import { placement } from "./slice-seed.js";
 import { declaredPackages, draftingPack, planningPack, planningStack, presentChecks } from "./planning-outputs.js";
+import { estimator } from "./progress.js";
 
 /**
  * The `init` pipeline, assembled (C-4.1).
@@ -349,6 +350,7 @@ async function planWithJournal(deps: PipelineDeps, ctx: Parameters<PhaseHandler[
       ...(deps.note === undefined ? {} : { note: deps.note }),
       /* PRDR-194: PLAN is the stage whose work has names worth recording — slices and the redrafts the checks send. */
       ...(deps.progress === undefined ? {} : { progress: deps.progress }),
+      estimate: estimator(deps),
       launch: async (inputs: Record<string, unknown>) => {
         await launchInitSession(sessionDeps(deps, journal, "PLAN"), { role: "planner", inputs, artifactOut: planDraftPath(deps.root) });
       },

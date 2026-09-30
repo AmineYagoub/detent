@@ -16,6 +16,7 @@ import { simulationInput } from "./validate-scratch.js";
 import type { Area } from "./validate-scope.js";
 import { checkerIssues, citeIssues, holdsRequirement, logIssues } from "./write-checks.js";
 import { changedSince, packPathFiles, restoreFile, rollback, snapshot, type Snapshot } from "./write-tree.js";
+import type { Estimator } from "./progress.js";
 
 /**
  * C-2¹⁴ (PRDR-284) — the sessions of one VALIDATE round: a `spec_review`
@@ -87,6 +88,8 @@ export interface RoundDeps {
   readonly review: (inputs: Json, artifactOut: string, scratch: ScratchGrant | null) => Promise<void>;
   readonly fix: (inputs: Json, artifactOut: string) => Promise<void>;
   readonly note?: ((text: string) => void) | undefined;
+  /** N-5⁗ (PRDR-325): what a round's reviews and its writer will cost, said before they run. */
+  readonly estimate?: Estimator | undefined;
 }
 
 export interface ReviewTask {

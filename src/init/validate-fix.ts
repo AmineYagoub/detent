@@ -191,8 +191,19 @@ export async function fixFindings(deps: RoundDeps, label: string, batches: reado
   let minorsSpent = 0;
   const outcome = new Map<string, Outcome>();
   let stood = true;
+  const step =
+    source === "review"
+      ? deps.estimate?.begin({
+          phase: "VALIDATE",
+          step: `VALIDATE's writer, ${label}`,
+          said: `VALIDATE's writer, ${label}: ${String(batches.length)} batch${batches.length === 1 ? "" : "es"} to run`,
+          units: batches.map(() => ({ role: "spec_write", task: "fix" })),
+          atOnce: 1,
+        })
+      : undefined;
   try {
     for (const [i, batch] of batches.entries()) {
+      const unit = step?.start();
       const stage = batches.length === 1 ? `VALIDATE's writer, ${label}` : `VALIDATE's writer, ${label}, batch ${String(i + 1)} of ${String(batches.length)}`;
       const rowsBefore = alone.has(i) ? readLedgerRows(deps.root).length : 0;
       const fixed = await fixBatch(deps, stage, batch, source);
@@ -200,7 +211,9 @@ export async function fixFindings(deps: RoundDeps, label: string, batches: reado
       for (const [id, left] of fixed.outcome) outcome.set(id, left);
       stood &&= fixed.stood;
       if (fixed.stood) noteUnitComplete(deps.root);
+      unit?.done();
     }
+    step?.end();
   } catch (err) {
     rollback(deps.root, before);
     throw err;

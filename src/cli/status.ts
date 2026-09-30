@@ -6,6 +6,8 @@ import { stateVersionRefusal } from "../kernel/migrate.js";
 import { planQuality } from "../kernel/plan-quality.js";
 import type { Totals } from "../kernel/outcomes.js";
 import { phaseSpend, spendLines } from "../init/phase-spend.js";
+import { progressLines } from "../init/progress.js";
+import { liveRunLock } from "../kernel/run-lock.js";
 
 /**
  * T-053 — `detent status` and the C-13 vocabulary.
@@ -56,9 +58,21 @@ function statusLines(tickets: readonly Ticket[]): StatusLine[] {
   }));
 }
 
-/** The terminal rendering. C-13's AC snapshots this: no internal state names. */
-export function renderStatus(root: string): string {
-  return `${[...ticketLines(root), ...amendmentLines(root), ...outcomeLines(root)].join("\n")}\n`;
+/**
+ * The terminal rendering. C-13's AC snapshots this: no internal state names.
+ * N-5⁗ (PRDR-325): during `init`, the costly step it is in, with an estimated
+ * finish; `running` says whether the pid that began the step holds the root.
+ */
+export function renderStatus(root: string, now: Date = new Date(), running: (pid: number) => boolean = (pid) => liveRunLock(root)?.pid === pid): string {
+  return `${[...ticketLines(root), ...amendmentLines(root), ...initLines(root, now, running), ...outcomeLines(root)].join("\n")}\n`;
+}
+
+function initLines(root: string, now: Date, running: (pid: number) => boolean): string[] {
+  try {
+    return progressLines(root, now, running);
+  } catch (err) {
+    return ["", `\`init\`'s progress is not shown: ${(err as Error).message}`];
+  }
 }
 
 /** X-4⁸ (PRDR-286): each amendment still holding tickets, what it waits on, and the tickets it holds. */

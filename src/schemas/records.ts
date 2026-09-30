@@ -193,6 +193,16 @@ export const ledgerRowSchema = z.strictObject({
   cache_ttl: z.enum(CACHE_LIFETIMES).optional(),
   cache_creation_5m_input_tokens: z.number().int().nonnegative().optional(),
   cache_creation_1h_input_tokens: z.number().int().nonnegative().optional(),
+  /**
+   * N-5⁗ (PRDR-325): an `init` session's kind and length: the task its inputs
+   * named, the effort its role was routed to, and how long it ran. A costly
+   * step's estimate takes this project's own figure from them. Optional: a
+   * row written before them has none, and gives no figure; a run's row names
+   * none.
+   */
+  task: nonEmptyString.optional(),
+  effort: nonEmptyString.optional(),
+  duration_ms: z.number().int().nonnegative().optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 

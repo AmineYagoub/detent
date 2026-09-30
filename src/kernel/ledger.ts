@@ -273,6 +273,14 @@ const DEFAULT_BREAKER: ProgressBreaker = {
   spend_without_progress_sessions: CEILINGS.spend_without_progress_sessions.default,
 };
 
+/** What an `init` session's ledger row adds to a run's: the phase that launched it (C-7‴), and its kind and length (N-5⁗). */
+export interface InitRowFields {
+  readonly phase?: string | undefined;
+  readonly task?: string | undefined;
+  readonly effort?: string | undefined;
+  readonly durationMs?: number | undefined;
+}
+
 export class SpendLedger {
   private accumulated: number;
   /** Spend at the moment the last unit of work completed. */
@@ -474,9 +482,10 @@ export class SpendLedger {
    * result's zeroed figures are recorded as a flagged lower bound, never
    * dropped and never treated as the absent-telemetry breaker. An `init`
    * session's row names the phase that launched it, which PRESENT sums by
-   * (C-7‴, PRDR-296).
+   * (C-7‴, PRDR-296), and its task, routed effort and length, which a step's
+   * estimate reads (N-5⁗, PRDR-325).
    */
-  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string, phase?: string): LedgerRow {
+  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string, init: InitRowFields = {}): LedgerRow {
     const perModel = Object.values(result.perModel ?? {});
     const fromBreakdown = perModel.length > 0;
     const sum = (pick: (u: (typeof perModel)[number]) => number): number => perModel.reduce((a, u) => a + pick(u), 0);
@@ -495,7 +504,10 @@ export class SpendLedger {
       /* PRDR-095: the breakdown's keys ARE the model names — record them. */
       models: Object.keys(result.perModel ?? {}).sort(),
       ...(result.crashed === true ? { partial: "crash" as const } : {}),
-      ...(phase === undefined ? {} : { phase }),
+      ...(init.phase === undefined ? {} : { phase: init.phase }),
+      ...(init.task === undefined || init.task === "" ? {} : { task: init.task }),
+      ...(init.effort === undefined || init.effort === "" ? {} : { effort: init.effort }),
+      ...(init.durationMs === undefined ? {} : { duration_ms: Math.max(0, Math.round(init.durationMs)) }),
       ...cacheFields(result),
     });
     this.journal.appendLedger(row);

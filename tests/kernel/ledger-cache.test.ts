@@ -34,7 +34,7 @@ describe("S-6″ a ledger row records its cache lifetime and its writes at each"
     const r = root();
     const journal = RunJournal.open(r);
     try {
-      const row = new SpendLedger(r, journal, 999).record("t1", 0, "audit", written, "2026-09-30T10:00:00.000Z", "AUDIT");
+      const row = new SpendLedger(r, journal, 999).record("t1", 0, "audit", written, "2026-09-30T10:00:00.000Z", { phase: "AUDIT" });
       expect(row.cache_ttl).toBe("5m");
       expect(row.cache_creation_5m_input_tokens).toBe(1500);
       expect(row.cache_creation_1h_input_tokens).toBe(40);

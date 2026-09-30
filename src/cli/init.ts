@@ -20,6 +20,7 @@ import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { routingAdvice } from "../kernel/routing-advice.js";
 import { bundledRuntime } from "../sessions/runtime.js";
+import { clearProgress } from "../init/progress.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -147,6 +148,8 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       `broke a stale run lock left by pid ${lock.brokeStale.pid} on this host${lockPhaseSuffix(lock.brokeStale)} (X-1⁷)\n`,
     );
   }
+  /* N-5⁗ (PRDR-325): the step a stopped init left is not this one's, which says its own as it begins them. */
+  clearProgress(root);
 
   try {
     /**
