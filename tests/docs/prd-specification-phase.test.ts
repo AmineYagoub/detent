@@ -150,19 +150,26 @@ describe("PRDR-278 the PRD records the specification phase and planning on its p
     expect(machine).toContain("X-3′");
   });
 
-  it("S-1 gains four roles in one F-3 schema event, and S-5⁵ states every role's default model and effort as the code has them", () => {
+  /**
+   * S-5⁵ is the routing as PRDR-278 recorded it, and S-5⁶ (PRDR-319) moved it:
+   * S-5⁵ keeps stating the four new roles as they were seated, and "as the code
+   * has them" is S-5⁶'s to state, in S-5⁵'s own form.
+   */
+  it("S-1 gains four roles in one F-3 schema event, S-5⁵ seats them, and S-5⁶ states every role's default model and effort as the code has them", () => {
     const roles = rule("S-1‴");
     for (const token of [...Object.keys(NEW_ROLES).map((r) => `\`${r}\``), "F-3", "`schema_version`", "role@hash"]) {
       expect(roles, token).toContain(token);
     }
-    const routed = new Map(
-      [...rule("S-5⁵").matchAll(/`([a-z_]+)`: `(claude-[a-z0-9-]+)` at `(low|medium|high|xhigh|max)`/gu)].map((m) => [m[1] ?? "", [m[2], m[3]]]),
-    );
-    for (const [role, pair] of Object.entries(NEW_ROLES)) expect(routed.get(role), role).toEqual(pair);
+    const routing = (mark: string): Map<string, (string | undefined)[]> =>
+      new Map([...rule(mark).matchAll(/`([a-z_]+)`: `(claude-[a-z0-9-]+)` at `(low|medium|high|xhigh|max)`/gu)].map((m) => [m[1] ?? "", [m[2], m[3]]]));
+    const seated = routing("S-5⁵");
+    for (const [role, pair] of Object.entries(NEW_ROLES)) expect(seated.get(role), role).toEqual(pair);
+    expect([...seated.keys()].sort()).toEqual([...new Set([...ROLE_IDS, ...Object.keys(NEW_ROLES)])].sort());
+    const routed = routing("S-5⁶");
     for (const role of ROLE_IDS) {
       expect(routed.get(role), `${role} as the code routes it`).toEqual([DEFAULT_MODEL_ROUTING[role], DEFAULT_EFFORT_ROUTING[role]]);
     }
-    expect([...routed.keys()].sort()).toEqual([...new Set([...ROLE_IDS, ...Object.keys(NEW_ROLES)])].sort());
+    expect([...routed.keys()].sort()).toEqual([...ROLE_IDS].sort());
   });
 
   it("no switch skips the phase, VALIDATE's ceiling defaults to 8, and each phase's spend is reported and never capped", () => {

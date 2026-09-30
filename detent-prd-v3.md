@@ -3690,6 +3690,20 @@ they need a real second round first.
   each role it still routes to `claude-opus-5` or `claude-sonnet-5`, the model that supersedes it,
   and the line that moves it, and nothing is rewritten. The move is the user's decision, not a
   tuning, so S-5⁵'s wait for a run-time outcome (D-33) does not hold it back.
+  *Built by PRDR-319. The default routing is `planner`: `claude-opus-5-5` at `max`; `plan_review`:
+  `claude-opus-5-5` at `max`; `audit`: `claude-opus-5-5` at `max`; `spec_write`: `claude-opus-5-5` at
+  `max`; `spec_review`: `claude-opus-5-5` at `max`; `review`: `claude-opus-5-5` at `xhigh`;
+  `diagnose`: `claude-opus-5-5` at `xhigh`; `informed_fix`: `claude-opus-5-5` at `xhigh`; `implement`:
+  `claude-sonnet-5-5` at `xhigh`; `blind_fix`: `claude-sonnet-5-5` at `xhigh`; `review_fix`:
+  `claude-sonnet-5-5` at `xhigh`; `research`: `claude-sonnet-5-5` at `xhigh`. The pin is 0.3.285,
+  which bundles 2.1.285. `FIRST_RUNTIME_SERVING` in `src/schemas/roles.ts` names the first runtime
+  found to serve each model a default routes to, 2.1.280 for Opus 5.5 and 2.1.284 for Sonnet 5.5;
+  2.1.282 and 2.1.283 were not read, so a runtime between is judged not to serve Sonnet 5.5.
+  `doctor`'s `routed-models` row fails on a routed model the bundled runtime predates, its
+  `superseded-models` row names each role on a superseded default with the line that moves it, and
+  `init` and `run` say both before their first session. On the new pin a live session on each model at
+  `xhigh` settled at `xhigh` with no fallback, and the runtime lists every level from `low` to `max` for
+  both.*
 
 - **S-6″ (3.1.1, PRDR-318).** The cache's lifetime is chosen per kind of session, from measured
   gaps. S-6 asks for the extended lifetime on every session, and on a subscription Claude Code picks

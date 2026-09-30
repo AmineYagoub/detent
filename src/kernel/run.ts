@@ -22,6 +22,7 @@ import { RunJournal } from "./journal.js";
 import { Driver } from "./driver.js";
 import { RefereeCore, type PendingEntry } from "./referee.js";
 import { loadConfig, type LoadedConfig } from "./worstcase.js";
+import { routingAdvice } from "./routing-advice.js";
 import { ensureToolchains, type ToolchainOutcome } from "./run-toolchain.js";
 import { strandedByPremise } from "./referee-sweeps.js";
 
@@ -58,6 +59,13 @@ export interface RunOptions {
   readonly worktree?: boolean;
   /** Injectable wall clock (ms) for the X-1 `ticket_wall_clock_ms` fixtures. */
   readonly now?: () => number;
+  /**
+   * S-5⁶ (PRDR-319): the Claude Code the SDK bundles, which serves every
+   * session. The driver reads it, since ARCH-1 keeps the SDK's manifest out of
+   * the referee's reach; absent, no routed model is judged against a runtime,
+   * and the superseded defaults are still named.
+   */
+  readonly runtime?: string;
   /**
    * The vendored, hash-verified prompt set. Required, not defaulted: loading
    * lives in the sessions layer (`loadPromptSet`), and ARCH-1 forbids the
@@ -158,6 +166,20 @@ export async function run(opts: RunOptions): Promise<RunOutcome> {
     return notReady(`config rejected: ${(err as Error).message}`);
   }
   return await runWithConfig(opts, loaded);
+}
+
+/**
+ * The config file's text, for the line a routing note names (S-5⁶), or null:
+ * `runWithConfig` is also handed configs the load path would refuse, which no
+ * file on disk need hold.
+ */
+function configText(root: string): string | null {
+  try {
+    return readFileSync(path.join(stateDir(root), "config.json"), "utf8");
+  } catch {
+    /* no file: the note names the key without a line */
+    return null;
+  }
 }
 
 /**
@@ -337,6 +359,15 @@ export async function runWithConfig(opts: RunOptions, loaded: LoadedConfig): Pro
       protected: loaded.config.protected,
       risk: loaded.config.risk,
     });
+    /**
+     * S-5⁶ (PRDR-319): before the first session, as `init` says it and
+     * `doctor` reports it. Said, never refused: the routing is the config's
+     * own (S-5′), and a model the runtime cannot serve falls back per session
+     * (PRDR-114).
+     */
+    for (const line of routingAdvice(loaded.config.model_routing, opts.runtime ?? null, configText(opts.root))) {
+      opts.announce?.(line);
+    }
     /**
      * PRDR-276: an install Detent ran on the operator's machine leaves a record,
      * on PRDR-211's precedent for an adapter-run command — here, beside the

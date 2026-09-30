@@ -18,6 +18,8 @@ import { makeTtyDecisions } from "./decide.js";
 import { acquireRunLock, lockPhaseSuffix, noteRunPhase, runLockRefusal } from "../kernel/run-lock.js";
 import { migrateState, migrationNote } from "../kernel/migrate.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
+import { routingAdvice } from "../kernel/routing-advice.js";
+import { bundledRuntime } from "../sessions/runtime.js";
 
 /**
  * T-060 — `detent init`, the first porcelain verb (C-1, C-5, C-8).
@@ -34,6 +36,8 @@ const EXIT_NOT_READY = 2;
 
 export interface InitMainDeps {
   readonly buildBackend?: (root: string) => SessionBackend;
+  /** S-5⁶ (PRDR-319): the Claude Code the SDK bundles; defaults to the manifest's `claudeCodeVersion`. */
+  readonly runtimeVersion?: () => string;
 }
 
 export async function main(argv: readonly string[], mainDeps: InitMainDeps = {}): Promise<number> {
@@ -211,6 +215,18 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
           : "symbol intelligence declined — recorded in .detent/config.json, never mentioned again (S-3″)\n",
       );
       config = configFor(root);
+    }
+    /**
+     * S-5⁶ (PRDR-319): before the first session, as `run` says it and `doctor`
+     * reports it — a role on a model the bundled runtime does not serve, and a
+     * role on a default S-5⁶ superseded, with the line that moves it. Said,
+     * never refused: the config's routing is its own (S-5′).
+     */
+    if (config !== null) {
+      const configText = readFileSync(path.join(stateDir(root), "config.json"), "utf8");
+      for (const line of routingAdvice(config.model_routing, (mainDeps.runtimeVersion ?? bundledRuntime)(), configText)) {
+        process.stdout.write(`${line}\n`);
+      }
     }
     const backend = (mainDeps.buildBackend ?? defaultBackend)(root);
     /**

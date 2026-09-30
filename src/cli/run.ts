@@ -10,6 +10,7 @@ import type { SessionBackend } from "../sessions/backend.js";
 import type { ApprovalDecision } from "../init/present.js";
 import { noteRunPhase } from "../kernel/run-lock.js";
 import { setInFlight } from "./exit-record.js";
+import { bundledRuntime } from "../sessions/runtime.js";
 
 /**
  * T-041/T-140 — `detent run`, the second porcelain verb (C-9…C-11, D-3).
@@ -54,6 +55,8 @@ export interface RunMainDeps {
   readonly approveToolchain?: (message: string) => Promise<boolean>;
   readonly toolchainProbe?: (exe: string) => boolean;
   readonly toolchainInstall?: (exe: string, args: readonly string[]) => void;
+  /** S-5⁶ (PRDR-319): the Claude Code the SDK bundles; defaults to the manifest's `claudeCodeVersion`. */
+  readonly runtimeVersion?: () => string;
 }
 
 export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}): Promise<number> {
@@ -163,6 +166,8 @@ export async function main(argv: readonly string[], mainDeps: RunMainDeps = {}):
     worker: values.worker,
     worktree: values.worktree === true && values["no-worktree"] !== true,
     announce: (message) => process.stdout.write(`${message}\n`),
+    /* S-5⁶ (PRDR-319): the runtime a live session runs on; a fixture run has none to judge. */
+    ...(isFixture ? {} : { runtime: (mainDeps.runtimeVersion ?? bundledRuntime)() }),
     /* PRDR-190: the recorder lives here; the kernel only declares the seam. */
     phase: (text) => {
       setInFlight(text);

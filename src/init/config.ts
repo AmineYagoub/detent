@@ -27,7 +27,7 @@ import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING } from "../schemas/roles.
 const DEFAULT_PROTECTED = ["tickets/**", ".detent/tickets/**", "AGENTS.md", "CLAUDE.md"] as const;
 
 /** S-5: the agent-sdk pin mirrors package.json's exact dependency. */
-const PINNED_AGENT_SDK = "0.3.280";
+const PINNED_AGENT_SDK = "0.3.285";
 
 /**
  * S-5's backend pin is "the version this project initialized against":
@@ -92,7 +92,7 @@ function grouped(table: Readonly<Record<string, string>>): string {
  */
 export function routingNote(): string {
   return (
-    `model routing defaulted (PRDR-114, S-5⁵): ${grouped(DEFAULT_MODEL_ROUTING)}. A routed model this runtime cannot serve ` +
+    `model routing defaulted (PRDR-114, S-5⁶): ${grouped(DEFAULT_MODEL_ROUTING)}. A routed model this runtime cannot serve ` +
     "falls back to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n" +
     `effort routing defaulted (PRDR-263, S-5⁵): ${grouped(DEFAULT_EFFORT_ROUTING)}. A level the routed model cannot serve ` +
     "is downgraded silently by the SDK and noted per session. Edit effort_routing in .detent/config.json to change it.\n"

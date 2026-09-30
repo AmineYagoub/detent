@@ -88,9 +88,10 @@ const sessionsOf = (p: Planned, slice: string): string[] => p.log.filter((l) => 
 const reviewCalls = (p: Planned) => p.backend.calls.filter((c) => c.role === "plan_review");
 
 describe("PRDR-294: the plan_review role (S-1‴, C-4⁶)", () => {
-  it("is a role of its own, routed to the planner's seat: claude-opus-5 at max (planning decision 9)", () => {
+  /** The seat moved with the planner to Opus 5.5 (S-5⁶, PRDR-319); it is still the planner's. */
+  it("is a role of its own, routed to the planner's seat: claude-opus-5-5 at max (planning decision 9)", () => {
     expect(ROLE_IDS as readonly string[]).toContain("plan_review");
-    expect((DEFAULT_MODEL_ROUTING as Readonly<Record<string, string>>)["plan_review"]).toBe("claude-opus-5");
+    expect((DEFAULT_MODEL_ROUTING as Readonly<Record<string, string>>)["plan_review"]).toBe("claude-opus-5-5");
     expect((DEFAULT_EFFORT_ROUTING as Readonly<Record<string, string>>)["plan_review"]).toBe("max");
     expect((DEFAULT_MODEL_ROUTING as Readonly<Record<string, string>>)["plan_review"]).toBe(DEFAULT_MODEL_ROUTING.planner);
   });
@@ -111,7 +112,7 @@ describe("PRDR-294: the plan_review role (S-1‴, C-4⁶)", () => {
     const reads = reviewCalls(p);
     expect(reads.map((c) => sliceOf(inputsOf(c.spec)))).toEqual(["s01", "s02"]);
     for (const c of reads) {
-      expect(c.spec.model).toBe("claude-opus-5");
+      expect(c.spec.model).toBe("claude-opus-5-5");
       expect(c.spec.effort).toBe("max");
       expect(c.spec.promptPrefix).toContain(PROMPTS.prompts.plan_review);
       expect(c.spec.tools).toEqual(["Read", "Grep", "Glob", "Write"]);
@@ -329,7 +330,7 @@ describe("PRDR-294: an existing config routes the review where its planner sits 
 
   it("a config that routes no planner gives it the planner's default seat, and one that routes the review keeps it", async () => {
     const none = await olderConfig({});
-    expect((none["model_routing"] as Record<string, string>)["plan_review"]).toBe("claude-opus-5");
+    expect((none["model_routing"] as Record<string, string>)["plan_review"]).toBe("claude-opus-5-5");
     expect((none["effort_routing"] as Record<string, string>)["plan_review"]).toBe("max");
     const own = await olderConfig({ model_routing: { planner: "claude-fable-5-1", plan_review: "claude-sonnet-5" }, effort_routing: {} });
     expect((own["model_routing"] as Record<string, string>)["plan_review"]).toBe("claude-sonnet-5");

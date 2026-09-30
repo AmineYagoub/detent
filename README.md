@@ -120,6 +120,26 @@ Detent derives the stack, scaffolds through its own bootstrap ticket, and
 builds from nothing. That path is the permanent release gate: every Detent
 release must build Detent's own walking skeleton from its own PRD.
 
+## Models
+
+Every session runs on Claude Opus 5.5 or Claude Sonnet 5.5. `init` writes this
+routing to `.detent/config.json`:
+
+| Roles | Model | Effort |
+|---|---|---|
+| `planner`, `plan_review`, `audit`, `spec_write`, `spec_review` | `claude-opus-5-5` | `max` |
+| `review`, `diagnose`, `informed_fix` | `claude-opus-5-5` | `xhigh` |
+| `implement`, `blind_fix`, `review_fix`, `research` | `claude-sonnet-5-5` | `xhigh` |
+
+The roles that judge, plan and specify run on Opus; the roles that write code
+run on Sonnet. Edit `model_routing` and `effort_routing` in
+`.detent/config.json` to change either. A config written by an earlier Detent
+keeps its own routing: `detent doctor`, and `init` and `run` before their first
+session, name each role still on a model a newer default supersedes, with the
+line that moves it. Sessions run on the Claude Code the Agent SDK bundles, not
+the `claude` on your PATH, so `doctor` also fails on a routed model that
+runtime cannot serve.
+
 ## What Detent will never do
 
 - Write to your base branch: work happens on a `detent/run-<id>` branch.

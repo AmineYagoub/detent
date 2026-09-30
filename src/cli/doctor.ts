@@ -1,17 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
 import { stateDir } from "../fs/layout.js";
 import { loadConfig, type LoadedConfig } from "../kernel/worstcase.js";
 import { buildLiveBackend, hasLiveBackendAuth } from "../sessions/live.js";
 import type { SessionBackend } from "../sessions/backend.js";
 import { researchTools } from "../sessions/guard.js";
+import { bundledRuntime, sdkManifest } from "../sessions/runtime.js";
 import { recordOutOfBandSpend } from "../kernel/ledger.js";
 import { readBindings } from "../adapter/drift.js";
 import { gateLabel } from "../adapter/packages.js";
 import { currentPlatform, missingToolchains } from "../adapter/toolchain.js";
 import { stateVersionRefusal } from "../kernel/migrate.js";
+import { supersededSentence, unservedSentence } from "../kernel/routing-advice.js";
+import { supersededRoutes, unservedRoutes } from "../schemas/roles.js";
 
 /**
  * T-050 — `detent doctor` (S-5, C-12, X-1, S-3).
@@ -44,6 +46,8 @@ export interface DoctorDeps {
   readonly backend?: SessionBackend;
   /** The installed SDK version; defaults to reading the package manifest. */
   readonly installedSdkVersion?: () => string;
+  /** S-5⁶ (PRDR-319): the Claude Code the SDK bundles; defaults to the manifest's `claudeCodeVersion`. */
+  readonly runtimeVersion?: () => string;
   /**
    * PRDR-276: the toolchain probe; the real one by default. A row that probes
    * the host asserts whatever the host has, so its test passed only on a
@@ -53,36 +57,9 @@ export interface DoctorDeps {
   readonly toolchainProbe?: (exe: string) => boolean;
 }
 
-/**
- * S-5: the installed agent-SDK version, for the pin check.
- *
- * PRDR-096: `require("@anthropic-ai/claude-agent-sdk/package.json")` threw —
- * the SDK's `exports` map does not expose `./package.json`, so Node refuses
- * the subpath and `doctor`, the command whose whole job is to report on the
- * environment, died reporting on it. Resolve the package's own entry point
- * instead and read the manifest beside it, which needs no exports entry. An
- * unreadable manifest returns "unknown" — the same honest value `init` records
- * for an unreadable CLI, and something the pin check can report rather than
- * crash on.
- */
+/** S-5: the installed agent-SDK version, for the pin check (PRDR-096: read beside the SDK's entry point). */
 function installedSdk(): string {
-  const require = createRequire(import.meta.url);
-  try {
-    let dir = path.dirname(require.resolve("@anthropic-ai/claude-agent-sdk"));
-    for (let up = 0; up < 8; up += 1) {
-      const candidate = path.join(dir, "package.json");
-      if (existsSync(candidate)) {
-        const manifest = JSON.parse(readFileSync(candidate, "utf8")) as { name?: string; version?: string };
-        if (manifest.name === "@anthropic-ai/claude-agent-sdk" && typeof manifest.version === "string") return manifest.version;
-      }
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-  } catch {
-    /* fall through to the honest unknown */
-  }
-  return "unknown";
+  return sdkManifest().version;
 }
 
 /** S-3/PRDR-050: a rule form the backend cannot parse must fail HERE, loudly. */
@@ -152,6 +129,37 @@ export async function doctor(root: string, deps: DoctorDeps = {}): Promise<Docto
             "a different Detent build and `init` never rewrites it. Advisory (S-5): the lockfile pins the SDK " +
             `exactly and the release shipping ${installed} passed the N-7 gate, so nothing refuses on this; set ` +
             `pinned.agent_sdk to ${installed} once you have re-verified this project against it`,
+    });
+
+    /**
+     * ---- routed models against the bundled runtime (S-5⁶, PRDR-319) ---------
+     * A session is served by the Claude Code the SDK bundles (S-5‴), and one
+     * routed to a model that runtime does not know runs on the runtime's
+     * default instead (PRDR-114): a failed row, naming each such role. A role
+     * on a default S-5⁶ superseded is the config's own choice as far as
+     * anything can tell (S-5′), so its row informs and never fails.
+     */
+    const runtime = (deps.runtimeVersion ?? bundledRuntime)();
+    const routing = loaded.config.model_routing;
+    const unserved = unservedRoutes(routing, runtime);
+    checks.push({
+      name: "routed-models",
+      ok: unserved !== null && unserved.length === 0,
+      detail:
+        unserved === null
+          ? `the bundled runtime's version could not be read from the SDK's manifest (${runtime}), so no routed model was judged (S-5⁶)`
+          : unserved.length > 0
+            ? unservedSentence(runtime, unserved)
+            : `the runtime this Detent bundles, Claude Code ${runtime}, serves every routed model it has a record of (S-5⁶)`,
+    });
+    const superseded = supersededRoutes(routing);
+    checks.push({
+      name: "superseded-models",
+      ok: true,
+      detail:
+        superseded.length === 0
+          ? "no role is routed to a model a newer default supersedes (S-5⁶)"
+          : supersededSentence(superseded, readFileSync(configPath, "utf8")),
     });
 
     /** ---- CLI pin (S-5), via the backend's own check ------------------------ */

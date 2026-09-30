@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ensureConfig } from "../../src/init/config.js";
-import { DEFAULT_MODEL_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -22,9 +22,33 @@ describe("PRDR-114 init writes the model routing", () => {
       * measured it in earnest: a single slice draft of 176,391 output tokens,
       * which is where a session limit killed the run.
       */
-    expect(DEFAULT_MODEL_ROUTING.planner).toBe("claude-opus-5");
-    expect(DEFAULT_MODEL_ROUTING.review).toBe("claude-opus-5");
-    expect(DEFAULT_MODEL_ROUTING.implement).toBe("claude-sonnet-5");
+    expect(DEFAULT_MODEL_ROUTING.planner).toBe("claude-opus-5-5");
+    expect(DEFAULT_MODEL_ROUTING.review).toBe("claude-opus-5-5");
+    expect(DEFAULT_MODEL_ROUTING.implement).toBe("claude-sonnet-5-5");
+  });
+
+  /**
+   * S-5⁶ (PRDR-319): every role on the newest models, the user's decision of
+   * 2026-09-30. Opus 5.5 costs less than Opus 5 at every rate, and Sonnet 5.5
+   * what Sonnet 5 does, so no role is left on a model its successor supersedes.
+   */
+  it("routes every role to Opus 5.5 or Sonnet 5.5, judgement on Opus and volume on Sonnet", () => {
+    expect(DEFAULT_MODEL_ROUTING).toEqual({
+      planner: "claude-opus-5-5",
+      plan_review: "claude-opus-5-5",
+      review: "claude-opus-5-5",
+      diagnose: "claude-opus-5-5",
+      informed_fix: "claude-opus-5-5",
+      audit: "claude-opus-5-5",
+      spec_write: "claude-opus-5-5",
+      spec_review: "claude-opus-5-5",
+      implement: "claude-sonnet-5-5",
+      blind_fix: "claude-sonnet-5-5",
+      review_fix: "claude-sonnet-5-5",
+      research: "claude-sonnet-5-5",
+    });
+    const routed = new Set(Object.values(DEFAULT_MODEL_ROUTING));
+    for (const superseded of ["claude-opus-5", "claude-sonnet-5"]) expect(routed.has(superseded), superseded).toBe(false);
   });
 
   it("a first init writes it; an existing config is never rewritten", () => {
@@ -39,6 +63,29 @@ describe("PRDR-114 init writes the model routing", () => {
     expect(config.pinned.agent_sdk).toBe(dep);
     expect(ensureConfig(root, 10)).toBe("exists");
     expect((JSON.parse(readFileSync(file, "utf8")) as { model_routing: unknown }).model_routing).toEqual(DEFAULT_MODEL_ROUTING);
+  });
+});
+
+/**
+ * S-5⁶ (PRDR-319): the README says which role runs on which model, at which
+ * level, as the code routes it. A table typed by hand drifts the day a default
+ * moves, so each row is read back and joined to the code's two tables.
+ */
+describe("S-5⁶ the README states the default routing as the code has it", () => {
+  it("names every role once, with its model and its level", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const start = readme.indexOf("\n## Models\n");
+    expect(start, "the README has a Models section").toBeGreaterThan(-1);
+    const section = readme.slice(start, readme.indexOf("\n## ", start + 1));
+    const stated = new Map<string, readonly [string, string]>();
+    for (const row of section.matchAll(/^\| ((?:`[a-z_]+`(?:, )?)+) \| `(claude-[a-z0-9-]+)` \| `([a-z]+)` \|$/gmu)) {
+      for (const role of (row[1] ?? "").matchAll(/`([a-z_]+)`/gu)) {
+        expect(stated.has(role[1] ?? ""), `${String(role[1])} is named once`).toBe(false);
+        stated.set(role[1] ?? "", [row[2] ?? "", row[3] ?? ""]);
+      }
+    }
+    expect([...stated.keys()].sort()).toEqual([...ROLE_IDS].sort());
+    for (const role of ROLE_IDS) expect(stated.get(role), role).toEqual([DEFAULT_MODEL_ROUTING[role], DEFAULT_EFFORT_ROUTING[role]]);
   });
 });
 
@@ -209,9 +256,11 @@ describe("PRDR-263 init writes the effort routing", () => {
   });
 
   /**
-   * The SDK's own declaration is the oracle (`sdk.d.ts:1846-1847` at the
-   * 0.3.280 pin): `xhigh` is Fable 5 / Opus 4.7+ / Sonnet 5, `max` is Fable 5 /
-   * Opus 4.6+ / Sonnet 4.6+. Opus 5.5 is past both bounds (PRDR-281).
+   * The runtime's own report is the oracle. Up to 0.3.280 the SDK declared it
+   * in `sdk.d.ts`; 0.3.285's types no longer name models, and its runtime,
+   * 2.1.285, lists every level from `low` to `max` for `claude-opus-5-5` and
+   * `claude-sonnet-5-5` through `supportedModels()`, asked live on 2026-09-30
+   * (S-5⁶, PRDR-319).
    * The PAIR is asserted, not the two tables separately, because checking them
    * apart leaves the join to a reader and the join is the whole claim. A pair
    * outside this table is a silent downgrade that PRDR-237 can only report
@@ -219,9 +268,8 @@ describe("PRDR-263 init writes the effort routing", () => {
    */
   it("never routes a role to a level its own model cannot serve", () => {
     const servable: Readonly<Record<string, readonly string[]>> = {
-      "claude-opus-5": ["low", "medium", "high", "xhigh", "max"],
       "claude-opus-5-5": ["low", "medium", "high", "xhigh", "max"],
-      "claude-sonnet-5": ["low", "medium", "high", "xhigh", "max"],
+      "claude-sonnet-5-5": ["low", "medium", "high", "xhigh", "max"],
     };
     const routing = writtenRouting();
     expect(Object.keys(routing).length, "an empty routing would make every assertion below vacuous").toBe(ROLE_IDS.length);

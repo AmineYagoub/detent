@@ -89,27 +89,121 @@ export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
 /**
  * PRDR-114: the routing `init` writes. Judgement roles — the plan, the
- * verdicts, the hypothesis, the informed attempt — get the stronger models;
+ * verdicts, the hypothesis, the informed attempt — get the stronger model;
  * the volume roles get Sonnet. Typed over ROLE_IDS so a ninth role is a
  * compile error here, not a silent runtime default. A routed model the
  * runtime cannot serve falls back to the runtime default, noted per session.
+ *
+ * S-5⁶ (PRDR-319): every role on the newest models, the user's decision of
+ * 2026-09-30, Opus 5.5 for judgement and Sonnet 5.5 for volume. Opus 5.5 costs
+ * less than Opus 5 at every rate, and Sonnet 5.5 what Sonnet 5 does. A config
+ * an earlier `init` wrote keeps its own routing (S-5′) and is told which of its
+ * roles still name a model `SUPERSEDED_MODELS` lists.
  */
 export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
-  planner: "claude-opus-5",
-  review: "claude-opus-5",
-  diagnose: "claude-opus-5",
-  informed_fix: "claude-opus-5",
-  implement: "claude-sonnet-5",
-  blind_fix: "claude-sonnet-5",
-  review_fix: "claude-sonnet-5",
-  research: "claude-sonnet-5",
+  planner: "claude-opus-5-5",
+  review: "claude-opus-5-5",
+  diagnose: "claude-opus-5-5",
+  informed_fix: "claude-opus-5-5",
+  implement: "claude-sonnet-5-5",
+  blind_fix: "claude-sonnet-5-5",
+  review_fix: "claude-sonnet-5-5",
+  research: "claude-sonnet-5-5",
   /** S-5⁵ (PRDR-278): every session of the specification phase runs on Opus 5.5 at `max` (specification decision 14). */
   audit: "claude-opus-5-5",
   spec_write: "claude-opus-5-5",
   spec_review: "claude-opus-5-5",
   /** C-4⁸ (PRDR-294): the planner's seat, so the review is never weaker than the drafts it judges (planning decision 9). */
-  plan_review: "claude-opus-5",
+  plan_review: "claude-opus-5-5",
 };
+
+/**
+ * S-5⁶ (PRDR-319): the first runtime known to serve each model a default routes
+ * to. A session is served by the Claude Code the SDK bundles (S-5‴), and a
+ * runtime that does not know a model falls back to its own default (PRDR-114),
+ * so `doctor` judges a routing against the bundled runtime, and `init` and
+ * `run` say what it cannot serve before their first session.
+ *
+ * Read from the binaries: 2.1.280's names `claude-opus-5-5` and not
+ * `claude-sonnet-5-5`, 2.1.281's does not name it either, and 2.1.284's and
+ * 2.1.285's do. 2.1.282 and 2.1.283 were not read, so 2.1.284 is the first
+ * FOUND to serve Sonnet 5.5, and a runtime between is judged not to: the side
+ * that never passes a model a runtime might not know, and a runtime no pinned
+ * Detent bundles. A model outside this table is not judged, since an operator
+ * may route to any model.
+ */
+export const FIRST_RUNTIME_SERVING: Readonly<Record<string, string>> = {
+  "claude-opus-5-5": "2.1.280",
+  "claude-sonnet-5-5": "2.1.284",
+};
+
+/**
+ * S-5⁶ (PRDR-319): the defaults S-5⁶ superseded, each with its successor. A
+ * config cannot tell a chosen `claude-opus-5` from a defaulted one, so a role
+ * routed to one is named with the line that moves it, and never rewritten.
+ */
+export const SUPERSEDED_MODELS: Readonly<Record<string, string>> = {
+  "claude-opus-5": "claude-opus-5-5",
+  "claude-sonnet-5": "claude-sonnet-5-5",
+};
+
+/** A table's entry for a model an operator named, which may be any string, `constructor` included. */
+function entry(table: Readonly<Record<string, string>>, model: string): string | undefined {
+  return Object.hasOwn(table, model) ? table[model] : undefined;
+}
+
+/** `2.1.285` as three numbers, or null for anything else. */
+function versionParts(version: string): readonly [number, number, number] | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version.trim());
+  return m === null ? null : [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+/** Whether `have` is `floor` or later, compared as numbers: 2.1.1000 is past 2.1.284. */
+function atLeast(have: readonly [number, number, number], floor: readonly [number, number, number]): boolean {
+  for (let i = 0; i < 3; i += 1) {
+    if (have[i] !== floor[i]) return (have[i] ?? 0) > (floor[i] ?? 0);
+  }
+  return true;
+}
+
+export interface UnservedRoute {
+  readonly role: string;
+  readonly model: string;
+  /** The first runtime `FIRST_RUNTIME_SERVING` names for the model. */
+  readonly first: string;
+}
+
+/**
+ * S-5⁶ (PRDR-319): each role routed to a model the table knows and `runtime`
+ * predates, in the routing's order. Null when `runtime` is not a version:
+ * nothing can be judged, and calling every model served, or none, would be a
+ * guess.
+ */
+export function unservedRoutes(routing: Readonly<Record<string, string>>, runtime: string): readonly UnservedRoute[] | null {
+  const have = versionParts(runtime);
+  if (have === null) return null;
+  const out: UnservedRoute[] = [];
+  for (const [role, model] of Object.entries(routing)) {
+    const first = entry(FIRST_RUNTIME_SERVING, model);
+    const floor = first === undefined ? null : versionParts(first);
+    if (first !== undefined && floor !== null && !atLeast(have, floor)) out.push({ role, model, first });
+  }
+  return out;
+}
+
+export interface SupersededRoute {
+  readonly role: string;
+  readonly model: string;
+  readonly successor: string;
+}
+
+/** S-5⁶ (PRDR-319): each role routed to a superseded default, with its successor, in the routing's order. */
+export function supersededRoutes(routing: Readonly<Record<string, string>>): readonly SupersededRoute[] {
+  return Object.entries(routing).flatMap(([role, model]) => {
+    const successor = entry(SUPERSEDED_MODELS, model);
+    return successor === undefined ? [] : [{ role, model, successor }];
+  });
+}
 
 /**
  * PRDR-263: the effort routing `init` writes, and the companion to the table
@@ -120,11 +214,17 @@ export const DEFAULT_MODEL_ROUTING: Readonly<Record<RoleId, string>> = {
  * Typed over ROLE_IDS for the same reason as the models: a ninth role is a
  * compile error here, not a role that silently keeps the runtime default.
  *
- * Every pair these two tables produce is servable, per the SDK's own
- * declaration — `xhigh` is Fable 5 / Opus 4.7+ / Sonnet 5, `max` is Fable 5 /
- * Opus 4.6+ / Sonnet 4.6+ — so nothing here relies on a downgrade. Where a
- * routed model cannot serve its level the SDK downgrades SILENTLY, which is
- * why PRDR-237 records what the turns settled at rather than assuming.
+ * Every pair these two tables produce is servable, so nothing here relies on
+ * a downgrade. Up to 0.3.280 the SDK declared it in its types: `xhigh` for
+ * Fable 5, Opus 4.7+ and Sonnet 5, `max` for Fable 5, Opus 4.6+ and Sonnet
+ * 4.6+. 0.3.285's types no longer name models; the runtime reports each
+ * model's levels through `supportedModels()`. Asked on 2026-09-30 (S-5⁶,
+ * PRDR-319), 2.1.285 resolves its `opus` and `sonnet` rows to
+ * `claude-opus-5-5` and `claude-sonnet-5-5` and lists every level from `low`
+ * to `max` for both, and a live session on each at `xhigh` settled at
+ * `xhigh`. Where a routed model cannot serve its level the SDK downgrades
+ * SILENTLY, which is why PRDR-237 records what the turns settled at rather
+ * than assuming.
  */
 export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
   planner: "max",

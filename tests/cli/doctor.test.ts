@@ -41,12 +41,18 @@ describe("PRDR-096 doctor reads the real installed SDK version", () => {
    */
   it("resolves a version without throwing, and the pin check actually runs", async () => {
     const root = await fixture();
+    /* The fixture pins what package.json pins, so the real install must match it. */
+    const pinned = (JSON.parse(readFileSync("package.json", "utf8")) as { dependencies: Record<string, string> }).dependencies[
+      "@anthropic-ai/claude-agent-sdk"
+    ];
+    const file = path.join(stateDir(root), "config.json");
+    const config = JSON.parse(readFileSync(file, "utf8")) as { pinned: Record<string, string> };
+    writeFileSync(file, `${JSON.stringify({ ...config, pinned: { ...config.pinned, agent_sdk: pinned } }, null, 2)}\n`);
     const report = await doctor(root, {});
     const check = named(report, "agent-sdk-pin");
     expect(check).toBeDefined();
     expect(check?.detail).not.toContain("is not defined by");
-    /* The fixture pins 0.3.280; the repo installs exactly that. */
-    expect(check?.detail).toContain("0.3.280");
+    expect(check?.detail).toContain(`pinned ${String(pinned)} == installed ${String(pinned)}`);
     expect(check?.ok).toBe(true);
   });
 });
@@ -531,3 +537,54 @@ describe("PRDR-276 doctor checks the toolchains a run would install", () => {
     expect(named(report, "toolchain")?.ok, "nothing Detent could install is missing").toBe(true);
   });
 });
+
+/** The fixture's config with `model_routing` replaced, as an operator's edit would leave it. */
+function route(root: string, routing: Readonly<Record<string, string>>): string {
+  const file = path.join(stateDir(root), "config.json");
+  const config = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+  writeFileSync(file, `${JSON.stringify({ ...config, model_routing: routing }, null, 2)}\n`);
+  return file;
+}
+
+/**
+ * S-5⁶ (PRDR-319) — a routed model is judged against the runtime that serves
+ * it, which is the Claude Code the SDK bundles (S-5‴), not the one on PATH.
+ * 0.3.280 bundled 2.1.280, which names `claude-opus-5-5` and never
+ * `claude-sonnet-5-5`, and nothing compared a routing to it.
+ */
+describe("S-5⁶ doctor judges each routed model against the bundled runtime", () => {
+  it("fails, naming the role, the model and the runtime, when the runtime predates the model", async () => {
+    const root = await fixture();
+    route(root, { implement: "claude-sonnet-5-5", review: "claude-opus-5-5" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280", runtimeVersion: () => "2.1.280" });
+    const row = named(report, "routed-models");
+    expect(row?.ok, "a model the bundled runtime does not serve is a failed check").toBe(false);
+    expect(row?.detail).toContain("implement → claude-sonnet-5-5");
+    expect(row?.detail).toContain("2.1.280");
+    expect(row?.detail, "a model the runtime serves is not named").not.toContain("review");
+    expect(report.exitCode).toBe(1);
+  });
+
+  it("passes when the runtime serves every routed model, and leaves a model outside its table unjudged", async () => {
+    const root = await fixture();
+    route(root, { implement: "claude-sonnet-5-5", review: "claude-opus-5-5", research: "claude-haiku-9" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280", runtimeVersion: () => "2.1.285" });
+    const row = named(report, "routed-models");
+    expect(row?.ok).toBe(true);
+    expect(row?.detail).toContain("2.1.285");
+  });
+
+  it("names each role routed to a superseded default, its successor and the line that moves it, without failing", async () => {
+    const root = await fixture();
+    const file = route(root, { review: "claude-opus-5", implement: "claude-sonnet-5", planner: "claude-opus-5-5" });
+    const report = await doctor(root, { installedSdkVersion: () => "0.3.280", runtimeVersion: () => "2.1.285" });
+    const row = named(report, "superseded-models");
+    expect(row?.ok, "a config keeps its own routing (S-5′), so this informs and does not fail").toBe(true);
+    const lines = readFileSync(file, "utf8").split("\n");
+    const at = (text: string): number => lines.findIndex((l) => l.includes(text)) + 1;
+    expect(row?.detail).toContain(`.detent/config.json:${String(at('"review": "claude-opus-5"'))} "review": "claude-opus-5-5"`);
+    expect(row?.detail).toContain(`.detent/config.json:${String(at('"implement": "claude-sonnet-5"'))} "implement": "claude-sonnet-5-5"`);
+    expect(row?.detail, "a role already on the newest model is not named").not.toContain("planner");
+  });
+});
+

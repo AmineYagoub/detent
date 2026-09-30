@@ -1,7 +1,7 @@
 ---
 id: PRDR-319
 title: "Nine roles run on older models, and the pinned runtime cannot serve Sonnet 5.5. S-5⁵ routes planner, plan_review, review, diagnose and informed_fix to claude-opus-5, and implement, blind_fix, review_fix and research to claude-sonnet-5. On 2026-09-30 the user decided that every role runs on the newest models, Opus 5.5 and Sonnet 5.5. Opus 5.5 costs 20% less per token than Opus 5 and 60% less per cache read, and ksar-cloud's 215 planning sessions would have cost 34% less at its prices. Sonnet 5.5 costs what Sonnet 5 does. The pinned SDK 0.3.280 bundles Claude Code 2.1.280, which names claude-opus-5-5 and not claude-sonnet-5-5, so the pin moves to 0.3.285, and a routed model the bundled runtime cannot serve is named before any session runs"
-state: OPEN
+state: DONE
 severity: major
 category: capability
 labels: ["prd-review", "cost-strategy", "S-5⁶", "S-5⁵", "S-5‴", "routing", "models", "sdk-pin", "user-decision"]
@@ -88,9 +88,142 @@ its pin. Nothing compares a routed model to the runtime that must serve it.
 3. **The levels stay as they are.** Lower levels are PRDR-327's, behind the bar.
 4. **`research` moves to Sonnet 5.5.** It stays a volume role on Sonnet, as S-5′ placed it.
 
-## Falsification (to run against HEAD when this is built)
+5. **`doctor`'s superseded row informs and never fails.** A config's routing is its own (S-5′), so
+   a role on `claude-opus-5` is reported with its successor and the line that moves it, and the row
+   stays `ok`. An unserved model fails its row, since that session would run on another model.
+6. **The runtime judged is the SDK manifest's `claudeCodeVersion`.** It is what serves every session
+   (S-5‴), read without starting a process. An unreadable version fails `doctor`'s row, since
+   nothing could be judged, and `init` and `run` say they could not judge it.
+7. **`run` is handed the runtime by its driver.** ARCH-1 keeps the SDK's manifest out of the
+   referee's reach, so `src/cli/run.ts` reads it and passes it as `RunOptions.runtime`. A fixture
+   run passes none: its sessions run on no runtime. The superseded defaults are named either way.
+8. **The v1→v2 migration seats the new roles on the new defaults.** It routes them "as `init` would
+   route it", so a pre-3.1.1 config that routes no planner now gets `plan_review` on
+   `claude-opus-5-5`, where it got `claude-opus-5`. One that routes its planner still gives the
+   review the planner's seat (planning decision 9).
+9. **The live smoke ran in `~/tabachir-detent-ab2`**, the authorized disposable clone, through
+   Detent's own backend, not in any project. Its `.detent/` was copied first to
+   `~/.detent-run-logs/ab2-detent-backup-2026-09-30`, and the two sessions' rows are in its ledger.
+10. **Test configs that record `agent_sdk: "0.3.280"` stay.** They are a project's recorded pin,
+    which `doctor` reports and never enforces (PRDR-254). The one test that compares it with the
+    installed SDK now pins what `package.json` pins.
+
+## Falsification, as filed
 
 - The default routing names `claude-opus-5` for five roles and `claude-sonnet-5` for four.
 - `doctor` passes a config that routes `implement` to `claude-sonnet-5-5` while the bundled
   runtime is 2.1.280.
 - A config routing `review` to `claude-opus-5` draws no note.
+## What changed
+
+- `src/schemas/roles.ts`: the nine roles move to `claude-opus-5-5` and `claude-sonnet-5-5`;
+  `FIRST_RUNTIME_SERVING`, `SUPERSEDED_MODELS`, `unservedRoutes` and `supersededRoutes`. Versions
+  are compared as numbers, and a model named like an object's own key is read with `Object.hasOwn`.
+  The effort doc-block says where the level support now comes from.
+- `src/sessions/runtime.ts` (new): the SDK manifest, `version` and `claudeCodeVersion`, moved out of
+  `doctor` with PRDR-096's resolution.
+- `src/kernel/routing-advice.ts` (new): the notes `doctor`, `init` and `run` share, and the line in
+  `.detent/config.json` a role's entry is on, looked for inside `model_routing`.
+- `src/cli/doctor.ts`: the `routed-models` and `superseded-models` rows, and `runtimeVersion` as a
+  seam.
+- `src/cli/init.ts`, `src/kernel/run.ts`, `src/cli/run.ts`: the notes before the first session.
+- `src/init/config.ts`: `PINNED_AGENT_SDK` is 0.3.285, and the routing note cites S-5⁶.
+- `package.json`, `package-lock.json`: `@anthropic-ai/claude-agent-sdk` 0.3.285 and its nine
+  platform packages, nothing else. `npm ci` passes on the new lockfile.
+- `README.md`: a Models section, with the routing table a test reads back against the code.
+- `detent-prd-v3.md`: S-5⁶'s build note, which states the routing in S-5⁵'s form.
+- Tests: `tests/sessions/runtime.test.ts`, `tests/kernel/routing-advice.test.ts`,
+  `tests/kernel/run-routing.test.ts`, `tests/cli/init-routing.test.ts` and
+  `tests/cli/run-routing.test.ts` are new. `doctor.test.ts`, `config-defaults.test.ts`,
+  `plan-review-role.test.ts` and `audit-role.test.ts` move to the new routing, and
+  `prd-specification-phase.test.ts` reads "as the code has them" from S-5⁶. S-5⁵ keeps what
+  PRDR-278 seated.
+
+## The runtimes
+
+- 0.3.280 bundles 2.1.280, whose binary names `claude-opus-5-5` 41 times and `claude-sonnet-5-5`
+  never; 2.1.281's does not name it either; 2.1.284's names it 24 times.
+- 0.3.285 bundles 2.1.285 (`npm view @anthropic-ai/claude-agent-sdk@0.3.285 claudeCodeVersion`),
+  whose binary names `claude-opus-5-5` 53 times and `claude-sonnet-5-5` 35 times.
+- 0.3.285's `sdk.d.ts` no longer says which model serves which level. Its runtime's
+  `supportedModels()`, asked on this account, resolves `opus` to `claude-opus-5-5` and `sonnet` to
+  `claude-sonnet-5-5`, each with `["low","medium","high","xhigh","max"]`.
+
+## Live smoke
+
+Run in `~/tabachir-detent-ab2` through `ClaudeCodeBackend` on the new pin, a `review` session asked
+to read `README.md` once so the containment hook saw the level each turn ran at:
+
+    sdk {"version":"0.3.285","runtime":"2.1.285"}
+    claude-opus-5-5 {"ok":true,"telemetryParsed":true,"routedEffort":"xhigh","settledEffort":"xhigh","models":["claude-haiku-4-5-20251001","claude-opus-5-5"],"fallback":null,"turns":2,"costUsd":0.0285,"seconds":8}
+    claude-sonnet-5-5 {"ok":true,"telemetryParsed":true,"routedEffort":"xhigh","settledEffort":"xhigh","models":["claude-haiku-4-5-20251001","claude-sonnet-5-5"],"fallback":null,"turns":2,"costUsd":0.0082,"seconds":3}
+    smoke total $ 0.0367
+
+Both served as routed, with no fallback, and settled at the level they were routed to.
+
+## Falsification
+
+Against HEAD `33fb4b0`, with 0.3.280 installed:
+
+    × PRDR-114 init writes the model routing > covers every role, judgement on the stronger models and volume on Sonnet 5ms
+    → expected 'claude-opus-5' to be 'claude-opus-5-5' // Object.is equality
+    × PRDR-114 init writes the model routing > routes every role to Opus 5.5 or Sonnet 5.5, judgement on Opus and volume on Sonnet 2ms
+    → expected { planner: 'claude-opus-5', …(11) } to deeply equal { planner: 'claude-opus-5-5', …(11) }
+    × S-5⁶ the README states the default routing as the code has it > names every role once, with its model and its level 0ms
+    → the README has a Models section: expected -1 to be greater than -1
+    × PRDR-263 init writes the effort routing > never routes a role to a level its own model cannot serve 10ms
+    → claude-opus-5 is a model whose effort support this test has not verified: expected undefined to be defined
+    × S-5⁶ init names the routing's problems before its first session > names a model the runtime cannot serve, and each superseded default with the line that moves it 134ms
+    → expected '' to contain 'implement → claude-sonnet-5-5'
+    × S-5⁶ run names the routing's problems before its first session > names a model the runtime cannot serve and a superseded default, before the first session, and runs as routed 582ms
+    → the unserved model, with the runtime: expected '' to contain 'implement → claude-sonnet-5-5'
+    × S-5⁶ doctor judges each routed model against the bundled runtime > fails, naming the role, the model and the runtime, when the runtime predates the model 137ms
+    → a model the bundled runtime does not serve is a failed check: expected undefined to be false // Object.is equality
+    × S-5⁶ doctor judges each routed model against the bundled runtime > passes when the runtime serves every routed model, and leaves a model outside its table unjudged 135ms
+    → expected undefined to be true // Object.is equality
+    × S-5⁶ doctor judges each routed model against the bundled runtime > names each role routed to a superseded default, its successor and the line that moves it, without failing 134ms
+    → a config keeps its own routing (S-5′), so this informs and does not fail: expected undefined to be true // Object.is equality
+    Error: Cannot find module '../../src/sessions/runtime.js' imported from '/Users/workstation/detent/tests/sessions/runtime.test.ts'
+    Tests  9 failed | 31 passed (40)
+
+## Mutation battery
+
+Each mutant was applied to snapshot copies of `roles.ts`, `routing-advice.ts`, `doctor.ts`,
+`init.ts`, `run.ts` (kernel and CLI) and `config.ts`, nine suites were run (106 cases), and every
+file was restored from its copy and checked with `cmp`.
+
+| Mutant | Result |
+|---|---|
+| M1 `review` back on `claude-opus-5` | killed, 7 cases |
+| M2 the table says 2.1.280 serves Sonnet 5.5 | killed, 5 |
+| M3 versions compared as text | killed: 2.1.1000 reads as before 2.1.284 |
+| M4 an unreadable runtime judged as serving everything | killed, 2 |
+| M5 the table read without `Object.hasOwn` | killed: `constructor` reads as a model |
+| M6 `routed-models` always ok | killed |
+| M7 `superseded-models` fails | killed |
+| M8 the line looked for from the file's top | killed: `effort_routing`'s line is named |
+| M9 `run` does not say its notes | killed, 3 |
+| M10 `init` does not say its notes | killed |
+| M11 `PINNED_AGENT_SDK` back to 0.3.280 | killed |
+| M12 the `run` CLI passes no runtime | killed |
+| M13 the superseded note dropped | killed, 4 |
+
+## Gates
+
+- `npm run lint`, `typecheck`, `parity:check`, `prompts:check`, `rules:check`, `tickets:check`: pass.
+- `npm test`: 198 files, 2,229 passed and 2 skipped (2,231).
+- `npm run plugin`: wrote nothing that changed.
+- `npm ci` on the new lockfile: passes, and installs 0.3.285 bundling 2.1.285.
+
+## Recorded, not fixed
+
+- **picomatch 4.0.3 has two high advisories** (GHSA-3v7f-55p6-f55p, GHSA-c2c7-rcm5-vvqj), which
+  `npm audit` reported during the install. It predates this change, and picomatch backs the
+  containment hook's globs, so it is a change of its own; it is offered as a separate task.
+- **2.1.282 and 2.1.283 were not read.** The table's 2.1.284 is the first runtime found to serve
+  Sonnet 5.5, and a runtime between is judged not to. No pinned Detent bundles one.
+- **The stopped tabachir test run keeps its pin**, `pin/tabachir-test` at 0.3.280, as the non-goals
+  say.
+- **The first run on Opus 5.5 at the planner's `max` measures what it thinks.** Opus 5.5 thinks more
+  per turn than Opus 5 at the same level, so planning's net cost on the new model is a run-time
+  outcome to read from the ledger (D-33).
