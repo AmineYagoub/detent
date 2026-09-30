@@ -17,7 +17,7 @@ import { sessionDeps } from "./session-deps.js";
 import { launchInitSession, withInitJournal } from "./session.js";
 import { countsOf, mergeFindings, type Finding, type Outcome } from "./validate-checks.js";
 import { dropKeptReviews, reviewRound, type KeptRoundDeps } from "./validate-kept.js";
-import { diffPath, fixBatches, fixFindings, type Fixed } from "./validate-fix.js";
+import { diffPath, fixFindings, writerBatches, type Fixed } from "./validate-fix.js";
 import type { ReviewTask, Shown } from "./validate-round.js";
 import { offeredNote, withRoundScratch } from "./validate-scratch.js";
 import { areaOf, areasOf, reviewable, scopeOf, type Area } from "./validate-scope.js";
@@ -222,7 +222,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
     const fixed: Fixed =
       findings.length === 0
         ? { outcome: new Map(), changed: [], diff: null, stood: true }
-        : await fixFindings(deps, `round ${String(r)}`, fixBatches(findings.map(({ id, severity, category, places, why, fix }) => ({ id, severity, category, places, why, fix }))), "review");
+        : await fixFindings(deps, `round ${String(r)}`, writerBatches(findings.map(({ id, severity, category, places, why, fix }) => ({ id, severity, category, places, why, fix }))), "review");
     const ends = counts.blocker + counts.major === 0;
     const open = openOf(findings, fixed.outcome, r >= deps.ceiling);
     rounds.push({ round: r, counts, open, changed: [...fixed.changed] });

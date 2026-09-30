@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { STATE_DIR } from "../fs/layout.js";
 import { noteUnitComplete } from "../kernel/ledger.js";
+import { readLedgerRows } from "../kernel/ledger-rows.js";
 import type { Outcome } from "./validate-checks.js";
 import { changedFiles, fixBatch, type RoundDeps, type ToFix } from "./validate-round.js";
 import { rollback, snapshot, type Snapshot } from "./write-tree.js";
@@ -37,6 +38,128 @@ export function fixBatches<T>(items: readonly T[], size: number = VALIDATE_FIX_B
   return batches;
 }
 
+/**
+ * C-2²⁷ (PRDR-323) — the order the writer takes a round's findings in, and
+ * where its batches are cut.
+ *
+ * C-2²⁴ cut them in the order `mergeFindings` gives, the areas' order.
+ * Reviewers of different areas quote the same text: on tabachir's first round
+ * 134 of the 379 findings shared their first place with another, and cut in
+ * the areas' order 22 of those places fell in two or more of the 19 batches,
+ * each batch's writer editing a place without seeing what another would ask of
+ * it. The first batch already held a minor, and the seventeenth was the last
+ * to hold a blocker, so a batch the checks undid took blockers down with
+ * minors, and no ledger row said what the minors cost.
+ *
+ * Findings that share a first place, the same file and line, are one group,
+ * split only when it holds more than a batch, and a group's most severe
+ * finding goes first. Groups go most severe first, then by file and line, and
+ * batches are cut on group boundaries, as few as that allows, each near an
+ * even share of what is left. A minor at a blocker's place goes with the
+ * blocker, one edit then settling the place. The minors that share a place
+ * with no blocker or major come last, in batches of their own: they are cut
+ * apart from the rest, so their batches' ledger rows are what they cost, at
+ * the price of one batch more than cutting all of them together may take.
+ */
+const SEVERITY_ORDER: Readonly<Record<string, number>> = { blocker: 0, major: 1, minor: 2 };
+
+const severityOf = (f: ToFix): number => SEVERITY_ORDER[String(f["severity"])] ?? Object.keys(SEVERITY_ORDER).length;
+
+/** A finding's first place: its file and line, or null for one that names none. */
+function firstPlace(f: ToFix): { readonly file: string; readonly line: number } | null {
+  const places = f["places"];
+  const first: unknown = Array.isArray(places) ? places[0] : undefined;
+  if (typeof first !== "object" || first === null) return null;
+  const { file, line } = first as { file?: unknown; line?: unknown };
+  return typeof file === "string" && typeof line === "number" ? { file, line } : null;
+}
+
+/** A finding's group: its first place, or the finding alone where it names none. */
+function placeKey(f: ToFix): string {
+  const place = firstPlace(f);
+  return place === null ? `\u0000${f.id}` : `${place.file}\u0000${String(place.line)}`;
+}
+
+const isMinor = (f: ToFix): boolean => f["severity"] === "minor";
+
+/** How many batches of at most `size` whole `units` need, in order: the greedy count, which is the fewest. */
+function fewestBatches<T>(units: readonly (readonly T[])[], size: number): number {
+  let count = 0;
+  let room = 0;
+  for (const unit of units) {
+    if (count > 0 && unit.length <= room) room -= unit.length;
+    else {
+      count += 1;
+      room = size - unit.length;
+    }
+  }
+  return count;
+}
+
+/**
+ * `units` in order, cut on their boundaries into as few batches of at most
+ * `size` as that allows. Each batch aims at an even share of what is left: it
+ * takes the unit that crosses its share when that lands nearer the share, or
+ * when stopping short would leave more than the batches after it can hold.
+ */
+function cutOnBoundaries<T>(units: readonly (readonly T[])[], size: number): T[][] {
+  const count = fewestBatches(units, size);
+  const batches: T[][] = [];
+  let at = 0;
+  let left = units.reduce((n, unit) => n + unit.length, 0);
+  for (let b = 0; b < count; b += 1) {
+    const share = Math.ceil(left / (count - b));
+    const batch: T[] = [];
+    for (let unit = units[at]; unit !== undefined; unit = units[at]) {
+      const next = batch.length + unit.length;
+      if (batch.length > 0 && next > size) break;
+      const nearer = next <= share || next - share < share - batch.length;
+      if (batch.length > 0 && !nearer && fewestBatches(units.slice(at), size) <= count - b - 1) break;
+      batch.push(...unit);
+      at += 1;
+    }
+    batches.push(batch);
+    left -= batch.length;
+  }
+  return batches;
+}
+
+/** C-2²⁷ (PRDR-323): a round's findings as the writer's batches, a place's together and the most severe first. */
+export function writerBatches<T extends ToFix>(findings: readonly T[], size: number = VALIDATE_FIX_BATCH): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const f of findings) groups.set(placeKey(f), [...(groups.get(placeKey(f)) ?? []), f]);
+  const ordered = [...groups.values()]
+    .map((group) => [...group].sort((a, b) => severityOf(a) - severityOf(b)))
+    .sort((a, b) => {
+      const [x, y] = [a[0], b[0]] as [T, T];
+      const [px, py] = [firstPlace(x), firstPlace(y)];
+      if (severityOf(x) !== severityOf(y)) return severityOf(x) - severityOf(y);
+      if (px === null || py === null) return px === null ? (py === null ? 0 : 1) : -1;
+      return px.file < py.file ? -1 : px.file > py.file ? 1 : px.line - py.line;
+    });
+  const cut = (part: readonly T[][]): T[][] =>
+    cutOnBoundaries(
+      part.flatMap((group) => (group.length > size ? fixBatches(group, size) : [group])),
+      size,
+    );
+  return [...cut(ordered.filter((group) => !group.every(isMinor))), ...cut(ordered.filter((group) => group.every(isMinor)))];
+}
+
+/** The batches, by index, that hold only minors at places no blocker or major of the round shares: the writer's note counts them and prices them. */
+export function minorsAlone(batches: readonly (readonly ToFix[])[]): ReadonlySet<number> {
+  const serious = new Set(
+    batches
+      .flat()
+      .filter((f) => !isMinor(f))
+      .map(placeKey),
+  );
+  const alone = new Set<number>();
+  batches.forEach((batch, n) => {
+    if (batch.length > 0 && batch.every((f) => isMinor(f) && !serious.has(placeKey(f)))) alone.add(n);
+  });
+  return alone;
+}
+
 export interface Fixed {
   readonly outcome: ReadonlyMap<string, Outcome>;
   /** The pack's documents the fixes changed, which stand. */
@@ -55,16 +178,25 @@ export interface Fixed {
  */
 export async function fixFindings(deps: RoundDeps, label: string, batches: readonly (readonly ToFix[])[], source: "checker" | "review"): Promise<Fixed> {
   const before = snapshot(deps.root, []);
+  const alone = source === "review" ? minorsAlone(batches) : new Set<number>();
   if (batches.length > 1) {
     const count = batches.reduce((n, batch) => n + batch.length, 0);
-    deps.note?.(`VALIDATE's writer, ${label}: ${String(count)} findings in ${String(batches.length)} batches of at most ${String(VALIDATE_FIX_BATCH)}, one after another (C-2²⁴)`);
+    const order =
+      source === "review" ? `; a place's findings together, the most severe first, and ${alone.size === 1 ? "1 batch holds" : `${String(alone.size)} batches hold`} only minors (C-2²⁷)` : "";
+    deps.note?.(
+      `VALIDATE's writer, ${label}: ${String(count)} findings in ${String(batches.length)} batches of at most ${String(VALIDATE_FIX_BATCH)}, one after another (C-2²⁴)${order}`,
+    );
   }
+  /** C-2²⁷ (PRDR-323): what the batches of minors alone cost, read from the ledger rows their sessions wrote. */
+  let minorsSpent = 0;
   const outcome = new Map<string, Outcome>();
   let stood = true;
   try {
     for (const [i, batch] of batches.entries()) {
       const stage = batches.length === 1 ? `VALIDATE's writer, ${label}` : `VALIDATE's writer, ${label}, batch ${String(i + 1)} of ${String(batches.length)}`;
+      const rowsBefore = alone.has(i) ? readLedgerRows(deps.root).length : 0;
       const fixed = await fixBatch(deps, stage, batch, source);
+      if (alone.has(i)) minorsSpent += readLedgerRows(deps.root).slice(rowsBefore).reduce((usd, row) => usd + row.cost_estimate_usd, 0);
       for (const [id, left] of fixed.outcome) outcome.set(id, left);
       stood &&= fixed.stood;
       if (fixed.stood) noteUnitComplete(deps.root);
@@ -72,6 +204,9 @@ export async function fixFindings(deps: RoundDeps, label: string, batches: reado
   } catch (err) {
     rollback(deps.root, before);
     throw err;
+  }
+  if (alone.size > 0) {
+    deps.note?.(`VALIDATE's writer, ${label}: the ${alone.size === 1 ? "batch" : `${String(alone.size)} batches`} of minors alone cost $${minorsSpent.toFixed(2)}, by their ledger rows (C-2²⁷)`);
   }
   const changed = changedFiles(deps.root, before);
   return { outcome, changed, diff: changed.length === 0 ? null : writeDiff(deps.root, label, before, changed), stood };

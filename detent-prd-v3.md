@@ -3791,6 +3791,21 @@ they need a real second round first.
   fixing the minors that share no place with a blocker or a major costs. The batch size, the checks
   on a batch and what a failed batch undoes are C-2²⁴'s, and the checker's writer keeps its one
   session.
+  *Built by PRDR-323. `writerBatches` in `src/init/validate-fix.ts` groups a round's findings by the
+  file and line of their first place, puts each group's most severe finding first, and orders the
+  groups. The groups that hold a blocker or a major are cut first and the groups of minors alone
+  after them, apart, so no batch mixes the two: that can take one batch more than cutting them
+  together, and it is what lets the minors' batches' ledger rows be their cost. Each part is cut on
+  group boundaries into the fewest batches of at most `VALIDATE_FIX_BATCH` that whole groups allow.
+  Each batch aims at an even share of what is left, and takes the group that crosses its share when
+  that lands nearer the share, or when stopping short would leave more than the batches after it can
+  hold. On tabachir's first round that is 20 batches of 18 to 20 findings, no place in two of them,
+  every blocker in the first two, and the 74 minors alone in the last four. A group larger than a
+  batch is cut as C-2²⁴ cuts findings. A finding that names no place is a group of its own, after
+  the groups of its severity that name one. The note before a writer of more than one batch says how
+  many batches hold only minors at places no blocker or major shares, and a note after any round's
+  writer that ran such a batch says what they cost, summed from the ledger rows their sessions
+  wrote. The checker's findings still go to one session.*
 
 - **X-1⁸ (3.1.1, PRDR-318).** How many sessions `init` runs at once is a budget,
   `budgets.init_sessions_at_once`: four by default, a whole number from one to sixteen, and a config
