@@ -61,6 +61,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
 | D-32 | **Planning is built on the pack.** SLICE is seeded by code and keyed by requirement ids (C-2⁸); PLAN drafts from pack records and asks nothing (C-4⁵); code checks what code can prove, drives one targeted redraft and blocks approval on what still fails (A-1⁷); one `plan_review` read per slice judges what code cannot (C-4⁶); ANALYZE is folded into DECIDE (D-10′); and gates bind per package (D-5′). | PRDR-278 (3.1.1); the operator's ten decisions of 2026-09-26, in `docs/plan-planning-redesign.md` §2, after `docs/planning-phase-audit-2026-09-26.md`. September's 79 planning tickets delivered about 19 results a live run could see, nearly all plumbing. ksar-cloud's approved plan was never reviewed whole (1.55M tokens against a 1M limit), kept 34 defects code had proved, and spent 78% of its planning on a review whose 151 verdicts were all `changes`. The pack alone would not fix that: ksar-cloud's documents were already half a pack. Planning decision 1 put this in the same amendment as D-31, and planning decision 4 pauses ksar-cloud's plan until the new planner re-plans it, as the baseline for later changes. |
 | D-33 | **Run-time outcomes decide which planning mechanisms stay.** A mechanism that claims to improve plans names the outcome it should move, among escalations to NEEDS_HUMAN, falsifications by cause, budget breaches, first-generation DONE, review rounds, and cost or wall-clock per ticket (N-5′), and a measured run in which that outcome does not move is grounds to remove it. Reviewer finding counts are not an outcome. | PRDR-278 (3.1.1); planning decision 3. September judged its planning patches by reviewer finding counts, and its own experiments showed those counts track how much the reviewer writes. |
 | D-34 | **AUDIT checks only what a decision rests on and a source could settle.** A triage sorts the survey's claims first. A claim a decision in the documents rests on, and that a primary source could settle, is checked, up to five of one topic to a session. A load-bearing claim no source could settle goes to DECIDE, and a claim nothing rests on is recorded and not checked. The checks keep the `audit` role's routing (C-2¹⁸). | PRDR-306 (3.1.1); the user's four decisions of 2026-09-28, taken during tabachir's test run. By 08:06 AUDIT had checked 138 claims, one session apiece on claude-opus-5-5 at max, for $426. DECIDE is given only the claims that are not confirmed, so the 77 confirmed changed nothing it was given. Many of the 48 unverified were claims no source could settle, and the 13 wrong ones, about $40 of checks, were the payoff. The user kept the model at max: the triage and the grouping do the saving. *Amended by D-34′ (PRDR-317): each claim checked has a session of its own, since grouped checks found fewer of the wrong claims; the triage stays.* |
+| D-35 | **Cost and time are cut only where the quality floor holds.** The floor: code checks every artifact a session writes; every claim the triage sends to a check gets a session of its own (D-34′); every VALIDATE round reviews every area in its scope, with the stop rule and the ceiling as they are, and a blocker is fixed and verified before anything plans from the pack; what is left open is shown to the user and never dropped; every ticket passes its gates and a review, and the user approves the plan; and the whole project is checked and planned before anything is built. A lever that changes neither what a session is asked nor its model or effort is built directly and measured by the ledger. One that lowers a model or an effort level is adopted only after it passes the bar on the evaluation sets (N-8), and its result is recorded whether it passes or not. Spend caps stay advisory, and no estimate stops anything (N-5⁗). | PRDR-318 (3.1.1); the user's three decisions of 2026-09-30, in `docs/plan-cost-strategy.md` §2: quality comes before cost, the whole project is checked and planned before anything is built, and every role runs on Opus 5.5 or Sonnet 5.5. Tabachir's test `init` spent $833 before it was stopped in VALIDATE's first round; finished on that build it would have cost about $1,500 and run about 27 hours, more than most users can spend. Every saving before this was argued case by case, and D-34's grouped claim checks, which looked like one, found three fewer of the wrong claims (D-34′). Milestone-scoped `init` was proposed and refused: a later milestone could conflict with something already built. |
 
 ---
 
@@ -189,6 +190,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   and field test were approved eleven times and declined never. The glob trigger is
   unchanged — a DONE-candidate whose diff touches the operator's `risk` globs still waits
   for a human, and approval still re-enters APPROVED for kernel re-verification.
+  *Amended by S-5⁸ (PRDR-318): a labelled ticket's implement and review sessions run at `max`; the label
+  is still never a stop.*
 
 - **X-1‴ (3.1.0, PRDR-108).** `review_fix_attempts` is read by the machine: review findings
   buy that many review-fix rounds before a human, default 3. It was configurable and never
@@ -235,6 +238,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   and a ticket the outage pushed into NEEDS_HUMAN returns to the pool by itself through
   `OUTAGE_REQUEUE` when the run resumes, the reason recorded on the generation it opens. A
   ticket a person has since touched is left to that person.
+  *Amended by X-8″ (PRDR-318): `run` waits for the reset a limit names, and a session a limit stopped
+  resumes its own conversation.*
 
 - **C-4‴ (3.1.1, PRDR-103).** REVIEW_PLAN's closed tag set gains `dependency`: a criterion
   that requires behaviour another ticket builds, where neither `depends_on` nor the surface
@@ -264,6 +269,9 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   referee notes and journals the fallback per session; the ledger's `models` field says what
   actually ran (PRDR-095). The agent-sdk pin moves to 0.3.258, whose bundled runtime serves
   the models the default names. An existing config keeps its own routing untouched.
+  *Amended by S-5⁶ (PRDR-318): a role routed to a model the bundled runtime does not serve is named
+  before any session is spent, and an existing config is told which of its roles name a superseded
+  model; its routing is still left as it is.*
 
 - **V-1′ (3.1.1, PRDR-115).** Greenfield's provisional bindings come from the documents
   first: when the planning documents name the verification commands, ANALYZE copies them
@@ -450,6 +458,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   bundled runtime is what serves a session, so model support moves with this pin and not with
   the `claude` an operator installs. The default routing is untouched — both models it names are
   served by 2.1.280 — so the pin decides only what a project MAY route to, not what it does.
+  *Amended by S-5⁶ (PRDR-318): the pin moves to 0.3.285, whose runtime serves `claude-sonnet-5-5` too,
+  and the default routing moves every role to Opus 5.5 or Sonnet 5.5.*
 
 - **S-1″ (3.1.1, PRDR-124).** An init session carries its OWN containment policy, whose surface
   is exactly the artifact it was asked to write. S-1′ has always said such a session gets the
@@ -730,6 +740,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   remediation rule is now explicit: assert on the entry point, never on the helper the entry
   point forgot to call. The same missing call also dropped `EXTENDED_CACHE_HEADER`, so S-6's
   extended prompt-cache TTL had never once been requested.
+  *Amended by S-6″ (PRDR-318): Detent sets `CLAUDE_CODE_PROMPT_CACHE_TTL` in each session's environment,
+  per kind of session, and an operator's own value is not passed.*
 
 - **SEC-5′ (3.1.1, PRDR-134).** The drift check compares the COMMAND, not only the
   configuration it came from. `checkBinding` compared `config_hash` alone, and `resolved` — the
@@ -883,6 +895,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   that never took.
   *Amended by S-4⁵ (PRDR-299): built for `init`'s sessions too, which say a disagreement through
   init's note seam.*
+  *Amended by S-5⁸ (PRDR-318): a `run` session's `effort_settled` also records why its level was chosen:
+  the role, risk or evidence.*
 
 - **S-4⁵ (3.1.1, PRDR-299).** `init`'s sessions record the effort they were routed to and the one
   they ran at, as the kernel's have since S-4‴ and S-4⁗, and the model they fell back from, as
@@ -1157,6 +1171,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   backend's support has no caller, and PRDR-298 deletes it.*
   *Amended by C-3⁵ (PRDR-298): the backend's support is deleted.*
   *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are batched, and each is told its own path.*
+  *Amended by S-6‴ (PRDR-318): a VALIDATE round's reviewers are handed the foundations as the same first
+  message, once the review set passes with it.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -2625,6 +2641,11 @@ the code does what the rules it amends describe, and each of those rules points 
   the planner's seat (planning decision 9), and the planner stays where S-5″ put it. Nothing else
   moves, and the routing is not tuned past these defaults until a run-time outcome says it should
   (D-33).
+  *Amended by S-5⁶ (PRDR-318): every role runs on Opus 5.5 or Sonnet 5.5, each at the effort above.*
+  *Amended by S-5⁷ (PRDR-318): a task's model or effort moves lower only through a passing measurement on
+  N-8's sets, which the routing names.*
+  *Amended by S-5⁸ (PRDR-318): in `run`, risk and failed attempts raise the implement, fix and review
+  sessions' levels, and never lower them.*
 
 - **D-5′ (3.1.1, PRDR-278).** Gates bind per package. D-5 bound the repository root only in v1 and
   named workspace scoping a v2 migration; NG2 made per-workspace gate scoping a non-goal; V-5
@@ -2799,6 +2820,8 @@ the code does what the rules it amends describe, and each of those rules points 
     it, and required only in `presentation.json`, which no released build wrote.
   *Amended by N-5‴ (PRDR-311): the build is digested when the process loads, not when it first
   stamps a record.*
+  *Amended by N-5⁗ (PRDR-318): during `init`, `detent status` also shows the phase's progress, its spend
+  and an estimated finish.*
 
 - **N-5‴ (3.1.1, PRDR-311).** The build a process stamps is the tree it loaded. N-5″ digested the
   tree the first time a record was stamped and kept that digest, so a tree edited between the load
@@ -3308,6 +3331,8 @@ the code does what the rules it amends describe, and each of those rules points 
   and told that any other document is context, read and never quoted.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
+  *Amended by S-6‴ (PRDR-318): once the review set passes with it, each reviewer is handed the
+  foundations' text in its first message, and they count as read.*
 
 - **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
   throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past
@@ -3421,6 +3446,8 @@ the code does what the rules it amends describe, and each of those rules points 
   the same helper. "VALIDATE's reviewers still run one after another" held until then.*
   *Amended by D-34′ (PRDR-317): a check session is given one claim again, so the batch is four
   claims. C-2¹⁸'s "up to five claims of one topic" held until then.*
+  *Amended by X-1⁸ (PRDR-318): how many checks run at once is `budgets.init_sessions_at_once`, four by
+  default.*
 
 - **C-2¹⁷ (3.1.1, PRDR-305).** AUDIT keeps its checked survey until the phase completes. Its
   checkpoint is written when it completes, and the claim checks after the survey run for hours on a
@@ -3555,6 +3582,8 @@ the code does what the rules it amends describe, and each of those rules points 
   already moved is done again first. Spend is read at each launch (D-25), and what a batch can run
   past a reading is one batch (D-28′). The size is a constant, as AUDIT's is, until a run-time
   outcome asks for another (D-33).
+  *Amended by X-1⁸ (PRDR-318): how many reviewers run at once is `budgets.init_sessions_at_once`, four
+  by default.*
 - **C-2²⁴ (3.1.1, PRDR-314).** VALIDATE's writer takes a round's findings in batches. C-2¹⁴ gave
   one `spec_write` session every finding of the round, and undid every fix of the round when that
   session's second attempt left the checker red or no requirement standing. On tabachir's test
@@ -3577,6 +3606,8 @@ the code does what the rules it amends describe, and each of those rules points 
   writer takes. The checker's writer before any round is still one session over all the checker's
   findings: a batch of them would read the checker red on the findings the others hold. The size
   is a constant until a run-time outcome asks for another (D-33).
+  *Amended by C-2²⁷ (PRDR-318): a place's findings are batched together, and the groups run most severe
+  first.*
 - **C-2²⁵ (3.1.1, PRDR-315).** A quote one line from where it says stands on the line that holds
   it. Code checks each passage an AUDIT survey or a VALIDATE reviewer quotes at the line it names,
   and C-2¹¹ and C-2¹⁴ refused the artifact for any passage not there, dropping it on the second
@@ -3624,6 +3655,173 @@ the code does what the rules it amends describe, and each of those rules points 
   AUDIT's key (C-2¹¹), so a survey kept by an earlier build is surveyed again. On tabachir, C-2²⁰'s
   triage sends 117 claims to a check: about $366 at arm A's $3.13 a claim, with the triage on
   top, against A's $453 and B's $203. The figure is reported, not a limit.
+  *Amended by X-1⁸ (PRDR-318): `AUDIT_CLAIM_BATCH` becomes `budgets.init_sessions_at_once`, four by
+  default.*
+
+**Cost and time at the same quality (3.1.1, PRDR-318).** The rules from S-5⁶ to S-5⁸ below, with
+D-35 in the decision log, were recorded on 2026-09-30, before any code, as N-6 requires. They carry
+the user's three decisions of that day, in `docs/plan-cost-strategy.md` §2 and cited here as *cost
+decision n*: quality comes before cost (1); the whole project is checked and planned before
+anything is built (2); and every role runs on the newest models, Claude Opus 5.5 and Claude Sonnet
+5.5 (3). PRDR-319 to PRDR-328 build them, one rule each; until each lands, the code does what the
+rules it amends describe, and each of those rules points here. Of the plan's four open questions,
+the user settled the first the same day: the measuring budget is $500 (N-8). The other three stay
+open, and until the user answers each, the rules keep to the reading that risks no quality: an
+existing config is told of a superseded model and not moved (S-5⁶); no routing moves on a bar that
+today's setup misses on a second run (N-8); and minor findings are still fixed (C-2²⁴,
+specification decision 3). Narrower later rounds of VALIDATE (the plan's §7) are not recorded here:
+they need a real second round first.
+
+- **S-5⁶ (3.1.1, PRDR-318).** Every role runs on Opus 5.5 or Sonnet 5.5 (cost decision 3). `init`'s
+  default routing moves `planner`, `plan_review`, `review`, `diagnose` and `informed_fix` from
+  `claude-opus-5` to `claude-opus-5-5`, and `implement`, `blind_fix`, `review_fix` and `research`
+  from `claude-sonnet-5` to `claude-sonnet-5-5`; `audit`, `spec_write` and `spec_review` stay on
+  `claude-opus-5-5`. Every role keeps its effort. Both models recalibrated their levels, and Opus
+  5.5 thinks more per turn than Opus 5 at the same level, so the same level keeps at least today's
+  thinking; a lower one is S-5⁷'s to measure. Opus 5.5 costs less than Opus 5 at every rate, per
+  million tokens $4 of input, $20 of output, $0.20 a cache read and $8 a one-hour cache write,
+  against $5, $25, $0.50 and $10: ksar-cloud's planning tokens would have cost 34% less. Sonnet 5.5
+  costs what Sonnet 5 does. The agent-sdk pin moves to 0.3.285, since the runtime a pin bundles is
+  what serves a session (S-5‴): 0.3.280's, 2.1.280, serves `claude-opus-5-5` and not
+  `claude-sonnet-5-5`, and 0.3.285's, 2.1.285, serves both. `doctor` fails, naming the role and the
+  model, when a role is routed to a model the bundled runtime does not serve, and `init` and `run`
+  say so before their first session. A config that already holds a routing keeps it (S-5′), since a
+  config cannot tell a chosen `claude-opus-5` from a defaulted one: `doctor`, `init` and `run` name
+  each role it still routes to `claude-opus-5` or `claude-sonnet-5`, the model that supersedes it,
+  and the line that moves it, and nothing is rewritten. The move is the user's decision, not a
+  tuning, so S-5⁵'s wait for a run-time outcome (D-33) does not hold it back.
+
+- **S-6″ (3.1.1, PRDR-318).** The cache's lifetime is chosen per kind of session, from measured
+  gaps. S-6 asks for the extended lifetime on every session, and on a subscription Claude Code picks
+  one hour anyway: all 38.9M tokens tabachir's test run wrote to the cache were written at one hour,
+  $8 a million on Opus 5.5 against $5 at five minutes. A claim check's requests come 12 seconds
+  apart at the median and 137 seconds at the 99th percentile, so five minutes would have cost it 17%
+  less. A review's long thinking turns outlast five minutes, 864 seconds at the 99th percentile, so
+  five minutes would cost it 11% more, and that is what an API key gets today. A kind is a role and
+  its task, since one role runs tasks whose gaps differ. AUDIT's claim checks, WRITE and VALIDATE's
+  writer get five minutes. AUDIT's survey and triage, DECIDE, VALIDATE's reviewers, SLICE, PLAN,
+  `plan_review` and every `run` role get one hour, as does a session launched with no kind named.
+  Detent sets the lifetime in each session's environment as `CLAUDE_CODE_PROMPT_CACHE_TTL`, `5m` or
+  `1h`, so an API key and a subscription behave alike, and an operator's own value is not passed
+  (SEC-4′). S-6's header stays on one-hour sessions. The ledger row records the lifetime a session
+  ran with and its cache writes at each lifetime. The table stays measured: the script that reads
+  the gaps between a session's requests from its transcript is kept, and a kind whose 99th-percentile
+  gap passes four minutes is not given five, which keeps the triage at one hour though five minutes
+  measured 2.6% cheaper on it. `run`'s roles and planning keep one hour until their gaps are
+  measured.
+
+- **X-8″ (3.1.1, PRDR-318).** A usage limit costs no finished work. X-8′'s headless driver backs off
+  1, 5 and 15 minutes and exits, whatever reset the limit names, while `init` waits for the stated
+  reset (PRDR-189). `run` waits for it too, within `init`'s six-hour ceiling, and a limit that names
+  no time keeps the ladder. A session a limit stopped resumes its own conversation after the wait,
+  through the SDK's `resume` and its session id, and is told to carry on where it stopped, so the
+  thinking and tool calls it had done are not repeated; its cache has expired by then and is written
+  again once. A resume the SDK refuses, or a session whose id never arrived, is launched afresh, and
+  the note says so. A resumed session is the same attempt for every count and budget, and its
+  artifact is checked as any other's. What a stopped session spent is recorded from the usage its
+  messages carried, once per message id and priced per model, as a lower bound, instead of $0.
+  Both drivers note each wait with the reset time and the session it will resume. Tabachir's run
+  logs hold 30 waits for a limit or an outage, each followed by a session started again from its
+  first turn, and in PRDR-317's A/B test four sessions stopped at the account's limit after 129
+  turns were recorded at $0.
+
+- **S-6‴ (3.1.1, PRDR-318).** A VALIDATE round's reviewers share one cached prefix, if the review set
+  passes with it. Every reviewer reads the pack's foundations first, on tabachir 24 documents and
+  198 KB of the 571, into its own context, and writes them to the cache. Under this rule each
+  reviewer is handed the foundations' text in its first message, after the role's prompt and before
+  anything that differs between reviewers, in one order and byte for byte the same, so a round's
+  later reviewers read them from the cache at $0.20 a million tokens instead of writing them at $8.
+  A reviewer is still told its own documents and reads them itself, and the foundations it was
+  handed count as read (C-2¹⁴). It changes what a reviewer is handed, so it is the default only once
+  N-8's review set, reviewed with it at the level the reviewers are routed to, reports each blocker
+  of the bar; until then it is off, and the run is recorded either way. Expected: about $0.45 a
+  review on tabachir, and more on a larger pack.
+
+- **C-2²⁷ (3.1.1, PRDR-318).** VALIDATE's writer takes a place's findings together, the most severe
+  first. C-2²⁴ cut a round's findings into batches in the order their ids give them, which is the
+  areas' order. Of tabachir's 379 findings in round 1, 134 share their first place with another, and
+  cut that way into 19 batches, 22 of those places fell in two or more of them, each edited by a
+  writer that did not see the others; the first batch already held a minor, and the seventeenth was
+  the last to hold a blocker. Findings whose first place is the same file and line form a group, and
+  a group is split across batches only when it holds more than `VALIDATE_FIX_BATCH` findings. The
+  groups are ordered by their most severe finding, blocker before major before minor, then by the
+  file and line of their first place, and cut in that order, on group boundaries, as few and as even
+  as C-2²⁴ cuts them. One edit settles a place, the blockers land first, and the batches of minors
+  run last: the writer's note says how many batches hold only minors, and their ledger rows are what
+  fixing the minors that share no place with a blocker or a major costs. The batch size, the checks
+  on a batch and what a failed batch undoes are C-2²⁴'s, and the checker's writer keeps its one
+  session.
+
+- **X-1⁸ (3.1.1, PRDR-318).** How many sessions `init` runs at once is a budget,
+  `budgets.init_sessions_at_once`: four by default, a whole number from one to sixteen, and a config
+  outside that range is refused at load. AUDIT's claim checks (C-2¹⁶) and a VALIDATE round's reviews
+  (C-2²³) read it in place of their constants, and nothing else about either changes. It changes
+  neither what a session is asked nor its model or effort, only the wall clock against how fast an
+  account's usage window is spent, so it is the operator's to set and not a mechanism for D-33 to
+  measure. At eight, AUDIT's checks and a round's reviews would take about half the wall clock, and
+  with X-8″ a limit reached loses no finished work. The writer's batches stay one at a time: all but
+  one of round 1's 379 findings are linked through the files they cite, so no two batches could
+  safely edit at once. `run`'s sessions stay under X-1's own budgets.
+
+- **N-5⁗ (3.1.1, PRDR-318).** `init` says what a costly step will cost before it spends. Before
+  AUDIT's checks, each VALIDATE round, each round's writer and PLAN, it notes how many claims,
+  areas, batches or slices it will run, with an estimate of their cost and wall clock: the units
+  times a unit's figure, and the wall clock divided by the sessions run at once (X-1⁸). The figure
+  is the median of this project's ledger rows for the same kind of session, model and effort when
+  there are at least five, and otherwise Detent's measured figure, which the note names with the
+  build and the project that measured it; the first are tabachir's, a claim check at $3.13 and 7.8
+  minutes and a review at $9.64 and 31.5 minutes. During `init`, `detent status` shows the phase,
+  the units done and left, the spend so far and an estimated finish from the same figures. No
+  estimate stops, asks or waits (cost decision 1, PRDR-191, PRDR-265). Tabachir's test run spent
+  $534 and 9.6 hours in AUDIT before DECIDE asked the user anything, and nothing said beforehand how
+  many claims would be checked or what that would cost. `run` is not estimated: its units, tickets,
+  have no measured figure under the redesign yet.
+
+- **N-8 (3.1.1, PRDR-318).** Evaluation sets, and the bar a lower model or effort level must pass
+  (D-35). The sets come from tabachir's test run and are kept outside this public repository, where
+  the operator says; the repository holds only their builder, runner and scorer. The claims set is
+  the 14 claims arm A of PRDR-317's A/B test found wrong and 30 it confirmed from a primary source,
+  each with its survey wording and arm A's brief. The reviews set is the 10 areas whose kept reviews
+  hold round 1's 18 blockers, each with its documents as the reviewers saw them, its foundations and
+  its round's inputs. A setup passes when it finds all 14 claims wrong and confirms none of them;
+  calls none of the 30 wrong unless its source shows that arm A was mistaken, each such claim listed
+  for a person to settle; and reports each of the 18 blockers at its place, the same file and a
+  quote overlapping the blocker's, as a blocker or a major. Runs differ: PRDR-317's two arms
+  disagreed on 15 of the 107 claims both checked. So today's setup is re-run on the same sets, and
+  where it misses part of the bar the user decides the bar, and nothing moves on it until then. The
+  runner checks and reviews through the launch path and prompts `init` uses, only on a disposable
+  copy the operator names and never on the project a set came from, four sessions at a time,
+  recording every session in that copy's ledger. It prints its estimate before it starts and its
+  spend as it goes, starts only when given a budget, and launches no session its estimate says
+  would pass it: a measurement is bought within what the user approved, unlike a run, whose caps
+  only announce. The user set the measuring budget at $500 on 2026-09-30.
+
+- **S-5⁷ (3.1.1, PRDR-318).** A task's model or effort moves below S-5⁶'s only through a passing
+  measurement on N-8's sets, and the routing names it. Effort is routed per task where a role runs
+  several, so AUDIT's claim checks can move apart from its survey and triage. The arms run in order:
+  Opus 5.5 at `high`, on both sets; Sonnet 5.5 at `max`, on the claims set; and Opus 5.5 at
+  `medium`, on both, only if `high` passed. A task moves to the cheapest arm that passed, and only
+  the task measured moves; the routing's doc-block and this document name the measurement that
+  moved it. A task whose arms all fail keeps its routing, and the result is recorded here, pass or
+  fail, with each miss, its spend and its wall clock. The writer and the planner keep their levels
+  until a set exists for them, and `run`'s roles are S-5⁸'s. For the tasks N-8's sets measure, a
+  passing measurement is the evidence S-5⁵ waited for from a run-time outcome (D-33).
+
+- **S-5⁸ (3.1.1, PRDR-318).** In `run`, a ticket's risk sets where its effort starts, and evidence
+  moves it, only up. A ticket is high-risk when its `risk_label` is set or its surface matches a
+  glob of the config's `risk` list, and its implement and review sessions are routed to `max`. When
+  an attempt fails a gate, is falsified, or draws a review asking for changes, the ticket's next
+  implement or fix attempt is routed one level above the last, up to `max`, and the step is noted
+  on the ticket; X-2's ladder, and the model each of its steps runs on, are unchanged. A ticket
+  whose surface overlaps one an earlier ticket of the run touched, where that ticket escalated to
+  NEEDS_HUMAN or was falsified, starts one level above its role's. No rule routes a session below
+  its role's configured level: a lower start for a low-risk ticket waits for D-33's outcomes from
+  measured runs, first-generation DONE, escalations, falsifications and review rounds. Each
+  session's `effort_settled` event (S-4⁗) also records why its level was chosen, the role, risk or
+  evidence, and `detent status` counts sessions and their cost by reason. The label is still never
+  a stop (B-4′). The user asked on 2026-09-30 for effort set by risk and by code quality: risk is
+  known before a session starts, and the only evidence of how the code is going is Detent's own
+  checks.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

@@ -1,8 +1,10 @@
 # Cost and time at the same quality — plan
 
-**Status:** written 2026-09-30; no code yet. PRDR-318 will record it in the PRD, and PRDR-319 to
-PRDR-328 will build it. Where this plan and the PRD differ, the PRD wins.
-**Prerequisite (N-6):** PRDR-318 must land before any code.
+**Status:** written 2026-09-30. PRDR-318 recorded it in the PRD the same day, as D-35 and ten rules:
+S-5⁶ (PRDR-319), S-6″ (PRDR-320), X-8″ (PRDR-321), S-6‴ (PRDR-322), C-2²⁷ (PRDR-323), X-1⁸
+(PRDR-324), N-5⁗ (PRDR-325), N-8 (PRDR-326), S-5⁷ (PRDR-327) and S-5⁸ (PRDR-328). No code yet;
+each of those tickets builds its rule. Where this plan and the PRD differ, the PRD wins.
+**Prerequisite (N-6):** PRDR-318, landed before any code.
 **Evidence:** tabachir's stopped test run (its ledger, 231 session transcripts and 21 kept reviews),
 PRDR-317's A/B test of claim checks, and ksar-cloud's planning ledger, all measured on 2026-09-30
 (§3).
@@ -225,7 +227,7 @@ spend as it goes.
 - That, and today's setup re-run on the 14 wrong claims and the 10 areas: about $330.
 - That, and Sonnet 5.5 at `max` on the claims set: about $430.
 
-Nothing runs until the user approves a budget.
+Nothing runs until the user approves a budget. On 2026-09-30 the user approved $500.
 
 ## 6. Layer 3: measured trade-offs
 
@@ -319,7 +321,7 @@ finding fixed.
 
 ## 10. Open questions
 
-1. **The measuring budget (§5):** about $190, $330 or $430.
+1. **The measuring budget (§5):** settled by the user on 2026-09-30, at $500.
 2. **Existing configs (§4.1):** told which roles to move, or moved automatically.
 3. **The bar**, if today's setup cannot meet it on a second run (§5).
 4. **Minor findings (§7):** they stay fixed automatically, unless the user decides otherwise.
