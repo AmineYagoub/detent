@@ -3878,6 +3878,30 @@ they need a real second round first.
   spend as it goes, starts only when given a budget, and launches no session its estimate says
   would pass it: a measurement is bought within what the user approved, unlike a run, whose caps
   only announce. The user set the measuring budget at $500 on 2026-09-30.
+  *Built by PRDR-326. `src/eval/` holds it, `scripts/eval-build.ts`, `scripts/eval-run.ts` and
+  `scripts/eval-score.ts` run it, and `docs/evaluation.md` says how. A set is `set.json` and
+  `tree/`, the files its sessions could read, each with its digest. The claims set takes arm A's
+  briefs from the one-claim artifacts of its checks, as AUDIT committed them, and its 30 confirmed
+  claims are the first in the order of their hashes; its tree is the copy's last commit, which must
+  hold every claim's passage. The reviews set proves each kept review by its key: the builder works
+  out each area's round-1 task from the tree with VALIDATE's own code (`roundTasks`), and a review
+  counts only where that task and the tree's files digest to the key it was kept under. From
+  tabachir's test copy: arm A's 145 briefs (80 confirmed, 14 wrong, 51 unverified), and 21 of the
+  24 kept reviews proven, holding 379 findings and the set's 18 blockers in 10 areas. The runner
+  checks a claim with AUDIT's `checkOneClaim` on `verifyClaimsInputs`, and reviews an area with
+  VALIDATE's `reviewArea` on the task its kept review was given, proven again by its key on the
+  copy. Its sessions are set up by `sessionDeps`, with the evaluated role routed to the model and
+  effort named. It refuses the copy a set was read from, any worktree of that copy's repository, this
+  repository, and a copy whose files are not the set's tree, unless told to stage the tree, which
+  commits it to a branch of the copy. It reads the spend from the copy's ledger at each launch, and
+  counts the sessions in flight at their figure. A route nothing has measured is estimated at the
+  dearest measured figure of its kind. A unit that did not finish is never read as a verdict, and an
+  evaluation with one is incomplete. Two quotes overlap when their places in the file's text meet,
+  whitespace aside. Neither AUDIT nor VALIDATE shows a session the answer it is asked for, so before
+  any session starts the runner removes from the copy each earlier record of a verdict on a unit of
+  the set, and names them: briefs, session artifacts, the phase's checkpoint, kept reviews and the
+  init journal. Each check's brief is kept in the results. `--only wrong` checks only the claims arm
+  A found wrong, and the score counts only those, for a re-run of today's setup.*
 
 - **S-5⁷ (3.1.1, PRDR-318).** A task's model or effort moves below S-5⁶'s only through a passing
   measurement on N-8's sets, and the routing names it. Effort is routed per task where a role runs

@@ -362,9 +362,10 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
  * reach their preconditions without launching real billed sessions. `init`,
  * the one verb with no fixture path at all, constructed its backend inline —
  * so the S-5 refusal below could not be tested without a source change first,
- * which is exactly the argument PRDR-174 made for the other two.
+ * which is exactly the argument PRDR-174 made for the other two. N-8
+ * (PRDR-326): an evaluation launches its sessions on this same backend.
  */
-function defaultBackend(root: string): SessionBackend {
+export function defaultBackend(root: string): SessionBackend {
   return new ClaudeCodeBackend({
     /**
      * PRDR-067 (amended by T-140's sixth firing): the D-21 guard applies to

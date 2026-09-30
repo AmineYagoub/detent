@@ -18,7 +18,10 @@
     "plugin": "tsx scripts/build-plugin.ts",
     "plugin:validate": "claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json && claude plugin validate --strict skills && claude plugin validate --strict agents",
     "rules:check": "tsx scripts/check-rules.ts",
-    "tickets:check": "tsx scripts/check-tickets.ts"
+    "tickets:check": "tsx scripts/check-tickets.ts",
+    "eval:build": "tsx scripts/eval-build.ts",
+    "eval:run": "tsx scripts/eval-run.ts",
+    "eval:score": "tsx scripts/eval-score.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.285",

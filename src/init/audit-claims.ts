@@ -124,8 +124,11 @@ export interface CheckClaimsDeps extends TriageDeps {
   readonly launch: (claim: Pending, artifactOut: string, previous: { readonly issue: string } | null) => Promise<{ readonly toolCalls: number }>;
 }
 
+/** What one claim's check reads and launches with: none of the triage, the width or the estimate (N-8, PRDR-326). */
+export type OneCheckDeps = Pick<CheckClaimsDeps, "root" | "documents" | "launch" | "note">;
+
 /** One brief, read with every check a brief gets, save which claim it is for. */
-function briefFrom(raw: unknown, deps: CheckClaimsDeps): { value: ClaimBrief | null; issue: string | null } {
+function briefFrom(raw: unknown, deps: OneCheckDeps): { value: ClaimBrief | null; issue: string | null } {
   const parsed = parseArtifact(claimBriefSchema, raw);
   if (!parsed.ok) return { value: null, issue: parsed.reason === "invalid" ? parsed.issues.join("; ") : parsed.reason };
   const source = parsed.value.source === undefined ? null : sourceIssue(deps.root, parsed.value.source, deps.documents);
@@ -155,7 +158,7 @@ function cachedBrief(hash: string, deps: CheckClaimsDeps): ClaimBrief | null {
  * nothing says which the session meant, and it is asked for again. A session
  * is given one claim (D-34′), and may still write a brief for another.
  */
-function readBriefs(file: string, asked: readonly Pending[], deps: CheckClaimsDeps): { briefs: Map<string, ClaimBrief>; issue: string | null } {
+function readBriefs(file: string, asked: readonly Pending[], deps: OneCheckDeps): { briefs: Map<string, ClaimBrief>; issue: string | null } {
   const briefs = new Map<string, ClaimBrief>();
   const raw = readJson(file);
   if (raw.issue !== null) return { briefs, issue: raw.issue };
@@ -179,7 +182,8 @@ function readBriefs(file: string, asked: readonly Pending[], deps: CheckClaimsDe
   return { briefs, issue: issues.length === 0 ? null : issues.join("; ") };
 }
 
-type Verdict = Omit<CheckedClaim, keyof Claim>;
+/** A claim's verdict, without the claim: what a check settles. */
+export type Verdict = Omit<CheckedClaim, keyof Claim>;
 
 const settled = (hash: string, brief: ClaimBrief): Verdict => ({
   claim_hash: hash,
@@ -198,7 +202,7 @@ type Tally = { -readonly [K in keyof AuditResearch]: AuditResearch[K] };
  * unchecked, and never ends the phase. The brief taken is committed on the
  * claim's hash, and is a unit of work.
  */
-async function checkClaim(pending: Pending, deps: CheckClaimsDeps, tally: Tally): Promise<Verdict> {
+async function checkClaim(pending: Pending, deps: OneCheckDeps, tally: Tally): Promise<Verdict> {
   const { claim, hash } = pending;
   const artifactOut = claimArtifactPath(deps.root, hash);
   let previous: { readonly issue: string } | null = null;
@@ -222,6 +226,18 @@ async function checkClaim(pending: Pending, deps: CheckClaimsDeps, tally: Tally)
   }
   deps.note?.(`AUDIT could not check "${claim.claim}" (${claim.subject}), so it is recorded as unverified and unchecked (C-2¹¹)`);
   return { claim_hash: hash, verdict: "unverified", checked: false };
+}
+
+/**
+ * N-8 (PRDR-326): one claim checked as AUDIT checks it, in a session of its
+ * own with one relaunch, its brief read with every check and committed. An
+ * evaluation checks a set's claims with it, so what it measures is AUDIT's
+ * check, and not a copy of it.
+ */
+export async function checkOneClaim(pending: Pending, deps: OneCheckDeps): Promise<{ readonly verdict: Verdict; readonly research: AuditResearch }> {
+  const tally: Tally = { sessions: 0, cache_hits: 0, tool_calls: 0 };
+  const verdict = await checkClaim(pending, deps, tally);
+  return { verdict, research: tally };
 }
 
 /**

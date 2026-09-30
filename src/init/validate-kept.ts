@@ -69,8 +69,13 @@ export function dropKeptReviews(root: string): void {
   rmSync(keptReviewsPath(root), { force: true });
 }
 
-/** What a reviewer reads, digested: what it is given, and the contents of every file it is given to read. */
-function reviewKey(root: string, round: number, task: ReviewTask, prompt: string): string {
+/**
+ * What a reviewer reads, digested: what it is given, and the contents of every
+ * file it is given to read. N-8 (PRDR-326): the evaluation set's builder reads
+ * a kept review as its reviewer's only where this key holds, which proves the
+ * files it keeps are the ones that reviewer read.
+ */
+export function reviewKey(root: string, round: number, task: ReviewTask, prompt: string): string {
   const files = [...task.foundations, ...task.documents, ...(task.diff === null ? [] : [task.diff])];
   const given = [round, task.area.name, task.foundations, task.documents, task.heuristic, task.previous, task.diff, prompt, contentsDigest(root, files)];
   return createHash("sha256").update(JSON.stringify(given)).digest("hex");

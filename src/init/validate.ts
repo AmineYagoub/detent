@@ -150,6 +150,27 @@ function tasksFor(areas: readonly Area[], scope: readonly string[], previous: re
   });
 }
 
+/**
+ * A round's pack, its areas, and a reviewer's task for each area in scope: the
+ * whole pack when `seeds` is null, as in round 1. N-8 (PRDR-326): an
+ * evaluation reviews a set's areas with round 1's tasks, so each is the task
+ * VALIDATE gives.
+ */
+export function roundTasks(
+  root: string,
+  greenfield: boolean,
+  seeds: readonly string[] | null,
+  previous: readonly Shown[] | null,
+  diff: string | null,
+): { readonly docs: readonly string[]; readonly areas: readonly Area[]; readonly tasks: readonly ReviewTask[] } {
+  const docs = packDocuments(root);
+  const { pack } = parsePack(root, docs, { greenfield });
+  const areas = areasOf(pack, docs);
+  const scope = seeds === null ? docs.filter(reviewable) : scopeOf(root, pack, docs, seeds);
+  const heuristic = checkPack(root, docs, { greenfield }).findings.filter((f) => !f.blocks);
+  return { docs, areas, tasks: tasksFor(areas, scope, previous, diff, heuristic) };
+}
+
 export async function validateStage(deps: ValidateStageDeps): Promise<PhaseOutcome> {
   const { root, greenfield } = deps;
   const status = classifyPack(root, { greenfield });
@@ -201,12 +222,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
   let diff = start.diff;
   let sandbox: Sandbox | null = null;
   for (let r = rounds.length + 1; ; r += 1) {
-    const docs = packDocuments(deps.root);
-    const { pack } = parsePack(deps.root, docs, { greenfield: deps.greenfield });
-    const areas = areasOf(pack, docs);
-    const scope = seeds === null ? docs.filter(reviewable) : scopeOf(deps.root, pack, docs, seeds);
-    const heuristic = checkPack(deps.root, docs, { greenfield: deps.greenfield }).findings.filter((f) => !f.blocks);
-    const tasks = tasksFor(areas, scope, previous, diff, heuristic);
+    const { docs, areas, tasks } = roundTasks(deps.root, deps.greenfield, seeds, previous, diff);
     if (tasks.length === 0) {
       deps.note?.("VALIDATE: nothing that moved is a document a round reviews, so no round runs (C-2¹⁴)");
       return finished(deps, rounds, { ran: true });

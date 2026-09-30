@@ -66,6 +66,18 @@ const HIERARCHY =
   "X-6a: project docs → codebase, dependency sources at their pinned versions included → official docs at that version → " +
   "upstream issues and changelogs → technical sources → general web";
 
+/** A claim as a session is given it: its words, its hash, its subject, and the passage that relies on it. */
+const given = (p: Pending): Json => ({ claim: p.claim.claim, claim_hash: p.hash, subject: p.claim.subject, passage: p.claim.passage });
+
+/**
+ * What a `verify_claims` session is given for its one claim (D-34′). N-8
+ * (PRDR-326): an evaluation checks a set's claims with these same inputs, so
+ * what it measures is AUDIT's own check.
+ */
+export function verifyClaimsInputs(claim: Pending, previous: { readonly issue: string } | null): Json {
+  return { task: "verify_claims", claims: [given(claim)], hierarchy: HIERARCHY, ...claimBriefsSkeleton(), ...refusedAttemptInput(previous, "set of briefs") };
+}
+
 export interface AuditStageDeps {
   readonly root: string;
   /** The documents the survey is given, the decision log already left out (C-2¹¹). */
@@ -214,7 +226,6 @@ async function surveyAnew(deps: AuditStageDeps, greenfield: boolean): Promise<Su
 export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
   const greenfield = isGreenfield(deps.stackMarkers);
   const { kept, dropped, unread } = keptSurvey(deps) ?? (await surveyAnew(deps, greenfield));
-  const given = (p: Pending): Json => ({ claim: p.claim.claim, claim_hash: p.hash, subject: p.claim.subject, passage: p.claim.passage });
   const checked = await checkClaims(kept.claims, {
     root: deps.root,
     documents: deps.documents,
@@ -230,11 +241,7 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
         { task: "triage", claims: claims.map(given), documents: [...deps.documents], expected_output: triageSkeleton(), ...refusedAttemptInput(previous, "triage") },
         out,
       ),
-    launch: async (claim, out, previous) =>
-      await deps.launch(
-        { task: "verify_claims", claims: [given(claim)], hierarchy: HIERARCHY, ...claimBriefsSkeleton(), ...refusedAttemptInput(previous, "set of briefs") },
-        out,
-      ),
+    launch: async (claim, out, previous) => await deps.launch(verifyClaimsInputs(claim, previous), out),
   });
   const found: Found = {
     contradictions: kept.contradictions,
