@@ -72,6 +72,14 @@ The figure is the median of this project's own sessions of the kind once there a
 otherwise Detent's measured figure, which the note names with the run that measured it; a kind
 nothing has measured yet is said to have no estimate. An estimate informs, and nothing waits for it.
 
+AUDIT's claim checks and a VALIDATE round's reviews run four sessions at once. To change that, set
+`init_sessions_at_once` under `budgets` in `.detent/config.json` to a whole number from 1 to 16.
+More at once finish sooner and use up your account's usage window faster; fewer take longer and use
+it more slowly. The number changes nothing a session is given, nor its model or effort. When a
+usage limit stops a session, `init` waits for the reset the limit names and resumes that session
+where it stopped, so no finished work is lost. VALIDATE's writer still runs its batches one at a
+time, since they edit the same files.
+
 ```bash
 detent run
 ```

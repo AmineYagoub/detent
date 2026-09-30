@@ -101,7 +101,7 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
    * stopped checking the one thing P6 is still worth: a ceiling nothing reads
    * is a dial wired to nothing, whether it halts or only reports.
    */
-  it("each ceiling declares its own breach target — eleven route nowhere at all", () => {
+  it("each ceiling declares its own breach target — nine route nowhere at all", () => {
     expect(breachTargetFor("flake_reruns")).toBe("LADDER_ENTRY");
     expect(breachTargetFor("gate_timeout_ms")).toBe("RED_GATE_NO_EXIT");
     expect(breachTargetFor("binding_probe_timeout_ms")).toBe("REJECTED_CANDIDATE");
@@ -114,6 +114,8 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     ).toEqual([
       /* PRDR-265: a question the pool could not fund still gets a session; the turns are reported. */
       "failure_research_tool_calls",
+      /* X-1⁸ (PRDR-324): a width, not a ceiling; it sets how many run at once and bounds nothing. */
+      "init_sessions_at_once",
       "planning_research_tool_calls",
       /* X-1⁵ (PRDR-191): the run total fired on success and late on failure, so it counts and reports. */
       "run_spend_usd",
@@ -145,9 +147,9 @@ describe("T-012 unit budgets (X-1, D-12)", () => {
     ]);
   });
 
-  /** PRDR-284: `spec_validation_rounds` is the eighteenth, VALIDATE's ceiling (C-2⁶). */
-  it("the X-1 table has exactly eighteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
-    expect(ALL_CEILING_KEYS).toHaveLength(18);
+  /** PRDR-284: `spec_validation_rounds` is the eighteenth, VALIDATE's ceiling (C-2⁶); X-1⁸ (PRDR-324): `init_sessions_at_once` the nineteenth, init's width. */
+  it("the X-1 table has exactly nineteen keys, and the adapter timeouts derive from it (PRDR-061)", () => {
+    expect(ALL_CEILING_KEYS).toHaveLength(19);
     expect(CEILINGS.gate_timeout_ms.default).toBe(900_000);
     expect(CEILINGS.binding_probe_timeout_ms.default).toBe(120_000);
   });

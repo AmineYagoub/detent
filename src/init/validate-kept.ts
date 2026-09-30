@@ -13,8 +13,9 @@ import { reviewArea, type ReviewTask, type RoundDeps } from "./validate-round.js
 import type { Area } from "./validate-scope.js";
 
 /**
- * C-2²³ (PRDR-313) — a VALIDATE round's reviews: up to four at once, each kept
- * as it lands.
+ * C-2²³ (PRDR-313) — a VALIDATE round's reviews: as many at once as
+ * `budgets.init_sessions_at_once` says, four by default (X-1⁸, PRDR-324),
+ * each kept as it lands.
  *
  * C-2¹⁴ ran one reviewer per area, one after another, and held what they
  * found in memory until the round's writer ran. Tabachir's pack has 26 areas,
@@ -35,8 +36,6 @@ import type { Area } from "./validate-scope.js";
  * starts from, and the kept reviews go. No session can write them: the
  * structural floor keeps every session out of `.detent/state/` (SEC-3′).
  */
-export const VALIDATE_REVIEW_BATCH = 4;
-
 const keptSchema = z.strictObject({
   schema_version: z.literal(SCHEMA_VERSION),
   reviews: z.array(z.strictObject({ key: sha256Hex, round: z.number().int().positive(), area: z.string(), findings: z.array(reviewFindingSchema) })),
@@ -80,11 +79,13 @@ function reviewKey(root: string, round: number, task: ReviewTask, prompt: string
 export interface KeptRoundDeps extends RoundDeps {
   /** The `spec_review` prompt's hash: a kept review answers only for the prompt it was made with. */
   readonly reviewPrompt: string;
+  /** X-1⁸ (PRDR-324): how many reviewers run at once. */
+  readonly atOnce: number;
 }
 
 /**
  * The round's reviews, each with its area's index in `areas`: every kept one
- * whose key holds, and the rest reviewed up to four at once, each kept as it
+ * whose key holds, and the rest reviewed `atOnce` at a time, each kept as it
  * lands. A reviewer that fails lets those in flight end, kept, and then fails
  * the round (C-2¹⁶).
  */
@@ -111,11 +112,11 @@ export async function reviewRound(
   const step = deps.estimate?.begin({
     phase: "VALIDATE",
     step: `VALIDATE round ${String(round)}'s reviews`,
-    said: `VALIDATE round ${String(round)}: ${String(toReview.length)} area${toReview.length === 1 ? "" : "s"} to review, a session each, ${String(VALIDATE_REVIEW_BATCH)} at once`,
+    said: `VALIDATE round ${String(round)}: ${String(toReview.length)} area${toReview.length === 1 ? "" : "s"} to review, a session each, ${String(deps.atOnce)} at once`,
     units: toReview.map((s) => ({ role: "spec_review", task: s.task.previous === null ? "review" : "verify" })),
-    atOnce: VALIDATE_REVIEW_BATCH,
+    atOnce: deps.atOnce,
   });
-  await inBatches(toReview, VALIDATE_REVIEW_BATCH, async (slot) => {
+  await inBatches(toReview, deps.atOnce, async (slot) => {
     const unit = step?.start();
     const findings = await reviewArea(deps, round, slot.task, pack, scratch, slot.area);
     keep(deps.root, { key: slot.key, round, area: slot.task.area.name, findings });

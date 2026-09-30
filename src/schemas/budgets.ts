@@ -92,6 +92,14 @@ export const CEILINGS = {
    * ksarjs converged in its seventh round, so 8 sits above it.
    */
   spec_validation_rounds: { scope: "init", breachTarget: "UNVERIFIED_FIXES", default: 8 },
+  /**
+   * X-1⁸ (PRDR-324): how many of AUDIT's claim checks, and of a VALIDATE
+   * round's reviews, run at once. Not a ceiling on spend, and nothing breaches
+   * it: more finishes sooner and spends an account's usage window faster, and
+   * a limit reached loses no finished work (X-8″). Four is what every
+   * measurement so far ran at.
+   */
+  init_sessions_at_once: { scope: "init", breachTarget: "NONE", default: 4 },
   flake_reruns: { scope: "red-gate", breachTarget: "LADDER_ENTRY", default: 1 },
   gate_timeout_ms: { scope: "gate-execution", breachTarget: "RED_GATE_NO_EXIT", default: 900_000 },
   binding_probe_timeout_ms: { scope: "binding-probe", breachTarget: "REJECTED_CANDIDATE", default: 120_000 },
@@ -149,6 +157,9 @@ const structural = (key: (typeof LADDER_CEILING_KEYS)[number]) =>
  */
 const withDefault = (key: CeilingKey) => z.number().positive().default(CEILINGS[key].default);
 
+/** X-1⁸ (PRDR-324): what a config outside the range is told. */
+const SESSIONS_AT_ONCE_RANGE = "X-1⁸: init_sessions_at_once is how many sessions init runs at once, a whole number from 1 to 16";
+
 export const budgetsSchema = z
   .strictObject({
     blind_fix_attempts: structural("blind_fix_attempts"),
@@ -163,6 +174,12 @@ export const budgetsSchema = z
     planning_research_tool_calls: withDefault("planning_research_tool_calls"),
     /* A count of rounds: a fraction of one runs nothing. */
     spec_validation_rounds: z.number().int().positive().default(CEILINGS.spec_validation_rounds.default),
+    init_sessions_at_once: z
+      .number({ error: SESSIONS_AT_ONCE_RANGE })
+      .int({ error: SESSIONS_AT_ONCE_RANGE })
+      .min(1, { error: SESSIONS_AT_ONCE_RANGE })
+      .max(16, { error: SESSIONS_AT_ONCE_RANGE })
+      .default(CEILINGS.init_sessions_at_once.default),
     flake_reruns: withDefault("flake_reruns"),
     gate_timeout_ms: withDefault("gate_timeout_ms"),
     binding_probe_timeout_ms: withDefault("binding_probe_timeout_ms"),

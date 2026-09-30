@@ -1131,6 +1131,9 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   them.*
   *Amended by C-2²³ (PRDR-313): VALIDATE's reviewers are a batch, four at a time, and this bounds
   them too.*
+  *Amended by X-1⁸ (PRDR-324): both batches are `budgets.init_sessions_at_once` sessions, four by
+  default and at most sixteen, so what AUDIT's checks or a round's reviews can run past a reading is
+  that many sessions.*
 
 - **C-4⁗‴ (3.1.1, PRDR-204).** The `k` draws of a slice's review launch **together**. They are
   independent by construction — that independence is what the threshold rests on — and they ran
@@ -3817,6 +3820,14 @@ they need a real second round first.
   with X-8″ a limit reached loses no finished work. The writer's batches stay one at a time: all but
   one of round 1's 379 findings are linked through the files they cite, so no two batches could
   safely edit at once. `run`'s sessions stay under X-1's own budgets.
+  *Built by PRDR-324. `init_sessions_at_once` is the nineteenth key of X-1's table, with no breach
+  target, since a width bounds nothing. The config schema refuses a value that is not a whole number
+  from 1 to 16 and names the range, and a config without the key, which is every config `init`
+  writes, gets four. `auditPhase` hands it to the claim checks and `validatePhase` to each round's
+  reviews; `AUDIT_CLAIM_BATCH` and `VALIDATE_REVIEW_BATCH` are gone. N-5⁗'s note before either step
+  and its progress name the number the step runs at, and its wall clock is counted in batches of
+  that many. A config with the key is refused by a build older than this one, as with any key X-1
+  adds; no migration step is needed, since an omitted key takes its default (F-3).*
 
 - **N-5⁗ (3.1.1, PRDR-318).** `init` says what a costly step will cost before it spends. Before
   AUDIT's checks, each VALIDATE round, each round's writer and PLAN, it notes how many claims,

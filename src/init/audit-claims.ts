@@ -111,6 +111,15 @@ export interface CheckClaimsDeps extends TriageDeps {
   readonly documents: readonly string[];
   /** N-5⁗ (PRDR-325): says what the checks will cost before they run, and keeps their progress; absent, neither. */
   readonly estimate?: Estimator | undefined;
+  /**
+   * C-2¹⁶ (PRDR-304), X-1⁸ (PRDR-324): how many check sessions run at once,
+   * `budgets.init_sessions_at_once`. The checks are independent, each session
+   * writes its brief under its own surface (S-1″), and a phase's launches
+   * share its one journal (PRDR-203), so running several shortens the phase
+   * and changes nothing a check is given. Spend is still read at each launch
+   * (D-25), and what the checks can run past a reading is one batch (D-28′).
+   */
+  readonly atOnce: number;
   /** The `verify_claims` session for `claim`, which is given it alone (D-34′). */
   readonly launch: (claim: Pending, artifactOut: string, previous: { readonly issue: string } | null) => Promise<{ readonly toolCalls: number }>;
 }
@@ -216,16 +225,6 @@ async function checkClaim(pending: Pending, deps: CheckClaimsDeps, tally: Tally)
 }
 
 /**
- * C-2¹⁶ (PRDR-304): how many check sessions AUDIT runs at once. The checks are
- * independent, each session writes its brief under its own surface (S-1″),
- * and a phase's launches share its one journal (PRDR-203), so a batch
- * shortens the phase and changes nothing a check is given. Spend is still
- * read at each launch (D-25), and what the batch can run past a reading is
- * one batch (D-28′).
- */
-export const AUDIT_CLAIM_BATCH = 4;
-
-/**
  * Settle each claim once, by its hash, and record every place the documents
  * rely on it with that one verdict: a claim that is wrong in two places is
  * wrong in both, and WRITE is given each place (C-2¹³). A committed brief
@@ -276,11 +275,11 @@ export async function checkClaims(
   const step = deps.estimate?.begin({
     phase: "AUDIT",
     step: "AUDIT's claim checks",
-    said: `AUDIT: ${String(toCheck.length)} claim${toCheck.length === 1 ? "" : "s"} to check, a session each, ${String(AUDIT_CLAIM_BATCH)} at once`,
+    said: `AUDIT: ${String(toCheck.length)} claim${toCheck.length === 1 ? "" : "s"} to check, a session each, ${String(deps.atOnce)} at once`,
     units: toCheck.map(() => ({ role: "audit", task: "verify_claims" })),
-    atOnce: AUDIT_CLAIM_BATCH,
+    atOnce: deps.atOnce,
   });
-  await inBatches(toCheck, AUDIT_CLAIM_BATCH, async (p) => {
+  await inBatches(toCheck, deps.atOnce, async (p) => {
     const unit = step?.start();
     record(p.hash, await checkClaim(p, deps, tally));
     unit?.done();

@@ -20,8 +20,9 @@ import type { Estimator } from "./progress.js";
 
 /**
  * C-2¹⁴ (PRDR-284) — the sessions of one VALIDATE round: a `spec_review`
- * reviewer per area, up to four at once (C-2²³, `validate-kept.ts`), and one
- * `spec_write` writer that applies what they found.
+ * reviewer per area, `budgets.init_sessions_at_once` at once (C-2²³, X-1⁸,
+ * `validate-kept.ts`), and one `spec_write` writer that applies what they
+ * found.
  *
  * A reviewer reads its area's documents after the foundations and reports
  * each defect at its `file:line`, quoted, with the exact fix. In a round after

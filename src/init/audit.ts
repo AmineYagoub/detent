@@ -79,6 +79,8 @@ export interface AuditStageDeps {
   readonly key: string;
   /** N-5⁗ (PRDR-325): what the claim checks will cost, said before they run. */
   readonly estimate?: Estimator | undefined;
+  /** X-1⁸ (PRDR-324): how many claim checks run at once. */
+  readonly atOnce: number;
 }
 
 function readSurvey(
@@ -218,6 +220,7 @@ export async function auditStage(deps: AuditStageDeps): Promise<PhaseOutcome> {
     documents: deps.documents,
     ...(deps.note === undefined ? {} : { note: deps.note }),
     estimate: deps.estimate,
+    atOnce: deps.atOnce,
     triaged: readKeptTriage(deps.root, deps.key),
     keepTriage: (entries) => {
       keepTriage(deps.root, deps.key, entries);
@@ -289,6 +292,7 @@ export function auditPhase(deps: PipelineDeps): PhaseHandler {
             key: keyOf(ctx),
             ...(deps.note === undefined ? {} : { note: deps.note }),
             estimate: estimator(deps),
+            atOnce: deps.budgets.init_sessions_at_once,
             launch: async (inputs, artifactOut) => {
               const result = await launchInitSession(sessionDeps(deps, journal, "AUDIT"), { role: "audit", inputs, artifactOut });
               /* C-3a's proxy: a turn is one call's worth, as S-4 has no per-call counter. */

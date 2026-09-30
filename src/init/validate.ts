@@ -216,7 +216,7 @@ async function loop(deps: ValidateStageDeps, start: Start): Promise<PhaseOutcome
       const offered = offeredNote(sandbox);
       if (offered !== null) deps.note?.(offered);
     }
-    /* C-2²³ (PRDR-313): up to four at once, each review kept as it lands, merged in the areas' order. */
+    /* C-2²³ (PRDR-313): `budgets.init_sessions_at_once` at once (X-1⁸), each review kept as it lands, merged in the areas' order. */
     const reported = await withRoundScratch(deps.root, r, sandbox, deps.note, async (scratch) => await reviewRound(deps, r, tasks, areas, docs.filter(reviewable), scratch));
     const findings = mergeFindings(r, reported);
     const counts = countsOf(findings);
@@ -309,6 +309,7 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
           today: (deps.now?.() ?? new Date()).toISOString().slice(0, 10),
           note: deps.note,
           estimate: estimator(deps),
+          atOnce: deps.budgets.init_sessions_at_once,
           sandbox: deps.sandbox ?? (async () => await probeSandbox({ root: deps.root })),
           review: async (inputs, artifactOut, scratch) => {
             await launchInitSession(launch, { role: "spec_review", inputs, artifactOut, ...(scratch === null ? {} : { scratch }) });

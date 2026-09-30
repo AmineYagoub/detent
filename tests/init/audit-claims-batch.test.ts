@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { stateDir } from "../../src/fs/layout.js";
-import { AUDIT_CLAIM_BATCH, auditBriefPath, claimHash } from "../../src/init/audit-claims.js";
+import { auditBriefPath, claimHash } from "../../src/init/audit-claims.js";
 import { runInit } from "../../src/init/machine.js";
 import { buildPipeline } from "../../src/init/pipeline.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -126,7 +126,7 @@ describe("PRDR-304 AUDIT checks its claims in batches (C-2¹⁶)", () => {
     await initThroughAudit(root, stub.backend);
 
     expect(stub.max()).toBe(4);
-    expect(AUDIT_CLAIM_BATCH).toBe(4);
+    expect(BUDGETS.init_sessions_at_once, "four where the config does not say (X-1⁸)").toBe(4);
     expect(stub.launched.slice(0, 4), "the first batch is the survey's first four claims").toEqual(claims.slice(0, 4).map((c) => c["claim"]));
     expect([...stub.launched].sort()).toEqual(claims.map((c) => String(c["claim"])).sort());
   });
@@ -155,7 +155,7 @@ describe("PRDR-304 AUDIT checks its claims in batches (C-2¹⁶)", () => {
 
     await expect(initThroughAudit(root, stub.backend)).rejects.toThrow(/audit session failed: the session crashed/u);
 
-    expect(stub.max(), "the failure met a whole batch in flight").toBe(AUDIT_CLAIM_BATCH);
+    expect(stub.max(), "the failure met a whole batch in flight").toBe(BUDGETS.init_sessions_at_once);
     expect(stub.inFlight(), "no session is left running when the phase fails").toBe(0);
     expect(stub.launched.length, "the claims not yet started stay unstarted").toBeLessThan(claims.length);
     for (const claim of stub.launched.slice(1)) expect(briefed(root, claim), claim).toBe(true);

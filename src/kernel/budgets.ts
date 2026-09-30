@@ -87,6 +87,8 @@ export const ENFORCEMENT_SITES = {
   planning_research_tool_calls: "init/audit",
   /** C-2¹⁴ (PRDR-284): the loop that counts its rounds against it, and stops there. */
   spec_validation_rounds: "init/validate",
+  /** X-1⁸ (PRDR-324): AUDIT hands it to its claim checks; `init/validate` hands it to a round's reviews the same way. */
+  init_sessions_at_once: "init/audit",
   flake_reruns: "kernel/flake",
   gate_timeout_ms: "adapter/run",
   binding_probe_timeout_ms: "adapter/bind",
