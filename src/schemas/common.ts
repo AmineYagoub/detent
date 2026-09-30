@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { globHazard } from "./glob-hazard.js";
 
 /**
  * F-3: every committed file carries `schema_version`; Detent refuses
@@ -42,8 +43,26 @@ export function isSafeTicketId(id: string): boolean {
   return ticketId.safeParse(id).success;
 }
 
-/** A glob pattern; matching semantics are picomatch's throughout (R-6). */
-export const glob = nonEmptyString;
+/**
+ * SEC-3″ (PRDR-330): a glob is refused where it is read when picomatch cannot
+ * match it safely and as written (`glob-hazard.ts`). This is where the config's
+ * `protected`, `risk` and `plan_docs`, and a ticket's `surface` and `granted`,
+ * are read.
+ */
+const matchable = (value: string, ctx: z.RefinementCtx): void => {
+  const hazard = globHazard(value);
+  if (hazard !== null) ctx.addIssue({ code: "custom", message: hazard });
+};
+
+/** A glob pattern; matching semantics are picomatch's throughout (R-6), and only one it can match safely (SEC-3″). */
+export const glob = nonEmptyString.superRefine(matchable);
+
+/**
+ * A surface entry as a planner drafts it (C-4⁵). Unlike a ticket's, it is not
+ * required to be non-empty, but it is held to SEC-3″, so a draft that could
+ * not become a ticket is refused while its relaunch can still fix it.
+ */
+export const draftGlob = z.string().superRefine(matchable);
 
 export type SchemaCheck<T> =
   | { readonly ok: true; readonly value: T }

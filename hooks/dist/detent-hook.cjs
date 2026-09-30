@@ -660,16 +660,16 @@ var require_parse = __commonJS({
       let paren = 0;
       let quote = 0;
       let value = "";
-      let escaped = false;
+      let escaped2 = false;
       for (const ch of input) {
-        if (escaped === true) {
+        if (escaped2 === true) {
           value += ch;
-          escaped = false;
+          escaped2 = false;
           continue;
         }
         if (ch === "\\") {
           value += ch;
-          escaped = true;
+          escaped2 = true;
           continue;
         }
         if (ch === '"') {
@@ -700,14 +700,14 @@ var require_parse = __commonJS({
       return parts;
     };
     var isPlainBranch = (branch) => {
-      let escaped = false;
+      let escaped2 = false;
       for (const ch of branch) {
-        if (escaped === true) {
-          escaped = false;
+        if (escaped2 === true) {
+          escaped2 = false;
           continue;
         }
         if (ch === "\\") {
-          escaped = true;
+          escaped2 = true;
           continue;
         }
         if (/[?*+@!()[\]{}]/.test(ch)) {
@@ -755,15 +755,15 @@ var require_parse = __commonJS({
       let bracket = 0;
       let paren = 0;
       let quote = 0;
-      let escaped = false;
+      let escaped2 = false;
       for (let i = 1; i < pattern.length; i++) {
         const ch = pattern[i];
-        if (escaped === true) {
-          escaped = false;
+        if (escaped2 === true) {
+          escaped2 = false;
           continue;
         }
         if (ch === "\\") {
-          escaped = true;
+          escaped2 = true;
           continue;
         }
         if (ch === '"') {
@@ -1238,14 +1238,14 @@ var require_parse = __commonJS({
           if (opts.literalBrackets === false || utils.hasRegexChars(prevValue)) {
             continue;
           }
-          const escaped = utils.escapeRegex(prev.value);
+          const escaped2 = utils.escapeRegex(prev.value);
           state.output = state.output.slice(0, -prev.value.length);
           if (opts.literalBrackets === true) {
-            state.output += escaped;
-            prev.value = escaped;
+            state.output += escaped2;
+            prev.value = escaped2;
             continue;
           }
-          prev.value = `(${capture}${escaped}|${prev.value})`;
+          prev.value = `(${capture}${escaped2}|${prev.value})`;
           state.output += prev.value;
           continue;
         }
@@ -1648,9 +1648,9 @@ var require_picomatch = __commonJS({
     var utils = require_utils();
     var constants = require_constants();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
-    var picomatch2 = (glob, options, returnState = false) => {
+    var picomatch3 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
-        const fns = glob.map((input) => picomatch2(input, options, returnState));
+        const fns = glob.map((input) => picomatch3(input, options, returnState));
         const arrayMatcher = (str) => {
           for (const isMatch of fns) {
             const state2 = isMatch(str);
@@ -1666,16 +1666,16 @@ var require_picomatch = __commonJS({
       }
       const opts = options || {};
       const posix = opts.windows;
-      const regex = isState ? picomatch2.compileRe(glob, options) : picomatch2.makeRe(glob, options, false, true);
+      const regex = isState ? picomatch3.compileRe(glob, options) : picomatch3.makeRe(glob, options, false, true);
       const state = regex.state;
       delete regex.state;
       let isIgnored = () => false;
       if (opts.ignore) {
         const ignoreOpts = { ...options, ignore: null, onMatch: null, onResult: null };
-        isIgnored = picomatch2(opts.ignore, ignoreOpts, returnState);
+        isIgnored = picomatch3(opts.ignore, ignoreOpts, returnState);
       }
       const matcher = (input, returnObject = false) => {
-        const { isMatch, match, output } = picomatch2.test(input, regex, options, { glob, posix });
+        const { isMatch, match, output } = picomatch3.test(input, regex, options, { glob, posix });
         const result = { glob, state, regex, posix, input, output, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
@@ -1701,7 +1701,7 @@ var require_picomatch = __commonJS({
       }
       return matcher;
     };
-    picomatch2.test = (input, regex, options, { glob, posix } = {}) => {
+    picomatch3.test = (input, regex, options, { glob, posix } = {}) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -1718,24 +1718,24 @@ var require_picomatch = __commonJS({
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
-          match = picomatch2.matchBase(input, regex, options, posix);
+          match = picomatch3.matchBase(input, regex, options, posix);
         } else {
           match = regex.exec(output);
         }
       }
       return { isMatch: Boolean(match), match, output };
     };
-    picomatch2.matchBase = (input, glob, options, posix = options && options.windows) => {
-      const regex = glob instanceof RegExp ? glob : picomatch2.makeRe(glob, options);
+    picomatch3.matchBase = (input, glob, options, posix = options && options.windows) => {
+      const regex = glob instanceof RegExp ? glob : picomatch3.makeRe(glob, options);
       return regex.test(utils.basename(input, { windows: posix }));
     };
-    picomatch2.isMatch = (str, patterns, options) => picomatch2(patterns, options)(str);
-    picomatch2.parse = (pattern, options) => {
-      if (Array.isArray(pattern)) return pattern.map((p) => picomatch2.parse(p, options));
+    picomatch3.isMatch = (str, patterns, options) => picomatch3(patterns, options)(str);
+    picomatch3.parse = (pattern, options) => {
+      if (Array.isArray(pattern)) return pattern.map((p) => picomatch3.parse(p, options));
       return parse(pattern, { ...options, fastpaths: false });
     };
-    picomatch2.scan = (input, options) => scan(input, options);
-    picomatch2.compileRe = (state, options, returnOutput = false, returnState = false) => {
+    picomatch3.scan = (input, options) => scan(input, options);
+    picomatch3.compileRe = (state, options, returnOutput = false, returnState = false) => {
       if (returnOutput === true) {
         return state.output;
       }
@@ -1746,13 +1746,13 @@ var require_picomatch = __commonJS({
       if (state && state.negated === true) {
         source = `^(?!${source}).*$`;
       }
-      const regex = picomatch2.toRegex(source, options);
+      const regex = picomatch3.toRegex(source, options);
       if (returnState === true) {
         regex.state = state;
       }
       return regex;
     };
-    picomatch2.makeRe = (input, options = {}, returnOutput = false, returnState = false) => {
+    picomatch3.makeRe = (input, options = {}, returnOutput = false, returnState = false) => {
       if (!input || typeof input !== "string") {
         throw new TypeError("Expected a non-empty string");
       }
@@ -1763,9 +1763,9 @@ var require_picomatch = __commonJS({
       if (!parsed.output) {
         parsed = parse(input, options);
       }
-      return picomatch2.compileRe(parsed, options, returnOutput, returnState);
+      return picomatch3.compileRe(parsed, options, returnOutput, returnState);
     };
-    picomatch2.toRegex = (source, options) => {
+    picomatch3.toRegex = (source, options) => {
       try {
         const opts = options || {};
         return new RegExp(source, opts.flags || (opts.nocase ? "i" : ""));
@@ -1774,8 +1774,8 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch2.constants = constants;
-    module2.exports = picomatch2;
+    picomatch3.constants = constants;
+    module2.exports = picomatch3;
   }
 });
 
@@ -1785,14 +1785,14 @@ var require_picomatch2 = __commonJS({
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils();
-    function picomatch2(glob, options, returnState = false) {
+    function picomatch3(glob, options, returnState = false) {
       if (options && (options.windows === null || options.windows === void 0)) {
         options = { ...options, windows: utils.isWindows() };
       }
       return pico(glob, options, returnState);
     }
-    Object.assign(picomatch2, pico);
-    module2.exports = picomatch2;
+    Object.assign(picomatch3, pico);
+    module2.exports = picomatch3;
   }
 });
 
@@ -1808,7 +1808,101 @@ var SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"];
 // src/sessions/guard.ts
 var import_node_path = __toESM(require("node:path"), 1);
 var import_node_fs = require("node:fs");
+var import_picomatch2 = __toESM(require_picomatch2(), 1);
+
+// src/schemas/glob-hazard.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
+function globHazard(glob) {
+  const known = verdicts.get(glob);
+  if (known !== void 0) return known;
+  const verdict = judged(glob);
+  verdicts.set(glob, verdict);
+  return verdict;
+}
+var verdicts = /* @__PURE__ */ new Map();
+function judged(glob) {
+  const forms = /* @__PURE__ */ new Set([glob, ...glob.split("/").filter((s) => s !== "" && s !== ".")]);
+  for (const form of forms) {
+    const hazard = formHazard(form);
+    if (hazard === null) continue;
+    const subject = form === glob ? `\`${glob}\`` : `\`${glob}\` has a segment, \`${form}\`, as a surface's package reach splits it, that`;
+    return `${subject} ${hazard} (SEC-3\u2033)`;
+  }
+  return null;
+}
+function formHazard(form) {
+  let source;
+  try {
+    source = import_picomatch.default.makeRe(form, { dot: true, debug: true }).source;
+  } catch (err) {
+    return `cannot be compiled by picomatch (${err.message}), which then matches nothing: write it so that it compiles`;
+  }
+  const spelled = literalExtglob(form);
+  if (spelled !== null) {
+    return spelled === form ? "is read by picomatch as its own spelling, not as an extglob, so it matches only a name spelled that way: write it without the repeated extglob" : `holds \`${spelled}\`, which picomatch reads as its own spelling, not as an extglob, so that part matches only a name spelled that way: write it without that repeated extglob`;
+  }
+  const group = repeatedGroup(source);
+  if (group !== null) {
+    return `makes picomatch repeat \`${group}\`, a group that is not a single character, so rejecting a path means trying every way to split it among the repeats, a number that grows exponentially with the path's length: write alternatives as braces (\`{a,b}\`) or globs of their own, and repeat single characters only`;
+  }
+  return null;
+}
+function literalExtglob(form) {
+  const token = import_picomatch.default.parse(form).tokens.find((t) => t.type === "text" && /^[*+]\(/u.test(t.value) && String(t.output) === escaped(t.value));
+  return token?.value ?? null;
+}
+var escaped = (text) => text.replace(/[-*+?.^${}(|)[\]]/gu, "\\$&");
+function repeatedGroup(source) {
+  return alternatives(source, 0).hazard;
+}
+function alternatives(src, at) {
+  let i = at;
+  let branches = 1;
+  let width = "none";
+  let hazard = null;
+  while (i < src.length && src[i] !== ")") {
+    if (src[i] === "|") {
+      branches += 1;
+      i += 1;
+      continue;
+    }
+    const piece = atom(src, i);
+    hazard ??= piece.hazard;
+    const q = quantifier(src, piece.end);
+    if (q !== null && q.many && piece.group && piece.width !== "one") hazard ??= src.slice(i, piece.end + q.length);
+    width = joined(width, q === null || piece.width === "none" ? piece.width : "more");
+    i = piece.end + (q?.length ?? 0);
+  }
+  return { end: i, width: branches > 1 ? "more" : width, hazard };
+}
+var joined = (a, b) => a === "none" ? b : b === "none" ? a : "more";
+function atom(src, at) {
+  const c = src[at];
+  if (c === "(") {
+    const head = /^\((?:\?(?:[:=!]|<[=!]|<[A-Za-z_$][\w$]*>))?/u.exec(src.slice(at))?.[0] ?? "(";
+    const inner = alternatives(src, at + head.length);
+    const around = /^\(\?<?[=!]/u.test(head);
+    return { end: src[inner.end] === ")" ? inner.end + 1 : inner.end, width: around ? "none" : inner.width, group: !around, hazard: inner.hazard };
+  }
+  if (c === "[") {
+    let j = at + 1;
+    if (src[j] === "^") j += 1;
+    while (j < src.length && src[j] !== "]") j += src[j] === "\\" ? 2 : 1;
+    return { end: j + 1, width: "one", group: false, hazard: null };
+  }
+  if (c === "\\") {
+    const next = src[at + 1] ?? "";
+    return { end: at + 2, width: next === "b" || next === "B" ? "none" : /[1-9]/u.test(next) ? "more" : "one", group: false, hazard: null };
+  }
+  return { end: at + 1, width: c === "^" || c === "$" ? "none" : "one", group: false, hazard: null };
+}
+function quantifier(src, at) {
+  const q = /^(?:([*+?])|\{(\d+)(?:(,)(\d*))?\})\??/u.exec(src.slice(at));
+  if (q === null) return null;
+  const [text, symbol, low, comma, high] = q;
+  const many = symbol !== void 0 ? symbol !== "?" : comma === void 0 ? Number(low) > 1 : high === "" || Number(high) > 1;
+  return { length: text.length, many };
+}
 
 // src/sessions/git-rm.ts
 var KNOWN_OPTIONS = /* @__PURE__ */ new Set(["-f", "--force", "-q", "--quiet", "--cached"]);
@@ -1874,8 +1968,8 @@ function matchAny(rel, patterns, opts = {}) {
     const p = String(raw).replace(/^\.\//, "");
     const bare = p.replace(/\/\*\*$/, "").replace(/\/$/, "");
     if (folded === (nocase ? asciiFold(bare) : bare)) return true;
-    if (import_picomatch.default.isMatch(clean, p, { dot: true, nocase })) return true;
-    if (import_picomatch.default.isMatch(clean, `${bare}/**`, { dot: true, nocase })) return true;
+    if (import_picomatch2.default.isMatch(clean, p, { dot: true, nocase })) return true;
+    if (import_picomatch2.default.isMatch(clean, `${bare}/**`, { dot: true, nocase })) return true;
   }
   return false;
 }
@@ -1934,7 +2028,7 @@ function globDescends(pattern, below) {
     const segment = segments[i];
     if (segment === void 0) return false;
     if (segment.includes("**")) return true;
-    if (!import_picomatch.default.isMatch(dir, segment, { dot: true })) return false;
+    if (!import_picomatch2.default.isMatch(dir, segment, { dot: true })) return false;
   }
   return segments.length > dirs.length;
 }
@@ -1945,7 +2039,7 @@ function unreadableReached(toolName, toolInput, policy, resolveReal) {
   const target = pathOf(toolInput) ?? (search ? "." : null);
   if (target === null) return null;
   const pattern = toolName === "Glob" ? String(toolInput.pattern ?? "") : "";
-  const base = toolName === "Glob" ? import_picomatch.default.scan(pattern).base : "";
+  const base = toolName === "Glob" ? import_picomatch2.default.scan(pattern).base : "";
   const resolved = (p) => {
     try {
       return resolveReal(p);
@@ -1967,11 +2061,30 @@ function unreadableReached(toolName, toolInput, policy, resolveReal) {
   }
   return null;
 }
+function policyHazard(policy) {
+  for (const glob of [...policy.protectedGlobs, ...policy.surface]) {
+    const hazard = globHazard(glob);
+    if (hazard !== null) return hazard;
+  }
+  return null;
+}
+function searchHazard(toolName, toolInput, policy) {
+  if (toolName !== "Glob" || (policy.unreadable ?? []).length === 0) return null;
+  const pattern = typeof toolInput === "object" && toolInput !== null ? toolInput.pattern : void 0;
+  return typeof pattern === "string" && pattern !== "" ? globHazard(pattern) : null;
+}
 function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest) {
   if (SPAWN_TOOLS.includes(toolName)) {
     return {
       decision: "deny",
       reason: `DENY: ${toolName} would spawn a billable session outside the ledger \u2014 a session does its own work, and a billable session exists only through the metered path (D-28).`
+    };
+  }
+  const unmatchable = searchHazard(toolName, toolInput, policy);
+  if (unmatchable !== null) {
+    return {
+      decision: "deny",
+      reason: `DENY: this Glob call's pattern cannot be matched safely: ${unmatchable}. The guard matches a Glob pattern against the way to each directory this session may not read (C-4\u2075), so it refuses one it cannot match safely: name the directories you need instead.`
     };
   }
   const barred = unreadableReached(toolName, toolInput, policy, resolveReal);
@@ -2018,6 +2131,13 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
   }
   if (!MUTATING_TOOLS.has(toolName)) {
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2\u2033)` };
+  }
+  const unsafe = policyHazard(policy);
+  if (unsafe !== null) {
+    return {
+      decision: "deny",
+      reason: `DENY: this session's policy cannot be honoured: ${unsafe}. No write is allowed under a policy the guard cannot match safely and as written, until the plan or config that supplied it is fixed (P5).`
+    };
   }
   const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;
   if (matchAny(rel, policy.protectedGlobs, { nocase: true })) {

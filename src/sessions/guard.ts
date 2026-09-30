@@ -2,6 +2,7 @@ import path from "node:path";
 import { readlinkSync, realpathSync } from "node:fs";
 import picomatch from "picomatch";
 import { SPAWN_TOOLS } from "../fs/hook-files.js";
+import { globHazard } from "../schemas/glob-hazard.js";
 import { commandOf, readGitRm, type GitRmReading } from "./git-rm.js";
 
 /**
@@ -260,6 +261,32 @@ function unreadableReached(toolName: string, toolInput: unknown, policy: GuardPo
 }
 
 /**
+ * SEC-3″ (PRDR-330): the first of a policy's globs that picomatch cannot match
+ * safely or as written, checked before any is matched. A match that does not
+ * end holds Detent's event loop, and a glob read as its own spelling protects
+ * less than it says. A plan's and a config's globs were checked where they
+ * were read. A policy file the plugin hook reads was checked nowhere.
+ */
+function policyHazard(policy: GuardPolicy): string | null {
+  for (const glob of [...policy.protectedGlobs, ...policy.surface]) {
+    const hazard = globHazard(glob);
+    if (hazard !== null) return hazard;
+  }
+  return null;
+}
+
+/**
+ * SEC-3″ (PRDR-330): a Glob call's pattern, which the unreadable check matches
+ * against the way to each directory the session may not read (C-4⁵), when
+ * picomatch cannot match it safely. A session names that pattern at will.
+ */
+function searchHazard(toolName: string, toolInput: unknown, policy: GuardPolicy): string | null {
+  if (toolName !== "Glob" || (policy.unreadable ?? []).length === 0) return null;
+  const pattern = typeof toolInput === "object" && toolInput !== null ? (toolInput as { pattern?: unknown }).pattern : undefined;
+  return typeof pattern === "string" && pattern !== "" ? globHazard(pattern) : null;
+}
+
+/**
  * The PreToolUse decision (oracle `pretooluse_guard.py`, S-2″). Deny-by-default
  * outside the declared surface FOR MUTATION; protected denies mutation always
  * (SEC-3 is immutability, not unreadability); the worktree bounds every tool,
@@ -290,6 +317,15 @@ export function guardToolUse(
       reason:
         `DENY: ${toolName} would spawn a billable session outside the ledger — a session does its own work, ` +
         "and a billable session exists only through the metered path (D-28).",
+    };
+  }
+  const unmatchable = searchHazard(toolName, toolInput, policy);
+  if (unmatchable !== null) {
+    return {
+      decision: "deny",
+      reason:
+        `DENY: this Glob call's pattern cannot be matched safely: ${unmatchable}. The guard matches a Glob pattern against the way to ` +
+        "each directory this session may not read (C-4⁵), so it refuses one it cannot match safely: name the directories you need instead.",
     };
   }
   const barred = unreadableReached(toolName, toolInput, policy, resolveReal);
@@ -373,6 +409,16 @@ export function guardToolUse(
   if (!MUTATING_TOOLS.has(toolName)) {
     /* Inside the worktree and not a mutation: bounded by P7 above, granted by the allowlist. */
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2″)` };
+  }
+  /* SEC-3″ (PRDR-330), P5: a policy the guard cannot match safely and as written is not honoured. */
+  const unsafe = policyHazard(policy);
+  if (unsafe !== null) {
+    return {
+      decision: "deny",
+      reason:
+        `DENY: this session's policy cannot be honoured: ${unsafe}. No write is allowed under a policy the guard cannot match ` +
+        "safely and as written, until the plan or config that supplied it is fixed (P5).",
+    };
   }
   /* Where the two disagree, the human is told which path the verdict is about. */
   const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;

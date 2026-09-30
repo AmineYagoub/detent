@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SCHEMA_VERSION, nonEmptyString } from "./common.js";
+import { SCHEMA_VERSION, draftGlob, nonEmptyString } from "./common.js";
 
 /**
  * The `init` vocabulary (C-4.1, C-5).
@@ -311,7 +311,8 @@ export const planDraftSchema = z.strictObject({
         description: z.string().default(""),
         acceptance_criteria: z.array(nonEmptyString).min(1),
         non_goals: z.array(z.string()).default([]),
-        surface: z.array(z.string()).default([]),
+        /** SEC-3″ (PRDR-330): each entry a glob picomatch can match safely and as written, as the ticket it becomes must hold. */
+        surface: z.array(draftGlob).default([]),
         /** Ticket ids this one depends on; becomes A-1 `blockers`. */
         depends_on: z.array(nonEmptyString).default([]),
         /** A-1‴: the names this ticket owns, and the ones it leans on. */

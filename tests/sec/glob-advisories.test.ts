@@ -32,7 +32,9 @@ const SPLICED = "src/e }].ts";
 /**
  * GHSA-c2c7-rcm5-vvqj: the advisory's nested repeated extglob, and a run of
  * `a`s it cannot match. 4.0.3 takes seconds to reject twenty-eight of them
- * under this suite, and twice as long for each one more.
+ * under this suite, and twice as long for each one more. Since PRDR-330 the
+ * guard refuses the glob before it matches it (SEC-3″): 4.0.5 reads it as its
+ * own spelling, and 4.0.3's regex repeats a group of more than one character.
  */
 const NESTED = "+(+(a))";
 const aRun = (n: number): string => `${"a".repeat(n)}b`;
@@ -121,7 +123,7 @@ describe("PRDR-329 the bundled hook carries the fixed engine", () => {
   it("GHSA-c2c7-rcm5-vvqj: a write under a `+(+(a))` surface is decided before the kill, for a path of forty `a`s", () => {
     const run = hook([NESTED], [], aRun(40));
     expect(run.error, `the hook was still matching after ${String(HOOK_KILL_MS)} ms`).toBeUndefined();
-    expect(denial(run)).toContain("outside this ticket's declared surface");
+    expect(denial(run)).toContain("SEC-3″");
   });
 
   it("a protected `+(*(a)|*(b))` protects what its second branch names, which 4.0.4 dropped", () => {

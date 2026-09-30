@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { draftGlob } from "../schemas/common.js";
 
 /**
  * A drafted ticket as a planning checkpoint holds it: a slice's cache
@@ -22,7 +23,8 @@ export const cachedTicketSchema = z.looseObject({
   depends_on: z.array(z.string()).default([]),
   acceptance_criteria: z.array(z.string()).default([]),
   non_goals: z.array(z.string()).default([]),
-  surface: z.array(z.string()).default([]),
+  /** SEC-3″ (PRDR-330): a cached ticket holding a glob picomatch cannot match safely or as written misses. */
+  surface: z.array(draftGlob).default([]),
   provides: z.array(z.unknown()).default([]),
   consumes: z.array(z.unknown()).default([]),
   /* A-1⁵: additive, so a slice cached before the fields existed still HITS. */

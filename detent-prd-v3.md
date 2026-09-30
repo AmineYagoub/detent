@@ -729,6 +729,29 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   denied, leaving an audit trail that stated the opposite of what happened. Two checks on one
   question must not disagree — PRDR-120's `resolveOwner` lesson, in a different place.
 
+- **SEC-3″ (3.1.1, PRDR-330).** Detent refuses a glob that picomatch cannot match safely and
+  as written. A plan, a config or a policy file may supply globs, and each is refused where it is
+  read if picomatch cannot compile it, if its regex repeats a group that is not a single
+  character, or if picomatch reads one of its extglobs as its own spelling. picomatch compiles a
+  glob to a backtracking regex. On 4.0.5, rejecting a 25-character path under `+(*)` took 1.7 s,
+  doubling with each character. The upstream fix for GHSA-c2c7-rcm5-vvqj catches neither that nor
+  `+(a|b|ab)`. `(a|b|ab)+` compiles the same with extglobs off, because picomatch passes a `+`
+  after a group through as a regex quantifier. The guard runs on Detent's own event loop, so a
+  session that names such a path stops every session and the ledger with it. The shapes that fix
+  does catch it compiles, from 4.0.4, to their escaped spelling. `+(a|aa)` then matches only a
+  name spelled `+(a|aa)`, and a caught shape holding a backslash escape compiles to a regex that
+  matches nothing, so a protected or `risk` glob written that way protects or gates less than it
+  says. The rule is judged from picomatch's own errors, regex and parse, not from a second
+  reading of its grammar. It judges the glob as written and each `/` segment, as V-5′'s package
+  reach splits a surface. A rewrite that keeps the meaning passes: `+(*(a)|*(b))` compiles to
+  `[ab]*`. The config's `protected`, `risk` and `plan_docs`, a ticket's `surface` and `granted`,
+  a plan draft's surfaces and a cached draft are checked when read. The guard checks its policy
+  before it matches any glob, so a policy file holding one denies every write on both skins
+  (P5), and it refuses a Glob call whose pattern it would match against the way to an unreadable
+  directory (C-4⁵). The plugin hook is no backstop: a PreToolUse command hook that times out does
+  not block the call. Runs of wildcards over text they can also match (`*a*a*a*b`) are still
+  polynomial, and that class is recorded in PRDR-330 for a ticket of its own.
+
 - **SEC-4′ (3.1.1, PRDR-133).** The session-environment allowlist is APPLIED. `buildSessionEnv`
   had no production caller: `buildOptions` never set `env`, and the pinned SDK inherits
   `process.env` when it is omitted, so every session — holding `Edit`, `Write` and
