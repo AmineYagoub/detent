@@ -16,7 +16,7 @@ import type { InitPhase } from "../schemas/init.js";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { RunJournal } from "../kernel/journal.js";
 import { SpendLedger, type ProgressBreaker } from "../kernel/ledger.js";
-import { OUTAGE_BACKOFF_MS } from "../kernel/driver.js";
+import { MAX_RESET_WAIT_MS, OUTAGE_BACKOFF_MS, conversationToResume, isOutage, isUsageLimit, outageWait } from "../schemas/backend-limit.js";
 import { scrub } from "../kernel/scrub.js";
 import { effortDowngrade, modelFallback, settledLevels } from "../kernel/session-effort.js";
 import { cacheLifetime } from "../schemas/cache-lifetime.js";
@@ -244,118 +244,19 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
   };
 }
 
-/**
- * PRDR-185: a backend outage is waited out, not fatal.
- *
- * A session limit is the most ordinary interruption on a subscription plan, and
- * it is an OUTAGE — nothing about the work was wrong, the transport was briefly
- * unavailable. `kernel/driver.ts` has known that since PRDR-112: it backs off
- * 1, 5, 15 minutes and halts only on consecutive outages with no progress
- * between them. `init` had none of it, so four limit hits across one live
- * planning run each ended the command and needed a human to notice and restart.
- * ARCH-2: a control on one driver belongs on both.
- *
- * The message is matched rather than a typed error because the SDK returns a
- * limit as an error RESULT, not an exception — the same shape S-4 already reads
- * for crashes. Narrow on purpose: a phrase that does not match simply fails as
- * before, which is the harmless direction.
- */
-const OUTAGE_MARKERS: readonly RegExp[] = [
-  /session limit/i,
-  /rate limit/i,
-  /overloaded/i,
-  /\b429\b/,
-  /service unavailable/i,
-  /\b50[0-9]\b.*(error|unavailable)/i,
-];
-
-export function isOutage(text: string): boolean {
-  return OUTAGE_MARKERS.some((re) => re.test(text));
-}
-
-/**
- * PRDR-189: a usage limit names its own reset time — wait until THAT.
- *
- * PRDR-185's ladder is 1, 5, 15 minutes, which is right for a transient
- * outage and wrong for a usage window: observed live, the three retries
- * exhausted in 21 minutes against a limit that reset hours later, and the run
- * died having done everything correctly. The message carries the answer —
- * "resets 10:30pm (Africa/Algiers)" — and PRDR-185's own acceptance criteria
- * said the operator should be told "until when" while the code never read it.
- *
- * The ZONE is not decoration. Africa/Algiers is UTC+1 year-round and this
- * machine was on CEST (UTC+2) when the limit hit, so reading "10:30pm" as local
- * time would wait an hour early and fail again — a retry that looks like it
- * honoured the reset and did not. The current time is taken IN the named zone
- * and the delta computed there, which needs no date arithmetic.
- *
- * D-13 (PRDR-261): the MINUTES are optional, because the backend does not
- * always send them. PRDR-189 read one of the two formats it emits and this
- * doc-block claimed both. The live message that killed an init was
- * "You've hit your session limit · resets 5pm (Africa/Algiers)" — no ":MM", no
- * match, `null`, and the 1/5/15 ladder ran against a window that reset four
- * hours later. Every test that reached here used 10:30pm or 5:20pm, so the
- * whole no-minutes family was untested and the gap read as intent.
- *
- * A TIME is still required, and that is what the second guard is for. With the
- * colon optional the pattern would otherwise accept any bare integer after the
- * word: "resets 5 minutes from now" reads as 05:00 — a sixteen-hour sleep —
- * and "resets 2026-09-17T17:00:00Z" reads the "20" of the year as 20:00. A
- * real reset states minutes or a meridiem. Neither means this is not a clock,
- * and the function says nothing, which sends the caller back to the ladder.
- */
-export function msUntilReset(message: string, now: Date = new Date()): number | null {
-  const m = /resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([A-Za-z]+\/[A-Za-z_]+)\))?/i.exec(message);
-  if (m === null) return null;
-  if (m[2] === undefined && m[3] === undefined) return null;
-  const minute = m[2] === undefined ? 0 : Number(m[2]);
-  const meridiem = m[3]?.toLowerCase();
-  let hour = Number(m[1]);
-  if (meridiem === "pm" && hour !== 12) hour += 12;
-  if (meridiem === "am" && hour === 12) hour = 0;
-  if (hour > 23 || minute > 59) return null;
-
-  let hereNow: string;
-  try {
-    hereNow = new Intl.DateTimeFormat("en-GB", {
-      hour12: false,
-      hour: "2-digit",
-      minute: "2-digit",
-      ...(m[4] === undefined ? {} : { timeZone: m[4] }),
-    }).format(now);
-  } catch {
-    /* An unknown zone is not a parse failure; fall back to this machine's clock. */
-    hereNow = new Intl.DateTimeFormat("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" }).format(now);
-  }
-  const [nowHour, nowMinute] = hereNow.split(":").map(Number) as [number, number];
-  let deltaMinutes = hour * 60 + minute - (nowHour * 60 + nowMinute);
-  /* Already past in that zone means the next occurrence is tomorrow. */
-  if (deltaMinutes <= 0) deltaMinutes += 24 * 60;
-  /* A minute past the stated time, so a clock a few seconds behind does not retry early. */
-  return deltaMinutes * 60_000 + 60_000;
-}
-
-/**
- * The longest this will wait for a named reset before handing the decision
- * back. A usage window resets within hours; a wait longer than this is more
- * likely a misparse or a clock problem than a real reset, and an operator would
- * rather be told than discover a command that slept until tomorrow.
- */
-export const MAX_RESET_WAIT_MS = 6 * 60 * 60_000;
-
 export async function launchInitSession(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
   /* S-1⁗ (PRDR-285): refused before anything is gated, charged or journaled, so no session starts with it. */
   if (request.scratch !== undefined && !SCRATCH_ROLES.has(request.role)) {
     throw new Error(`a ${request.role} session was given a scratch directory, and only ${[...SCRATCH_ROLES].join(", ")} may run scripts (S-1‴, S-1⁗)`);
   }
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  /** X-8″ (PRDR-321): the conversation the next attempt carries on, when a usage limit stopped one that held work. */
+  let resume: string | undefined;
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await launchOnce(deps, request);
+      return await launchOnce(deps, request, resume);
     } catch (err) {
       const message = (err as Error).message;
-      const ladder = OUTAGE_BACKOFF_MS[attempt];
-      if (!isOutage(message) || ladder === undefined) throw err;
       /**
        * PRDR-189: the stated reset wins over the ladder.
        *
@@ -364,23 +265,38 @@ export async function launchInitSession(deps: InitSessionDeps, request: InitSess
        * correctly at every step. When the message says when it comes back, that
        * is the wait; the ladder remains for outages that say nothing.
        */
-      const untilReset = msUntilReset(message, deps.now?.());
-      if (untilReset !== null && untilReset > MAX_RESET_WAIT_MS) {
+      const wait = isOutage(message) ? outageWait(message, attempt, deps.now?.()) : null;
+      if (wait === null) throw err;
+      if (wait.kind === "too_long") {
         throw new Error(
-          `${message} — it resets in ${String(Math.round(untilReset / 60_000))} min, longer than this will wait ` +
+          `${message} — it resets in ${String(Math.round(wait.ms / 60_000))} min, longer than this will wait ` +
             `(${String(MAX_RESET_WAIT_MS / 60_000)} min). Re-run when the window has reset; every finished slice and redraft is checkpointed.`,
         );
       }
-      const wait = untilReset ?? ladder;
-      const mins = String(Math.round(wait / 60_000));
+      /**
+       * X-8″ (PRDR-321): what was done is carried on, not done again. A session
+       * a usage limit stopped after its first turn is resumed with its own
+       * conversation once the wait is over; before PRDR-321 it was launched
+       * afresh and paid for its thinking, its tool calls and its cache twice.
+       */
+      const failed = err instanceof InitSessionFailed ? err.result : null;
+      resume = failed === null ? undefined : conversationToResume(failed, isUsageLimit(message));
+      const next =
+        resume !== undefined
+          ? `; session ${resume} resumes where it stopped`
+          : failed !== null && isUsageLimit(message)
+            ? failed.sessionId === undefined
+              ? "; no session id arrived, so it is launched afresh"
+              : "; it stopped before its first turn, so it is launched afresh"
+            : "";
+      const mins = String(Math.round(wait.ms / 60_000));
+      const step = `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)})`;
       deps.note?.(
-        untilReset === null
-          ? `backend outage during ${request.role} — waiting ${mins} min before retrying ` +
-              `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`
-          : `backend limit during ${request.role} — waiting ${mins} min for the stated reset ` +
-              `(${String(attempt + 1)}/${String(OUTAGE_BACKOFF_MS.length)}): ${message.slice(0, 160)}`,
+        wait.kind === "ladder"
+          ? `backend outage during ${request.role} — waiting ${mins} min before retrying${next} ${step}: ${message.slice(0, 160)}`
+          : `backend limit during ${request.role} — waiting ${mins} min for the stated reset, ${wait.resets}${next} ${step}: ${message.slice(0, 160)}`,
       );
-      await sleep(wait);
+      await sleep(wait.ms);
     }
   }
 }
@@ -405,7 +321,17 @@ function recordRan(deps: InitSessionDeps, role: string, routed: string, result: 
   deps.note?.(modelFallback(role, requested, reason));
 }
 
-async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): Promise<SessionResult> {
+/** X-8″ (PRDR-321): a session that failed, with what it returned, so a usage limit's stop can be resumed. */
+export class InitSessionFailed extends Error {
+  constructor(
+    message: string,
+    readonly result: SessionResult,
+  ) {
+    super(message);
+  }
+}
+
+async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest, resume?: string): Promise<SessionResult> {
   mkdirSync(path.dirname(request.artifactOut), { recursive: true });
 
   /* PRDR-203: the phase's journal, never this launch's own — see `InitSessionDeps.journal`. */
@@ -418,8 +344,18 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
   ledger.recordLaunch();
   /* S-4⁵ (PRDR-299): the level this session is routed to, `"default"` where none is, as the kernel's `start` names it (S-4‴). */
   const routed = deps.effortRouting?.[request.role] ?? "default";
-  journal.appendTicketEvent(INIT_TICKET, { stage: request.role, event: "start", at: new Date().toISOString(), effort: routed });
-  const result = await deps.backend.run(initSessionSpec(deps, request));
+  journal.appendTicketEvent(INIT_TICKET, {
+    stage: request.role,
+    event: "start",
+    at: new Date().toISOString(),
+    effort: routed,
+    ...(resume === undefined ? {} : { resumes: resume }),
+  });
+  const spec = initSessionSpec(deps, request);
+  const result = await deps.backend.run(resume === undefined ? spec : { ...spec, resume: { sessionId: resume } });
+  if (result.resume?.refused !== undefined) {
+    deps.note?.(`${request.role}: the runtime would not resume session ${result.resume.sessionId} (${scrub(result.resume.refused)}), so it was launched afresh (X-8″)`);
+  }
   recordRan(deps, request.role, routed, result);
   ledger.record(INIT_TICKET, 0, request.role, result, new Date().toISOString(), deps.phase);
   journal.appendTicketEvent(INIT_TICKET, {
@@ -447,8 +383,9 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest): P
      * which has no fixture path and runs first, scrubbed none of it. A throw is
      * the one place a seam cannot cover, so it is done here.
      */
-    throw new Error(
+    throw new InitSessionFailed(
       `${request.role} session failed${result.rawTail === "" ? "" : `: ${scrub(result.rawTail.slice(-300))}`}`,
+      result,
     );
   }
   /**

@@ -8,6 +8,7 @@ import { EXIT_HUMAN_GATED, EXIT_NOT_READY, EXIT_OK } from "./run.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import type { AmendmentRecord } from "../schemas/amendment.js";
 import { describeAmendment, holdReason, openAmendmentOf, readAmendments } from "./amendment-store.js";
+import { MAX_RESET_WAIT_MS, OUTAGE_BACKOFF_MS, outageWait } from "../schemas/backend-limit.js";
 
 /**
  * T-106 — the headless driver's loop (C-9, C-10, C-13, D-27).
@@ -38,9 +39,6 @@ class DriverRefusal extends Error {}
  * an X-3 state change.
  */
 class DriverIntegrationHalt extends Error {}
-
-/** PRDR-112: 1, 5, 15 minutes; the retry itself is the probe, and a crashed retry costs $0. */
-export const OUTAGE_BACKOFF_MS: readonly number[] = [60_000, 300_000, 900_000];
 
 const TERMINAL: readonly string[] = ["DONE", "NEEDS_HUMAN", "BLOCKED"];
 
@@ -145,13 +143,30 @@ export class Driver {
          * referee's streak, a crashed one re-raises this route at the next
          * level, and after the ladder the run exits exactly as before.
          */
-        const wait = OUTAGE_BACKOFF_MS[this.outages];
-        if (wait === undefined) throw refused;
+        /**
+         * X-8″ (PRDR-321): a usage limit names its reset, and the run waits for
+         * THAT, as `init` has since PRDR-189. The ladder's 21 minutes against a
+         * window that reset hours later ended the run and handed the restart to
+         * a person. The referee's message says which session a limit stopped,
+         * and the next launch of that role resumes it.
+         */
+        const wait = outageWait(refused.message, this.outages, new Date(this.now()));
+        if (wait === null) throw refused;
+        if (wait.kind === "too_long") {
+          throw new DriverRefusal(
+            `${refused.message} — it resets in ${String(Math.round(wait.ms / 60_000))} min, longer than this will wait ` +
+              `(${String(MAX_RESET_WAIT_MS / 60_000)} min). Re-run \`detent run\` when the window has reset; a session the limit stopped resumes then.`,
+          );
+        }
         this.outages += 1;
+        const mins = Math.round(wait.ms / 60_000);
         this.opts.announce?.(
-          `backend outage — waiting ${Math.round(wait / 60_000)} min before retrying (${this.outages}/${OUTAGE_BACKOFF_MS.length})`,
+          wait.kind === "ladder"
+            ? `backend outage — waiting ${String(mins)} min before retrying (${String(this.outages)}/${String(OUTAGE_BACKOFF_MS.length)})`
+            : `backend limit — waiting ${String(mins)} min for the stated reset, ${wait.resets} ` +
+                `(${String(this.outages)}/${String(OUTAGE_BACKOFF_MS.length)}): ${refused.message.slice(0, 300)}`,
         );
-        await this.sleep(wait);
+        await this.sleep(wait.ms);
         continue;
       }
 

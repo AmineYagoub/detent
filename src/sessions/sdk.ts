@@ -4,6 +4,7 @@ import { fullPrompt, type SessionBackend, type SessionResult, type SessionSpec }
 import { guardToolUse, stopGate, type GuardPolicy } from "./guard.js";
 import { buildSessionEnv } from "./env.js";
 import { StreamUsage } from "./stream-usage.js";
+import { isOutage } from "../schemas/backend-limit.js";
 import { SCRATCH_SERVER } from "./sandbox.js";
 import { scratchServer } from "./scratch-server.js";
 
@@ -205,6 +206,8 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     ...serversOf(spec),
     /** X-1″ (PRDR-106): no ceiling unless a caller sets one — only the doctor probe does. */
     ...(spec.maxTurns === undefined ? {} : { maxTurns: spec.maxTurns }),
+    /** X-8″ (PRDR-321): the conversation a usage limit stopped, carried on rather than started over. */
+    ...(spec.resume === undefined ? {} : { resume: spec.resume.sessionId }),
     ...(spec.model === "" ? {} : { model: spec.model }),
     /**
      * PRDR-197: effort where a role is routed to one.
@@ -369,6 +372,22 @@ export function isModelUnavailable(result: SessionResult): boolean {
   );
 }
 
+/**
+ * X-8″ (PRDR-321): all a resumed session is told. The conversation holds the
+ * task, its inputs and the work so far, so this restates none of it. A resume
+ * after midnight is told nothing of the date either: the runtime adds "The
+ * date has changed. Today's date is now …" to the conversation itself, and
+ * keeps the prefix it had cached.
+ */
+export const RESUME_PROMPT =
+  "A usage limit stopped you part-way through this task, and it has now reset. Carry on from where you stopped, and write the artifact the task asked for.";
+
+/** A spec as it was before a resume was asked of it. */
+function withoutResume(spec: SessionSpec): SessionSpec {
+  const { resume, ...afresh } = spec;
+  return resume === undefined ? spec : afresh;
+}
+
 /** S-5's default version probe: what the CLI on PATH reports, unparsed. */
 function probeClaudeVersion(): string {
   return execFileSync("claude", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -426,6 +445,25 @@ export class ClaudeCodeBackend implements SessionBackend {
    * launch of that model skips straight to the fallback.
    */
   async run(spec: SessionSpec): Promise<SessionResult> {
+    if (spec.resume === undefined) return await this.launch(spec);
+    /**
+     * X-8″ (PRDR-321): a resume the runtime will not make is launched afresh,
+     * as a stopped session always was. It says so by failing before its first
+     * turn with a reason that is no outage: "No conversation found with session
+     * ID" is what 2.1.285 says of a conversation it does not have. One that
+     * fails before its first turn on an outage or a limit changed nothing, and
+     * is returned for its driver to wait out and resume again.
+     */
+    const { sessionId } = spec.resume;
+    const resumed = await this.launch(spec);
+    const refused = !resumed.ok && resumed.turns === 0 && (/no conversation found/iu.test(resumed.rawTail) || !isOutage(resumed.rawTail));
+    if (!refused) return { ...resumed, resume: { sessionId } };
+    const fresh = await this.launch(withoutResume(spec));
+    return { ...fresh, resume: { sessionId, refused: resumed.rawTail.trim().slice(0, 200) } };
+  }
+
+  /** PRDR-114's model fallback around one launch. */
+  private async launch(spec: SessionSpec): Promise<SessionResult> {
     if (spec.model !== "") {
       const known = this.unavailable.get(spec.model);
       if (known !== undefined) {
@@ -449,16 +487,20 @@ export class ClaudeCodeBackend implements SessionBackend {
     let mcpFailures: { name: string; status: string }[] | null = null;
     /** PRDR-237: the level the turns actually ran at; null means no tool call reported one. */
     let settledEffort: string | null = null;
-    /** S-6″ (PRDR-320): the cache writes each response carried, by lifetime. */
+    /** S-6″, X-8″ (PRDR-320, PRDR-321): what each response carried, its cache writes by lifetime and its spend. */
     const usage = new StreamUsage();
+    /** X-8″ (PRDR-321): the conversation's id, which every message the SDK streams names. */
+    let sessionId: string | null = null;
     try {
       const stream = query({
-        prompt: fullPrompt(spec),
+        prompt: spec.resume === undefined ? fullPrompt(spec) : RESUME_PROMPT,
         options: buildOptions(spec, this.config, (level) => {
           settledEffort = level;
         }),
       });
       for await (const message of stream) {
+        const named = (message as { session_id?: unknown }).session_id;
+        if (typeof named === "string" && named !== "") sessionId = named;
         /**
          * S-3‴ (PRDR-123): the init message is the only per-session truth
          * about whether a configured MCP server actually attached. Probing the
@@ -503,22 +545,48 @@ export class ClaudeCodeBackend implements SessionBackend {
        * here is a crash — transport death, or the doctor probe's own
        * one-turn bound — never a budget event.
        */
+      /**
+       * X-8″ (PRDR-321): what the session spent is kept, not zeroed. The SDK
+       * throws AFTER it streams the runtime's error result, and that result
+       * carries the session's cost and usage, its side requests included: a
+       * session stopped at its turn limit reported $0.0037, a Haiku call among
+       * it, which this recorded as $0. A usage limit arrives the same way, and
+       * tabachir's A/B test recorded four sessions of 14 to 77 turns at $0.
+       * Where no result arrived, the stream's own usage is priced instead, a
+       * lower bound. The session is still a crash to every reader (PRDR-053).
+       */
+      const reported = result as SessionResult | null;
+      const spent = reported !== null && reported.telemetryParsed ? reported : usage.spent();
+      const crash = parseResultMessage({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        num_turns: reported !== null && reported.telemetryParsed ? reported.turns : observedTurns,
+        total_cost_usd: 0,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        result: (err as Error).message,
+      });
       return {
-        ...parseResultMessage({
-          type: "result",
-          subtype: "error_during_execution",
-          is_error: true,
-          num_turns: observedTurns,
-          total_cost_usd: 0,
-          usage: { input_tokens: 0, output_tokens: 0 },
-          result: (err as Error).message,
-        }),
+        ...crash,
+        costEstimateUsd: spent.costEstimateUsd,
+        inputTokens: spent.inputTokens,
+        outputTokens: spent.outputTokens,
+        cacheReadInputTokens: spent.cacheReadInputTokens,
+        cacheCreationInputTokens: spent.cacheCreationInputTokens,
+        ...(spent.perModel === undefined ? {} : { perModel: spent.perModel }),
+        crashed: true,
         cacheTtl: spec.cacheTtl ?? "1h",
         cacheWrites: usage.cacheWrites(),
+        ...(sessionId === null ? {} : { sessionId }),
       };
     }
     /* A stream that ended with no result message is the absent-telemetry case. */
-    const out = { ...(result ?? parseResultMessage({})), cacheTtl: spec.cacheTtl ?? "1h", cacheWrites: usage.cacheWrites() };
+    const out = {
+      ...(result ?? parseResultMessage({})),
+      cacheTtl: spec.cacheTtl ?? "1h",
+      cacheWrites: usage.cacheWrites(),
+      ...(sessionId === null ? {} : { sessionId }),
+    };
     const observed = settledEffort === null ? out : { ...out, effort: settledEffort };
     return mcpFailures === null ? observed : { ...observed, mcpFailures };
   }

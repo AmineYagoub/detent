@@ -87,6 +87,13 @@ export interface SessionSpec {
    * role, and the referee's session arm never sets it.
    */
   readonly scratch?: ScratchGrant;
+  /**
+   * X-8″ (PRDR-321): carry on this session's own conversation, which a usage
+   * limit stopped, instead of starting the task over. The backend resumes it
+   * with a short prompt to carry on, and launches the spec afresh when the
+   * runtime will not resume it, saying so in `SessionResult.resume`.
+   */
+  readonly resume?: { readonly sessionId: string };
 }
 
 /**
@@ -115,7 +122,7 @@ export function prefixHash(spec: SessionSpec): string {
  * client-side estimate, named accordingly (PRDR-052). `telemetryParsed: false`
  * is the S-4 circuit breaker — the kernel treats it as budget-breaching.
  */
-interface ModelTokenUsage {
+export interface ModelTokenUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadInputTokens: number;
@@ -174,6 +181,14 @@ export interface SessionResult {
    * where the backend reports no stream.
    */
   readonly cacheWrites?: Readonly<Record<CacheLifetime, number>>;
+  /** X-8″ (PRDR-321): the runtime's id for the session's conversation, which a later spec may resume; absent where none arrived. */
+  readonly sessionId?: string;
+  /**
+   * X-8″ (PRDR-321): what came of a spec's `resume`: the conversation it
+   * named, and `refused`, the runtime's reason, when it would not resume it
+   * and the session was launched afresh instead.
+   */
+  readonly resume?: { readonly sessionId: string; readonly refused?: string };
 }
 
 export interface SessionBackend {

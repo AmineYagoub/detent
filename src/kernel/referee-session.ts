@@ -16,6 +16,7 @@ import { assertTicketWallClock } from "./ticket-clock.js";
 import { scrub } from "./scrub.js";
 import { modelFallback, recordEffort } from "./session-effort.js";
 import { attemptInputs } from "./session-inputs.js";
+import { limitStop, refusedResumeNote, turnsCarried } from "./session-resume.js";
 import { fileSignalled } from "./amendment-file.js";
 
 /**
@@ -61,6 +62,14 @@ export class SessionArm {
      * announced once; nothing here refuses.
      */
     ctx.spend.recordLaunch();
+    /**
+     * X-8″ (PRDR-321): a session a usage limit stopped is carried on, not
+     * launched again. Its conversation holds the task and the work so far, so
+     * the launch resumes it and counts no new session: it is the same attempt
+     * for every count and budget. The journal keeps it, so a run restarted
+     * after the limit resumes it as the one that waited would have.
+     */
+    const carried = ctx.journal.stoppedConversation(id, role, openGen);
 
     /**
      * X-1⁗ (PRDR-140): the wall clock is enforced HERE, at the launch seam,
@@ -92,11 +101,13 @@ export class SessionArm {
      */
     const counters = currentCounters(current);
     const generation = currentGeneration(current);
-    current = {
-      ...current,
-      generations: withCurrentCounters(current.generations, generation.index, { ...counters, sessions: counters.sessions + 1 }),
-    };
-    writeTicket(ctx.root, current);
+    if (carried === null) {
+      current = {
+        ...current,
+        generations: withCurrentCounters(current.generations, generation.index, { ...counters, sessions: counters.sessions + 1 }),
+      };
+      writeTicket(ctx.root, current);
+    }
 
     const artifactOut = path.join(runsDir(ctx.root, id), artifactNameFor(role));
     mkdirSync(path.dirname(artifactOut), { recursive: true });
@@ -181,6 +192,7 @@ export class SessionArm {
          */
         artifactRoot: runsDir(ctx.root, id),
       },
+      ...(carried === null ? {} : { resume: { sessionId: carried.sessionId } }),
     };
 
     /**
@@ -190,19 +202,22 @@ export class SessionArm {
      * crashed-resume skip above deliberately KEEPS its artifact (B-5 judges
      * what the half-done session left).
      */
-    rmSync(artifactOut, { force: true });
-    /*
-     * PRDR-225: the signals a session writes and the referee consumes are
-     * cleared here too, or a stale one impersonates this session — gate-313's
-     * t-s01-004 review-fix wrote `falsified.json` when the referee read one
-     * after IN_PROGRESS alone (it reads one after every fix since PRDR-289), it
-     * survived a requeue, and the next generation's implementer, which wrote
-     * nothing, was falsified against it. `oversized.json` is NOT cleared:
-     * it is cross-run evidence sizing-evidence reads for a later PLAN (X-4″).
-     * The crash-resume skip returns above, so a genuinely in-flight session's
-     * signal is kept for B-5, exactly as its artifact is.
-     */
-    for (const s of ["falsified.json", "surface_request.json"]) rmSync(path.join(runsDir(ctx.root, id), s), { force: true });
+    /* X-8″ (PRDR-321): a resumed session's artifact and signals are its own, written before the limit stopped it. */
+    if (carried === null) {
+      rmSync(artifactOut, { force: true });
+      /*
+       * PRDR-225: the signals a session writes and the referee consumes are
+       * cleared here too, or a stale one impersonates this session — gate-313's
+       * t-s01-004 review-fix wrote `falsified.json` when the referee read one
+       * after IN_PROGRESS alone (it reads one after every fix since PRDR-289), it
+       * survived a requeue, and the next generation's implementer, which wrote
+       * nothing, was falsified against it. `oversized.json` is NOT cleared:
+       * it is cross-run evidence sizing-evidence reads for a later PLAN (X-4″).
+       * The crash-resume skip returns above, so a genuinely in-flight session's
+       * signal is kept for B-5, exactly as its artifact is.
+       */
+      for (const s of ["falsified.json", "surface_request.json"]) rmSync(path.join(runsDir(ctx.root, id), s), { force: true });
+    }
     const routedEffort = ctx.loaded.config.effort_routing[role] ?? "default";
     ctx.journal.appendTicketEvent(id, {
       stage: role,
@@ -229,8 +244,12 @@ export class SessionArm {
        * fact, exposed to hooks as `effort.level`, and PRDR-237 reads it below.
        */
       effort: routedEffort,
+      ...(carried === null ? {} : { resumes: carried.sessionId }),
     });
     const result = await ctx.backend.run(spec);
+    const refusedResume = refusedResumeNote(role, result);
+    if (refusedResume !== null) appendNote(ctx.root, id, { author: "kernel", text: refusedResume });
+    const turnsBefore = turnsCarried(carried, result);
     /** PRDR-237: what the session RAN at, against what it was asked for. */
     recordEffort(ctx.journal, ctx.root, id, role, generation.index, ctx.iso(), routedEffort, result.effort);
     if (result.modelFallback !== undefined) {
@@ -263,6 +282,7 @@ export class SessionArm {
     const outcome = result.telemetryParsed ? result : { ...result, ok: false, crashed: true };
     const generationNow = currentGeneration(readTicket(ctx.root, id));
     ctx.spend.record(id, generationNow.index, role, outcome, ctx.iso());
+    const stop = limitStop(id, role, outcome, turnsBefore);
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "end",
@@ -270,7 +290,9 @@ export class SessionArm {
       generation: generationNow.index,
       ok: outcome.ok,
       cost: outcome.costEstimateUsd,
+      ...stop.end,
     });
+    if (stop.refusal !== null) throw new SessionRefusal(stop.refusal);
     /**
      * T-140 (PRDR-072): crashed with ZERO turns = the backend refused the
      * session (auth outage, usage limit, spawn failure) — an infrastructure
@@ -341,9 +363,10 @@ export class SessionArm {
     /**
      * X-1 (PRDR-250): the observed turn count, for the one ceiling that reads it
      * back. Callers that do not bound turns ignore it; `researchStage` compares
-     * it against `failure_research_tool_calls`.
+     * it against `failure_research_tool_calls`. A resumed session's count is
+     * the attempt's, both halves (X-8″, PRDR-321).
      */
-    return result.turns;
+    return stop.attemptTurns;
   }
 
   /**

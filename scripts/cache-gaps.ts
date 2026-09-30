@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { FIVE_MINUTE_P99_CEILING_S, type CacheLifetime } from "../src/schemas/cache-lifetime.js";
+import { MODEL_PRICES, knownPrice, type ModelPrice } from "../src/sessions/prices.js";
 import { runDirectly } from "./plan-corpus.js";
 
 /**
@@ -29,15 +30,8 @@ import { runDirectly } from "./plan-corpus.js";
  * session's lifetime is checked after the fact.
  */
 
-/** Per million tokens: input, output, cache read, one-hour write, five-minute write. */
-type Price = readonly [number, number, number, number, number];
-const OPUS_5_5: Price = [4, 20, 0.2, 8, 5];
-const PRICES: Readonly<Record<string, Price>> = {
-  "claude-opus-5-5": OPUS_5_5,
-  "claude-opus-5": [5, 25, 0.5, 10, 6.25],
-  "claude-sonnet-5-5": [2, 10, 0.2, 4, 2.5],
-  "claude-sonnet-5": [2, 10, 0.2, 4, 2.5],
-};
+/** A model the price table does not know is priced as Opus 5.5, and counted. */
+const OPUS_5_5: ModelPrice = MODEL_PRICES["claude-opus-5-5"] ?? { input: 4, output: 20, cacheRead: 0.2, write5m: 5, write1h: 8 };
 
 /** The role each of init's tasks and planning's stages belongs to, so a kind reads as role and task. */
 const ROLE_OF: Readonly<Record<string, string>> = {
@@ -168,9 +162,10 @@ export function reportKinds(sessions: readonly TranscriptSession[]): KindReport[
       let previous: number | null = null;
       for (const r of [...s.requests].sort((a, b) => a.start - b.start)) {
         requests += 1;
-        const known = PRICES[r.model];
+        const known = knownPrice(r.model);
         if (known === undefined) unpriced += 1;
-        const [pin, pout, pread, pw1h, pw5m] = (known ?? OPUS_5_5).map((x) => x / 1e6) as unknown as Price;
+        const p = known ?? OPUS_5_5;
+        const [pin, pout, pread, pw1h, pw5m] = [p.input, p.output, p.cacheRead, p.write1h, p.write5m].map((x) => x / 1e6) as [number, number, number, number, number];
         const gap = previous === null ? 0 : (r.start - previous) / 1000;
         if (previous !== null) gaps.push(gap);
         const base = r.input * pin + r.output * pout;

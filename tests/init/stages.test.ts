@@ -6,7 +6,7 @@ import { isGreenfield } from "../../src/init/greenfield.js";
 import { planDraftSkeleton } from "../../src/init/plan.js";
 import { planDraftSchema } from "../../src/schemas/init.js";
 import { DOC_PATTERNS, awaitDocsMessage, discoverDocs } from "../../src/init/discover-docs.js";
-import { msUntilReset } from "../../src/init/session.js";
+import { msUntilReset } from "../../src/schemas/backend-limit.js";
 import { guardToolUse, type GuardPolicy } from "../../src/sessions/guard.js";
 import { runInit } from "../../src/init/machine.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";

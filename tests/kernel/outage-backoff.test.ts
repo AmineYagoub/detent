@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { OUTAGE_BACKOFF_MS } from "../../src/kernel/driver.js";
+import { OUTAGE_BACKOFF_MS } from "../../src/schemas/backend-limit.js";
 import { EXIT_ERROR, EXIT_OK, run } from "../../src/kernel/run.js";
 import { readTicket } from "../../src/kernel/tickets/readers.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";

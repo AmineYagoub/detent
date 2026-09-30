@@ -7,7 +7,7 @@ import type { SessionSpec } from "../../src/sessions/backend.js";
 import { MockBackend, okResult, type StageFn } from "../../src/sessions/mock.js";
 import { loadPromptSet } from "../../src/sessions/prompts.js";
 import { ClaudeCodeBackend, buildOptions, buildPreToolUseHook, parseResultMessage, type SdkBackendConfig } from "../../src/sessions/sdk.js";
-import { isOutage } from "../../src/init/session.js";
+import { isOutage } from "../../src/schemas/backend-limit.js";
 import { removeTree, writeTree } from "../helpers.js";
 import { addTicket, implementGreen, makeRunRepo, reviewApprove } from "../kernel/run-fixture.js";
 

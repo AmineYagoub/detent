@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runInit } from "../../src/init/machine.js";
-import { msUntilReset } from "../../src/init/session.js";
+import { msUntilReset } from "../../src/schemas/backend-limit.js";
 import { MockBackend, outageResult, type StageFn } from "../../src/sessions/mock.js";
 import { CLEAN_AUDIT, planningPipeline, BUDGETS, DRAFT, LONE_CANDIDATE, PROMPTS, planner, repo, planning } from "./plan-fixture.js";
 

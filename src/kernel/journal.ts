@@ -164,6 +164,37 @@ export class RunJournal {
     }
     return starts > ends;
   }
+
+  /**
+   * X-8″ (PRDR-321): the conversation a usage limit stopped for `role` in
+   * `generation`, which its next launch resumes rather than starting the
+   * task over: the `stopped_by_limit` its last `end` recorded, with the turns
+   * the conversation has run so far. Null when its last session ended any
+   * other way, or none has run. A torn line is skipped, as `unfinished` skips
+   * one (F-3′).
+   */
+  stoppedConversation(ticketId: string, role: string, generation: number): { readonly sessionId: string; readonly turns: number } | null {
+    const file = this.ticketJournalPath(ticketId);
+    if (!existsSync(file)) return null;
+    let last: { readonly sessionId: string; readonly turns: number } | null = null;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (line.trim() === "") continue;
+      let record: { stage?: unknown; event?: unknown; generation?: unknown; stopped_by_limit?: { session_id?: unknown; turns?: unknown } };
+      try {
+        record = JSON.parse(line) as typeof record;
+      } catch {
+        continue;
+      }
+      if (record.stage !== role || record.event !== "end") continue;
+      if ((typeof record.generation === "number" ? record.generation : 0) !== generation) continue;
+      const stopped = record.stopped_by_limit;
+      last =
+        typeof stopped?.session_id === "string" && stopped.session_id !== ""
+          ? { sessionId: stopped.session_id, turns: typeof stopped.turns === "number" ? stopped.turns : 0 }
+          : null;
+    }
+    return last;
+  }
 }
 
 export function runsDir(root: string, ticketId: string): string {

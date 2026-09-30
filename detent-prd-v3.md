@@ -3750,6 +3750,20 @@ they need a real second round first.
   logs hold 30 waits for a limit or an outage, each followed by a session started again from its
   first turn, and in PRDR-317's A/B test four sessions stopped at the account's limit after 129
   turns were recorded at $0.
+  *Built by PRDR-321. `src/schemas/backend-limit.ts` holds what both drivers read: the ladder, the
+  stated reset and its six-hour ceiling, `isUsageLimit`, and `conversationToResume`, which decides
+  the conversation the next attempt carries on. `isUsageLimit` reads the runtime's own "You've hit
+  your … limit", for any limit, and the older "usage limit reached". A session a usage limit stopped
+  after its first turn is resumed by its session id. `init` resumes it within the launch. `run`
+  resumes it from the `stopped_by_limit` on its `end` in the ticket's journal, so a run restarted
+  after the limit resumes it too. The SDK backend resumes with a short prompt to carry on. When the
+  runtime has no such conversation ("No conversation found with session ID"), the backend launches
+  the spec afresh with the task's own prompt and says why, and the note repeats it. In `run` a
+  resumed session counts no new session, keeps its artifact and signals, and returns both halves'
+  turns. A stopped session's spend is the runtime's own error result where one arrived before the
+  SDK threw, its side requests included. Otherwise it is the streamed usage priced per model, as a
+  lower bound. Resumed after midnight, a session is told "The date has changed. Today's date is now
+  …", and the prefix it had cached is kept.*
 
 - **S-6‴ (3.1.1, PRDR-318).** A VALIDATE round's reviewers share one cached prefix, if the review set
   passes with it. Every reviewer reads the pack's foundations first, on tabachir 24 documents and
