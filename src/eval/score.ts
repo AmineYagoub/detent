@@ -156,7 +156,7 @@ export function renderClaimsScore(results: ClaimsResults, score: ClaimsScore): s
 
 export function renderReviewsScore(results: ReviewsResults, score: ReviewsScore): string {
   const lines = [
-    `N-8: the reviews set on ${results.route.model} at ${results.route.effort}: ${score.verdict.toUpperCase()}`,
+    `N-8: the reviews set on ${results.route.model} at ${results.route.effort}${results.foundations === "given" ? ", the foundations given" : ""}: ${score.verdict.toUpperCase()}`,
     `  blockers reported at their place as a blocker or a major: ${String(score.found)} of ${String(score.total)}`,
     ...score.missed.map((m) => `  missed, reported as ${m.got}: ${m.at} (${m.area}): ${clip(m.why)}`),
     ...score.unfinished.map((u) => `  not finished: ${u.area}, by ${u.why}`),

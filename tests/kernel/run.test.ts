@@ -36,6 +36,7 @@ import {
   reviewApprove,
 } from "./run-fixture.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
+import { loadConfig } from "../../src/kernel/worstcase.js";
 
 /**
  * T-041 — the kernel run loop. Four oracle e2e ports plus the plan's AC
@@ -683,7 +684,8 @@ describe("T-041 X-1 enforcement fixtures", () => {
 
     const loaded = {
       config: {
-        schema_version: SCHEMA_VERSION as typeof SCHEMA_VERSION,
+        /* Every key but these two as a config that names none gets it, so a key the schema gains needs nothing here. */
+        ...loadConfig({ schema_version: SCHEMA_VERSION, budgets: {}, pinned: { agent_sdk: "0.3.280", claude_code: "2.1.191" } }).config,
         budgets: {
           blind_fix_attempts: 1 as const,
           informed_fix_attempts: 1 as const,
@@ -695,7 +697,8 @@ describe("T-041 X-1 enforcement fixtures", () => {
           turns_per_stage: 30,
           failure_research_tool_calls: 8,
           planning_research_tool_calls: 16,
-          spec_validation_rounds: 8, init_sessions_at_once: 4,
+          spec_validation_rounds: 8,
+          init_sessions_at_once: 4,
           flake_reruns: 1,
           gate_timeout_ms: 900_000,
           binding_probe_timeout_ms: 120_000,
@@ -704,15 +707,6 @@ describe("T-041 X-1 enforcement fixtures", () => {
           spend_without_progress_multiple: 3,
           spend_without_progress_sessions: 999,
         },
-        protected: [],
-        risk: [],
-        model_routing: {},
-        effort_routing: {},
-        pinned: { agent_sdk: "0.3.280", claude_code: "2.1.191" },
-        setting_sources: [],
-        plan_docs: [],
-        plan_baseline: "production" as const,
-        slice_size: { min: 12, max: 18 },
         symbols: { enabled: false, command: "serena-agent", pinned: "0.1.4" },
       },
       computedWorstCase: 14,

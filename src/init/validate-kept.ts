@@ -74,11 +74,18 @@ export function dropKeptReviews(root: string): void {
  * file it is given to read. N-8 (PRDR-326): the evaluation set's builder reads
  * a kept review as its reviewer's only where this key holds, which proves the
  * files it keeps are the ones that reviewer read.
+ *
+ * S-6‴: a reviewer handed the foundations is keyed apart from one that read
+ * them, so a review kept under one setting is not taken under the other. A
+ * reviewer that reads them is keyed as before, so the keys of every review
+ * kept, and of N-8's set, still hold.
  */
-export function reviewKey(root: string, round: number, task: ReviewTask, prompt: string): string {
+export function reviewKey(root: string, round: number, task: ReviewTask, prompt: string, foundations: "read" | "given" = "read"): string {
   const files = [...task.foundations, ...task.documents, ...(task.diff === null ? [] : [task.diff])];
   const given = [round, task.area.name, task.foundations, task.documents, task.heuristic, task.previous, task.diff, prompt, contentsDigest(root, files)];
-  return createHash("sha256").update(JSON.stringify(given)).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(foundations === "given" ? [...given, "foundations given"] : given))
+    .digest("hex");
 }
 
 export interface KeptRoundDeps extends RoundDeps {
@@ -104,7 +111,7 @@ export async function reviewRound(
 ): Promise<{ area: number; findings: ReviewFinding[] }[]> {
   const kept = new Map(readKept(deps.root).map((r) => [r.key, r.findings]));
   const slots = tasks.map((task) => {
-    const key = reviewKey(deps.root, round, task, deps.reviewPrompt);
+    const key = reviewKey(deps.root, round, task, deps.reviewPrompt, deps.foundations ?? "read");
     return { task, key, area: areas.indexOf(task.area), findings: kept.get(key) };
   });
   const reused = slots.filter((s) => s.findings !== undefined).length;

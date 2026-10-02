@@ -165,13 +165,18 @@ Nothing in §4 to §6 is built yet. Each part says what its ticket will do.
 
 - A round's reviewers all read the same foundations first: on tabachir, 24 documents and 198 KB of
   the 571. Today each reviewer reads them into its own context and writes them to the cache.
-- In the design, each reviewer is given the foundations in its first message, in one fixed order
-  and byte for byte the same, then its own documents. After the first reviewers of a round, the
-  others would read the foundations from the cache at $0.20 a million tokens instead of writing
-  them at $8.
+- **Built, off by default.** With `review_foundations: given`, each reviewer of a round gets the
+  foundations as its system prompt, in one fixed order and byte for byte the same. It then reads
+  its own documents. After the first reviewers of a round, the others read the foundations from
+  the cache at $0.20 a million tokens instead of writing them at $8.
+- **The system prompt, not the first message.** The first design put the foundations at the start
+  of the first message. A probe on Claude Code 2.1.285 found that shares nothing: Claude Code sets
+  its cache breakpoint at the end of the message, and a second session opening with the same 30K
+  tokens read none of them from the cache. Given as the system prompt, the same tokens were read
+  from the cache: 29,281 of 29,920.
 - Expected: about $0.45 a review on tabachir, and more on a larger pack. It changes what a
-  reviewer is handed, so it will become the default only if the review set of §5 finds every
-  blocker with it.
+  reviewer is handed, so it becomes the default only if the review set of §5 finds every blocker
+  with it. That run has not been made yet (PRDR-322).
 
 ### 4.5 The writer takes a place's findings together, most severe first (PRDR-323)
 

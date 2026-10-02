@@ -47,6 +47,8 @@ export interface EvalDeps {
   readonly sandbox?: () => Promise<Sandbox>;
   /** A claims set's claims arm A found wrong alone, as today's setup is re-run on them (N-8). */
   readonly only?: "wrong";
+  /** S-6‴: a reviews set's reviewers each handed the foundations as their system prompt, as `review_foundations: given` hands them. */
+  readonly foundations?: "given";
 }
 
 const CHECK = { role: "audit", task: "verify_claims" } as const;
@@ -56,6 +58,7 @@ export async function runEvaluation(deps: EvalDeps): Promise<EvalResults> {
   if (!(deps.budgetUsd > 0)) throw new EvalRefused("an evaluation runs only within a budget, and none above $0 was given (N-8)");
   const set = readSet(deps.setDir);
   if (deps.only !== undefined && set.kind !== "claims") throw new EvalRefused("only a claims set is run on the claims arm A found wrong alone");
+  if (deps.foundations !== undefined && set.kind !== "reviews") throw new EvalRefused("only a reviews set's reviewers are handed the foundations (S-6‴)");
   const root = prepareCopy(deps.copy, set, deps.setDir, deps.stage, deps.note);
   const lock = acquireRunLock(root);
   if (!lock.ok) throw new EvalRefused(`${root} is held by another process, and an evaluation waits for it to end`);
@@ -98,7 +101,17 @@ export async function runEvaluation(deps: EvalDeps): Promise<EvalResults> {
             ...(deps.only === undefined ? {} : { only: deps.only }),
             ...(await checkSet(set, { ...unitDeps, launch: sessionDeps(pipeline, journal, "AUDIT"), only: deps.only })),
           }
-        : { kind: "reviews" as const, ...(await reviewSet(set, { ...unitDeps, launch: sessionDeps(pipeline, journal, "VALIDATE"), prompts: deps.prompts, sandbox: deps.sandbox })) };
+        : {
+            kind: "reviews" as const,
+            ...(deps.foundations === undefined ? {} : { foundations: deps.foundations }),
+            ...(await reviewSet(set, {
+              ...unitDeps,
+              launch: sessionDeps(pipeline, journal, "VALIDATE"),
+              prompts: deps.prompts,
+              sandbox: deps.sandbox,
+              foundations: deps.foundations ?? "read",
+            })),
+          };
     });
     const ended = clock().toISOString();
     const rows = readLedgerRows(root).filter((r) => r.ticket === INIT_TICKET && r.at >= started);

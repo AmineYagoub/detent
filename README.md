@@ -80,6 +80,13 @@ usage limit stops a session, `init` waits for the reset the limit names and resu
 where it stopped, so no finished work is lost. VALIDATE's writer still runs its batches one at a
 time, since they edit the same files.
 
+Every VALIDATE reviewer reads the pack's foundations before its own area, and pays to cache them
+in its own session. With `review_foundations` set to `given` in `.detent/config.json`, a round
+hands every reviewer the foundations as the same system prompt instead. The round's first
+reviewers cache it, and the rest read it from the cache at a fraction of the price. It changes
+what a reviewer is handed, so the default stays `read` until Detent's review set shows reviewers
+handed the foundations still find every blocker.
+
 ```bash
 detent run
 ```

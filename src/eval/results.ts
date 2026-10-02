@@ -59,7 +59,13 @@ export const claimsResultsSchema = z.strictObject({
   claims: z.array(claimResultSchema),
 });
 export type ClaimsResults = z.infer<typeof claimsResultsSchema>;
-export const reviewsResultsSchema = z.strictObject({ ...ranSchema, kind: z.literal("reviews"), areas: z.array(areaResultSchema) });
+export const reviewsResultsSchema = z.strictObject({
+  ...ranSchema,
+  kind: z.literal("reviews"),
+  /** S-6‴: present where every reviewer was handed the foundations as its system prompt. */
+  foundations: z.literal("given").optional(),
+  areas: z.array(areaResultSchema),
+});
 export type ReviewsResults = z.infer<typeof reviewsResultsSchema>;
 export const evalResultsSchema = z.discriminatedUnion("kind", [claimsResultsSchema, reviewsResultsSchema]);
 export type EvalResults = z.infer<typeof evalResultsSchema>;
@@ -73,7 +79,8 @@ const stamp = (iso: string): string => iso.replace(/[:.]/gu, "-");
 /** Writes `results` under `dir` with a name that says what ran, and returns the file. */
 export function writeResults(dir: string, results: EvalResults): string {
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${results.kind}-${results.route.model}-${results.route.effort}-${stamp(results.started)}.json`);
+  const given = results.kind === "reviews" && results.foundations === "given" ? "-foundations-given" : "";
+  const file = path.join(dir, `${results.kind}-${results.route.model}-${results.route.effort}${given}-${stamp(results.started)}.json`);
   writeFileSync(file, `${JSON.stringify(results, null, 2)}\n`);
   return file;
 }

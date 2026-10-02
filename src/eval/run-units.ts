@@ -103,7 +103,10 @@ export async function checkSet(set: ClaimsSet, deps: UnitDeps & { readonly only?
 }
 
 /** Each area of the set reviewed as VALIDATE's round 1 reviews it, `atOnce` at a time, once its task is proven the set's. */
-export async function reviewSet(set: ReviewsSet, deps: UnitDeps & { readonly prompts: PromptSet; readonly sandbox?: (() => Promise<Sandbox>) | undefined }): Promise<{ readonly areas: AreaResult[] }> {
+export async function reviewSet(
+  set: ReviewsSet,
+  deps: UnitDeps & { readonly prompts: PromptSet; readonly sandbox?: (() => Promise<Sandbox>) | undefined; readonly foundations?: "read" | "given" },
+): Promise<{ readonly areas: AreaResult[] }> {
   const { docs, areas, tasks } = roundTasks(deps.root, set.greenfield, null, null, null);
   const pack = docs.filter(reviewable);
   if (JSON.stringify(pack) !== JSON.stringify(set.pack)) throw new EvalRefused("the copy's pack is not the one the set's reviewers were given");
@@ -132,9 +135,17 @@ export async function reviewSet(set: ReviewsSet, deps: UnitDeps & { readonly pro
             root: deps.root,
             greenfield: set.greenfield,
             note: deps.note,
-            review: async (inputs, artifactOut, grant) => {
+            foundations: deps.foundations ?? "read",
+            review: async (inputs, artifactOut, grant, systemPrompt) => {
               await deps.budget.within(
-                async () => await launchInitSession(deps.launch, { role: "spec_review", inputs, artifactOut, ...(grant === null ? {} : { scratch: grant }) }),
+                async () =>
+                  await launchInitSession(deps.launch, {
+                    role: "spec_review",
+                    inputs,
+                    artifactOut,
+                    ...(grant === null ? {} : { scratch: grant }),
+                    ...(systemPrompt === undefined ? {} : { systemPrompt }),
+                  }),
               );
             },
             fix: () => Promise.reject(new Error("an evaluation runs no writer (N-8)")),

@@ -24,6 +24,16 @@ export interface SessionSpec {
   readonly promptPrefix: string;
   /** Per-ticket variable suffix. */
   readonly promptVariable: string;
+  /**
+   * S-6‴: the session's system prompt, where its kind shares one; absent, the
+   * SDK's own, which is empty. A system prompt is cached as a block of its
+   * own, so each session given the same one reads it from the cache once the
+   * first has written it. A shared start of the first message is not: Claude
+   * Code sets its breakpoint at the message's end, and on 2.1.285 a second
+   * session whose first 30K tokens matched the first's read none of them from
+   * the cache, where one given them as its system prompt read 29,281.
+   */
+  readonly systemPrompt?: string;
   readonly cwd: string;
   /** Where the session writes its artifact. Artifacts are the interface (P2). */
   readonly artifactOut: string;

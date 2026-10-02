@@ -22,13 +22,14 @@ import { runDirectly } from "./plan-corpus.js";
  * `--budget-usd`, which it requires. `--stage` commits the set's tree to a
  * branch of a copy whose files differ; `--at-once` is how many sessions run
  * at once, four by default; `--only wrong` checks only the claims arm A found
- * wrong, as today's setup is re-run. It writes its results beside the set, or under
- * `--results`, and prints the score.
+ * wrong, as today's setup is re-run. `--foundations given` hands a reviews
+ * set's reviewers the foundations as their system prompt (S-6‴). It writes its
+ * results beside the set, or under `--results`, and prints the score.
  */
 
 const USAGE =
   "usage: npx tsx scripts/eval-run.ts --set <set dir> --copy <a disposable copy> --model <model> --effort <effort> --budget-usd <dollars> " +
-  "[--at-once 4] [--stage] [--only wrong] [--results <dir>]\n";
+  "[--at-once 4] [--stage] [--only wrong] [--foundations given] [--results <dir>]\n";
 
 const home = (p: string): string => p.replace(/^~(?=$|\/)/u, os.homedir());
 
@@ -45,6 +46,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       stage: { type: "boolean", default: false },
       results: { type: "string" },
       only: { type: "string" },
+      foundations: { type: "string" },
     },
   });
   const budgetUsd = Number(values["budget-usd"]);
@@ -58,7 +60,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     !Number.isInteger(atOnce) ||
     atOnce < 1 ||
     atOnce > 16 ||
-    (values.only !== undefined && values.only !== "wrong")
+    (values.only !== undefined && values.only !== "wrong") ||
+    (values.foundations !== undefined && values.foundations !== "given")
   ) {
     process.stderr.write(USAGE);
     return 2;
@@ -77,6 +80,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       runtime: bundledRuntime(),
       note: (text) => process.stdout.write(`  ${text}\n`),
       ...(values.only === "wrong" ? { only: "wrong" as const } : {}),
+      ...(values.foundations === "given" ? { foundations: "given" as const } : {}),
     });
     const file = writeResults(values.results === undefined ? path.join(path.dirname(setDir), "results") : path.resolve(home(values.results)), results);
     const scored = report(results, {});

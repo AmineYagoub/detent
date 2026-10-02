@@ -327,8 +327,15 @@ export function validatePhase(deps: PipelineDeps): PhaseHandler {
           estimate: estimator(deps),
           atOnce: deps.budgets.init_sessions_at_once,
           sandbox: deps.sandbox ?? (async () => await probeSandbox({ root: deps.root })),
-          review: async (inputs, artifactOut, scratch) => {
-            await launchInitSession(launch, { role: "spec_review", inputs, artifactOut, ...(scratch === null ? {} : { scratch }) });
+          foundations: deps.reviewFoundations ?? "read",
+          review: async (inputs, artifactOut, scratch, systemPrompt) => {
+            await launchInitSession(launch, {
+              role: "spec_review",
+              inputs,
+              artifactOut,
+              ...(scratch === null ? {} : { scratch }),
+              ...(systemPrompt === undefined ? {} : { systemPrompt }),
+            });
           },
           fix: async (inputs, artifactOut) => {
             await launchInitSession(launch, { role: "spec_write", inputs, artifactOut, surface: PACK_PATHS });

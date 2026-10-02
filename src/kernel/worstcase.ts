@@ -172,6 +172,15 @@ const configSchema = z.strictObject({
     .strictObject({ min: z.number().int().positive(), max: z.number().int().positive() })
     .refine((v) => v.max >= v.min, "slice_size.max must be at least slice_size.min")
     .default({ min: 12, max: 18 }),
+  /**
+   * S-6‴: how a VALIDATE reviewer gets the pack's foundations. `read`, the
+   * default, has it read them itself, as every reviewer did before. `given`
+   * hands every reviewer of a round their text as its system prompt, byte for
+   * byte the same, which the prompt cache then serves to all but the round's
+   * first reviewers. It changes what a reviewer is handed, so it stays `read`
+   * until N-8's review set passes with `given`.
+   */
+  review_foundations: z.enum(["read", "given"]).default("read"),
   risk: z.array(glob).default([]),
   /**
    * PRDR-142: the KEYS are roles. This accepted any string, and `roles.ts`

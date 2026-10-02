@@ -41,17 +41,18 @@ const where = (p: { readonly file: string; readonly line: number }): string => `
  * the pack's documents, its quote at its line, whitespace aside; every
  * document it was asked to review read; and, in a verification, `previous`
  * naming one of the findings it was given. A quote on one other line of its
- * document stands there, the finding kept with that line (C-2²⁵).
+ * document stands there, the finding kept with that line (C-2²⁵). A document
+ * it was handed whole counts as read (S-6‴).
  */
 export function checkReview(
   root: string,
   review: ReviewArtifact,
-  given: { readonly pack: readonly string[]; readonly documents: readonly string[]; readonly previous: readonly string[] },
+  given: { readonly pack: readonly string[]; readonly documents: readonly string[]; readonly previous: readonly string[]; readonly handed?: readonly string[] },
 ): ReviewCheck {
   const issues: string[] = [];
   const dropped: string[] = [];
   const moved: string[] = [];
-  const unread = given.documents.filter((d) => !review.documents_read.includes(d));
+  const unread = given.documents.filter((d) => !review.documents_read.includes(d) && !(given.handed ?? []).includes(d));
   if (unread.length > 0) issues.push(`the review did not read every document it was given: ${unread.join(", ")}`);
   const kept: ReviewFinding[] = [];
   for (const f of review.findings) {

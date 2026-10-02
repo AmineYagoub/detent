@@ -265,6 +265,7 @@ export async function main(argv: readonly string[], mainDeps: InitMainDeps = {})
       effortRouting: config?.effort_routing ?? {},
       planBaseline: config?.plan_baseline ?? "production",
       ...(config?.slice_size === undefined ? {} : { sliceSize: config.slice_size }),
+      ...(config?.review_foundations === undefined ? {} : { reviewFoundations: config.review_foundations }),
       ...(config?.symbols === undefined ? {} : { symbols: config.symbols }),
       planDocs: config?.plan_docs ?? [],
       note: (text) => process.stdout.write(`  ${text}\n`),

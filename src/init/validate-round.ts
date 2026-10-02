@@ -12,6 +12,7 @@ import { checkPack } from "./pack-check.js";
 import { packDocuments } from "./pack.js";
 import { refusedAttemptInput, withOneRelaunch, type RetriedAttempt } from "./retry.js";
 import { checkReview, fixIssues, outcomes, type Outcome, type Severity } from "./validate-checks.js";
+import { foundationsPrompt } from "./validate-foundations.js";
 import { simulationInput } from "./validate-scratch.js";
 import type { Area } from "./validate-scope.js";
 import { checkerIssues, citeIssues, holdsRequirement, logIssues } from "./write-checks.js";
@@ -85,12 +86,17 @@ export interface Shown {
 export interface RoundDeps {
   readonly root: string;
   readonly greenfield: boolean;
-  /** S-1⁗ (PRDR-285): with the round's scratch directory, or null when the round has none. */
-  readonly review: (inputs: Json, artifactOut: string, scratch: ScratchGrant | null) => Promise<void>;
+  /**
+   * S-1⁗ (PRDR-285): with the round's scratch directory, or null when the round has none. S-6‴: and
+   * the system prompt the round hands every reviewer, its foundations, or undefined where they read them.
+   */
+  readonly review: (inputs: Json, artifactOut: string, scratch: ScratchGrant | null, systemPrompt?: string) => Promise<void>;
   readonly fix: (inputs: Json, artifactOut: string) => Promise<void>;
   readonly note?: ((text: string) => void) | undefined;
   /** N-5⁗ (PRDR-325): what a round's reviews and its writer will cost, said before they run. */
   readonly estimate?: Estimator | undefined;
+  /** S-6‴: `given` hands every reviewer the foundations as its system prompt; `read`, or absent, has each read them. */
+  readonly foundations?: "read" | "given" | undefined;
 }
 
 export interface ReviewTask {
@@ -135,11 +141,13 @@ export async function reviewArea(
 ): Promise<ReviewFinding[]> {
   const out = reviewArtifactPath(deps.root, area);
   const verify = task.previous !== null;
+  const handed = deps.foundations === "given" ? foundationsPrompt(deps.root, task.foundations) : undefined;
   const inputs: Json = {
     task: verify ? "verify" : "review",
     round,
     area: task.area.name,
     foundations: [...task.foundations],
+    ...(handed === undefined ? {} : { foundations_given: true }),
     documents: [...task.documents],
     heuristic: task.heuristic.map((f) => ({ file: f.file, line: f.line, text: f.text, report: f.message })),
     ...(verify ? { previous: task.previous, diff: task.diff } : {}),
@@ -152,10 +160,16 @@ export async function reviewArea(
   const stage = `VALIDATE round ${String(round)}, ${task.area.name}`;
   const result = await withOneRelaunch<ReviewFinding[]>({ stage, note: deps.note }, async (previous) => {
     rmSync(out, { force: true });
-    await deps.review({ ...inputs, ...refusedAttemptInput(previous, "review") }, out, scratch);
+    await deps.review({ ...inputs, ...refusedAttemptInput(previous, "review") }, out, scratch, handed);
     const read = readArtifact(out, reviewArtifactSchema);
     if (read.value === null) return { value: null, issue: read.issue };
-    const checked = checkReview(deps.root, read.value, { pack, documents: task.documents, previous: (task.previous ?? []).map((p) => p.id) });
+    const checked = checkReview(deps.root, read.value, {
+      pack,
+      documents: task.documents,
+      previous: (task.previous ?? []).map((p) => p.id),
+      /* S-6‴: a foundation it was handed counts as read. */
+      handed: handed === undefined ? [] : task.foundations,
+    });
     if (previous === null && checked.issues.length > 0) return { value: null, issue: checked.issues.join("; ") };
     if (checked.moved.length > 0) deps.note?.(movedNote(stage, checked.moved));
     for (const d of checked.dropped) deps.note?.(`${stage}: a finding at ${d} stands on nothing, so it is dropped (C-2¹⁴)`);

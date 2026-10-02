@@ -209,6 +209,8 @@ export function buildOptions(spec: SessionSpec, config: SdkBackendConfig, onEffo
     /** X-8″ (PRDR-321): the conversation a usage limit stopped, carried on rather than started over. */
     ...(spec.resume === undefined ? {} : { resume: spec.resume.sessionId }),
     ...(spec.model === "" ? {} : { model: spec.model }),
+    /** S-6‴: a system prompt only where the spec names one, so every other session's options are unchanged. */
+    ...(spec.systemPrompt === undefined ? {} : { systemPrompt: spec.systemPrompt }),
     /**
      * PRDR-197: effort where a role is routed to one.
      *

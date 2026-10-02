@@ -118,6 +118,8 @@ export interface InitSessionRequest {
    * other role may be given it (`SCRATCH_ROLES`).
    */
   readonly scratch?: ScratchGrant;
+  /** S-6‴: the system prompt every session of its kind shares, a VALIDATE round's foundations; absent, the SDK's own. */
+  readonly systemPrompt?: string;
 }
 
 /**
@@ -197,6 +199,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     /** S-6″ (PRDR-320): the cache lifetime of the session's kind, its role and the task its inputs name. */
     cacheTtl: cacheLifetime(request.role, taskOf(request.inputs)),
     ...(request.scratch === undefined ? {} : { scratch: request.scratch }),
+    ...(request.systemPrompt === undefined ? {} : { systemPrompt: request.systemPrompt }),
     /**
      * S-1″ (PRDR-124): the per-session containment policy, so the one write
      * rule above is TRUE rather than merely stated.

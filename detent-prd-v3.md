@@ -1216,8 +1216,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   backend's support has no caller, and PRDR-298 deletes it.*
   *Amended by C-3⁵ (PRDR-298): the backend's support is deleted.*
   *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are batched, and each is told its own path.*
-  *Amended by S-6‴ (PRDR-318): a VALIDATE round's reviewers are handed the foundations as the same first
-  message, once the review set passes with it.*
+  *Amended by S-6‴ (PRDR-318): a VALIDATE round's reviewers are handed the foundations as the same
+  system prompt, once the review set passes with it.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -3401,7 +3401,7 @@ the code does what the rules it amends describe, and each of those rules points 
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
   *Amended by S-6‴ (PRDR-318): once the review set passes with it, each reviewer is handed the
-  foundations' text in its first message, and they count as read.*
+  foundations' text as its system prompt, and they count as read.*
 
 - **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
   throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past
@@ -3834,17 +3834,24 @@ they need a real second round first.
   lower bound. Resumed after midnight, a session is told "The date has changed. Today's date is now
   …", and the prefix it had cached is kept.*
 
-- **S-6‴ (3.1.1, PRDR-318).** A VALIDATE round's reviewers share one cached prefix, if the review set
-  passes with it. Every reviewer reads the pack's foundations first, on tabachir 24 documents and
-  198 KB of the 571, into its own context, and writes them to the cache. Under this rule each
-  reviewer is handed the foundations' text in its first message, after the role's prompt and before
-  anything that differs between reviewers, in one order and byte for byte the same, so a round's
-  later reviewers read them from the cache at $0.20 a million tokens instead of writing them at $8.
-  A reviewer is still told its own documents and reads them itself, and the foundations it was
-  handed count as read (C-2¹⁴). It changes what a reviewer is handed, so it is the default only once
-  N-8's review set, reviewed with it at the level the reviewers are routed to, reports each blocker
-  of the bar; until then it is off, and the run is recorded either way. Expected: about $0.45 a
-  review on tabachir, and more on a larger pack.
+- **S-6‴ (3.1.1, PRDR-318; built by PRDR-322, off by default).** A VALIDATE round's reviewers share
+  one cached prefix, if the review set passes with it. Every reviewer reads the pack's foundations
+  first, on tabachir 24 documents and 198 KB of the 571, into its own context, and writes them to
+  the cache. With the config's `review_foundations` at `given`, each reviewer is handed the
+  foundations' text as its system prompt: each document whole, under its path, its lines numbered
+  as the Read tool numbers them, in the round's order and byte for byte the same for every reviewer
+  of a round. A round's later reviewers then read them from the cache at $0.20 a million tokens
+  instead of writing them at $8. The system prompt carries them, not the first message: Claude Code
+  sets its cache breakpoint at the end of a message, so no other session reads a shared start of a
+  first message from the cache. On 2.1.285 a second session whose first 30K tokens matched
+  another's read none of them, and one handed them as its system prompt read 29,281 of 29,920. The
+  first message is unchanged, but for `foundations_given`. A reviewer is still told its own
+  documents and reads them itself, unless its system prompt holds them, and the foundations it was
+  handed count as read (C-2¹⁴). A review made with them handed is kept under a key of its own. It
+  changes what a reviewer is handed, so `review_foundations` stays `read` until N-8's review set,
+  reviewed with it at the level the reviewers are routed to, reports each blocker of the bar. The
+  run is recorded either way. Expected: about $0.45 a review on tabachir, and more on a larger
+  pack.
 
 - **C-2²⁷ (3.1.1, PRDR-318).** VALIDATE's writer takes a place's findings together, the most severe
   first. C-2²⁴ cut a round's findings into batches in the order their ids give them, which is the

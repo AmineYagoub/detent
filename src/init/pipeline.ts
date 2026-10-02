@@ -60,6 +60,8 @@ export interface PipelineDeps {
   readonly symbols?: SymbolsConfig;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
+  /** S-6‴: how a VALIDATE reviewer gets the foundations, the config's `review_foundations`. */
+  readonly reviewFoundations?: "read" | "given";
   readonly note?: (text: string) => void;
   /**
    * PRDR-194: where work actually BEGINS, distinct from `note`.
