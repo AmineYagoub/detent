@@ -2136,7 +2136,7 @@ function guardToolUse(toolName, toolInput, policy, resolveReal = realpathNearest
   if (unsafe !== null) {
     return {
       decision: "deny",
-      reason: `DENY: this session's policy cannot be honoured: ${unsafe}. No write is allowed under a policy the guard cannot match safely and as written, until the plan or config that supplied it is fixed (P5).`
+      reason: `DENY: this session's policy cannot be honoured: ${unsafe}. No write into the worktree is allowed under a policy the guard cannot match safely and as written, until the plan or config that supplied it is fixed (P5).`
     };
   }
   const via = rel === typed ? "" : ` (reached through a symbolic link from ${typed})`;

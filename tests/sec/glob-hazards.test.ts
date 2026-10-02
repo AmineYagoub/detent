@@ -221,6 +221,22 @@ describe("PRDR-330 the decision the SDK backend registers does not match such a 
     expect(decision.reason).toContain("b is protected");
   });
 
+  /** PRDR-331: the session's own artifact area, where the SDK backend's policy names one (B-2″). */
+  const REFUSED: GuardPolicy = { surface: ["src/**"], protectedGlobs: [STAR], workRoot: "/wt", artifactRoot: "/runs/t1" };
+
+  it("under a refused policy a write into the worktree is denied, and the message says the worktree (PRDR-331)", () => {
+    const decision = guardToolUse("Write", { file_path: "/wt/src/a.ts" }, REFUSED, identity);
+    expect(decision.decision).toBe("deny");
+    expect(decision.reason).toContain("No write into the worktree is allowed under a policy the guard cannot match safely and as written");
+  });
+
+  it("under a refused policy the session's own artifact area stays writable, since it is decided before the policy and matches no glob (PRDR-331)", () => {
+    expect(guardToolUse("Write", { file_path: "/runs/t1/review.json" }, REFUSED, identity)).toEqual({
+      decision: "allow",
+      reason: "review.json is this session's own artifact area (B-2″)",
+    });
+  });
+
   it("ordinary globs are matched as before: `@(src|lib)/**` grants `lib/x.ts`, and a protected `+([a-z])` protects it", () => {
     expect(decide(ORDINARY, STRUCTURAL_PROTECTED, "lib/x.ts").decision).toBe("allow");
     const decision = decide(["**"], ["+([a-z])"], "lib/x.ts");
@@ -268,5 +284,9 @@ describe("PRDR-330 the bundled hook does not match such a glob", () => {
 
   it("a protected `+(a|aa)` does not shrink to its own spelling: a write to `a` is refused", () => {
     expect(denial(hook(["**"], [LITERAL], "a"))).toContain("its own spelling");
+  });
+
+  it("under a refused policy a write into the worktree is denied, and the message says the worktree (PRDR-331)", () => {
+    expect(denial(hook(["src/**"], [STAR], "src/a.ts"))).toContain("No write into the worktree is allowed under a policy the guard cannot match safely and as written");
   });
 });

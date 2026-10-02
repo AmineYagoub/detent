@@ -746,11 +746,14 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   reach splits a surface. A rewrite that keeps the meaning passes: `+(*(a)|*(b))` compiles to
   `[ab]*`. The config's `protected`, `risk` and `plan_docs`, a ticket's `surface` and `granted`,
   a plan draft's surfaces and a cached draft are checked when read. The guard checks its policy
-  before it matches any glob, so a policy file holding one denies every write on both skins
-  (P5), and it refuses a Glob call whose pattern it would match against the way to an unreadable
-  directory (C-4⁵). The plugin hook is no backstop: a PreToolUse command hook that times out does
-  not block the call. Runs of wildcards over text they can also match (`*a*a*a*b`) are still
-  polynomial, and that class is recorded in PRDR-330 for a ticket of its own.
+  before it matches any glob, so under a policy holding one it denies every write into the
+  worktree on both skins (P5). The session's own artifact area stays writable: the guard decides
+  it before it reads the policy and matches no glob there (B-2″, PRDR-331), and the plugin hook's
+  policy file names no such area. The guard also refuses a Glob call whose pattern it would match
+  against the way to an unreadable directory (C-4⁵). The plugin hook is no backstop: a PreToolUse
+  command hook that times out does not block the call. Runs of wildcards over text they can also
+  match (`*a*a*a*b`) are still polynomial, and that class is recorded in PRDR-330 for a ticket of
+  its own.
 
 - **SEC-4′ (3.1.1, PRDR-133).** The session-environment allowlist is APPLIED. `buildSessionEnv`
   had no production caller: `buildOptions` never set `env`, and the pinned SDK inherits

@@ -410,14 +410,19 @@ export function guardToolUse(
     /* Inside the worktree and not a mutation: bounded by P7 above, granted by the allowlist. */
     return { decision: "abstain", reason: `${rel} is inside the worktree; the allowlist decides (S-2″)` };
   }
-  /* SEC-3″ (PRDR-330), P5: a policy the guard cannot match safely and as written is not honoured. */
+  /*
+   * SEC-3″ (PRDR-330), P5: a policy the guard cannot match safely and as written
+   * is not honoured. PRDR-331: what it refuses is a write into the worktree. The
+   * session's own artifact area was decided above (B-2″) and matches no glob, so
+   * it stays writable.
+   */
   const unsafe = policyHazard(policy);
   if (unsafe !== null) {
     return {
       decision: "deny",
       reason:
-        `DENY: this session's policy cannot be honoured: ${unsafe}. No write is allowed under a policy the guard cannot match ` +
-        "safely and as written, until the plan or config that supplied it is fixed (P5).",
+        `DENY: this session's policy cannot be honoured: ${unsafe}. No write into the worktree is allowed under a policy the guard ` +
+        "cannot match safely and as written, until the plan or config that supplied it is fixed (P5).",
     };
   }
   /* Where the two disagree, the human is told which path the verdict is about. */
