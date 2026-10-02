@@ -3969,9 +3969,16 @@ they need a real second round first.
   init journal. Each check's brief is kept in the results. `--only wrong` checks only the claims arm
   A found wrong, and the score counts only those, for a re-run of today's setup.*
 
-- **S-5⁷ (3.1.1, PRDR-318).** A task's model or effort moves below S-5⁶'s only through a passing
-  measurement on N-8's sets, and the routing names it. Effort is routed per task where a role runs
-  several, so AUDIT's claim checks can move apart from its survey and triage. The arms run in order:
+- **S-5⁷ (3.1.1, PRDR-318; the routing per task built by PRDR-327).** A task's model or effort
+  moves below S-5⁶'s only through a passing measurement on N-8's sets, and the routing names it.
+  Effort is routed per task where a role runs several, so AUDIT's claim checks can move apart from
+  its survey and triage. A `role/task` key of `effort_routing` routes one task, and the role's
+  other tasks keep the role's level. The tasks are `audit`'s `survey`, `triage` and
+  `verify_claims`; `spec_write`'s `decide`, `write` and `fix`; and `spec_review`'s `review` and
+  `verify`. A key naming a task its role does not run is refused by name, as an unknown role is. A
+  new config is written with the roles' levels and each task a measurement moved, and the first
+  `init` names the keys. `model_routing` stays per role: an arm that passed on another model would
+  need a task key there too, built with the move. The arms run in order:
   Opus 5.5 at `high`, on both sets; Sonnet 5.5 at `max`, on the claims set; and Opus 5.5 at
   `medium`, on both, only if `high` passed. A task moves to the cheapest arm that passed, and only
   the task measured moves; the routing's doc-block and this document name the measurement that

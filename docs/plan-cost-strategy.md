@@ -246,6 +246,16 @@ Nothing runs until the user approves a budget. On 2026-09-30 the user approved $
   measurement moved it. Where a role runs several tasks, as `audit` runs the survey, the triage and
   the checks, only the task measured will move. The writer and the planner stay at their levels
   until a set exists for them.
+- **Built:** effort can be routed per task under a `role/task` key, such as
+  `audit/verify_claims`, and a role's other tasks keep its level. No default has moved.
+- **Measured so far.** Each arm's misses are in PRDR-327.
+
+| Arm | Set | Result | Spend | Wall clock |
+|---|---|---|---|---|
+| today's setup, re-run (Opus 5.5 at `max`) | 14 wrong claims | FAIL: 11 of 14 found wrong; 1 confirmed, 2 unverified | $31.74 | 26.7 min |
+
+Today's setup does not meet the claims bar on a second run, so no claims routing moves until the
+user decides the bar (§10, question 3).
 
 ### 6.2 Effort by risk and by evidence, in `run` (PRDR-328)
 

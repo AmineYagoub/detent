@@ -4,6 +4,7 @@ import { z } from "zod";
 import { stateDir } from "../fs/layout.js";
 import { readLedgerRows } from "../kernel/ledger-rows.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
+import { effortFor } from "../schemas/roles.js";
 import { estimateStep, estimateText, sessionFigure, sliceFigure, span, type Route, type SliceFigure, type Unit } from "./estimate.js";
 import { INIT_TICKET } from "./session.js";
 
@@ -135,7 +136,8 @@ const NOTHING: Step = { start: () => ({ done: () => undefined }), end: () => und
 
 export function estimator(deps: EstimatorDeps): Estimator {
   const now = deps.now ?? ((): Date => new Date());
-  const route = (role: string): Route => ({ model: deps.modelRouting?.[role] ?? "", effort: deps.effortRouting?.[role] ?? "default" });
+  /* S-5⁷: a unit is figured at its task's level where the config routes its task apart. */
+  const route = (role: string, task?: string): Route => ({ model: deps.modelRouting?.[role] ?? "", effort: effortFor(deps.effortRouting ?? {}, role, task) ?? "default" });
   const on = (role: string): string => `${role} on ${route(role).model === "" ? "the runtime's own model" : route(role).model} at ${route(role).effort}`;
   const sliceRoute = `${on("planner")} and ${on("plan_review")}`;
   return {
@@ -145,7 +147,7 @@ export function estimator(deps: EstimatorDeps): Estimator {
       try {
         const rows = readLedgerRows(deps.root);
         const slices = readSliceFigures(deps.root);
-        estimate = estimateStep(spec.units, spec.atOnce, (unit) => (unit === "slice" ? sliceFigure(slices, sliceRoute) : sessionFigure(rows, unit, route(unit.role))));
+        estimate = estimateStep(spec.units, spec.atOnce, (unit) => (unit === "slice" ? sliceFigure(slices, sliceRoute) : sessionFigure(rows, unit, route(unit.role, unit.task))));
       } catch (err) {
         deps.note?.(`${spec.said} — no estimate, since the figures could not be read: ${(err as Error).message} (N-5⁗)`);
         return NOTHING;

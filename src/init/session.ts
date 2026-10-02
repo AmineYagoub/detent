@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { ARCHIVE_DIR } from "../schemas/pack.js";
-import { promptOf, SCRATCH_ROLES, type RoleId } from "../schemas/roles.js";
+import { effortFor, promptOf, SCRATCH_ROLES, type RoleId } from "../schemas/roles.js";
 import {
   artifactWriteRule,
   stablePrefix,
@@ -156,6 +156,9 @@ function taskOf(inputs: Readonly<Record<string, unknown>>): string | undefined {
   return typeof named === "string" ? named : undefined;
 }
 
+/** The spec's `effort`, absent where nothing routes one, so the SDK's own default applies. */
+const effortOption = (level: string | undefined): { readonly effort?: string } => (level === undefined ? {} : { effort: level });
+
 function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): SessionSpec {
   /* C-4⁵ (PRDR-292): no Detent PRD id in what a model reads; the prompts name none either. */
   const preamble = JSON.stringify({ phase: "init", non_negotiables: "Only artifacts count. Write exactly the artifact named below." }, null, 2);
@@ -190,7 +193,7 @@ function initSessionSpec(deps: InitSessionDeps, request: InitSessionRequest): Se
     ...(planning ? { tools: PLANNER_TOOLS } : {}),
     permissionMode: "",
     model: deps.modelRouting?.[request.role] ?? "",
-    ...(deps.effortRouting?.[request.role] === undefined ? {} : { effort: deps.effortRouting[request.role] }),
+    ...effortOption(effortFor(deps.effortRouting ?? {}, request.role, taskOf(request.inputs))),
     /** S-6″ (PRDR-320): the cache lifetime of the session's kind, its role and the task its inputs name. */
     cacheTtl: cacheLifetime(request.role, taskOf(request.inputs)),
     ...(request.scratch === undefined ? {} : { scratch: request.scratch }),
@@ -343,8 +346,8 @@ async function launchOnce(deps: InitSessionDeps, request: InitSessionRequest, re
       : new SpendLedger(deps.root, journal, deps.spendCeiling, deps.progressBreaker, deps.note);
   /* D-25: spend is read here, at launch and never mid-flight; the advisory total and the breaker only announce (PRDR-265). */
   ledger.recordLaunch();
-  /* S-4⁵ (PRDR-299): the level this session is routed to, `"default"` where none is, as the kernel's `start` names it (S-4‴). */
-  const routed = deps.effortRouting?.[request.role] ?? "default";
+  /* S-4⁵ (PRDR-299): the level this session is routed to, `"default"` where none is, as the kernel's `start` names it (S-4‴); its task's own where the config routes one (S-5⁷). */
+  const routed = effortFor(deps.effortRouting ?? {}, request.role, taskOf(request.inputs)) ?? "default";
   journal.appendTicketEvent(INIT_TICKET, {
     stage: request.role,
     event: "start",

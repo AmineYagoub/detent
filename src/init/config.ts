@@ -5,7 +5,7 @@ import { probeSymbols, type SymbolsConfig, type SymbolsStatus } from "../adapter
 import { stateDir, writeArtifact } from "../fs/layout.js";
 import { loadConfig } from "../kernel/worstcase.js";
 import { CEILINGS } from "../schemas/budgets.js";
-import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING } from "../schemas/roles.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, DEFAULT_TASK_EFFORT_ROUTING, TASK_KEYS } from "../schemas/roles.js";
 
 /**
  * T-140 — `init` writes the project config (R-9, X-1, S-5).
@@ -69,7 +69,8 @@ export function ensureConfig(root: string, spendCapUsd?: number): EnsureConfigRe
      * default, `high`, with nothing written down anywhere; a routed one is a
      * decision the operator can read in the file and change.
      */
-    effort_routing: { ...DEFAULT_EFFORT_ROUTING },
+    /* S-5⁷: beside the roles, each task a measurement moved apart from its role. */
+    effort_routing: { ...DEFAULT_EFFORT_ROUTING, ...DEFAULT_TASK_EFFORT_ROUTING },
     plan_baseline: "production",
     pinned: { agent_sdk: PINNED_AGENT_SDK, claude_code: installedClaudeVersion() },
   });
@@ -87,15 +88,18 @@ function grouped(table: Readonly<Record<string, string>>): string {
  * PRDR-114, PRDR-263: what a first `init` says it routed, so a default the
  * operator did not choose is one they can see.
  *
- * Built from the two tables. The sentences named every role by hand, and a
- * role added to the tables would have been routed and never named (PRDR-281).
+ * Built from the tables. The sentences named every role by hand, and a role
+ * added to the tables would have been routed and never named (PRDR-281). The
+ * keys a task can be routed under are named too (S-5⁷): a knob an
+ * operator cannot see is one they do not have (PRDR-197).
  */
 export function routingNote(): string {
   return (
     `model routing defaulted (PRDR-114, S-5⁶): ${grouped(DEFAULT_MODEL_ROUTING)}. A routed model this runtime cannot serve ` +
     "falls back to the runtime default, noted per session. Edit model_routing in .detent/config.json to change it.\n" +
-    `effort routing defaulted (PRDR-263, S-5⁵): ${grouped(DEFAULT_EFFORT_ROUTING)}. A level the routed model cannot serve ` +
-    "is downgraded silently by the SDK and noted per session. Edit effort_routing in .detent/config.json to change it.\n"
+    `effort routing defaulted (PRDR-263, S-5⁵): ${grouped({ ...DEFAULT_EFFORT_ROUTING, ...DEFAULT_TASK_EFFORT_ROUTING })}. A level the routed model cannot serve ` +
+    "is downgraded silently by the SDK and noted per session. Edit effort_routing in .detent/config.json to change it.\n" +
+    `A task can be routed apart from its role under its own key (S-5⁷): ${TASK_KEYS.join(", ")}.\n`
   );
 }
 

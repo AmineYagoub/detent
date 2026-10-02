@@ -155,6 +155,12 @@ line that moves it. Sessions run on the Claude Code the Agent SDK bundles, not
 the `claude` on your PATH, so `doctor` also fails on a routed model that
 runtime cannot serve.
 
+A role that runs several tasks can have one of them routed apart under a
+`role/task` key of `effort_routing`, such as `audit/verify_claims` for AUDIT's
+claim checks; its other tasks keep the role's level. A first `init` names the
+keys. The defaults route a task below its role's level only after it meets the
+bar on Detent's evaluation sets, and no task has yet.
+
 In `run`, a ticket's risk and Detent's own checks raise these levels, and never
 lower them. A ticket the plan labels risky, or whose surface meets a glob of the
 config's `risk` list, runs its implement, fix and review sessions at `max`. Each

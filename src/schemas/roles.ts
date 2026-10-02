@@ -252,6 +252,42 @@ export const DEFAULT_EFFORT_ROUTING: Readonly<Record<RoleId, string>> = {
 };
 
 /**
+ * S-5⁷: the tasks of the roles that run more than one. A task's
+ * effort can be routed apart from its role's under a `role/task` key of
+ * `effort_routing`, so AUDIT's claim checks can move without its survey and
+ * its triage. `run`'s roles run one task each, and S-5⁸ routes them.
+ */
+export const ROLE_TASKS: Readonly<Partial<Record<RoleId, readonly string[]>>> = {
+  audit: ["survey", "triage", "verify_claims"],
+  spec_write: ["decide", "write", "fix"],
+  spec_review: ["review", "verify"],
+};
+
+/** S-5⁷: the `effort_routing` key of a role's task. */
+export function taskKey(role: string, task: string): string {
+  return `${role}/${task}`;
+}
+
+/** S-5⁷: every `role/task` key `effort_routing` accepts. */
+export const TASK_KEYS: readonly string[] = Object.entries(ROLE_TASKS).flatMap(([role, tasks]) => (tasks ?? []).map((task) => taskKey(role, task)));
+
+/** S-5⁷: the level a session of `role` doing `task` is routed to: its task's own, else its role's, else none. */
+export function effortFor(routing: Readonly<Partial<Record<string, string>>>, role: string, task: string | undefined): string | undefined {
+  return (task === undefined ? undefined : routing[taskKey(role, task)]) ?? routing[role];
+}
+
+/**
+ * S-5⁷: the tasks whose level a passing measurement on N-8's sets moved apart
+ * from their role's, each named with the measurement that moved it. A new
+ * config is written with these beside the roles' levels.
+ *
+ * Empty: no task has moved. A task moves only to the cheapest arm that passed
+ * D-35's bar, and an arm is held to that bar only where today's setup, re-run,
+ * meets it too.
+ */
+export const DEFAULT_TASK_EFFORT_ROUTING: Readonly<Record<string, string>> = {};
+
+/**
  * S-1's read-only set. Since S-1′ (PRDR-067) these roles run DEFAULT mode
  * with the read-only tool surface plus one scoped write rule for their own
  * artifact — plan mode blocks the write the A-contract demands and survives

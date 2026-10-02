@@ -70,3 +70,58 @@ The estimated cost of each arm, from the measured per-session figures:
 2. **Sonnet 5.5 for claim checks only.** A claim check is research with a verdict. A review weighs
    a whole area against the foundations, which is where an Opus is most likely to earn its price.
 3. **The cheapest passing arm, not the best-scoring.** Every passing arm met the whole bar.
+
+## Progress
+
+### The budget (AC 1)
+
+- The user approved $500 for measuring on 2026-09-30 ("Evaluation budget is $500, go ahead build
+  all tickets and don't stop until you finish"). They stopped the first smoke run that day, and on
+  2026-10-02 said to continue building.
+- About $3.17 of the $500 was spent before the arms: $0.17 on live probes, and up to $3 on the
+  stopped smoke run. A driver outside the repository runs the arms one after another from a frozen
+  worktree at `048362e`, and caps each arm at its planned cap or what is left of $496.83, whichever
+  is less.
+
+### The routing per task (AC 4's mechanism, AC 7)
+
+Built before any arm moves a level:
+- A `role/task` key of `effort_routing` routes one task apart from its role. `effortFor` reads the
+  task's key, then the role's, then none. Both the session's `effort` and the level its `start`
+  event, `effort_settled` and ledger row name come from it.
+- `ROLE_TASKS` lists the tasks: `audit`'s `survey`, `triage` and `verify_claims`; `spec_write`'s
+  `decide`, `write` and `fix`; `spec_review`'s `review` and `verify`. The config refuses a key that
+  names a task its role does not run, by name, as it refuses an unknown role.
+- The estimator figures a unit at its task's level, so an estimate matches what the session will
+  run at.
+- `DEFAULT_TASK_EFFORT_ROUTING` holds each task a passing arm moved. It is empty, because no arm
+  has moved one. A new config is written with it beside the roles' levels, and the first `init`
+  names every task key.
+- An eval arm routes its unit's role only and reads no project config, so a task key in the copy's
+  config cannot override an arm's level.
+
+**Falsified at HEAD (`534bcd9`)** with a probe through APIs that exist there:
+- a claim check routed `audit/verify_claims: high` beside `audit: max` ran at `max`, as the survey
+  did;
+- the config refused the key;
+- no doc-block in `src/schemas/roles.ts` named a measurement on N-8's sets.
+
+All three failed at HEAD and pass on the fix.
+
+**Mutation battery (12 mutants):** 11 killed. `C1` (a new config holds the roles' levels alone)
+survives, and it is equivalent while `DEFAULT_TASK_EFFORT_ROUTING` is empty. The battery runs again
+if a task moves.
+
+### The arms (ACs 2, 3, 6)
+
+**Today's setup re-run on the 14 wrong claims: FAIL.** This was Opus 5.5 at `max`, 2026-10-02
+13:17 to 13:44 UTC. It found 11 of the 14 wrong, and spent $31.74 over 14 sessions in 26.7
+minutes, against a $60 cap. It missed three claims:
+- one on what a data-protection law's article requires of a processor's contract. It found this
+  confirmed: the official text it cited says "a contract or legal act", and arm A had judged the
+  claim's "written contract" wrong;
+- one on what a regulator's deliberation says about publishing personal data on foreign-run
+  platforms. It found this unverified;
+- one on an official mark-correction window after each term. It found this unverified.
+
+Under AC 6, no claims routing moves until the user decides the bar.

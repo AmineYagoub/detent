@@ -176,7 +176,7 @@ describe("PRDR-197 effort_routing is validated on both axes", () => {
   });
 
   it("refuses a role that does not exist, naming it", () => {
-    expect(() => loadConfig({ ...base(), effort_routing: { reviewr: "xhigh" } })).toThrow(/effort_routing has no role `reviewr`/);
+    expect(() => loadConfig({ ...base(), effort_routing: { reviewr: "xhigh" } })).toThrow(/effort_routing has no role or task `reviewr`/);
   });
 
   it("refuses a level the SDK does not have, naming it", () => {

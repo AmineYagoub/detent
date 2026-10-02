@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EFFORT_LEVELS, ROLE_IDS } from "../schemas/roles.js";
+import { EFFORT_LEVELS, ROLE_IDS, TASK_KEYS } from "../schemas/roles.js";
 import { budgetsSchema, type Budgets } from "../schemas/budgets.js";
 import { SCHEMA_VERSION, glob, nonEmptyString } from "../schemas/common.js";
 import type { State } from "../schemas/states.js";
@@ -201,14 +201,22 @@ const configSchema = z.strictObject({
    * with nothing printed. An unknown role and an unknown level are each refused
    * by name. Empty by default, so a config that says nothing gets exactly the
    * sessions it got before.
+   *
+   * S-5⁷: a key may also name a role's task, `audit/verify_claims`,
+   * which routes that task apart from its role. A task the role does not run
+   * is refused like an unknown role, since a misspelt task would leave its
+   * sessions at the role's level with nothing said.
    */
   effort_routing: z
     .record(z.string(), z.string())
     .default({})
     .superRefine((routing, ctx) => {
       for (const [key, value] of Object.entries(routing)) {
-        if (!ROLE_IDS.includes(key as (typeof ROLE_IDS)[number])) {
-          ctx.addIssue({ code: "custom", message: `effort_routing has no role \`${key}\` — expected one of ${ROLE_IDS.join(", ")}` });
+        if (!ROLE_IDS.includes(key as (typeof ROLE_IDS)[number]) && !TASK_KEYS.includes(key)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `effort_routing has no role or task \`${key}\` — expected one of ${[...ROLE_IDS, ...TASK_KEYS].join(", ")}`,
+          });
         }
         if (!EFFORT_LEVELS.includes(value as (typeof EFFORT_LEVELS)[number])) {
           ctx.addIssue({
