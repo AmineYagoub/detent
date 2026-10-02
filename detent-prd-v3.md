@@ -1638,7 +1638,7 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   both hops, still runs the named script, and beats a project `.npmrc` setting
   `ignore-scripts=false`. An operator who needs a project's install to build exports
   `DETENT_ALLOW_LIFECYCLE_SCRIPTS=1` for the run; a session cannot, because it does not compose
-  the referee's environment, and per-project per-script approval is PRDR-233. Second: an
+  the referee's environment, and per-project per-script approval is V-1⁷. Second: an
   ecosystem row declares the package managers it may install for, and the npm row is npm's and
   greenfield's alone. Run in a pnpm or yarn project it wrote `package-lock.json`, which
   `PM_BY_LOCKFILE` reads first, so the referee's own install flipped the discovered package
@@ -1648,6 +1648,27 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   hook's scoped gate runs under the same environment and through the same runner (PRDR-332).
   Until then it ran `sh -c` with Detent's own environment, so a session's `pretest` and
   `posttest` ran in Detent's process each time the session tried to end.
+
+- **V-1⁷ (3.1.1, PRDR-233).** An operator approves a project's lifecycle scripts one body at a
+  time, and a run executes those and no others. `detent verify lifecycle` lists, for each package,
+  the lifecycle scripts its manifest declares, each with its body and the body's SHA-256: the ones
+  `npm install` runs (`preinstall`, `install`, `postinstall`, `prepublish`, `preprepare`,
+  `prepare`, `postprepare`, `dependencies`), and the `pre` and `post` of each bound npm script
+  gate. `--approve <script>` records one after showing it, on a terminal after a [y/N] and off one
+  only with `--yes`. The record is append-only, `state/lifecycle.jsonl`, keyed by package, script
+  and hash, so an edited body is not approved until it is approved again. Suppression stays on
+  (V-1⁶). Detent runs each approved script itself, `npm run <script>` under the same environment,
+  where npm would have: an approved `preinstall` before the install and the rest after it in
+  npm's order, an approved `pre` before its gate and `post` after a green one. It does so on the
+  referee's installs and gates, the Stop hook's scoped gate and the falsification probe. An
+  approval given after a work directory was installed installs it again, since the install's mark
+  records what was approved to run with it. A red gate's record (`last_failure.json`), the dossier
+  and the Stop hook's block name each declared script Detent did not run, and the verb that
+  approves it. For a project with an approval on record the run-wide
+  `DETENT_ALLOW_LIFECYCLE_SCRIPTS` is superseded: suppression stays on and only the approved
+  scripts run. For a project without one it lifts suppression as before. Only npm's scripts:
+  pnpm's, yarn's and bun's are unmeasured, and a dependency's own install scripts stay suppressed.
+  Binding execution at `init` and `verify sync` keeps the run-wide reading of the switch.
 
 - **V-3⁵ (3.1.1, PRDR-231).** A configuration is a baseline only if it was EXECUTED and approved.
   V-3⁗ judges a ticket's tree against the config at its fork commit and adopted whatever that

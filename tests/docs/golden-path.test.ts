@@ -163,6 +163,10 @@ const OPENS: Record<string, PromptSite> = {
     constructs: ["node:readline", "createInterface(", ".question("],
     reason: "V-1's re-baseline consent inside `verify sync`, C-12 plumbing; not a member of INTERRUPTS",
   },
+  "cli/verify-lifecycle.ts": {
+    constructs: ["node:readline", "createInterface(", ".question("],
+    reason: "V-1⁷'s approval of a lifecycle script's body inside `verify lifecycle` (PRDR-233), C-12 plumbing; not a member of INTERRUPTS",
+  },
 };
 
 /** Modules that hand an asker to something that will call it, and open no transport themselves. */

@@ -20,13 +20,13 @@ import { SCHEMA_VERSION } from "../schemas/common.js";
 export function buildDossier(root: string, ticket: Ticket, reason: string): Dossier {
   const dir = runsDir(root, ticket.id);
   const artifacts = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json") || f.endsWith(".jsonl")).sort() : [];
-  const failure = readSignature(dir);
+  const failure = readFailure(dir);
   return dossierSchema.parse({
     schema_version: SCHEMA_VERSION,
     ticket: ticket.id,
     reason,
     generations: ticket.generations.map((g) => ({ index: g.index, counters: g.counters })),
-    last_signatures: failure === null ? [] : [failure],
+    last_signatures: failure.signature === null ? [] : [failure.signature],
     artifact_index: artifacts,
     /**
      * PRDR-271: the ladder's last rung hands the ticket to a human, and what
@@ -35,6 +35,7 @@ export function buildDossier(root: string, ticket: Ticket, reason: string): Doss
      * failed attempts and no account of what was suspect before the first one.
      */
     plan_findings: (readPlanFindings(root, ticket.id) ?? []).map(findingLine),
+    ...(failure.lifecycle === null ? {} : { lifecycle_not_run: failure.lifecycle }),
     suggested_resolutions: [
       "review the dossier and the last failure record",
       "requeue with guidance (`detent requeue <id>`) to open a fresh generation (X-8)",
@@ -61,6 +62,7 @@ export function dossierSummary(ticket: Ticket, dossier: Dossier): string {
       `${totals.blind_fix_attempts + totals.informed_fix_attempts + totals.review_fix_attempts} fixes, ` +
       `${totals.research_sessions} research, ${totals.hypotheses} hypotheses)`,
     ...(dossier.last_signatures.length > 0 ? [`last failure signature: ${dossier.last_signatures[0]}`] : []),
+    ...(dossier.lifecycle_not_run === undefined ? [] : [dossier.lifecycle_not_run]),
     `artifacts: ${dossier.artifact_index.join(", ") || "(none)"}`,
     ...planLines(dossier.plan_findings),
   ];
@@ -82,13 +84,17 @@ function planLines(findings: readonly string[]): readonly string[] {
   return [`plan review said (${findings.length}):`, ...shown, ...(rest > 0 ? [`  - ...${rest} more in dossier.json`] : [])];
 }
 
-function readSignature(dir: string): string | null {
+/** The last failure record's signature, and its note on the lifecycle scripts Detent did not run (V-1⁷, PRDR-233). */
+function readFailure(dir: string): { readonly signature: string | null; readonly lifecycle: string | null } {
   const file = path.join(dir, "last_failure.json");
-  if (!existsSync(file)) return null;
+  if (!existsSync(file)) return { signature: null, lifecycle: null };
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as { signature?: string };
-    return parsed.signature ?? null;
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as { signature?: unknown; lifecycle_not_run?: unknown };
+    return {
+      signature: typeof parsed.signature === "string" && parsed.signature !== "" ? parsed.signature : null,
+      lifecycle: typeof parsed.lifecycle_not_run === "string" && parsed.lifecycle_not_run !== "" ? parsed.lifecycle_not_run : null,
+    };
   } catch {
-    return null;
+    return { signature: null, lifecycle: null };
   }
 }

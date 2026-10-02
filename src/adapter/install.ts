@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import path from "node:path";
 import type { GateResult } from "./run.js";
 import type { PackageManager } from "./discover/types.js";
+import { installScripts, type Approvals, type NotRun } from "./lifecycle.js";
 import { ROOT_PACKAGE } from "./packages.js";
 
 /**
@@ -72,10 +73,34 @@ export const ECOSYSTEMS: readonly Ecosystem[] = [
   },
 ];
 
+/**
+ * `notRun`: the manifest's declared lifecycle scripts the install did not run,
+ * since none is approved as it stands (V-1⁷).
+ */
 export type InstallOutcome =
   | { readonly kind: "none"; readonly reason: string }
-  | { readonly kind: "installed"; readonly ecosystem: string; readonly reason: string; readonly result: GateResult }
-  | { readonly kind: "failed"; readonly ecosystem: string; readonly reason: string; readonly result: GateResult };
+  | { readonly kind: "installed"; readonly ecosystem: string; readonly reason: string; readonly result: GateResult; readonly notRun: readonly NotRun[] }
+  | { readonly kind: "failed"; readonly ecosystem: string; readonly reason: string; readonly result: GateResult; readonly notRun: readonly NotRun[] };
+
+/**
+ * V-1⁷ (PRDR-233): the approvals an install honours, read from the root, and
+ * the package whose manifest it installs.
+ */
+export interface InstallLifecycle {
+  readonly approvals: Approvals;
+  readonly package: string;
+}
+
+/** The mark's lines: the install's timestamp, then what was approved to run with it, when anything was. */
+const LIFECYCLE_LINE = "lifecycle ";
+
+function markLines(workDir: string, eco: Ecosystem): readonly string[] | null {
+  try {
+    return readFileSync(path.join(workDir, eco.stamp), "utf8").trim().split("\n");
+  } catch {
+    return null;
+  }
+}
 
 function mtime(file: string): number | null {
   try {
@@ -93,15 +118,16 @@ function mtime(file: string): number | null {
  */
 export function readMark(workDir: string, eco: Ecosystem): string | null {
   if (!existsSync(path.join(workDir, eco.manifest))) return null;
-  try {
-    return readFileSync(path.join(workDir, eco.stamp), "utf8").trim();
-  } catch {
-    return null;
-  }
+  return markLines(workDir, eco)?.[0] ?? null;
 }
 
-/** Why an install is due, or `null` when the mark is fresher than everything it depends on. */
-export function installNeeded(workDir: string, eco: Ecosystem): string | null {
+/**
+ * Why an install is due, or `null` when the mark is fresher than everything it
+ * depends on. `digest` is what is approved to run with the install (V-1⁷): an
+ * approval given since the mark was written installs again, so the approved
+ * script runs.
+ */
+export function installNeeded(workDir: string, eco: Ecosystem, digest = ""): string | null {
   const manifest = mtime(path.join(workDir, eco.manifest));
   if (manifest === null) return null;
   const stamp = mtime(path.join(workDir, eco.stamp));
@@ -109,6 +135,8 @@ export function installNeeded(workDir: string, eco: Ecosystem): string | null {
   if (manifest > stamp) return `${eco.manifest} is newer than ${eco.stamp}`;
   const lock = eco.lockfile === null ? null : mtime(path.join(workDir, eco.lockfile));
   if (lock !== null && lock > stamp) return `${eco.lockfile} is newer than ${eco.stamp}`;
+  const ran = markLines(workDir, eco)?.find((line) => line.startsWith(LIFECYCLE_LINE))?.slice(LIFECYCLE_LINE.length) ?? "";
+  if (ran !== digest) return `the lifecycle scripts approved to run with the install changed since ${eco.stamp}`;
   return null;
 }
 
@@ -122,18 +150,30 @@ export async function ensureDependencies(
   run: (command: string) => Promise<GateResult>,
   ecosystems: readonly Ecosystem[] = ECOSYSTEMS,
   pm: PackageManager | null = null,
+  lifecycle?: InstallLifecycle,
 ): Promise<InstallOutcome> {
   let declined: string | null = null;
   for (const eco of ecosystems) {
-    const reason = installNeeded(workDir, eco);
+    /* V-1⁷ (PRDR-233): the npm row's install runs the approved scripts of its manifest, where npm would have. */
+    const scripts = lifecycle === undefined || eco.name !== "node" ? null : installScripts(workDir, lifecycle.package, lifecycle.approvals);
+    const reason = installNeeded(workDir, eco, scripts?.digest ?? "");
     if (reason === null) continue;
     /* PRDR-232: a row that is not this project's package manager installs nothing and says which manager it saw. */
     if (eco.pms !== undefined && !eco.pms.includes(pm)) {
       declined = `${eco.name}: this project's package manager is ${pm ?? "undetected"}, and Detent installs only with ${eco.pms.filter((p) => p !== null).join(", ")}`;
       continue;
     }
+    const notRun = scripts?.notRun ?? [];
+    for (const command of scripts?.before ?? []) {
+      const before = await run(command);
+      if (!before.green) return { kind: "failed", ecosystem: eco.name, reason, result: before, notRun };
+    }
     const result = await run(eco.install);
-    if (!result.green) return { kind: "failed", ecosystem: eco.name, reason, result };
+    if (!result.green) return { kind: "failed", ecosystem: eco.name, reason, result, notRun };
+    for (const command of scripts?.after ?? []) {
+      const after = await run(command);
+      if (!after.green) return { kind: "failed", ecosystem: eco.name, reason, result: after, notRun };
+    }
     /*
      * The mark is written last, so it is the newest thing in the tree: a mark
      * older than the lockfile the install just rewrote would install again on
@@ -142,8 +182,8 @@ export async function ensureDependencies(
      */
     const stamp = path.join(workDir, eco.stamp);
     mkdirSync(path.dirname(stamp), { recursive: true });
-    writeFileSync(stamp, `${new Date().toISOString()}\n`);
-    return { kind: "installed", ecosystem: eco.name, reason, result };
+    writeFileSync(stamp, `${new Date().toISOString()}\n${scripts === null || scripts.digest === "" ? "" : `${LIFECYCLE_LINE}${scripts.digest}\n`}`);
+    return { kind: "installed", ecosystem: eco.name, reason, result, notRun };
   }
   return { kind: "none", reason: declined ?? "nothing to install" };
 }

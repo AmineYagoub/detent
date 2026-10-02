@@ -1,7 +1,9 @@
 import { ensureDependencies } from "../adapter/install.js";
 import { discover } from "../adapter/discover/index.js";
-import { CI_ENV } from "../adapter/normalize.js";
-import { runGate as runCommand } from "../adapter/run.js";
+import { gateEnv } from "../adapter/normalize.js";
+import { NO_SIBLINGS, notRunNoteFor, npmGateScripts, readApprovals, siblingsOf, withSiblings, type GateBinding } from "../adapter/lifecycle.js";
+import { ROOT_PACKAGE } from "../adapter/packages.js";
+import { runGate as runCommand, type GateResult } from "../adapter/run.js";
 import { execFileSync } from "node:child_process";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { readBindings } from "../adapter/drift.js";
@@ -124,7 +126,8 @@ export function buildLiveBackend(root: string): ClaudeCodeBackend {
    * where the session works, the tree's root. A package's gates are the
    * referee's to run, in the package's directory, after the session ends.
    */
-  const gateCmd = readBindings(root).bindings.find((b) => b.package === "." && b.slot === "test")?.resolved ?? null;
+  const binding = readBindings(root).bindings.find((b) => b.package === "." && b.slot === "test");
+  const gateCmd = binding?.resolved ?? null;
   return new ClaudeCodeBackend({
     /** PRDR-149: the same structural floor the per-session policies carry. */
     policy: { surface: ["**"], protectedGlobs: [...STRUCTURAL_PROTECTED], workRoot: root },
@@ -135,34 +138,48 @@ export function buildLiveBackend(root: string): ClaudeCodeBackend {
      * root with no `package.json`, and the session read the ENOENT as proof the
      * gate runner had npm.
      */
-    runScopedGate: async (command, cwd = root) => await scopedGate(command, cwd),
+    runScopedGate: async (command, cwd = root) => await scopedGate(command, cwd, { root, binding: binding ?? null }),
   });
 }
+
+export interface ScopedGateOptions {
+  /** The project's root, whose `.detent` holds the lifecycle approvals (V-1⁷). */
+  readonly root: string;
+  /** The root package's bound gate, whose approved `pre` and `post` run around it. */
+  readonly binding?: GateBinding | null;
+  readonly timeoutMs?: number;
+}
+
+/** The Stop hook's block reason keeps the last 1,500 characters of this tail (`stopGate`). */
+const TAIL = 1500;
 
 /**
  * The Stop hook's scoped gate (S-2's accelerant): what the manifest declares is
  * installed (V-1⁗), then the bound command runs. A failed install here is
  * advisory; the referee's own gate run records it.
  *
- * Both run through the adapter's gate runner, under `CI_ENV`, with X-1's gate
- * timeout, as every other gate does (V-1⁶). PRDR-332: the gate ran `sh -c`
- * through `execFile` with Detent's own environment, so `npm run test` ran the
- * `pretest` and `posttest` the session had written, as Detent's own child. And
- * `execFile`'s timeout killed the shell alone, so a test runner's workers held
- * the pipes open; the adapter's runner kills the whole process group.
+ * Both run through the adapter's gate runner, under the run's gate
+ * environment, with X-1's gate timeout, as every other gate does (V-1⁶).
+ * PRDR-332: the gate ran `sh -c` through `execFile` with Detent's own
+ * environment, so `npm run test` ran the `pretest` and `posttest` the session
+ * had written, as Detent's own child. And `execFile`'s timeout killed the
+ * shell alone, so a test runner's workers held the pipes open; the adapter's
+ * runner kills the whole process group.
+ *
+ * V-1⁷ (PRDR-233): the approved scripts run where npm would have run them, and
+ * a red gate's tail ends by naming the declared scripts Detent did not run.
  */
-export async function scopedGate(
-  command: string,
-  cwd: string,
-  timeoutMs: number = CEILINGS.gate_timeout_ms.default,
-): Promise<{ readonly green: boolean; readonly outputTail: string }> {
-  await ensureDependencies(
-    cwd,
-    (install) => runCommand({ command: install, cwd, timeoutMs, env: CI_ENV }),
-    undefined,
-    /* PRDR-232: never an npm install in a project that chose another manager. */
-    discover(cwd).stack.pm,
-  );
-  const result = await runCommand({ command, cwd, timeoutMs, env: CI_ENV });
-  return { green: result.green, outputTail: result.output.slice(-1500) };
+export async function scopedGate(command: string, cwd: string, opts: ScopedGateOptions): Promise<{ readonly green: boolean; readonly outputTail: string }> {
+  const timeoutMs = opts.timeoutMs ?? CEILINGS.gate_timeout_ms.default;
+  const env = gateEnv(opts.root);
+  const run = (c: string): Promise<GateResult> => runCommand({ command: c, cwd, timeoutMs, env });
+  const approvals = readApprovals(opts.root);
+  /* PRDR-232: never an npm install in a project that chose another manager. */
+  const pm = discover(cwd).stack.pm;
+  await ensureDependencies(cwd, run, undefined, pm, { approvals, package: ROOT_PACKAGE });
+  const gate = opts.binding ?? null;
+  const result = await withSiblings(gate === null ? NO_SIBLINGS : siblingsOf(cwd, gate, command, approvals), run, () => run(command));
+  const note = result.green ? null : notRunNoteFor(cwd, ROOT_PACKAGE, gate === null ? [] : npmGateScripts(ROOT_PACKAGE, [gate]), approvals, pm);
+  if (note === null) return { green: result.green, outputTail: result.output.slice(-TAIL) };
+  return { green: false, outputTail: `${result.output.slice(-Math.max(0, TAIL - note.length - 1))}\n${note}` };
 }

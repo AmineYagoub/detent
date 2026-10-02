@@ -4,8 +4,11 @@ import picomatch from "picomatch";
 import { DriftHaltError, assertNoDrift, readBindings } from "../adapter/drift.js";
 import { ROOT_PACKAGE, discoverPackages, gateLabel, packageDir, touchedPackages } from "../adapter/packages.js";
 import { bindingsForTree } from "./drift-base.js";
-import { needsBaseRef, substituteBase, CI_ENV } from "../adapter/normalize.js";
+import { needsBaseRef, substituteBase, gateEnv } from "../adapter/normalize.js";
+import { NO_SIBLINGS, notRunNoteFor, npmGateScripts, readApprovals, siblingsOf, withSiblings, type Approvals, type GateSiblings } from "../adapter/lifecycle.js";
+import type { Binding } from "../schemas/records.js";
 import { ensureDependencies, readMark } from "../adapter/install.js";
+import type { PackageManager } from "../adapter/discover/types.js";
 import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import type { GateSlot } from "../schemas/gates.js";
 import type { Ticket } from "../schemas/ticket.js";
@@ -30,6 +33,11 @@ function unverifiable(slots: readonly GateSlot[], bare: readonly string[]): Brea
     `no gate is bound for ${slots.join(", ")}${where} — nothing would be verified. Run \`detent init\` to bind the project's ` +
       "verification commands (V-1); a run cannot judge a diff it never tested.",
   );
+}
+
+/** V-1⁷ (PRDR-233): the note a red gate's record carries, naming the package's declared scripts Detent did not run. */
+function notRunHere(workDir: string, pkg: string, bindings: readonly Binding[], approvals: Approvals, pm: PackageManager | null): string | null {
+  return notRunNoteFor(packageDir(workDir, pkg), pkg, npmGateScripts(pkg, bindings), approvals, pm);
 }
 
 /** Thrown to unwind to the driver when V-3 halts the run (SEC-5, D-23). */
@@ -171,14 +179,18 @@ export class GateArm {
     const bare = touched.filter((pkg) => !bindings.some((b) => b.package === pkg && slots.includes(b.slot)));
     if (bare.length > 0) throw unverifiable(slots, bare);
     const installedHere = new Set<string>();
+    /* V-1⁷ (PRDR-233): what an operator approved of the project's own lifecycle scripts, read once for this evaluation. */
+    const approvals = readApprovals(ctx.root);
+    const pmOf = (pkg: string): PackageManager | null => here.get(pkg)?.stack.pm ?? null;
     for (const pkg of touched) {
       const dir = packageDir(workDir, pkg);
       const install = await ensureDependencies(
         dir,
-        (command) => runGate({ command, cwd: dir, timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
+        (command) => runGate({ command, cwd: dir, timeoutMs: ctx.budgets.gate_timeout_ms, env: gateEnv(ctx.root) }),
         ctx.ecosystems,
         /* PRDR-232: the project's own package manager decides which row may install, so the referee cannot flip it. */
-        here.get(pkg)?.stack.pm ?? null,
+        pmOf(pkg),
+        { approvals, package: pkg },
       );
       if (install.kind === "none") continue;
       if (install.kind === "installed") installedHere.add(`${pkg}\0${install.ecosystem}`);
@@ -192,10 +204,11 @@ export class GateArm {
         exit: install.result.exitCode,
         ms: install.result.durationMs,
         reason: install.reason,
+        ...(install.notRun.length > 0 ? { not_run: install.notRun.map((n) => `${n.script} (${n.status})`) } : {}),
         ...(install.kind === "failed" ? { tail: scrub(install.result.output.slice(-1500)) } : {}),
       });
       if (install.kind === "failed") {
-        this.recordFailure(ticket.id, install.result, pkg);
+        this.recordFailure(ticket.id, install.result, pkg, notRunHere(workDir, pkg, bindings, approvals, pmOf(pkg)));
         return gateRed(install.result);
       }
     }
@@ -218,7 +231,7 @@ export class GateArm {
       }
     }
 
-    const scoped = await this.runScopedGates(bindings, slots, workDir, touched);
+    const scoped = await this.runScopedGates(bindings, slots, workDir, touched, approvals);
     const result = scoped?.result ?? null;
     /**
      * V-1″ (PRDR-135): no bound gate is UNVERIFIABLE, not green. `null` here
@@ -264,7 +277,7 @@ export class GateArm {
       return gateGreen(decision.result, "flake-filtered");
     }
 
-    this.recordFailure(ticket.id, decision.result, failed);
+    this.recordFailure(ticket.id, decision.result, failed, notRunHere(workDir, failed, bindings, approvals, pmOf(failed)));
     if (escalateReason !== undefined) {
       appendNote(ctx.root, ticket.id, { author: "kernel", text: escalateReason });
     }
@@ -286,38 +299,39 @@ export class GateArm {
     slots: readonly GateSlot[],
     workDir: string,
     packages: readonly string[],
+    approvals: Approvals,
   ): Promise<{ readonly result: GateResult; readonly package: string } | null> {
     let last: { readonly result: GateResult; readonly package: string } | null = null;
     for (const pkg of packages) {
       for (const slot of slots) {
         const binding = bindings.find((b) => b.package === pkg && b.slot === slot);
         if (binding === undefined) continue;
-        last = { result: await this.gate(binding.resolved, slot, packageDir(workDir, pkg), pkg), package: pkg };
+        const dir = packageDir(workDir, pkg);
+        /* V-1⁷ (PRDR-233): the gate's approved `pre` and `post`, which suppression keeps its package manager from running. */
+        last = { result: await this.gate(binding.resolved, slot, dir, pkg, siblingsOf(dir, binding, binding.resolved, approvals)), package: pkg };
         if (!last.result.green) return last;
       }
     }
     return last;
   }
 
-  private async gate(command: string, slot: GateSlot, cwd: string, pkg: string = ROOT_PACKAGE): Promise<GateResult> {
-    const result = await runGate({
-      command,
-      cwd,
-      slot,
-      timeoutMs: this.ctx.budgets.gate_timeout_ms,
-      env: CI_ENV,
-    });
+  private async gate(command: string, slot: GateSlot, cwd: string, pkg: string = ROOT_PACKAGE, siblings: GateSiblings = NO_SIBLINGS): Promise<GateResult> {
+    const env = gateEnv(this.ctx.root);
+    const run = (c: string): Promise<GateResult> => runGate({ command: c, cwd, slot, timeoutMs: this.ctx.budgets.gate_timeout_ms, env });
+    const result = await withSiblings(siblings, run, () => run(command));
     if (result.outcome === "not-found" || !runnable(result)) {
-      throw new Breach(`gate ${gateLabel({ package: pkg, slot })} is not runnable: \`${command}\` (exit ${result.normalizedExit})`);
+      throw new Breach(`gate ${gateLabel({ package: pkg, slot })} is not runnable: \`${result.command}\` (exit ${result.normalizedExit})`);
     }
     return result;
   }
 
-  private recordFailure(ticketId: string, result: GateResult, pkg: string = ROOT_PACKAGE): void {
+  private recordFailure(ticketId: string, result: GateResult, pkg: string = ROOT_PACKAGE, notRun: string | null = null): void {
     const verdict = classify(result.output, result.exitCode);
     const record = {
       /* V-5′: where the red gate ran, when it was not the root. */
       ...(pkg === ROOT_PACKAGE ? {} : { package: pkg }),
+      /* V-1⁷ (PRDR-233): where the first red gate is read, the declared scripts Detent did not run. */
+      ...(notRun === null ? {} : { lifecycle_not_run: notRun }),
       cmd: result.command,
       exit: result.exitCode,
       signature: verdict.signature,

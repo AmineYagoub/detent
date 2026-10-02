@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CI_ENV } from "../adapter/normalize.js";
+import { gateEnv } from "../adapter/normalize.js";
 import { runGate } from "../adapter/run.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { hypothesisSchema, type Hypothesis, type ResearchBrief } from "../schemas/records.js";
@@ -91,7 +91,7 @@ async function diagnose(ticket: Ticket, ctx: RefereeContext, sessions: SessionAr
       writeFileSync(artifactPath, `${JSON.stringify(h, null, 2)}\n`);
     },
     executeRepro: (command) =>
-      runGate({ command, cwd: workDir, slot: "test", timeoutMs: ctx.budgets.gate_timeout_ms, env: CI_ENV }),
+      runGate({ command, cwd: workDir, slot: "test", timeoutMs: ctx.budgets.gate_timeout_ms, env: gateEnv(ctx.root) }),
     note: (text) => appendNote(ctx.root, id, { author: "kernel", text }),
   });
   return outcome.event;

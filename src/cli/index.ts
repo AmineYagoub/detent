@@ -12,10 +12,11 @@ import { amendMain, approveMain, requeueMain, unclaimMain } from "./plumbing.js"
  * The `detent` entry point (C-3, C-14).
  *
  * Two porcelain verbs — `init` and `run` — and the documented plumbing
- * (`status`, `report`, `doctor`, `approve`, `requeue`, `unclaim`, `amend`, `verify sync`). `init`
- * is the M3 pipeline (T-060…); until then it reports that it is not yet built,
- * rather than pretending. Dispatch only: each verb's logic lives in its own
- * module, so this file is a table, not a place decisions are made.
+ * (`status`, `report`, `doctor`, `approve`, `requeue`, `unclaim`, `amend`,
+ * `verify sync`, `verify lifecycle`). `init` is the M3 pipeline (T-060…);
+ * until then it reports that it is not yet built, rather than pretending.
+ * Dispatch only: each verb's logic lives in its own module, so this file is a
+ * table, not a place decisions are made.
  */
 
 type Verb = (argv: readonly string[]) => number | Promise<number>;
@@ -48,6 +49,7 @@ const USAGE = `detent <command>
   unclaim <id>|--stale release a dead owner claim lock (plumbing)
   amend <AM-id>        show an amendment to the pack; --approve, --edit <file> or --reject <reason> decides it (plumbing, X-4⁸)
   verify sync [root]   re-baseline drifted verification bindings (plumbing, V-3)
+  verify lifecycle [root]  show the project's lifecycle scripts; --approve <script> lets a run execute one (plumbing, V-1⁷)
   referee --root <p>   serve the R-1 tool set over MCP stdio (plumbing, MP1's plugin entry)
 `;
 

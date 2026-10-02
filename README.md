@@ -189,7 +189,13 @@ right behaviours for a tree Detent owns and the wrong ones for yours.
 
 Documented, scriptable, and never required on the golden path:
 `detent status`, `detent report`, `detent doctor`, `detent approve <id>`,
-`detent requeue <id>`, `detent unclaim <id>`, `detent amend <AM-id>`, `detent verify sync`.
+`detent requeue <id>`, `detent unclaim <id>`, `detent amend <AM-id>`, `detent verify sync`,
+`detent verify lifecycle`.
+
+`detent verify lifecycle` lists the lifecycle scripts a project's manifests declare (`postinstall`,
+`prepare`, a gate's `pretest`, and the rest npm runs), each with its body and hash. Detent runs
+none of them, until an operator approves a body with `--approve <script>`. A run then executes
+that body where npm would have, and an edited body waits for a new approval.
 
 `detent amend <AM-id>` shows an amendment a session filed against the specification pack, and
 decides it with `--approve`, `--edit <file>` or `--reject <reason>`. An applied amendment waits for

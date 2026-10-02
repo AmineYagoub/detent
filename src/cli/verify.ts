@@ -14,6 +14,7 @@ import { acceptDrift, bindingsForTree } from "../kernel/drift-base.js";
 import { git, worktreePath } from "../kernel/git.js";
 import { requeueTicket } from "../kernel/plumbing.js";
 import { stateVersionRefusal } from "../kernel/migrate.js";
+import { main as lifecycleMain } from "./verify-lifecycle.js";
 
 /**
  * T-027 — `detent verify sync` (C-12 plumbing, V-3).
@@ -317,6 +318,8 @@ export async function acceptTicketDrift(root: string, id: string, deps: VerifySy
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
+  /* V-1⁷ (PRDR-233): its own options, so it is routed before this verb's strict parse. */
+  if (argv[0] === "lifecycle") return await lifecycleMain(argv.slice(1));
   const { values, positionals } = parseArgs({
     args: [...argv],
     allowPositionals: true,
@@ -324,7 +327,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   });
   const [sub, maybeRoot] = positionals;
   if (sub !== "sync") {
-    process.stderr.write("usage: detent verify sync [root] [--yes] [--ticket <id>]\n");
+    process.stderr.write("usage: detent verify sync [root] [--yes] [--ticket <id>]\n       detent verify lifecycle [root] [--approve <script>]... [--package <dir>] [--yes]\n");
     return 2;
   }
   const root = maybeRoot ?? process.cwd();

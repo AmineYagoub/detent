@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readBindings } from "../adapter/drift.js";
 import { ROOT_PACKAGE, comparePackages, ownerOf, packageDir } from "../adapter/packages.js";
-import { CI_ENV, needsBaseRef, substituteBase } from "../adapter/normalize.js";
-import { runGate, runnable } from "../adapter/run.js";
+import { gateEnv, needsBaseRef, substituteBase } from "../adapter/normalize.js";
+import { readApprovals, siblingsOf, withSiblings } from "../adapter/lifecycle.js";
+import { runGate, runnable, type GateResult } from "../adapter/run.js";
 import { changedFiles, git } from "./git.js";
 
 /**
@@ -152,7 +153,10 @@ export function boundTestRunner(root: string, baseRef: string, timeoutMs: number
       const binding = own.find((b) => b.slot === "test_single") ?? own.find((b) => b.slot === "test");
       if (binding === undefined) return false;
       const command = needsBaseRef(binding.resolved) ? substituteBase(binding.resolved, baseRef) : binding.resolved;
-      const result = await runGate({ command, cwd: packageDir(workDir, pkg), slot: binding.slot, timeoutMs, env: CI_ENV });
+      const dir = packageDir(workDir, pkg);
+      /* V-1⁷ (PRDR-233): the run's gate environment, and the gate's approved `pre` and `post`. */
+      const run = (c: string): Promise<GateResult> => runGate({ command: c, cwd: dir, slot: binding.slot, timeoutMs, env: gateEnv(root) });
+      const result = await withSiblings(siblingsOf(dir, binding, command, readApprovals(root)), run, () => run(command));
       if (!(runnable(result) && result.green)) return false;
     }
     return true;

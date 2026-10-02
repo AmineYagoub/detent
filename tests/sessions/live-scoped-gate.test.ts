@@ -63,7 +63,7 @@ describe("PRDR-332 the Stop hook's scoped gate runs under the gate runner's envi
     const dir = mkdtempSync(path.join(tmpdir(), "detent-scoped-gate-"));
     roots.push(dir);
     const started = Date.now();
-    const result = await scopedGate("sleep 30 & wait", dir, 1_000);
+    const result = await scopedGate("sleep 30 & wait", dir, { root: dir, timeoutMs: 1_000 });
     expect(result.green).toBe(false);
     expect(Date.now() - started, "the gate's child kept its pipes open past the timeout").toBeLessThan(15_000);
   }, 60_000);

@@ -129,6 +129,12 @@ export const dossierSchema = z.strictObject({
    * fail on a schema. Empty means PLAN named nothing, not that it was unread.
    */
   plan_findings: z.array(nonEmptyString).default([]),
+  /**
+   * V-1⁷ (PRDR-233): the last red gate's note on the declared lifecycle
+   * scripts Detent did not run, and how an operator approves one. Absent when
+   * it ran every one, and on a dossier written before the field existed.
+   */
+  lifecycle_not_run: nonEmptyString.optional(),
   suggested_resolutions: z.array(nonEmptyString).default([]),
 });
 export type Dossier = z.infer<typeof dossierSchema>;

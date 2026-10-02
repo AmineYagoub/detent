@@ -1,4 +1,5 @@
 import type { Candidate, PackageManager, StackFacts } from "./discover/types.js";
+import { hasLifecycleRecord } from "./lifecycle.js";
 
 /**
  * T-028 — invocation-time normalization (V-4).
@@ -55,9 +56,9 @@ export function substituteBase(command: string, baseRef: string): string {
  *
  * The operator may lift it for a project that genuinely builds on install, by
  * exporting `DETENT_ALLOW_LIFECYCLE_SCRIPTS=1` for the run. A session cannot:
- * it does not compose the referee's environment. That switch is all-or-nothing
- * by design here; approving a project's scripts one body at a time is filed as
- * its own ticket rather than built into a one-line environment fix.
+ * it does not compose the referee's environment. That switch is all-or-nothing;
+ * approving a project's scripts one body at a time is `gateEnv` and
+ * `lifecycle.ts` (V-1⁷, PRDR-233).
  */
 export function suppressionEnv(approved: boolean): Readonly<Record<string, string>> {
   return { npm_config_ignore_scripts: approved ? "false" : "true" };
@@ -68,6 +69,16 @@ export function lifecycleApproved(env: NodeJS.ProcessEnv = process.env): boolean
 }
 
 export const CI_ENV: Readonly<Record<string, string>> = { CI: "1", ...suppressionEnv(lifecycleApproved()) };
+
+/**
+ * V-1⁷ (PRDR-233): the environment a run's installs and gates get in `root`.
+ * The run-wide switch still lifts suppression for a project with no approval
+ * on record. For a project with one, the finer verb supersedes it: suppression
+ * stays on, and Detent runs each approved script itself (`lifecycle.ts`).
+ */
+export function gateEnv(root: string, env: NodeJS.ProcessEnv = process.env): Readonly<Record<string, string>> {
+  return { CI: "1", ...suppressionEnv(lifecycleApproved(env) && !hasLifecycleRecord(root)) };
+}
 
 /**
  * How each package manager forwards extra arguments to a script. Only npm
