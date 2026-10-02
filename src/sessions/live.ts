@@ -2,7 +2,7 @@ import { ensureDependencies } from "../adapter/install.js";
 import { discover } from "../adapter/discover/index.js";
 import { CI_ENV } from "../adapter/normalize.js";
 import { runGate as runCommand } from "../adapter/run.js";
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { readBindings } from "../adapter/drift.js";
 import { CEILINGS } from "../schemas/budgets.js";
@@ -133,32 +133,36 @@ export function buildLiveBackend(root: string): ClaudeCodeBackend {
      * PRDR-211: the scoped gate runs where the session works — its worktree
      * since B-2″, which this used to ignore: on gate-313 it ran `npm test` in a
      * root with no `package.json`, and the session read the ENOENT as proof the
-     * gate runner had npm. And it runs only after what the manifest declares is
-     * installed there (V-1⁗); a failed install here is advisory, the referee's
-     * own gate run records it.
+     * gate runner had npm.
      */
-    runScopedGate: async (command, cwd = root) => {
-      await ensureDependencies(
-        cwd,
-        (install) => runCommand({ command: install, cwd, timeoutMs: CEILINGS.gate_timeout_ms.default, env: CI_ENV }),
-        undefined,
-        /* PRDR-232: never an npm install in a project that chose another manager. */
-        discover(cwd).stack.pm,
-      );
-      return runGate(command, cwd);
-    },
+    runScopedGate: async (command, cwd = root) => await scopedGate(command, cwd),
   });
 }
 
-function runGate(command: string, cwd: string): Promise<{ green: boolean; outputTail: string }> {
-  return new Promise((resolve) => {
-    execFile(
-      "sh",
-      ["-c", command],
-      { cwd, timeout: CEILINGS.gate_timeout_ms.default, maxBuffer: 8 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        resolve({ green: error === null, outputTail: `${stdout}${stderr}`.slice(-1500) });
-      },
-    );
-  });
+/**
+ * The Stop hook's scoped gate (S-2's accelerant): what the manifest declares is
+ * installed (V-1⁗), then the bound command runs. A failed install here is
+ * advisory; the referee's own gate run records it.
+ *
+ * Both run through the adapter's gate runner, under `CI_ENV`, with X-1's gate
+ * timeout, as every other gate does (V-1⁶). PRDR-332: the gate ran `sh -c`
+ * through `execFile` with Detent's own environment, so `npm run test` ran the
+ * `pretest` and `posttest` the session had written, as Detent's own child. And
+ * `execFile`'s timeout killed the shell alone, so a test runner's workers held
+ * the pipes open; the adapter's runner kills the whole process group.
+ */
+export async function scopedGate(
+  command: string,
+  cwd: string,
+  timeoutMs: number = CEILINGS.gate_timeout_ms.default,
+): Promise<{ readonly green: boolean; readonly outputTail: string }> {
+  await ensureDependencies(
+    cwd,
+    (install) => runCommand({ command: install, cwd, timeoutMs, env: CI_ENV }),
+    undefined,
+    /* PRDR-232: never an npm install in a project that chose another manager. */
+    discover(cwd).stack.pm,
+  );
+  const result = await runCommand({ command, cwd, timeoutMs, env: CI_ENV });
+  return { green: result.green, outputTail: result.output.slice(-1500) };
 }

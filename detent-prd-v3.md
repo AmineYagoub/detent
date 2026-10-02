@@ -1644,7 +1644,10 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   `PM_BY_LOCKFILE` reads first, so the referee's own install flipped the discovered package
   manager, moved every bound command's `resolved`, and blocked a ticket that had changed nothing
   — measured as `pnpm run test` before the install and `npm run test` after. A row that is not
-  the project's installs nothing and the outcome names the manager it saw.
+  the project's installs nothing and the outcome names the manager it saw. Third: the Stop
+  hook's scoped gate runs under the same environment and through the same runner (PRDR-332).
+  Until then it ran `sh -c` with Detent's own environment, so a session's `pretest` and
+  `posttest` ran in Detent's process each time the session tried to end.
 
 - **V-3⁵ (3.1.1, PRDR-231).** A configuration is a baseline only if it was EXECUTED and approved.
   V-3⁗ judges a ticket's tree against the config at its fork commit and adopted whatever that
