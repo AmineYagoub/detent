@@ -1,3 +1,4 @@
+import type { EffortReason } from "../schemas/roles.js";
 import { appendNote } from "./tickets/mutations.js";
 
 /**
@@ -48,8 +49,10 @@ export function recordEffort(
   at: string,
   routed: string,
   settled: string | undefined,
+  reason: EffortReason,
 ): void {
-  journal.appendTicketEvent(id, { stage: role, event: "effort_settled", at, generation, ...settledLevels(routed, settled) });
+  /* S-5⁸ (PRDR-328): why the session was routed where it was, beside what it ran at. */
+  journal.appendTicketEvent(id, { stage: role, event: "effort_settled", at, generation, ...settledLevels(routed, settled), reason });
   const downgrade = effortDowngrade(role, routed, settled);
   if (downgrade !== null) appendNote(root, id, { author: "kernel", text: downgrade });
 }

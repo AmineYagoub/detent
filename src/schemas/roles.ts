@@ -88,6 +88,16 @@ export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
 /**
+ * S-5⁸ (PRDR-328): why a run session ran at its level. `role` is its role's
+ * configured level; `risk` the ticket's risk, which starts it at `max`;
+ * `evidence` what the ticket's own attempts, or its neighbours' outcomes in the
+ * run, have shown. Each session's `effort_settled` event and ledger row name it.
+ */
+export const EFFORT_REASONS = ["role", "risk", "evidence"] as const;
+
+export type EffortReason = (typeof EFFORT_REASONS)[number];
+
+/**
  * PRDR-114: the routing `init` writes. Judgement roles — the plan, the
  * verdicts, the hypothesis, the informed attempt — get the stronger model;
  * the volume roles get Sonnet. Typed over ROLE_IDS so a ninth role is a

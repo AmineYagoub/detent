@@ -15,6 +15,7 @@ import { appendNote, writeTicket } from "./tickets/mutations.js";
 import { assertTicketWallClock } from "./ticket-clock.js";
 import { scrub } from "./scrub.js";
 import { modelFallback, recordEffort } from "./session-effort.js";
+import { effortRouteFor, effortStepNote } from "./effort-route.js";
 import { attemptInputs } from "./session-inputs.js";
 import { limitStop, refusedResumeNote, turnsCarried } from "./session-resume.js";
 import { fileSignalled } from "./amendment-file.js";
@@ -109,6 +110,8 @@ export class SessionArm {
       writeTicket(ctx.root, current);
     }
 
+    /* S-5⁸ (PRDR-328): the role's level, raised by the ticket's risk and by what the run has shown. */
+    const route = effortRouteFor(ctx, current, role);
     const artifactOut = path.join(runsDir(ctx.root, id), artifactNameFor(role));
     mkdirSync(path.dirname(artifactOut), { recursive: true });
     /* PRDR-221: a session with a symbol server is told, in the variable part only (S-6). */
@@ -147,7 +150,7 @@ export class SessionArm {
       permissionMode: "",
       model: ctx.loaded.config.model_routing[role] ?? "",
       /* PRDR-197: ARCH-2 — the loop routes effort exactly as init does, or neither driver has it. */
-      ...(ctx.loaded.config.effort_routing[role] === undefined ? {} : { effort: ctx.loaded.config.effort_routing[role] }),
+      ...(route.level === "default" ? {} : { effort: route.level }),
       /**
        * S-2′/D-21: the per-ticket hook policy. Surface = the ticket's declared
        * surface plus ONLY the runs area, where artifact/falsified/surface-
@@ -218,7 +221,9 @@ export class SessionArm {
        */
       for (const s of ["falsified.json", "surface_request.json"]) rmSync(path.join(runsDir(ctx.root, id), s), { force: true });
     }
-    const routedEffort = ctx.loaded.config.effort_routing[role] ?? "default";
+    const routedEffort = route.level;
+    const step = effortStepNote(role, ctx.loaded.config.effort_routing[role], route);
+    if (step !== null) appendNote(ctx.root, id, { author: "kernel", text: step });
     ctx.journal.appendTicketEvent(id, {
       stage: role,
       event: "start",
@@ -251,7 +256,7 @@ export class SessionArm {
     if (refusedResume !== null) appendNote(ctx.root, id, { author: "kernel", text: refusedResume });
     const turnsBefore = turnsCarried(carried, result);
     /** PRDR-237: what the session RAN at, against what it was asked for. */
-    recordEffort(ctx.journal, ctx.root, id, role, generation.index, ctx.iso(), routedEffort, result.effort);
+    recordEffort(ctx.journal, ctx.root, id, role, generation.index, ctx.iso(), routedEffort, result.effort, route.reason);
     if (result.modelFallback !== undefined) {
       /* PRDR-114: the routing asked for a model this runtime cannot serve; the ledger's `models` says what ran. */
       const { requested } = result.modelFallback;
@@ -281,7 +286,7 @@ export class SessionArm {
      */
     const outcome = result.telemetryParsed ? result : { ...result, ok: false, crashed: true };
     const generationNow = currentGeneration(readTicket(ctx.root, id));
-    ctx.spend.record(id, generationNow.index, role, outcome, ctx.iso());
+    ctx.spend.record(id, generationNow.index, role, outcome, ctx.iso(), { effortReason: route.reason });
     const stop = limitStop(id, role, outcome, turnsBefore);
     ctx.journal.appendTicketEvent(id, {
       stage: role,

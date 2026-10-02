@@ -132,6 +132,8 @@ export class RefereeContext {
   readonly hookFiles: boolean;
   /** D-27‴ (PRDR-099): who drives this run, as `stage.json` names it. */
   readonly driver: StageDriver;
+  /** S-5⁸ (PRDR-328): when this run began, from which an earlier ticket's outcome counts. */
+  readonly startedAt: number;
   readonly refs: RefSnapshot;
   readonly baseRef: string | null;
   /** V-1⁗ (PRDR-211): what the referee installs before running a gate, and never commits. */
@@ -169,6 +171,7 @@ export class RefereeContext {
     );
     this.hookFiles = opts.hookFiles ?? true;
     this.driver = { owner: this.worker, pid: process.pid, host: hostname(), ...opts.servedSession };
+    this.startedAt = this.now();
     /* P7: every ref except the run branch is protected ground for this run. */
     this.refs = snapshotRefs(opts.root);
     /* V-5: the run's baseline, resolved once; null falls back to root commands. */

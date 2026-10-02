@@ -190,8 +190,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   and field test were approved eleven times and declined never. The glob trigger is
   unchanged — a DONE-candidate whose diff touches the operator's `risk` globs still waits
   for a human, and approval still re-enters APPROVED for kernel re-verification.
-  *Amended by S-5⁸ (PRDR-318): a labelled ticket's implement and review sessions run at `max`; the label
-  is still never a stop.*
+  *Amended by S-5⁸ (PRDR-318, PRDR-328): a labelled ticket's implement, fix and review sessions run at
+  `max`; the label is still never a stop.*
 
 - **X-1‴ (3.1.0, PRDR-108).** `review_fix_attempts` is read by the machine: review findings
   buy that many review-fix rounds before a human, default 3. It was configurable and never
@@ -3980,21 +3980,26 @@ they need a real second round first.
   until a set exists for them, and `run`'s roles are S-5⁸'s. For the tasks N-8's sets measure, a
   passing measurement is the evidence S-5⁵ waited for from a run-time outcome (D-33).
 
-- **S-5⁸ (3.1.1, PRDR-318).** In `run`, a ticket's risk sets where its effort starts, and evidence
-  moves it, only up. A ticket is high-risk when its `risk_label` is set or its surface matches a
-  glob of the config's `risk` list, and its implement and review sessions are routed to `max`. When
-  an attempt fails a gate, is falsified, or draws a review asking for changes, the ticket's next
-  implement or fix attempt is routed one level above the last, up to `max`, and the step is noted
-  on the ticket; X-2's ladder, and the model each of its steps runs on, are unchanged. A ticket
-  whose surface overlaps one an earlier ticket of the run touched, where that ticket escalated to
-  NEEDS_HUMAN or was falsified, starts one level above its role's. No rule routes a session below
-  its role's configured level: a lower start for a low-risk ticket waits for D-33's outcomes from
-  measured runs, first-generation DONE, escalations, falsifications and review rounds. Each
-  session's `effort_settled` event (S-4⁗) also records why its level was chosen, the role, risk or
-  evidence, and `detent status` counts sessions and their cost by reason. The label is still never
-  a stop (B-4′). The user asked on 2026-09-30 for effort set by risk and by code quality: risk is
-  known before a session starts, and the only evidence of how the code is going is Detent's own
-  checks.
+- **S-5⁸ (3.1.1, PRDR-318, built by PRDR-328).** In `run`, a ticket's risk sets where its effort
+  starts, and evidence moves it, only up. A ticket is high-risk when its `risk_label` is set or its
+  surface meets a glob of the config's `risk` list, and its implement, fix and review sessions are
+  routed to `max`. The fix roles are among them so that a fix never runs below the attempt it
+  fixes. Each attempt that fails a gate, has its premise falsified, or draws a review asking for
+  changes raises the ticket's later implement and fix sessions one level, up to `max`. The
+  code-writing roles start from one level, so each attempt runs one level above the last. The step
+  is noted on the ticket. X-2's ladder, and the model each of its steps runs on, are unchanged. A
+  ticket whose surface meets one where an earlier ticket of this run escalated to NEEDS_HUMAN (an
+  outage's requeue aside) or had its premise falsified runs its implement, fix and review sessions
+  one level above its roles'. Two surfaces meet when an entry of one, read as a path, matches a glob
+  of the other, either way round, and this run is the referee's lifetime. No rule routes a session
+  below its role's configured level. A role routed to no level is raised to `max` by risk and by no
+  step, since one above the SDK's own default is not a level Detent can name. A lower start for a
+  low-risk ticket waits for D-33's outcomes from measured runs: first-generation DONE, escalations,
+  falsifications and review rounds. Each session's `effort_settled` event (S-4⁗) and ledger row
+  record why its level was chosen: the role, risk or evidence. `detent status` counts sessions and
+  their cost by reason. The label is still never a stop (B-4′). The user asked on 2026-09-30 for
+  effort set by risk and by code quality: risk is known before a session starts, and the only
+  evidence of how the code is going is Detent's own checks.
 
 The `init` pipeline (§4.1 of v2) is **inherited** in its phases and interrupts — since C-2‴/C-3′ (3.1.1), and since C-2⁶/D-10′ (3.1.1, PRDR-278): `INIT_FS → DISCOVER → [AWAIT_DOCS] → AUDIT → DECIDE → [AWAIT_INFO] → WRITE → VALIDATE → [AWAIT_INFO] → DETERMINE_VERIFICATION → [AWAIT_BINDING_CHOICE | AWAIT_SETUP_CONSENT] → SLICE → PLAN → PREPARE_AGENTS → PRESENT → [AWAIT_INFO | AWAIT_APPROVAL] → READY`; the interrupt set is the same five (C-3⁗) — and re-surfaced as plugin commands and skills. C-1…C-8 hold as the dated entries above amend them (with "kernel" → "referee"). v3 restates only the surface and the loop ownership:
 

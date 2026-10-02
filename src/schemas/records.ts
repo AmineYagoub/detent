@@ -5,6 +5,7 @@ import { countersSchema, reviewTags } from "./ticket.js";
 import { GATE_SLOTS } from "./gates.js";
 import { requireLocalSearchBeforeWeb } from "./init.js";
 import { CACHE_LIFETIMES } from "./cache-lifetime.js";
+import { EFFORT_REASONS } from "./roles.js";
 
 /** A-3 Hypothesis (X-4). A root cause is inadmissible as prose. */
 export const hypothesisSchema = z.strictObject({
@@ -209,6 +210,12 @@ export const ledgerRowSchema = z.strictObject({
   task: nonEmptyString.optional(),
   effort: nonEmptyString.optional(),
   duration_ms: z.number().int().nonnegative().optional(),
+  /**
+   * S-5⁸ (PRDR-328): why a run session ran at its level, which `detent status`
+   * counts sessions and cost by. Optional: an `init` row names none, and a row
+   * written before the field did not record it.
+   */
+  effort_reason: z.enum(EFFORT_REASONS).optional(),
 });
 export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 

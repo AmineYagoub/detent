@@ -8,6 +8,9 @@ import type { Totals } from "../kernel/outcomes.js";
 import { phaseSpend, spendLines } from "../init/phase-spend.js";
 import { progressLines } from "../init/progress.js";
 import { liveRunLock } from "../kernel/run-lock.js";
+import { effortTally } from "../kernel/effort-route.js";
+import { readLedgerRows } from "../kernel/ledger-rows.js";
+import { EFFORT_REASONS, type EffortReason } from "../schemas/roles.js";
 
 /**
  * T-053 — `detent status` and the C-13 vocabulary.
@@ -155,10 +158,26 @@ function outcomeLines(root: string): string[] {
       if (quality.outside !== null) out.push(`  outside any slice — ${figures(quality.outside)}`);
       if (quality.unreadable > 0) out.push(`  ${plural(quality.unreadable, "line")} of transitions.jsonl could not be read, and ${quality.unreadable === 1 ? "is" : "are"} not counted.`);
     }
-    return [...out, ...spendLines(phaseSpend(root))];
+    return [...out, ...spendLines(phaseSpend(root)), ...effortLines(root)];
   } catch (err) {
     return ["", `Run-time outcomes and spend are not shown: ${(err as Error).message}`];
   }
+}
+
+const BECAUSE: Readonly<Record<EffortReason, string>> = {
+  role: "at their role's level",
+  risk: "raised for their ticket's risk",
+  evidence: "raised by evidence",
+};
+
+/** S-5⁸ (PRDR-328): the run's sessions and their cost by why each ran at its level; nothing where no row names a reason. */
+function effortLines(root: string): string[] {
+  const tally = effortTally(readLedgerRows(root));
+  const said = EFFORT_REASONS.flatMap((r) => {
+    const t = tally.get(r);
+    return t === undefined ? [] : [`${plural(t.sessions, "session")} ${BECAUSE[r]}, $${t.cost_usd.toFixed(4)}`];
+  });
+  return said.length === 0 ? [] : ["", `Effort (S-5⁸): ${said.join(" · ")}`];
 }
 
 export function main(argv: readonly string[]): number {

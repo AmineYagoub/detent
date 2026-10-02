@@ -74,7 +74,7 @@ function madeBy(root: string): Made | null {
  * whole in it (PRDR-249), and counts once among the unreadable, as does a line
  * that is JSON but not a transition.
  */
-function readTransitions(root: string): { readonly lines: TransitionLine[]; readonly unreadable: number } {
+export function readTransitions(root: string): { readonly lines: TransitionLine[]; readonly unreadable: number } {
   const file = path.join(stateDir(root), "transitions.jsonl");
   if (!existsSync(file)) return { lines: [], unreadable: 0 };
   const lines: TransitionLine[] = [];

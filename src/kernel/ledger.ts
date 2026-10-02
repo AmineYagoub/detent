@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import path from "node:path";
 import { stateDir } from "../fs/layout.js";
 import { CEILINGS, type Budgets } from "../schemas/budgets.js";
+import type { EffortReason } from "../schemas/roles.js";
 import { ledgerRowSchema, type LedgerRow } from "../schemas/records.js";
 import type { SessionResult } from "../sessions/backend.js";
 import type { RunJournal } from "./journal.js";
@@ -273,12 +274,16 @@ const DEFAULT_BREAKER: ProgressBreaker = {
   spend_without_progress_sessions: CEILINGS.spend_without_progress_sessions.default,
 };
 
-/** What an `init` session's ledger row adds to a run's: the phase that launched it (C-7‴), and its kind and length (N-5⁗). */
-export interface InitRowFields {
+/**
+ * What a session's ledger row adds: an `init` session's phase (C-7‴) and its
+ * kind and length (N-5⁗), and a run session's reason for its effort (S-5⁸).
+ */
+export interface RowFields {
   readonly phase?: string | undefined;
   readonly task?: string | undefined;
   readonly effort?: string | undefined;
   readonly durationMs?: number | undefined;
+  readonly effortReason?: EffortReason | undefined;
 }
 
 export class SpendLedger {
@@ -483,9 +488,10 @@ export class SpendLedger {
    * dropped and never treated as the absent-telemetry breaker. An `init`
    * session's row names the phase that launched it, which PRESENT sums by
    * (C-7‴, PRDR-296), and its task, routed effort and length, which a step's
-   * estimate reads (N-5⁗, PRDR-325).
+   * estimate reads (N-5⁗, PRDR-325). A run session's row names why its effort
+   * was chosen (S-5⁸, PRDR-328).
    */
-  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string, init: InitRowFields = {}): LedgerRow {
+  record(ticketId: string, generation: number, role: string, result: SessionResult, at: string, init: RowFields = {}): LedgerRow {
     const perModel = Object.values(result.perModel ?? {});
     const fromBreakdown = perModel.length > 0;
     const sum = (pick: (u: (typeof perModel)[number]) => number): number => perModel.reduce((a, u) => a + pick(u), 0);
@@ -508,6 +514,7 @@ export class SpendLedger {
       ...(init.task === undefined || init.task === "" ? {} : { task: init.task }),
       ...(init.effort === undefined || init.effort === "" ? {} : { effort: init.effort }),
       ...(init.durationMs === undefined ? {} : { duration_ms: Math.max(0, Math.round(init.durationMs)) }),
+      ...(init.effortReason === undefined ? {} : { effort_reason: init.effortReason }),
       ...cacheFields(result),
     });
     this.journal.appendLedger(row);

@@ -155,6 +155,14 @@ line that moves it. Sessions run on the Claude Code the Agent SDK bundles, not
 the `claude` on your PATH, so `doctor` also fails on a routed model that
 runtime cannot serve.
 
+In `run`, a ticket's risk and Detent's own checks raise these levels, and never
+lower them. A ticket the plan labels risky, or whose surface meets a glob of the
+config's `risk` list, runs its implement, fix and review sessions at `max`. Each
+attempt that fails a gate, has its premise falsified, or is sent back by its
+review runs the ticket's next implement or fix session one level higher, up to
+`max`, and says so on the ticket. A ticket whose surface meets one that stopped
+for you or was falsified earlier in the run starts one level higher.
+
 ## What Detent will never do
 
 - Write to your base branch: work happens on a `detent/run-<id>` branch.
@@ -207,6 +215,9 @@ falsifications by cause, budget breaches, review rounds, cost and time at work,
 with the builds that made the plan and its pack; then what `init` spent on each
 phase. A run records the same figures in its journal when it ends. They are
 evidence for deciding which planning mechanisms stay, and they gate nothing.
+`detent status` then counts `run`'s sessions by why each ran at its level:
+its role's, raised for its ticket's risk, or raised by evidence, with what each
+group cost.
 While `init` is in a costly step, `detent status` shows the step, the units done
 and left, what they have spent so far, and an estimated finish from the figures
 its note gave; after a stop, it shows the step the stop left and how far it got.
