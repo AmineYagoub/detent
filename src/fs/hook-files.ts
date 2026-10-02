@@ -25,3 +25,49 @@ export const HOOK_STAGE_FILE = "stage.json";
  * placement, in the guard, refused by that very lint.
  */
 export const SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"] as const;
+
+/**
+ * PRDR-079: is this claim's holder verifiably gone? A host recorded on the
+ * claim that is not THIS host makes pid liveness a lie — never breakable. A
+ * legacy claim without a host keeps the single-machine assumption PRDR-078
+ * recorded. Shared by `unclaim`, approve/requeue's guard, the pool's
+ * crash-resume self-heal, and the Stop hook's reading of the run's driver
+ * (PRDR-099), so every breaker answers identically. It lives here, beside the
+ * hook files, because the hook bundle may import this module and not the
+ * kernel's.
+ */
+export function claimBreakable(info: { readonly pid: number; readonly host?: string | undefined }, isAlive: (pid: number) => boolean, thisHost: string): boolean {
+  if (info.host !== undefined && info.host !== thisHost) return false;
+  return !isAlive(info.pid);
+}
+
+/**
+ * PRDR-079 amendment: EPERM answers "exists". Signal-0 to a process you may
+ * not signal (pid 1 on a CI runner) throws EPERM — the process is ALIVE.
+ * Treating any throw as death made both breakers see privileged live
+ * processes as stale.
+ */
+export function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * D-27‴ (PRDR-099): the referee that drives a plugin run, as `stage.json`
+ * records it. `owner`, `pid` and `host` are a claim's own currency (PRDR-079),
+ * so the Stop hook asks of it what a breaker asks of a claim. `session_id` and
+ * `parents` tie it to the Claude session it serves: the session id Claude Code
+ * started it under, and the pids it runs under, the nearest first — the
+ * plugin's launcher and the Claude process above it.
+ */
+export interface StageDriver {
+  readonly owner: string;
+  readonly pid: number;
+  readonly host: string;
+  readonly session_id?: string;
+  readonly parents?: readonly number[];
+}

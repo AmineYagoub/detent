@@ -21,32 +21,8 @@ export interface ClaimInfo {
   readonly host?: string;
 }
 
-/**
- * PRDR-079: is this claim's holder verifiably gone? A host recorded on the
- * claim that is not THIS host makes pid liveness a lie — never breakable. A
- * legacy claim without a host keeps the single-machine assumption PRDR-078
- * recorded. Shared by `unclaim`, approve/requeue's guard, and the pool's
- * crash-resume self-heal, so every breaker answers identically.
- */
-/**
- * PRDR-079 amendment: EPERM answers "exists". Signal-0 to a process you may
- * not signal (pid 1 on a CI runner) throws EPERM — the process is ALIVE.
- * Treating any throw as death made both breakers see privileged live
- * processes as stale.
- */
-export function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
-export function claimBreakable(info: ClaimInfo, isAlive: (pid: number) => boolean, thisHost: string): boolean {
-  if (info.host !== undefined && info.host !== thisHost) return false;
-  return !isAlive(info.pid);
-}
+/** PRDR-079: claim liveness, shared with the Stop hook's reading of a run's driver (PRDR-099). */
+export { claimBreakable, pidAlive } from "../../fs/hook-files.js";
 
 /**
  * R-3: `openSync(path, "wx")` is POSIX `O_CREAT|O_EXCL` — the same primitive

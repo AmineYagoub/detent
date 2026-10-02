@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { readBindings } from "../adapter/drift.js";
 import { bindingsPreamble, type PromptSet, type SessionBackend } from "../sessions/backend.js";
@@ -12,6 +13,7 @@ import { contractKey } from "../schemas/init.js";
 import { resolveOwner } from "../init/contracts.js";
 import { assertNoEditingTools, probeSymbols, symbolServerConfig, symbolToolNames, writeSymbolContext, type SymbolsConfig } from "../adapter/symbols.js";
 import { clearClaimPolicy, publishClaimPolicy, refreshRunRefeed } from "./hook-policy.js";
+import type { StageDriver } from "../fs/hook-files.js";
 import { type RunJournal, runsDir } from "./journal.js";
 import { ECOSYSTEMS, type Ecosystem } from "../adapter/install.js";
 import { SpendLedger } from "./ledger.js";
@@ -101,9 +103,19 @@ export interface CoreOptions {
    * the operator's edits and telling them to drive a loop already running.
    */
   readonly hookFiles?: boolean;
+  /**
+   * D-27‴ (PRDR-099): what ties this referee to the Claude session it serves,
+   * recorded in `stage.json` beside the referee's own owner, pid and host. The
+   * composition root reads it; absent, the Stop hook cannot tell that session
+   * from another and nudges as it did before.
+   */
+  readonly servedSession?: ServedSession;
   /** X-1⁵ (PRDR-191): where the advisory total is said out loud, on this driver too. */
   readonly announce?: (text: string) => void;
 }
+
+/** D-27‴ (PRDR-099): the session id Claude Code started the referee under, and the pids it runs under, the nearest first. */
+export type ServedSession = Pick<StageDriver, "session_id" | "parents">;
 
 export class RefereeContext {
   readonly root: string;
@@ -118,6 +130,8 @@ export class RefereeContext {
   readonly spend: SpendLedger;
   /** PRDR-104: false on the headless driver path. */
   readonly hookFiles: boolean;
+  /** D-27‴ (PRDR-099): who drives this run, as `stage.json` names it. */
+  readonly driver: StageDriver;
   readonly refs: RefSnapshot;
   readonly baseRef: string | null;
   /** V-1⁗ (PRDR-211): what the referee installs before running a gate, and never commits. */
@@ -154,6 +168,7 @@ export class RefereeContext {
       opts.announce,
     );
     this.hookFiles = opts.hookFiles ?? true;
+    this.driver = { owner: this.worker, pid: process.pid, host: hostname(), ...opts.servedSession };
     /* P7: every ref except the run branch is protected ground for this run. */
     this.refs = snapshotRefs(opts.root);
     /* V-5: the run's baseline, resolved once; null falls back to root commands. */
@@ -241,7 +256,7 @@ export class RefereeContext {
 
   refreshRunRefeed(active: boolean): void {
     if (!this.hookFiles) return;
-    refreshRunRefeed(this.root, active, this.now() + this.budgets.ticket_wall_clock_ms);
+    refreshRunRefeed(this.root, active, this.now() + this.budgets.ticket_wall_clock_ms, this.driver);
   }
 
   maybeArtifact(ticketId: string, name: string): unknown {

@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
-import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, SPAWN_TOOLS } from "../fs/hook-files.js";
+import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, SPAWN_TOOLS, claimBreakable, pidAlive } from "../fs/hook-files.js";
 import { guardToolUse, pathOf } from "../sessions/guard.js";
 
 /**
@@ -45,6 +46,7 @@ interface HookPayload {
   readonly tool_input?: unknown;
   readonly cwd?: unknown;
   readonly stop_hook_active?: unknown;
+  readonly session_id?: unknown;
 }
 
 function payloadCwd(payload: HookPayload): string {
@@ -239,6 +241,30 @@ function driverDecision(tool: string, toolInput: unknown): string | null {
 
 
 /**
+ * D-27‴ (PRDR-099): is the session ending one that should pick the run up?
+ * The stage file names the referee that drives the run, in a claim's currency
+ * (PRDR-079), and the breaker's own question decides first: a driver verifiably
+ * gone on this host has left the run to whoever is here, which is the case the
+ * re-feed exists for. A live one, or one on another host, is asked whether it
+ * serves this session: the same session id, or, after a `/clear` gave the
+ * conversation a new one, the same Claude process, this hook's parent, among
+ * the pids the referee runs under. Anything else is a session opened beside a
+ * run another session drives, and is told nothing. A file that names no driver,
+ * or a driver tied to no session, is answered as before, since nothing in it
+ * tells the sessions apart.
+ */
+function addressed(driver: unknown, payload: HookPayload): boolean {
+  if (driver === null || typeof driver !== "object") return true;
+  const d = driver as { pid?: unknown; host?: unknown; session_id?: unknown; parents?: unknown };
+  if (typeof d.pid !== "number") return true;
+  const sessionId = typeof d.session_id === "string" ? d.session_id : null;
+  const parents = Array.isArray(d.parents) ? d.parents.filter((p): p is number => typeof p === "number") : [];
+  if (sessionId === null && parents.length === 0) return true;
+  if (claimBreakable({ pid: d.pid, host: typeof d.host === "string" ? d.host : undefined }, pidAlive, hostname())) return true;
+  return (sessionId !== null && payload.session_id === sessionId) || parents.includes(process.ppid);
+}
+
+/**
  * The Stop decision. Absent or unreadable stage file allows: the stop gate is
  * an accelerant, never the authority — the referee re-runs the full gate after
  * session end (P2), which is also why a timed-out gate blocks (red until
@@ -249,7 +275,7 @@ async function decideStop(payload: HookPayload, nowMs: number): Promise<string |
   const cwd = payloadCwd(payload);
   const rawStage = readPolicyFile(path.join(cwd, ".detent", HOOK_STAGE_FILE));
   if (rawStage === null) return null;
-  let parsed: { run_refeed?: unknown; expires_at_ms?: unknown } | null;
+  let parsed: { run_refeed?: unknown; expires_at_ms?: unknown; driver?: unknown } | null;
   try {
     parsed = JSON.parse(rawStage) as typeof parsed;
   } catch {
@@ -268,8 +294,9 @@ async function decideStop(payload: HookPayload, nowMs: number): Promise<string |
   const stopHookActive = Boolean(payload.stop_hook_active);
   /**
    * T-120 loop persistence: while the referee says work remains, ending the
-   * session gets one deterministic nudge back into the loop (the re-feed
-   * pattern; `stop_hook_active` bounds it to a single firing).
+   * session that drives the run gets one deterministic nudge back into the
+   * loop (the re-feed pattern; `stop_hook_active` bounds it to a single
+   * firing). Which session that is, `addressed` decides (D-27‴).
    *
    * This is now the ONLY thing the Stop path does. `gate_cmd` was read from
    * this same file and run through a shell — and because the hook carries no
@@ -281,7 +308,7 @@ async function decideStop(payload: HookPayload, nowMs: number): Promise<string |
    * had no producer, and the stop gate was always an accelerant the referee
    * re-runs regardless (P2).
    */
-  if (refeed !== "" && !stopHookActive) {
+  if (refeed !== "" && !stopHookActive && addressed(parsed?.driver, payload)) {
     return JSON.stringify({ decision: "block", reason: refeed });
   }
   return null;

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { STRUCTURAL_PROTECTED } from "../schemas/common.js";
 import { approvalState } from "../init/machine.js";
@@ -9,6 +10,7 @@ import { stateDir } from "../fs/layout.js";
 import { ensureRunBranch, installTrailerHook } from "../kernel/git.js";
 import { RunJournal } from "../kernel/journal.js";
 import { RefereeCore } from "../kernel/referee.js";
+import type { ServedSession } from "../kernel/referee-context.js";
 import { loadConfig } from "../kernel/worstcase.js";
 import { buildServer } from "../referee/server.js";
 import type { SessionBackend } from "../sessions/backend.js";
@@ -42,6 +44,35 @@ function defaultBackend(root: string, protectedGlobs: readonly string[]): Sessio
   return new ClaudeCodeBackend({
     policy: { surface: ["**"], protectedGlobs: [...protectedGlobs, ...STRUCTURAL_PROTECTED], workRoot: root },
   });
+}
+
+/** The pid `pid` runs under, or null when `ps` cannot say. */
+function parentOf(pid: number): number | null {
+  try {
+    const parent = Number(execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8", timeout: 5_000 }).trim());
+    return Number.isInteger(parent) && parent > 1 ? parent : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * D-27‴ (PRDR-099): what ties this referee to the Claude session that started
+ * it, read once at start. Claude Code gives the servers it starts the session's
+ * id in `CLAUDE_CODE_SESSION_ID`, the same id a Stop payload carries. A
+ * `/clear` gives the conversation a new id and keeps this server, so the pids
+ * the referee runs under are recorded too: its parent, the plugin's launcher,
+ * and the Claude process above that, of which the Stop hook is a child. Two,
+ * and no further: a session that started this one's Claude from its own shell
+ * is further up, and is not the session this referee serves.
+ */
+export function servedSession(env: NodeJS.ProcessEnv = process.env, parent: (pid: number) => number | null = parentOf): ServedSession {
+  const id = env["CLAUDE_CODE_SESSION_ID"];
+  const grandparent = parent(process.ppid);
+  return {
+    ...(id !== undefined && id !== "" ? { session_id: id } : {}),
+    parents: grandparent === null ? [process.ppid] : [process.ppid, grandparent],
+  };
 }
 
 export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = {}): Promise<number> {
@@ -202,6 +233,7 @@ export async function main(argv: readonly string[], mainDeps: RefereeMainDeps = 
       prompts,
       ...(values.worker !== undefined ? { worker: values.worker } : {}),
       worktree: values["no-worktree"] !== true,
+      servedSession: servedSession(),
     },
     loaded,
     journal,

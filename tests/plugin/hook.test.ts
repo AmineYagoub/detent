@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { renderHookBundle } from "../../scripts/build-plugin.js";
+import { pidAlive } from "../../src/fs/hook-files.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 
@@ -310,6 +312,62 @@ describe("T-113 Stop gate over the bundle (D-27″: the re-feed, and nothing exe
       ".detent/stage.json": JSON.stringify({ stage: "driver", gate_cmd: null, run_refeed: "x", expires_at_ms: 1000 }),
     });
     expect(stop(cwd, false)).toEqual({ out: "", code: 0 });
+  });
+});
+
+describe("D-27‴ the re-feed reaches the session that drives the run (PRDR-099)", () => {
+  /**
+   * The bundle runs as a child of this test process, as the hook runs as a child
+   * of the session's Claude process, so `process.pid` here is the hook's parent.
+   */
+  const stopAs = (cwd: string, sessionId: string, active = false): { readonly out: string; readonly code: number } =>
+    run({ hook_event_name: "Stop", stop_hook_active: active, cwd, session_id: sessionId });
+  const standing = (driver: unknown): string =>
+    work({ ".detent/stage.json": JSON.stringify({ schema_version: SCHEMA_VERSION, stage: "driver", gate_cmd: null, run_refeed: "x", expires_at_ms: FUTURE, driver }) });
+  const blocks = (r: { readonly out: string }): boolean => r.out !== "" && (JSON.parse(r.out) as { decision: string }).decision === "block";
+  /** A pid that was this host's and is gone. */
+  const gone = (): number => {
+    const child = spawnSync("true");
+    expect(child.pid).toBeGreaterThan(0);
+    return child.pid;
+  };
+  const live = { owner: "w1", pid: process.pid, host: hostname() };
+
+  it("tells a session opened beside a run another session drives nothing", () => {
+    const cwd = standing({ ...live, session_id: "the-driver", parents: [gone()] });
+    expect(stopAs(cwd, "a-bystander")).toEqual({ out: "", code: 0 });
+  });
+
+  it("nudges the session the driver serves, once", () => {
+    const cwd = standing({ ...live, session_id: "the-driver", parents: [gone()] });
+    expect(blocks(stopAs(cwd, "the-driver"))).toBe(true);
+    expect(stopAs(cwd, "the-driver", true)).toEqual({ out: "", code: 0 });
+  });
+
+  it("nudges the same Claude process after a /clear gave its conversation a new session id", () => {
+    const cwd = standing({ ...live, session_id: "before-the-clear", parents: [gone(), process.pid] });
+    expect(blocks(stopAs(cwd, "after-the-clear"))).toBe(true);
+  });
+
+  it("nudges whoever is here when the driver is verifiably gone on this host: the run is theirs to resume", () => {
+    const cwd = standing({ owner: "w1", pid: gone(), host: hostname(), session_id: "the-driver", parents: [gone()] });
+    expect(blocks(stopAs(cwd, "a-newcomer"))).toBe(true);
+  });
+
+  it("reads a driver this user may not signal as alive, not gone (PRDR-079: EPERM answers exists)", () => {
+    expect(pidAlive(1), "pid 1 is alive, and signal 0 to it is refused to anyone but root").toBe(true);
+    const cwd = standing({ owner: "w1", pid: 1, host: hostname(), session_id: "the-driver", parents: [gone()] });
+    expect(stopAs(cwd, "a-bystander")).toEqual({ out: "", code: 0 });
+  });
+
+  it("does not break a driver on another host, whose pid says nothing here", () => {
+    const cwd = standing({ owner: "w1", pid: gone(), host: `not-${hostname()}`, session_id: "the-driver", parents: [gone()] });
+    expect(stopAs(cwd, "a-bystander")).toEqual({ out: "", code: 0 });
+  });
+
+  it("answers as before when nothing in the file tells the sessions apart", () => {
+    expect(blocks(stopAs(standing(live), "anyone")), "a driver tied to no session").toBe(true);
+    expect(blocks(stopAs(standing({ pid: "not-a-pid", session_id: "the-driver" }), "anyone")), "a malformed driver").toBe(true);
   });
 });
 

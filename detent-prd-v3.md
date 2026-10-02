@@ -807,6 +807,22 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   fired without one. SEC-6 says a settings file may only narrow what Detent does; a repository
   file causing execution that would not otherwise happen is that property inverted.
 
+- **D-27‴ (3.1.1, PRDR-099).** The Stop re-feed reaches the session that drives the run, and
+  not another session opened in its root. `stage.json` names the referee that writes it, in a
+  claim's currency (PRDR-079): owner, pid and host. It also records what ties the referee to
+  the Claude session it serves: the session id Claude Code started it under, and the two pids
+  it runs under, its parent (the plugin's launcher) and the Claude process above that. The hook
+  asks the breaker's question first: a driver verifiably gone on this host has left the run to
+  whoever is here, and that session is nudged, which is the case the re-feed exists for. A live
+  driver's re-feed reaches the session whose id it recorded, or the Claude process the hook is a
+  child of, which still serves the run after a `/clear` gives its conversation a new id. Any
+  other session in the root is told nothing, where before it was told to drive a loop another
+  session owned. A file that names no driver, or a driver tied to no session, is answered as
+  before. Measured live, with the plugin's launcher and the shipped bundle, under Claude Code
+  2.1.280: the driving session was nudged once, a second session in the same root was silent
+  while the driver lived, the driving session was nudged again after a `/clear`, and a new
+  session was nudged once the driver had exited.
+
 - **B-5′ (3.1.1, PRDR-131).** The crash skip is scoped to the GENERATION, not to the ticket's
   lifetime. B-5's premise — the budget was consumed, so a crashed session may not relaunch — is
   sound for the generation being resumed and false across one, because X-8 defines a new

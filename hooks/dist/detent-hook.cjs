@@ -1798,12 +1798,25 @@ var require_picomatch2 = __commonJS({
 
 // src/plugin/hook.ts
 var import_node_fs2 = require("node:fs");
+var import_node_os = require("node:os");
 var import_node_path2 = __toESM(require("node:path"), 1);
 
 // src/fs/hook-files.ts
 var HOOK_SURFACE_FILE = "active_surface.json";
 var HOOK_STAGE_FILE = "stage.json";
 var SPAWN_TOOLS = ["Task", "Agent", "TaskCreate"];
+function claimBreakable(info, isAlive, thisHost) {
+  if (info.host !== void 0 && info.host !== thisHost) return false;
+  return !isAlive(info.pid);
+}
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
 
 // src/sessions/guard.ts
 var import_node_path = __toESM(require("node:path"), 1);
@@ -2263,6 +2276,16 @@ function decidePreToolUse(payload, nowMs) {
   });
   return decision.decision === "deny" ? denyJson(decision.reason) : null;
 }
+function addressed(driver, payload) {
+  if (driver === null || typeof driver !== "object") return true;
+  const d = driver;
+  if (typeof d.pid !== "number") return true;
+  const sessionId = typeof d.session_id === "string" ? d.session_id : null;
+  const parents = Array.isArray(d.parents) ? d.parents.filter((p) => typeof p === "number") : [];
+  if (sessionId === null && parents.length === 0) return true;
+  if (claimBreakable({ pid: d.pid, host: typeof d.host === "string" ? d.host : void 0 }, pidAlive, (0, import_node_os.hostname)())) return true;
+  return sessionId !== null && payload.session_id === sessionId || parents.includes(process.ppid);
+}
 async function decideStop(payload, nowMs) {
   const cwd = payloadCwd(payload);
   const rawStage = readPolicyFile(import_node_path2.default.join(cwd, ".detent", HOOK_STAGE_FILE));
@@ -2276,7 +2299,7 @@ async function decideStop(payload, nowMs) {
   if (expired(parsed, nowMs)) return null;
   const refeed = typeof parsed?.run_refeed === "string" && parsed.run_refeed !== "" ? REFEED_TEXT : "";
   const stopHookActive = Boolean(payload.stop_hook_active);
-  if (refeed !== "" && !stopHookActive) {
+  if (refeed !== "" && !stopHookActive && addressed(parsed?.driver, payload)) {
     return JSON.stringify({ decision: "block", reason: refeed });
   }
   return null;

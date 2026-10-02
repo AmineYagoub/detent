@@ -1,6 +1,6 @@
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { SPAWN_TOOLS } from "../fs/hook-files.js";
+import { SPAWN_TOOLS, type StageDriver } from "../fs/hook-files.js";
 import { HOOK_STAGE_FILE, HOOK_SURFACE_FILE, stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 
@@ -63,8 +63,12 @@ export function clearClaimPolicy(root: string): void {
  * human-gated run stops cleanly, and a mid-run stop gets one deterministic
  * nudge. `gate_cmd` stays null on the driver path; the worker-style red/green
  * stop gate is a different producer of the same file shape.
+ *
+ * D-27‴ (PRDR-099): the file names the referee that drives the run, so the
+ * Stop hook nudges the session that referee serves, and not another session
+ * opened in the same root while it lives.
  */
-export function refreshRunRefeed(root: string, active: boolean, expiresAtMs: number): void {
+export function refreshRunRefeed(root: string, active: boolean, expiresAtMs: number, driver?: StageDriver): void {
   const file = path.join(stateDir(root), HOOK_STAGE_FILE);
   if (!active) {
     rmSync(file, { force: true });
@@ -76,6 +80,7 @@ export function refreshRunRefeed(root: string, active: boolean, expiresAtMs: num
     gate_cmd: null,
     run_refeed: RUN_REFEED_TEXT,
     expires_at_ms: expiresAtMs,
+    ...(driver === undefined ? {} : { driver }),
   });
 }
 

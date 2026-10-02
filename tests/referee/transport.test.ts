@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { stateDir } from "../../src/fs/layout.js";
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { HOOK_STAGE_FILE, stateDir } from "../../src/fs/layout.js";
 import { ensureRunBranch, installTrailerHook } from "../../src/kernel/git.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { RefereeCore } from "../../src/kernel/referee.js";
@@ -123,5 +124,34 @@ describe("T-106 the stdio server and the in-process registry are one referee", (
     /** ---- parity: results and journals agree field for field */
     expect(overStdio).toEqual(inProcess);
     expect(journaledTransitions(stdio.root)).toEqual(journaledTransitions(inproc.root));
+  });
+
+  /**
+   * D-27‴ (PRDR-099): the served referee, spawned as the plugin spawns it,
+   * names the session Claude Code started it under and the processes it runs
+   * under. This test stands where Claude Code stands: it starts the launcher.
+   */
+  it("the spawned referee's stage file names its session and the process that started its launcher", { timeout: 60_000 }, async () => {
+    const repo = await makeRunRepo();
+    cleanups.push(() => removeTree(repo.root));
+    addTicket(repo.root, { id: "t-1" });
+    const transport = new StdioClientTransport({
+      command: path.join(ROOT, "node_modules", ".bin", "tsx"),
+      args: [path.join(ROOT, "src", "cli", "referee.ts"), "--root", repo.root, "--backend", "mock"],
+      env: { ...getDefaultEnvironment(), CLAUDE_CODE_SESSION_ID: "session-from-claude" },
+      stderr: "pipe",
+    });
+    const client = new Client({ name: "d-27", version: "0.0.0" });
+    await client.connect(transport);
+    cleanups.push(() => client.close());
+    await client.callTool({ name: "next", arguments: {} });
+    const stage = JSON.parse(readFileSync(path.join(stateDir(repo.root), HOOK_STAGE_FILE), "utf8")) as {
+      driver: { owner: string; pid: number; host: string; session_id: string; parents: number[] };
+    };
+    expect(stage.driver).toMatchObject({ owner: "w1", host: hostname(), session_id: "session-from-claude" });
+    /* tsx runs the referee in a child process: its parent is the launcher, and the launcher's is this test. */
+    expect(stage.driver.parents).toHaveLength(2);
+    expect(stage.driver.parents[1]).toBe(process.pid);
+    expect(stage.driver.pid).not.toBe(process.pid);
   });
 });

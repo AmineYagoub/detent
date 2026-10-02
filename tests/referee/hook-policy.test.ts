@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readBindings } from "../../src/adapter/drift.js";
@@ -8,6 +9,7 @@ import { RUN_REFEED_TEXT } from "../../src/kernel/hook-policy.js";
 import { SPAWN_TOOLS } from "../../src/sessions/guard.js";
 import { RunJournal } from "../../src/kernel/journal.js";
 import { RefereeCore } from "../../src/kernel/referee.js";
+import type { ServedSession } from "../../src/kernel/referee-context.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
 import { callTool, isToolError, type RefereeToolError } from "../../src/referee/registry.js";
 import { MockBackend } from "../../src/sessions/mock.js";
@@ -31,7 +33,7 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-async function makeCore(hookFiles = true): Promise<{ root: string; core: RefereeCore }> {
+async function makeCore(hookFiles = true, servedSession?: ServedSession): Promise<{ root: string; core: RefereeCore }> {
   const repo = await makeRunRepo();
   cleanups.push(() => removeTree(repo.root));
   const loaded = loadConfig(JSON.parse(readFileSync(path.join(stateDir(repo.root), "config.json"), "utf8")));
@@ -40,7 +42,7 @@ async function makeCore(hookFiles = true): Promise<{ root: string; core: Referee
   const runBranch = ensureRunBranch(repo.root, "hook-policy");
   installTrailerHook(repo.root);
   const core = new RefereeCore(
-    { root: repo.root, backend: new MockBackend(), prompts: loadPromptSet(), now: () => NOW, hookFiles },
+    { root: repo.root, backend: new MockBackend(), prompts: loadPromptSet(), now: () => NOW, hookFiles, ...(servedSession === undefined ? {} : { servedSession }) },
     loaded,
     journal,
     runBranch,
@@ -104,6 +106,22 @@ describe("T-120 run-scoped re-feed", () => {
 
     core.pool();
     expect(existsSync(stagePath(root))).toBe(false);
+  });
+});
+
+describe("D-27‴ the stage file names the run's driver (PRDR-099)", () => {
+  it("in a claim's currency, with the session the referee serves", async () => {
+    const { root, core } = await makeCore(true, { session_id: "session-1", parents: [11, 22] });
+    addTicket(root, { id: "t-1" });
+    core.pool();
+    expect(readJson(stagePath(root))["driver"]).toEqual({ owner: "w1", pid: process.pid, host: hostname(), session_id: "session-1", parents: [11, 22] });
+  });
+
+  it("with no session tie when the composition root gave none", async () => {
+    const { root, core } = await makeCore();
+    addTicket(root, { id: "t-1" });
+    core.pool();
+    expect(readJson(stagePath(root))["driver"]).toEqual({ owner: "w1", pid: process.pid, host: hostname() });
   });
 });
 
