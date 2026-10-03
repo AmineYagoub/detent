@@ -10,7 +10,7 @@ import { detentBuild } from "../kernel/build.js";
 import { SCHEMA_VERSION } from "../schemas/common.js";
 import { reviewFindingSchema } from "../schemas/validate.js";
 import type { BuiltSet } from "./claims-set.js";
-import { EvalRefused, gitRoot, refuseInside, treeDir, treeOf, workingFiles, writeSetFile, writeTree, type ReviewsSet } from "./sets.js";
+import { EvalRefused, gitRoot, readSet, refuseInside, treeDir, treeOf, workingFiles, writeSetFile, writeTree, type ReviewsSet } from "./sets.js";
 
 /**
  * N-8 (PRDR-326) — the reviews set, read from a copy whose first VALIDATE
@@ -22,8 +22,8 @@ import { EvalRefused, gitRoot, refuseInside, treeDir, treeOf, workingFiles, writ
  * that tree with VALIDATE's own code: a kept review whose key a task gives is
  * that area's reviewer's, and proves the tree is what it read. A kept review
  * no task gives was made of an earlier pack, and is left out. The set is the
- * areas whose proven review holds a blocker, each with its task and its
- * blockers; the reviewers' other findings are counted, not kept.
+ * areas whose proven review holds a blocker, each with its task, its blockers
+ * and its majors (N-8′); the reviews' minors are counted, not kept.
  */
 
 const keptSchema = z.object({
@@ -89,6 +89,7 @@ export function buildReviewsSet(from: string, setDir: string, opts: { readonly p
       task: { foundations: [...task.foundations], documents: [...task.documents], heuristic: task.heuristic.map((f) => ({ ...f, blocks: false })) },
       findings: review.findings.length,
       blockers: review.findings.filter((f) => f.severity === "blocker"),
+      majors: review.findings.filter((f) => f.severity === "major"),
     })),
   };
   writeSetFile(setDir, set);
@@ -100,5 +101,44 @@ export function buildReviewsSet(from: string, setDir: string, opts: { readonly p
       `kept reviews: ${String(kept.length)}, ${String(proven.length)} proven by their keys as first-round reviews of this tree (the rest reviewed an earlier pack or round), holding ${String(findings)} findings`,
       `the reviews set: ${String(blockers)} blockers in ${String(set.areas.length)} areas, with a tree of ${String(files.length)} files as the reviewers read them`,
     ],
+  };
+}
+
+/**
+ * N-8′ (PRDR-334) — the majors of a reviews set built before the bar asked for
+ * them, added in place from the copy it was read from.
+ *
+ * Each area's review is the one kept under the key the set holds, which
+ * digests the reviewer's task and every file it read, so its majors are the
+ * ones the set's reviewers would have been held to from the start. The review's
+ * blockers and its count of findings must be the set's, or the set is refused.
+ * Nothing else changes: the tree and the `built` stamp stay, so every result
+ * run on the set still scores against it.
+ */
+export function addMajors(setDir: string): BuiltSet<ReviewsSet> {
+  const set = readSet(setDir);
+  if (set.kind !== "reviews") throw new EvalRefused(`${setDir} is a claims set, and only a reviews set holds majors`);
+  if (set.areas.every((a) => a.majors !== undefined)) return { set, report: [`${setDir} already holds its majors; nothing was written`] };
+  let kept: z.infer<typeof keptSchema>["reviews"];
+  try {
+    kept = keptSchema.parse(JSON.parse(readFileSync(keptReviewsPath(set.built.from), "utf8"))).reviews;
+  } catch {
+    throw new EvalRefused(`${set.built.from}, the copy the set was read from, keeps no reviews this build can read at ${keptReviewsPath(set.built.from)}`);
+  }
+  const areas = set.areas.map((area) => {
+    const review = kept.find((r) => r.key === area.key);
+    if (review === undefined) throw new EvalRefused(`${set.built.from} no longer keeps the review of ${area.name}, under the key ${area.key}`);
+    const blockers = review.findings.filter((f) => f.severity === "blocker");
+    if (review.findings.length !== area.findings || JSON.stringify(blockers) !== JSON.stringify(area.blockers)) {
+      throw new EvalRefused(`the review ${set.built.from} keeps for ${area.name} is not the one the set was built from: its blockers or its count of findings differ`);
+    }
+    return { ...area, majors: review.findings.filter((f) => f.severity === "major") };
+  });
+  const extended: ReviewsSet = { ...set, areas };
+  writeSetFile(setDir, extended);
+  const majors = areas.reduce((n, a) => n + a.majors.length, 0);
+  return {
+    set: extended,
+    report: [`${String(majors)} majors added to the ${String(areas.length)} areas of ${setDir}, each from the review its key proves in ${set.built.from}; the tree and the build stamp are unchanged`],
   };
 }

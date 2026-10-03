@@ -80,13 +80,13 @@ usage limit stops a session, `init` waits for the reset the limit names and resu
 where it stopped, so no finished work is lost. VALIDATE's writer still runs its batches one at a
 time, since they edit the same files.
 
-A VALIDATE round hands every reviewer the pack's foundations as the same system prompt, so no
-reviewer reads them itself. The round's first reviewers cache it, and the rest read it from the
-cache at a fraction of the price. On Detent's review set, reviewers handed the foundations found
-every blocker. Set `review_foundations` to `read` in `.detent/config.json` to have each reviewer
-read them itself, as before. An `init` stopped in VALIDATE by an earlier Detent kept its reviews
-as reviewers that read the foundations; resumed with them handed, it reviews those areas again,
-unless the config says `read`.
+Every VALIDATE reviewer reads the pack's foundations before its own area, and pays to cache them
+in its own session. With `review_foundations` set to `given` in `.detent/config.json`, a round
+hands every reviewer the foundations as the same system prompt instead. The round's first
+reviewers cache it, and the rest read it from the cache, so a review costs about 40% less. The
+default stays `read`: on Detent's review set, reviewers handed the foundations found every
+blocker but only 113 of its 132 majors, where reviewers reading them found 124. Switching a
+stopped `init` to `given` reviews again the areas its round had already kept.
 
 ```bash
 detent run
@@ -169,11 +169,12 @@ claim checks; its other tasks keep the role's level. A first `init` names the
 keys. The defaults route a task below its role's level only after it meets the
 bar on Detent's evaluation sets, and one has: a VALIDATE reviewer's first-round
 review (`spec_review/review`) runs at `high`, which found every blocker of the
-review set for less than half of what `max` spent. A verification stays at
-`max`. A config written by an earlier Detent keeps its first-round reviews at
-`max` until `"spec_review/review": "high"` is added to its `effort_routing`.
-AUDIT's claim checks stay at `max` too, since no cheaper setup found every wrong
-claim, and nor did `max` itself on a second run.
+review set, and 124 of its 132 majors where `max` found 126, for less than half
+of what `max` spent. A verification stays at `max`. A config written by an
+earlier Detent keeps its first-round reviews at `max` until
+`"spec_review/review": "high"` is added to its `effort_routing`. AUDIT's claim
+checks stay at `max` too, since no cheaper setup found every wrong claim, and
+nor did `max` itself on a second run.
 
 In `run`, a ticket's risk and Detent's own checks raise these levels, and never
 lower them. A ticket the plan labels risky, or whose surface meets a glob of the

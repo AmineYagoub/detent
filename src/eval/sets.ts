@@ -19,8 +19,9 @@ import { reviewFindingSchema } from "../schemas/validate.js";
  * wrong and a sample of those it confirmed, each with the survey's wording and
  * arm A's brief, and its tree is the project as the survey read it. The
  * reviews set holds the areas of VALIDATE's first round whose kept reviews
- * hold a blocker, each with its reviewer's task and the key that digests it,
- * and its tree is the pack as the reviewers read it. A set is written outside
+ * hold a blocker, each with its reviewer's task, the key that digests it and
+ * the review's blockers and majors, and its tree is the pack as the reviewers
+ * read it. A set is written outside
  * this repository, which holds only the code that builds, runs and scores
  * them: a project's documents, claims and findings are its own.
  */
@@ -89,6 +90,11 @@ export const reviewsSetSchema = z.strictObject({
       /** How many findings its kept review holds. */
       findings: z.number().int().nonnegative(),
       blockers: z.array(reviewFindingSchema),
+      /**
+       * N-8′: its kept review's majors, which the bar asks 90% of. A set built
+       * before N-8′ holds none until `eval-build --majors` adds them.
+       */
+      majors: z.array(reviewFindingSchema).optional(),
     }),
   ),
 });
@@ -96,6 +102,9 @@ export type ReviewsSet = z.infer<typeof reviewsSetSchema>;
 
 export const evalSetSchema = z.discriminatedUnion("kind", [claimsSetSchema, reviewsSetSchema]);
 export type EvalSet = z.infer<typeof evalSetSchema>;
+
+/** N-8′: what adds the majors to a reviews set built before the bar asked for them. */
+export const ADD_MAJORS = "npx tsx scripts/eval-build.ts --majors <the reviews set>";
 
 /** A refusal the operator can act on: nothing was built, run or written. */
 export class EvalRefused extends Error {

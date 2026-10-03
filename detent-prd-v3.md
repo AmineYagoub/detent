@@ -1216,8 +1216,8 @@ D-1…D-25 carry forward from v2.0-draft.7. D-2, D-19, and D-22 are amended as b
   backend's support has no caller, and PRDR-298 deletes it.*
   *Amended by C-3⁵ (PRDR-298): the backend's support is deleted.*
   *Amended by C-2¹⁶ (PRDR-304): AUDIT's claim checks are batched, and each is told its own path.*
-  *Amended by S-6‴ (PRDR-318): a VALIDATE round's reviewers are handed the foundations as the same
-  system prompt, by default since the review set passed with it (PRDR-322).*
+  *Amended by S-6‴ (PRDR-318): where the config's `review_foundations` is `given`, a VALIDATE
+  round's reviewers are handed the foundations as the same system prompt.*
 
 - **C-4⁗⁵ (3.1.1, PRDR-210).** The wait ends when the first response **begins**, not when its
   first turn completes. C-4⁗‴ listened for the stream's first completed `assistant` message; the
@@ -3400,8 +3400,8 @@ the code does what the rules it amends describe, and each of those rules points 
   and told that any other document is context, read and never quoted.*
   *Amended by X-4⁸ (PRDR-286): an amendment's edit is re-validated as every edit to the pack is,
   at the next `detent init`, which the amendment asks the operator to run.*
-  *Amended by S-6‴ (PRDR-318): by default since the review set passed with it (PRDR-322), each
-  reviewer is handed the foundations' text as its system prompt, and they count as read.*
+  *Amended by S-6‴ (PRDR-318): where the config's `review_foundations` is `given`, each reviewer
+  is handed the foundations' text as its system prompt, and they count as read.*
   *Amended by C-2²⁸ (PRDR-333): a first round's finding that leaves out `previous` reads as null,
   and a verification's keeps the field required.*
 
@@ -3836,9 +3836,9 @@ they need a real second round first.
   lower bound. Resumed after midnight, a session is told "The date has changed. Today's date is now
   …", and the prefix it had cached is kept.*
 
-- **S-6‴ (3.1.1, PRDR-318; built and measured by PRDR-322).** A VALIDATE round's reviewers share
-  one cached prefix, since the review set passed with it. Every reviewer read the pack's foundations
-  first, on tabachir 24 documents and 198 KB of the 571, into its own context, and wrote them to
+- **S-6‴ (3.1.1, PRDR-318; built and measured by PRDR-322).** A VALIDATE round's reviewers can
+  share one cached prefix, where the config asks for it. Every reviewer reads the pack's foundations
+  first, on tabachir 24 documents and 198 KB of the 571, into its own context, and writes them to
   the cache. With the config's `review_foundations` at `given`, each reviewer is handed the
   foundations' text as its system prompt: each document whole, under its path, its lines numbered
   as the Read tool numbers them, in the round's order and byte for byte the same for every reviewer
@@ -3851,10 +3851,10 @@ they need a real second round first.
   documents and reads them itself, unless its system prompt holds them, and the foundations it was
   handed count as read (C-2¹⁴). A review made with them handed is kept under a key of its own, so
   a run stopped in a round whose reviewers read them, resumed with them given, reviews that round's
-  areas again, unless its config says `read`. It changes what a reviewer is handed, so it became
-  the default only once N-8's review set, reviewed with it at the level the reviewers are routed
-  to, reported each blocker of the bar: `review_foundations` is `given` by default, and `read` has
-  each reviewer read them itself.
+  areas again. It changes what a reviewer is handed, so it is the default only once N-8's review
+  set, reviewed with it at the level the reviewers are routed to, passes the bar. It found each
+  blocker but too few of the majors (N-8′), so `review_foundations` is `read` by default, and
+  `given` hands the foundations.
   *Measured by PRDR-322 on 2026-10-03: N-8's review set on Opus 5.5 at `high`, where a first round's
   review runs (S-5⁷), with the foundations given, four sessions at once on runtime 2.1.285. It
   reported 18 of the 18 blockers at their place, for $17.91 over 10 sessions in 15.7 min. The four
@@ -3864,8 +3864,10 @@ they need a real second round first.
   reads only those 2,970. None of the 10 read a foundation from its file, where each of the 15
   sessions of PRDR-327's arm at `high`, which read them, made 24 such reads. Against that arm, the
   median review cost $1.76 instead of $2.92, took 5.7 min instead of 7.8 and 14 turns instead of
-  45, and the reviews reported 148 findings instead of 200. Each run passed the bar once; the
-  bar counts blockers, not findings.*
+  45, and the reviews reported 148 findings instead of 200. Against the original reviews' 132
+  majors, it reported 113 at their place, where that arm reported 124.*
+  *Amended by N-8′ (PRDR-334): the run fails the bar's majors, 113 of the 132 under the 119 it asks,
+  so `review_foundations` is `read` by default again.*
 
 - **C-2²⁷ (3.1.1, PRDR-318).** VALIDATE's writer takes a place's findings together, the most severe
   first. C-2²⁴ cut a round's findings into batches in the order their ids give them, which is the
@@ -4004,6 +4006,29 @@ they need a real second round first.
   the set, and names them: briefs, session artifacts, the phase's checkpoint, kept reviews and the
   init journal. Each check's brief is kept in the results. `--only wrong` checks only the claims arm
   A found wrong, and the score counts only those, for a re-run of today's setup.*
+  *Amended by N-8′ (PRDR-334): the reviews set holds its majors too, and a setup passes only when
+  it also reports 90% of them at their place.*
+
+- **N-8′ (3.1.1, PRDR-334).** The reviews bar counts the set's majors too. Each area of the reviews
+  set holds the majors of the kept review its key proves, beside its blockers. A setup passes only
+  when it reports each blocker, and at least 90% of the majors, at their place as a blocker or a
+  major: the same file and an overlapping quote. A major missed is a defect the pack keeps, since a
+  round goes on while it holds a blocker or a major (C-2¹⁴) and the writer fixes both. Counted on
+  blockers alone, a setup whose reviewers lost a tenth of the majors passed and became the default.
+  Against the 132 majors the original reviews of tabachir's 10 areas hold, today's `max`, re-run,
+  reported 126, Opus 5.5 at `high` 124, `high` with the foundations given 113, and `medium` 106;
+  every run but `medium` found all 18 blockers. 90% asks 119 of the 132, so `max` and `high` pass and
+  the other two fail: S-5⁷'s move to `high` stands, and S-6‴'s `review_foundations` is `read` by
+  default again. A set built before this holds no majors. The runner refuses one before any session
+  starts and the scorer refuses it, both naming `scripts/eval-build.ts --majors`. That adds them in
+  place from the copy the set was read from, each area's from the review its key proves, refuses
+  where a review is gone or differs from the set's, and changes nothing else, so every result run on
+  the set still scores against it. The claims bar is unchanged.
+  *Built by PRDR-334. `MAJORS_FLOOR` in `src/eval/score.ts` holds the share, and `addMajors` in
+  `src/eval/reviews-set.ts` the addition. Tabachir's set gained its 132 majors on 2026-10-03, and
+  the four runs were scored again from their results, spending nothing: today's `max`, re-run, PASS
+  with 126 of the 132; `high` PASS with 124; `medium` FAIL, with 14 of the 18 blockers and 106 of the
+  majors; `high` with the foundations given FAIL, with 113.*
 
 - **S-5⁷ (3.1.1, PRDR-318; built and measured by PRDR-327).** A task's model or effort
   moves below S-5⁶'s only through a passing measurement on N-8's sets, and the routing names it.
@@ -4038,6 +4063,8 @@ they need a real second round first.
   `audit/verify_claims` keeps `max`, and since today's setup does not meet the claims bar on a
   second run, the bar for a check is the user's to decide before one can move. A config written
   before the move keeps its own routing, and nothing yet tells it of the move.*
+  *Amended by N-8′ (PRDR-334): scored against the set's 132 majors too, today's `max` reported 126
+  and `high` 124, above the 119 the bar asks, so the move to `high` stands; `medium` reported 106.*
 
 - **S-5⁸ (3.1.1, PRDR-318, built by PRDR-328).** In `run`, a ticket's risk sets where its effort
   starts, and evidence moves it, only up. A ticket is high-risk when its `risk_label` is set or its

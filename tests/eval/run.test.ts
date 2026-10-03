@@ -328,6 +328,19 @@ describe("PRDR-326 a reviews evaluation reviews each area on the task VALIDATE's
     );
   });
 
+  it("refuses a reviews set built before N-8′, which holds no majors, before any session starts (PRDR-334)", async () => {
+    const from = await stoppedCopy();
+    const setDir = outside().replace(/claims$/u, "reviews");
+    buildReviewsSet(from, setDir, { promptHash: PROMPTS.hashes.spec_review });
+    const file = path.join(setDir, "set.json");
+    const set = JSON.parse(readFileSync(file, "utf8")) as { areas: Record<string, unknown>[] };
+    for (const area of set.areas) delete area["majors"];
+    writeFileSync(file, `${JSON.stringify(set)}\n`);
+    const stub = checks(() => "wrong");
+    await expect(runEvaluation(base(setDir, unrelated(), stub.stage, { stage: true }))).rejects.toThrow(/holds no majors .*add them with npx tsx scripts\/eval-build\.ts --majors/u);
+    expect(stub.specs, "no session started").toHaveLength(0);
+  });
+
   it("runs only a claims set on the claims arm A found wrong alone", async () => {
     const from = await stoppedCopy();
     const setDir = outside().replace(/claims$/u, "reviews");

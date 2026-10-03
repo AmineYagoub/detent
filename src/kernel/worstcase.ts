@@ -173,15 +173,16 @@ const configSchema = z.strictObject({
     .refine((v) => v.max >= v.min, "slice_size.max must be at least slice_size.min")
     .default({ min: 12, max: 18 }),
   /**
-   * S-6‴: how a VALIDATE reviewer gets the pack's foundations. `given`, the
-   * default, hands every reviewer of a round their text as its system prompt,
-   * byte for byte the same, which the prompt cache then serves to all but the
-   * round's first reviewers. `read` has each reviewer read them itself, as
-   * every reviewer did before. It changes what a reviewer is handed, so it
-   * became the default only once N-8's review set passed with it: on
-   * 2026-10-03, at `high`, PRDR-322's run reported 18 of the 18 blockers.
+   * S-6‴: how a VALIDATE reviewer gets the pack's foundations. `read`, the
+   * default, has each reviewer read them itself. `given` hands every reviewer
+   * of a round their text as its system prompt, byte for byte the same, which
+   * the prompt cache then serves to all but the round's first reviewers. It
+   * changes what a reviewer is handed, so it is the default only once N-8's
+   * review set passes with it. On 2026-10-03, at `high`, PRDR-322's run found
+   * all 18 blockers, and PRDR-334 scored it against the majors too: 113 of the
+   * 132, where reviewers reading them at `high` reported 124, under N-8′'s 119.
    */
-  review_foundations: z.enum(["read", "given"]).default("given"),
+  review_foundations: z.enum(["read", "given"]).default("read"),
   risk: z.array(glob).default([]),
   /**
    * PRDR-142: the KEYS are roles. This accepted any string, and `roles.ts`

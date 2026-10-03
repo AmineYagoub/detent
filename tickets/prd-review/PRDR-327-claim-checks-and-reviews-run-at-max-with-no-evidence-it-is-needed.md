@@ -259,3 +259,10 @@ All killed, on a baseline of 105 passing tests, each restored from a snapshot an
   keystore claim, above.
 - **One run per arm.** Each arm passed or failed on a single run. A second run of `high` on the
   review set is PRDR-322's run, with the foundations handed, so it measures that change too.
+
+### Re-scored by PRDR-334 (2026-10-03)
+
+N-8′ adds the majors to the reviews bar: at least 90% of the 132 the original reviews of the set's
+10 areas hold, at their place as a blocker or a major. Re-scored from their results, spending
+nothing: today's `max`, re-run, reported 126 and passes; `high` reported 124 and passes; `medium`
+reported 106 and fails on these too. So the move to `high` stands.

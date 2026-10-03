@@ -83,7 +83,7 @@ describe("S-6‴ a round hands every reviewer the foundations as its system prom
     for (const spec of specs) expect(`${spec.promptPrefix}\n\n${spec.promptVariable}`, "the first message holds no document").not.toContain("<document path=");
   }, 120_000);
 
-  it("hands nothing, and says nothing of it, where the config says read, as a pipeline built without the setting does", async () => {
+  it("hands nothing, and says nothing of it, where the reviewers read the foundations themselves, as by default", async () => {
     for (const more of [{}, { reviewFoundations: "read" as const }]) {
       const { specs, inputs } = await round(more);
       expect(specs.length).toBeGreaterThanOrEqual(2);
@@ -149,10 +149,10 @@ describe("S-6‴ a round hands every reviewer the foundations as its system prom
     expect(readFileSync(path.join(REPO, "scripts", "eval-run.ts"), "utf8")).toContain('...(values.foundations === "given" ? { foundations: "given" as const } : {})');
   });
 
-  it("is given by default, takes read, and refuses anything else", () => {
+  it("is read by default, takes given, and refuses anything else", () => {
     const base = { schema_version: SCHEMA_VERSION, budgets: Object.fromEntries(Object.entries(CEILINGS).map(([k, v]) => [k, v.default])), pinned: { agent_sdk: "0.3.285", claude_code: "2.1.285" } };
-    expect(loadConfig(base).config.review_foundations, "PRDR-322's run passed with it, so a config that names nothing hands them").toBe("given");
-    expect(loadConfig({ ...base, review_foundations: "read" }).config.review_foundations).toBe("read");
+    expect(loadConfig(base).config.review_foundations, "PRDR-334: given fails the bar's majors, so a config that names nothing reads them").toBe("read");
+    expect(loadConfig({ ...base, review_foundations: "given" }).config.review_foundations).toBe("given");
     expect(() => loadConfig({ ...base, review_foundations: "handed" })).toThrow(/review_foundations/u);
   });
 
@@ -164,16 +164,18 @@ describe("S-6‴ a round hands every reviewer the foundations as its system prom
 
   it("S-6‴ states the setting, its default and why the system prompt carries it", () => {
     const text = (definitionText(readFileSync(path.join(REPO, "detent-prd-v3.md"), "utf8"), "S-6‴")[0] ?? "").replace(/\s+/gu, " ");
-    for (const said of ["`review_foundations`", "`given`", "as its system prompt", "is `given` by default", "`foundations_given`", "count as read (C-2¹⁴)"]) expect(text, said).toContain(said);
+    for (const said of ["`review_foundations`", "`given`", "as its system prompt", "is `read` by default", "`foundations_given`", "count as read (C-2¹⁴)"]) expect(text, said).toContain(said);
   });
 
-  it("PRDR-322: the config's doc-block, S-6‴ and the README name the run that made given the default", () => {
+  it("PRDR-334: the config's doc-block, S-6‴ and the README name the measurement that keeps read the default", () => {
     const block = readFileSync(path.join(REPO, "src", "kernel", "worstcase.ts"), "utf8").replace(/\s*\*\s*/gu, " ");
-    expect(block).toContain("PRDR-322's run reported 18 of the 18 blockers");
+    expect(block).toContain("113 of the 132, where reviewers reading them at `high` reported 124, under N-8′'s 119");
     const text = (definitionText(readFileSync(path.join(REPO, "detent-prd-v3.md"), "utf8"), "S-6‴")[0] ?? "").replace(/\s+/gu, " ");
-    for (const said of ["Measured by PRDR-322", "18 of the 18 blockers", "$17.91 over 10 sessions in 15.7 min", "78,759", "None of the 10 read a foundation from its file"]) expect(text, said).toContain(said);
+    for (const said of ["Measured by PRDR-322", "18 of the 18 blockers", "$17.91 over 10 sessions in 15.7 min", "78,759", "None of the 10 read a foundation from its file", "it reported 113 at their place, where that arm reported 124", "*Amended by N-8′ (PRDR-334)"]) {
+      expect(text, said).toContain(said);
+    }
     const readme = readFileSync(path.join(REPO, "README.md"), "utf8").replace(/\s+/gu, " ");
-    expect(readme).toContain("Set `review_foundations` to `read` in `.detent/config.json`");
+    expect(readme).toContain("The default stays `read`: on Detent's review set, reviewers handed the foundations found every blocker but only 113 of its 132 majors, where reviewers reading them found 124.");
   });
 });
 

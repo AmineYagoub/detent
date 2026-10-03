@@ -222,3 +222,10 @@ All killed, on a baseline of 57 passing tests, each restored from a snapshot and
   verification is handed the foundations too, and runs at `max`.
 - **`ensureConfig` does not write the key,** as it did not before. The README names it.
 
+### Superseded in part by PRDR-334 (2026-10-03)
+
+The default this ticket set is undone. Scored against the 132 majors the original reviews of the
+set's 10 areas hold, this run reported 113 at their place as a blocker or a major, where PRDR-327's
+arm at `high`, which read the foundations, reported 124. N-8′ now asks for 90% of them, 119, so
+the run fails the bar and `review_foundations` defaults to `read` again. The mechanism, the
+setting's `given` and this run's record stay.

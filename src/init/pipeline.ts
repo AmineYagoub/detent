@@ -62,9 +62,9 @@ export interface PipelineDeps {
   readonly sliceSize?: { readonly min: number; readonly max: number };
   /**
    * S-6‴: how a VALIDATE reviewer gets the foundations, the config's
-   * `review_foundations`, `given` unless the config says `read`. `init` always
-   * passes it. A pipeline built without it, as a test builds one, has each
-   * reviewer read them.
+   * `review_foundations`, `read` unless the config says `given`. `init` always
+   * passes it, and a pipeline built without it, as a test builds one, reads
+   * them too.
    */
   readonly reviewFoundations?: "read" | "given";
   readonly note?: (text: string) => void;

@@ -1,11 +1,11 @@
 ---
 id: PRDR-334
 title: "N-8's reviews bar counts blockers alone, so a setup that loses a tenth of the majors passes it, and PRDR-322 made one the default. Scored against the 132 majors the original reviews of the set's 10 areas hold, today's `max` re-run reported 126 at their place as a blocker or a major, Opus 5.5 at `high` 124, `high` with the foundations given 113 and `medium` 106. Every run but `medium` found all 18 blockers, so `high` with the foundations given passed, and `review_foundations` now hands them by default, though its reviewers reported 11 fewer of the majors than reviewers reading them at the same level. The set will hold its majors, the bar will ask for 90% of them, the four runs will be re-scored, and `review_foundations` will default to `read` again"
-state: OPEN
+state: DONE
 severity: major
 category: defect
 labels: ["prd-review", "cost-strategy", "N-8", "D-35", "S-6‴", "S-5⁷", "evaluation", "quality"]
-surface: ["src/eval/sets.ts", "src/eval/reviews-set.ts", "src/eval/score.ts", "src/eval/run.ts", "scripts/eval-build.ts", "src/kernel/worstcase.ts", "src/init/pipeline.ts", "tests/eval/score.test.ts", "tests/eval/reviews-set.test.ts", "tests/eval/run.test.ts", "tests/init/validate-round-prefix.test.ts", "tests/init/effort-by-task.test.ts", "detent-prd-v3.md", "README.md", "docs/evaluation.md", "docs/plan-cost-strategy.md"]
+surface: ["src/eval/sets.ts", "src/eval/reviews-set.ts", "src/eval/score.ts", "src/eval/run.ts", "scripts/eval-build.ts", "src/kernel/worstcase.ts", "src/init/pipeline.ts", "tests/eval/score.test.ts", "tests/eval/reviews-set.test.ts", "tests/eval/review-fixture.ts", "tests/eval/run.test.ts", "tests/init/validate-round-prefix.test.ts", "detent-prd-v3.md", "README.md", "docs/evaluation.md", "docs/plan-cost-strategy.md"]
 prd_refs: ["N-8", "D-35", "S-6‴", "S-5⁷", "C-2¹⁴"]
 acceptance_criteria: ["The reviews set holds each area's majors. A set the builder makes carries them. An older set gains them in place from the copy it was read from: each area's majors come from the kept review its key proves, and the set is refused where an area's review is missing or its blockers or findings differ from the set's. The set's tree and its `built` stamp stay as they were, so results run on it still score against it.", "The reviews score counts each of the set's majors reported at its place, the same file and an overlapping quote, as a blocker or a major, and lists each one missed. A setup passes only when it also reports at least 90% of the set's majors so. A reviews set without majors is refused by the runner before any session starts, and by the scorer, each naming the command that adds them.", "The four reviews runs of 2026-10-02 and 2026-10-03 are re-scored from their results and recorded in this ticket, the PRD and the plan. Today's `max` re-run and Opus 5.5 at `high` pass. `medium` and `high` with the foundations given fail. No new evaluation runs.", "`review_foundations` defaults to `read` again. Its doc-block, S-6‴, the README and the plan say why: with the foundations given, the set's reviewers reported 113 of the 132 majors, where reviewers reading them at the same level reported 124.", "`spec_review/review` stays at `high`: its run passes the bar with the majors, 124 of 132, and S-5⁷ records it.", "The ticket records the recommended config: every setting this measuring bears on, its value, and the measurement behind it, or that none exists.", "Falsifying test, against HEAD: a reviews run that reports every blocker and only 113 of a set's 132 majors passes, and a config that names no `review_foundations` hands the reviewers the foundations."]
 non_goals: ["Does NOT change the claims bar, which is the user's to decide (PRDR-327, AC 6).", "Does NOT run any new evaluation. The four runs are re-scored from their results.", "Does NOT remove `review_foundations: given`. It stays available, and its run stays recorded.", "Does NOT tell or move existing configs about `spec_review/review`. The plan's question 2 stays the user's."]
@@ -100,8 +100,94 @@ decision 1), then cost.
 | `budgets.init_sessions_at_once` | 4, or up to 8 where the account's usage limits allow | Changes nothing a session is given (X-1⁸). 8 halves AUDIT's and VALIDATE's wall clock, uses the usage window faster, and a limit costs no finished work (X-8″). |
 | `risk` | globs of the project's security-critical paths | Not measured. A ticket whose surface meets one runs its implement, fix and review sessions at `max` (S-5⁸). |
 
-## Falsification (to run against HEAD before any code)
+## Falsification (verification protocol, item 1)
 
-- A reviews set with 18 blockers and 132 majors, and a run that reports every blocker as a blocker
-  and only 113 of the majors at their place: the score passes it at HEAD.
-- `loadConfig` of a config that names no `review_foundations`: `given` at HEAD.
+A test run against HEAD (`6030cf0`, the filing) before any code, and kept out of the tree once
+the fix passed it. Its set holds 18 blockers and 132 majors, each in a file of its own so that a
+place meets only its own, and its run reports every blocker and 113 of the majors:
+
+```
+× refuses a run that reports every blocker and only 113 of a set's 132 majors
+  → expected 'pass' to be 'fail'
+× hands the reviewers no foundations where the config names no review_foundations
+  → expected 'given' to be 'read'
+```
+
+Both fail at HEAD and pass on the fix. A first draft put every finding in one file, with quotes
+that shared a run of 24 characters or more and no file text, so every major met every report and
+the case could not fail. Giving each finding a file of its own made the match exact.
+
+## What was built
+
+- **The set's majors.** `reviewsSetSchema`'s areas take `majors`, optional so that a set built
+  before reads. `buildReviewsSet` writes each proven review's majors. `addMajors`, run by
+  `scripts/eval-build.ts --majors <set>`, adds them in place from `built.from`'s kept reviews by
+  each area's key. It refuses an area whose review is gone, or whose blockers or count of findings
+  differ, and returns at once from a set that already holds them.
+- **The bar.** `MAJORS_FLOOR` is 0.9. `scoreReviews` tallies the majors as it tallies the blockers,
+  at their place as a blocker or a major, and the score prints how many it found, how many the bar
+  asks, and each one missed, whatever the verdict. A run fails once the majors it missed put the
+  floor out of reach, so a unit left unfinished leaves it incomplete only while the floor can still
+  be met. `refuseWithoutMajors` refuses a set that holds none, in the scorer and in the runner
+  before any session starts, naming `--majors`.
+- **The default.** `review_foundations` defaults to `read`, and its doc-block names the
+  measurement. `PipelineDeps` says `init` passes the setting and a pipeline built without it
+  reads.
+- **The documents.** N-8′ in the PRD, with amendment notes on N-8, S-5⁷ and S-6‴. S-6′'s and
+  C-2¹⁴'s notes say the foundations are handed only where the config asks. The README's two
+  paragraphs, `docs/evaluation.md` (the set, `--majors`, the bar, the foundations sentence), and the
+  plan's §4.4, §5, §6.1 and its new §11, the recommended config. PRDR-322 and PRDR-327 carry a note
+  each.
+
+## The four runs, re-scored (AC 3)
+
+Tabachir's set gained its majors on 2026-10-03: `eval-build --majors` added 132 to its 10 areas
+(11, 8, 14, 17, 8, 19, 20, 10, 13 and 12), each from the review its key proves in
+`~/tabachir-detent-test`, and left the tree, the `built` stamp and the blockers as they were; a
+second run wrote nothing. Its `set.json` from before is kept outside the repository. Each run was
+then scored again with `scripts/eval-score.ts`, launching nothing and spending nothing:
+
+| Run | Verdict | Blockers | Majors (the bar asks 119) |
+|---|---|---|---|
+| today's `max`, re-run | PASS | 18 of 18 | 126 of 132 |
+| Opus 5.5 at `high` | PASS | 18 of 18 | 124 of 132 |
+| Opus 5.5 at `medium` | FAIL | 14 of 18 | 106 of 132 |
+| `high`, the foundations given | FAIL | 18 of 18 | 113 of 132 |
+
+These are the counts the hand scoring found before this ticket was filed.
+
+## Mutation battery (14 mutants)
+
+All killed, on a baseline of 64 passing tests (`tests/eval` and the foundations' tests), each
+restored from a snapshot and checked with `cmp`:
+
+| Mutant | Killed by |
+|---|---|
+| S1 the floor is 85% | the floor's tests, and 119 of 132 |
+| S2 the floor is not applied | the floor's tests, and the printed score |
+| S3 a major reported as a minor counts | the minor's test |
+| S4 off by one at the floor | 18 of 20 passes, and the runner's passes |
+| S5 an unfinished unit never fails on majors, nor finishes | out of reach fails |
+| S6 the scorer takes a set with no majors | the scorer's refusal |
+| S7 the score prints no majors line | the printed score |
+| U1 the runner takes a set with no majors | the runner's refusal |
+| B1 the builder keeps no majors | the builder's tests |
+| A1 `addMajors` does not check the review | the refusals |
+| A2 `addMajors` takes every finding but the blockers | the set restored exactly, once the fixture's review held a minor |
+| A3 `addMajors` writes a set that holds them | nothing written the second time |
+| C1 the default is `given` | the default's test |
+| E1 the script ignores `--majors` | the script's run |
+
+`A2` survived the first battery: the fixture's review held a blocker and a major and no minor, so
+taking everything but the blockers took the majors alone. The fixture's review now holds a minor
+too, and the builder's test says it is counted and not kept.
+
+## Recorded, not fixed
+
+- **A pass may miss a tenth of the majors.** `high` misses 8 of 132 and passes. The score lists
+  each major missed, so the misses are read, not hidden.
+- **The match is lenient.** The same file and an overlapping quote, with no file text a shared run
+  of 24 characters. A run that reports more findings has more chances to meet a place.
+- **One run per setup.** The 113 against 124 could hold a run's variance. A second run of `given`
+  could pass; it would cost about $18 and is not needed for the default.
+- **Existing configs and `spec_review/review`** stay the user's, the plan's question 2.

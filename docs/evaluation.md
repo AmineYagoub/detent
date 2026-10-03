@@ -33,8 +33,20 @@ key digests everything the reviewer was given and the contents of every file it
 read. The builder works out each area's round-1 task from the copy's files with
 VALIDATE's own code. It accepts a kept review only when that task gives the
 same key, which proves the files are exactly what the reviewer read. The set
-holds the areas whose proven review has a blocker, with each area's task and
-blockers. Its tree is the pack as the reviewers read it.
+holds the areas whose proven review has a blocker, with each area's task,
+blockers and majors. Its tree is the pack as the reviewers read it.
+
+A reviews set built before the bar counted majors holds none, and the runner
+and the scorer refuse it. Add them in place, from the copy the set was read
+from:
+
+```bash
+npx tsx scripts/eval-build.ts --majors ~/detent-evals/tabachir/reviews
+```
+
+Each area's majors come from the review its key proves. The set is refused if
+that review is gone or differs from the set's. Nothing else in the set changes,
+so results already run on it still score against it.
 
 Build both from the copy a run left behind. The builder only reads that copy:
 
@@ -57,10 +69,10 @@ An evaluation runs a set on one model and effort level:
 
 The sessions use the same backend, prompts and session setup as `init`, but
 for two things. The evaluated role's routing is the one you name. And a reviews
-set's reviewers read the foundations themselves, as the set's reviewers did,
-unless `--foundations given` hands them over as their system prompt, as `init`
-does by default (S-6‴). A run's results say when they were given, and so does
-their file's name.
+set's reviewers read the foundations themselves, as the set's reviewers did and
+as `init` does by default, unless `--foundations given` hands them over as
+their system prompt, as `review_foundations: given` does (S-6‴). A run's
+results say when they were given, and so does their file's name.
 
 ```bash
 npx tsx scripts/eval-run.ts --set ~/detent-evals/tabachir/claims --copy ~/tabachir-detent-ab2 \
@@ -114,11 +126,15 @@ A setup **passes** when:
   arm A was the one mistaken;
 - it reports every blocker at its place: the same file, with a quote that
   overlaps the blocker's, as a blocker or a major. A blocker reported as a
-  minor is a miss, since a round with no blocker and no major ends VALIDATE.
+  minor is a miss, since a round with no blocker and no major ends VALIDATE;
+- it reports at least 90% of the majors at their place, the same way (N-8′).
+  A major missed is a defect the pack keeps. On tabachir's set, the bar asks
+  119 of 132: today's `max`, re-run, reported 126, and `high` 124.
 
 The score prints PASS, FAIL, PENDING or INCOMPLETE:
 
-- **FAIL** lists each miss.
+- **FAIL** lists each miss. Every reviews score lists the majors it missed,
+  since a pass may miss up to a tenth of them.
 - **PENDING** means the setup called some confirmed claims wrong. The score
   lists each one with its source and correction for a person to settle.
 - **INCOMPLETE** means a unit did not finish, because of the budget or a failed

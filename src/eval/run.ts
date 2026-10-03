@@ -13,6 +13,7 @@ import { EvalBudget, evalFigure, spentSince } from "./budget.js";
 import { clearAnswers, prepareCopy } from "./copy.js";
 import type { EvalResults } from "./results.js";
 import { checkSet, claimsToCheck, reviewSet } from "./run-units.js";
+import { refuseWithoutMajors } from "./score.js";
 import { EvalRefused, readSet } from "./sets.js";
 
 /**
@@ -59,6 +60,8 @@ export async function runEvaluation(deps: EvalDeps): Promise<EvalResults> {
   const set = readSet(deps.setDir);
   if (deps.only !== undefined && set.kind !== "claims") throw new EvalRefused("only a claims set is run on the claims arm A found wrong alone");
   if (deps.foundations !== undefined && set.kind !== "reviews") throw new EvalRefused("only a reviews set's reviewers are handed the foundations (S-6‴)");
+  /* N-8′: a run whose score could not be judged is refused before it spends. */
+  if (set.kind === "reviews") refuseWithoutMajors(set);
   const root = prepareCopy(deps.copy, set, deps.setDir, deps.stage, deps.note);
   const lock = acquireRunLock(root);
   if (!lock.ok) throw new EvalRefused(`${root} is held by another process, and an evaluation waits for it to end`);

@@ -165,7 +165,7 @@ Nothing in §4 to §6 is built yet. Each part says what its ticket will do.
 
 - A round's reviewers all read the same foundations first: on tabachir, 24 documents and 198 KB of
   the 571. Each reviewer read them into its own context and wrote them to the cache.
-- **Built, and the default.** With `review_foundations: given`, each reviewer of a round gets the
+- **Built, off by default.** With `review_foundations: given`, each reviewer of a round gets the
   foundations as its system prompt, in one fixed order and byte for byte the same. It then reads
   its own documents. After the first reviewers of a round, the others read the foundations from
   the cache at $0.20 a million tokens instead of writing them at $8.
@@ -175,17 +175,20 @@ Nothing in §4 to §6 is built yet. Each part says what its ticket will do.
   tokens read none of them from the cache. Given as the system prompt, the same tokens were read
   from the cache: 29,281 of 29,920.
 - **Measured (PRDR-322, 2026-10-03).** It changes what a reviewer is handed, so it could become the
-  default only if the review set of §5 found every blocker with it. On Opus 5.5 at `high`, where a
-  first round's review now runs (§6.1), it reported 18 of the 18 blockers, for $17.91 over 10
-  sessions in 15.7 min, so `given` is the default.
+  default only if the review set of §5 passed with it. On Opus 5.5 at `high`, where a first round's
+  review now runs (§6.1), it reported 18 of the 18 blockers, for $17.91 over 10 sessions in 15.7
+  min, and PRDR-322 made `given` the default. Scored against the majors too (PRDR-334), it
+  reported 113 of the 132, under the 119 the bar asks, where the `high` arm that read the
+  foundations reported 124. So the default is `read` again.
   - The four reviewers launched together each wrote the system prompt to the cache. The six
     launched after them each read 78,759 tokens of their first request from the cache: the whole
     system prompt, and the 2,970 tokens of tools and runtime prompt that a reviewer reading the
     foundations itself reads too. None of the 10 read a foundation from its file, where each
     reviewer of the `high` arm that read them made 24 reads.
   - Against that arm, a review's median cost fell from $2.92 to $1.76, its length from 7.8 to 5.7
-    min and its turns from 45 to 14. The reviews reported 148 findings instead of 200. The bar
-    counts blockers, so the drop in findings is recorded, not judged.
+    min and its turns from 45 to 14. The reviews reported 148 findings instead of 200, and 11
+    fewer of the original majors. The saving, about $30 on a tabachir first round, does not pay for
+    a tenth of the majors.
 
 ### 4.5 The writer takes a place's findings together, most severe first (PRDR-323)
 
@@ -228,7 +231,10 @@ operator says, outside this public repository.
 **The bar.** A cheaper setup passes when:
 - it finds all 14 claims wrong, and confirms none of them;
 - it calls none of the 30 confirmed claims wrong, unless its source shows that A was mistaken;
-- it reports each of the 18 blockers at its place, as a blocker or a major.
+- it reports each of the 18 blockers at its place, as a blocker or a major;
+- it reports at least 90% of the 132 majors the same way, 119 of them. A major missed is a defect
+  the pack keeps (PRDR-334). Counted on blockers alone, a setup that lost a tenth of the majors
+  passed.
 
 **Runs differ.** A model finds different things on different runs: PRDR-317's two arms disagreed
 on 15 of the 107 claims both checked. So the measurement can also re-run today's setup on the same
@@ -278,8 +284,10 @@ Today's setup does not meet the claims bar on a second run, so no claims routing
 user decides the bar (§10, question 3). It meets the reviews bar, so a cheaper reviews arm is held
 to all of it.
 
-- **Reviews move to `high`.** It is the cheapest reviews arm that passed. A first round's review
-  now runs at `high` by default, and a verification keeps `max`, since the set holds none. Per
+- **Reviews move to `high`.** It is the cheapest reviews arm that passed. It also reported 124 of
+  the 132 majors, against `max`'s 126 on its re-run, so it passes the majors' part of the bar
+  that PRDR-334 added; `medium` reported 106. A first round's review now runs at `high` by
+  default, and a verification keeps `max`, since the set holds none. Per
   session, the medians were $10.54 and 35.8 min at `max`, $2.92 and 7.8 min at `high`, and $2.04
   and 4.7 min at `medium`. Output fell from 248K tokens at `max` to 52K at `high` and 30K at
   `medium`, and the findings from 235 to 200 and 129. Each arm still had to report every blocker.
@@ -371,3 +379,17 @@ the verifications they cut still run at `max`.
 3. **The bar**, if today's setup cannot meet it on a second run (§5). On claims it did not: 11 of
    the 14 (§6.1). No claims routing moves until the user decides.
 4. **Minor findings (§7):** they stay fixed automatically, unless the user decides otherwise.
+
+## 11. The recommended config, as measured (PRDR-334)
+
+Quality first (decision 1), then cost.
+
+| Setting | Value | Why |
+|---|---|---|
+| `effort_routing["spec_review/review"]` | `high` | 18 of 18 blockers and 124 of 132 majors, against `max`'s 18 and 126, at $2.92 and 7.8 min a review against $10.54 and 35.8 min. The default for a new config; a config written earlier keeps `max` until the key is added. |
+| `review_foundations` | `read` | Given, the reviewers reported 113 of 132 majors, against 124 reading them. The default. |
+| the claim checks (`audit: max`) | `max` | Nothing cheaper met the bar, and `max` itself found 11 of the 14 on its re-run. The bar is the user's (§10, question 3). |
+| `spec_review/verify`, `spec_write`, `planner`, `plan_review` | `max` | Not measured: no set holds a verification, a writer batch or a plan. |
+| the code-writing roles | Sonnet 5.5 at `xhigh` | Not measured. `run` raises them by risk and after a failed attempt (§6.2). |
+| `budgets.init_sessions_at_once` | 4, or up to 8 where the account's limits allow | Changes nothing a session is given. 8 halves AUDIT's and VALIDATE's wall clock, and a limit costs no finished work (§4.3, §4.6). |
+| `risk` | globs of the project's security-critical paths | Not measured. A ticket whose surface meets one runs at `max` in `run` (§6.2). |
