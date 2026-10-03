@@ -1970,6 +1970,15 @@ var PROMPT_IDS = [
   ...Object.values(PLANNER_PROMPTS),
   ...ROLE_IDS.filter((r) => r !== "planner")
 ];
+var ROLE_TASKS = {
+  audit: ["survey", "triage", "verify_claims"],
+  spec_write: ["decide", "write", "fix"],
+  spec_review: ["review", "verify"]
+};
+function taskKey(role, task) {
+  return `${role}/${task}`;
+}
+var TASK_KEYS = Object.entries(ROLE_TASKS).flatMap(([role, tasks]) => (tasks ?? []).map((task) => taskKey(role, task)));
 
 // src/sessions/guard.ts
 var asciiFold = (s) => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
