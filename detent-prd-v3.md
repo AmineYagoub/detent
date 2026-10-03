@@ -3946,6 +3946,9 @@ they need a real second round first.
   it holds the run lock, and as the step a stopped `init` left otherwise; `detent init` clears that
   as it starts. A figure that cannot be read gives no estimate, and a progress file that cannot be
   written gives no progress; neither stops the step.*
+  *Amended by S-5⁷ (PRDR-327): Detent's measured figures add a review at `high`, where a first
+  round's review now runs: $2.92 and 7.8 minutes, the medians of PRDR-327's arm's 15 ledger rows on
+  N-8's review set at build 048362e.*
 
 - **N-8 (3.1.1, PRDR-318).** Evaluation sets, and the bar a lower model or effort level must pass
   (D-35). The sets come from tabachir's test run and are kept outside this public repository, where
@@ -3990,7 +3993,7 @@ they need a real second round first.
   init journal. Each check's brief is kept in the results. `--only wrong` checks only the claims arm
   A found wrong, and the score counts only those, for a re-run of today's setup.*
 
-- **S-5⁷ (3.1.1, PRDR-318; the routing per task built by PRDR-327).** A task's model or effort
+- **S-5⁷ (3.1.1, PRDR-318; built and measured by PRDR-327).** A task's model or effort
   moves below S-5⁶'s only through a passing measurement on N-8's sets, and the routing names it.
   Effort is routed per task where a role runs several, so AUDIT's claim checks can move apart from
   its survey and triage. A `role/task` key of `effort_routing` routes one task, and the role's
@@ -4007,6 +4010,22 @@ they need a real second round first.
   fail, with each miss, its spend and its wall clock. The writer and the planner keep their levels
   until a set exists for them, and `run`'s roles are S-5⁸'s. For the tasks N-8's sets measure, a
   passing measurement is the evidence S-5⁵ waited for from a run-time outcome (D-33).
+  *Measured by PRDR-327 on 2026-10-02 and 2026-10-03, each arm four sessions at once on N-8's
+  tabachir sets, on runtime 2.1.285. Reviews: today's setup, re-run, reported 18 of the 18 blockers
+  at their place, for $106.81 over 10 sessions in 1 h 42 min. Opus 5.5 at `high` reported 18 too,
+  for $44.61 over 15 sessions in 34.3 min, five of them relaunches that C-2²⁸ has since made
+  needless. Opus 5.5 at `medium` reported 14, for $19.72 over 10 sessions in 13.5 min: it missed two
+  blockers in the foundations, one in the records area and one in privacy and security. So a first
+  round's review, `spec_review/review`, runs at `high` by default, the cheapest arm that passed, and
+  a verification, `spec_review/verify`, keeps `max`, since the set holds none. Claim checks: today's
+  setup, re-run, found 11 of the 14 wrong claims wrong, for $31.74 over 14 sessions in 26.7 min; of
+  the other three it confirmed one and left two unverified. Opus 5.5 at `high` found 8, for $15.17
+  over 44 sessions in 13.4 min, and called one of the 30 confirmed claims wrong, a call a person
+  must settle. Sonnet 5.5 at `max` found 7 and confirmed four of the others, for $97.71 over 48
+  sessions in 1 h 40 min. `medium` was not run on claims, since `high` failed there. So
+  `audit/verify_claims` keeps `max`, and since today's setup does not meet the claims bar on a
+  second run, the bar for a check is the user's to decide before one can move. A config written
+  before the move keeps its own routing, and nothing yet tells it of the move.*
 
 - **S-5⁸ (3.1.1, PRDR-318, built by PRDR-328).** In `run`, a ticket's risk sets where its effort
   starts, and evidence moves it, only up. A ticket is high-risk when its `risk_label` is set or its

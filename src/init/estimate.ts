@@ -56,7 +56,8 @@ interface Measured extends Route {
 
 /**
  * Detent's measured figures: the median cost of the kind's ledger rows and the
- * median length of its transcripts, on the run and build named.
+ * median length of its sessions, from their transcripts or the rows' own
+ * durations, on the run and build named.
  */
 export const MEASURED: readonly Measured[] = [
   {
@@ -76,6 +77,15 @@ export const MEASURED: readonly Measured[] = [
     usd: 9.64,
     minutes: 31.5,
     by: "tabachir's test run at build 34585b8, 26 ledger rows and 35 transcripts",
+  },
+  {
+    role: "spec_review",
+    task: "review",
+    model: "claude-opus-5-5",
+    effort: "high",
+    usd: 2.92,
+    minutes: 7.8,
+    by: "PRDR-327's arm on N-8's tabachir review set at build 048362e, 15 ledger rows",
   },
 ];
 

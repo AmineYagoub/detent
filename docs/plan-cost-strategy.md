@@ -252,15 +252,32 @@ Nothing runs until the user approves a budget. On 2026-09-30 the user approved $
   the checks, only the task measured will move. The writer and the planner stay at their levels
   until a set exists for them.
 - **Built:** effort can be routed per task under a `role/task` key, such as
-  `audit/verify_claims`, and a role's other tasks keep its level. No default has moved.
+  `audit/verify_claims`, and a role's other tasks keep its level. One default has moved: a first
+  round's review, `spec_review/review`, runs at `high`.
 - **Measured so far.** Each arm's misses are in PRDR-327.
 
 | Arm | Set | Result | Spend | Wall clock |
 |---|---|---|---|---|
 | today's setup, re-run (Opus 5.5 at `max`) | 14 wrong claims | FAIL: 11 of 14 found wrong; 1 confirmed, 2 unverified | $31.74 | 26.7 min |
+| today's setup, re-run (Opus 5.5 at `max`) | 10 areas | PASS: 18 of 18 blockers at their place | $106.81 | 1 h 42 min |
+| Opus 5.5 at `high` | 44 claims | FAIL: 8 of 14 found wrong (5 unverified, 1 confirmed); 1 of 30 confirmed called wrong, for a person to settle | $15.17 | 13.4 min |
+| Opus 5.5 at `high` | 10 areas | PASS: 18 of 18 blockers at their place; 5 of 10 reviewers relaunched for leaving out `previous` (PRDR-333) | $44.61 | 34.3 min |
+| Sonnet 5.5 at `max` | 44 claims | FAIL: 7 of 14 found wrong (4 confirmed, 3 unverified); none of the 30 confirmed called wrong | $97.71 | 1 h 40 min |
+| Opus 5.5 at `medium` | 10 areas | FAIL: 14 of 18 blockers at their place; 4 reported as nothing, 2 in the foundations, 1 in records and 1 in privacy and security | $19.72 | 13.5 min |
 
 Today's setup does not meet the claims bar on a second run, so no claims routing moves until the
-user decides the bar (§10, question 3).
+user decides the bar (§10, question 3). It meets the reviews bar, so a cheaper reviews arm is held
+to all of it.
+
+- **Reviews move to `high`.** It is the cheapest reviews arm that passed. A first round's review
+  now runs at `high` by default, and a verification keeps `max`, since the set holds none. Per
+  session, the medians were $10.54 and 35.8 min at `max`, $2.92 and 7.8 min at `high`, and $2.04
+  and 4.7 min at `medium`. Output fell from 248K tokens at `max` to 52K at `high` and 30K at
+  `medium`, and the findings from 235 to 200 and 129. Each arm still had to report every blocker.
+- **`medium` was not run on claims,** since `high` failed there. The `medium` arm ran on build
+  `047be16`, whose `spec_review` prompt adds PRDR-322's sentences for a reviewer handed the
+  foundations. It was handed none, so they asked nothing of it.
+- **Claim checks stay at `max`,** until the user decides the bar.
 
 ### 6.2 Effort by risk and by evidence, in `run` (PRDR-328)
 
@@ -314,9 +331,13 @@ $250, which the redesign has not yet measured.
 | With Layer 3 too, if `high` passes and halves the thinking | about $1,100 | about 16 h |
 | With narrower later rounds too, if round 2 shows they are safe | about $900 to $950 | about 13 h |
 
-Each step down needs its evidence first. `medium` would go further, if it passes. What remains is
-the quality floor itself: 117 checked claims, about 65 area reviews over three rounds, and every
-finding fixed.
+Each step down needs its evidence first. What remains is the quality floor itself: 117 checked
+claims, about 65 area reviews over three rounds, and every finding fixed.
+
+Measured since (PRDR-327, §6.1): `high` passed on reviews and failed on claims, and `medium`
+failed on reviews. So only a first round's reviews moved, and the Layer 3 row becomes about
+$1,175 and about 18.5 h. The narrower later rounds would then save their whole $250 to $300, since
+the verifications they cut still run at `max`.
 
 ## 9. Tickets, in the order to build them
 
@@ -338,5 +359,6 @@ finding fixed.
 
 1. **The measuring budget (§5):** settled by the user on 2026-09-30, at $500.
 2. **Existing configs (§4.1):** told which roles to move, or moved automatically.
-3. **The bar**, if today's setup cannot meet it on a second run (§5).
+3. **The bar**, if today's setup cannot meet it on a second run (§5). On claims it did not: 11 of
+   the 14 (§6.1). No claims routing moves until the user decides.
 4. **Minor findings (§7):** they stay fixed automatically, unless the user decides otherwise.

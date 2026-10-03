@@ -8,7 +8,7 @@ import { INIT_TICKET, launchInitSession, withInitJournal } from "../../src/init/
 import { loadConfig } from "../../src/kernel/worstcase.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
 import { CEILINGS } from "../../src/schemas/budgets.js";
-import { DEFAULT_EFFORT_ROUTING, DEFAULT_TASK_EFFORT_ROUTING, ROLE_TASKS, TASK_KEYS, effortFor, type RoleId } from "../../src/schemas/roles.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, DEFAULT_TASK_EFFORT_ROUTING, ROLE_TASKS, TASK_KEYS, effortFor, type RoleId } from "../../src/schemas/roles.js";
 import type { SessionBackend, SessionSpec } from "../../src/sessions/backend.js";
 import { okResult } from "../../src/sessions/mock.js";
 import { definitionText } from "../docs/prd-marks.js";
@@ -167,5 +167,52 @@ describe("S-5⁷ effort routed per task", () => {
       expect(text, role).toContain(`\`${role}\``);
       for (const task of tasks ?? []) expect(text, `${role}/${task}`).toContain(`\`${task}\``);
     }
+  });
+});
+
+/** S-5⁷'s text, whitespace folded. */
+const s57 = (): string => (definitionText(readFileSync(path.join(REPO, "detent-prd-v3.md"), "utf8"), "S-5⁷")[0] ?? "").replace(/\s+/gu, " ");
+
+describe("PRDR-327 the level a measurement moved (S-5⁷)", () => {
+  const routed = { ...DEFAULT_EFFORT_ROUTING, ...DEFAULT_TASK_EFFORT_ROUTING };
+
+  it("routes a first round's review to high by default, and a verification and every other specification task at max", async () => {
+    expect(DEFAULT_TASK_EFFORT_ROUTING).toEqual({ "spec_review/review": "high" });
+    expect((await launch("spec_review", "review", routed)).spec.effort).toBe("high");
+    expect((await launch("spec_review", "verify", routed)).spec.effort, "the set holds no verification").toBe("max");
+    for (const [role, tasks] of Object.entries(ROLE_TASKS)) {
+      for (const task of tasks ?? []) if (`${role}/${task}` !== "spec_review/review") expect(effortFor(routed, role, task), `${role}/${task}`).toBe("max");
+    }
+  });
+
+  it("estimates a first round's reviews at high by the arm that measured it", () => {
+    const root = tmpTree({});
+    roots.push(root);
+    const notes: string[] = [];
+    const review = { role: "spec_review", task: "review" } as const;
+    estimator({ root, note: (n) => notes.push(n), modelRouting: DEFAULT_MODEL_ROUTING, effortRouting: routed })
+      .begin({ phase: "VALIDATE", step: "VALIDATE round 1", said: "VALIDATE round 1: 4 areas to review", units: [review, review, review, review], atOnce: 4 })
+      .end();
+    expect(notes.join("\n")).toContain(
+      "about $11.68 and 7.8 min, by Detent's measured figure for a review, $2.92 and 7.8 min on claude-opus-5-5 at high, the medians of PRDR-327's arm on N-8's tabachir review set at build 048362e, 15 ledger rows",
+    );
+  });
+
+  it("names the measurement that moved it in the routing's doc-block, and S-5⁷ records every arm, the claim checks' among them", () => {
+    const source = readFileSync(path.join(REPO, "src", "schemas", "roles.ts"), "utf8");
+    const at = source.indexOf("export const DEFAULT_TASK_EFFORT_ROUTING");
+    const block = source.slice(source.lastIndexOf("/**", at), at).replace(/\s*\*\s*/gu, " ");
+    for (const said of ["PRDR-327", "N-8's review set", "`high` reported 18 of the 18 blockers", "`medium` reported 14", "claim checks keep `max`"]) expect(block, said).toContain(said);
+    const text = s57();
+    for (const said of [
+      "Measured by PRDR-327",
+      "Opus 5.5 at `high` reported 18 too, for $44.61 over 15 sessions in 34.3 min",
+      "Opus 5.5 at `medium` reported 14, for $19.72 over 10 sessions in 13.5 min",
+      "`spec_review/review`, runs at `high` by default",
+      "found 11 of the 14 wrong claims wrong, for $31.74 over 14 sessions in 26.7 min",
+      "Opus 5.5 at `high` found 8, for $15.17 over 44 sessions in 13.4 min",
+      "Sonnet 5.5 at `max` found 7 and confirmed four of the others, for $97.71 over 48 sessions in 1 h 40 min",
+      "`audit/verify_claims` keeps `max`",
+    ]) expect(text, said).toContain(said);
   });
 });

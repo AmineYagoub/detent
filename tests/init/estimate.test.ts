@@ -110,7 +110,7 @@ describe("N-5⁗ a unit's figure", () => {
     for (const m of MEASURED) {
       expect(text, `${m.role}/${m.task}`).toContain(`$${m.usd.toFixed(2)} and ${String(m.minutes)} minutes`);
     }
-    expect(MEASURED.map((m) => `${m.role}/${m.task}`)).toEqual(["audit/verify_claims", "spec_review/review"]);
+    expect(MEASURED.map((m) => `${m.role}/${m.task} ${m.effort}`)).toEqual(["audit/verify_claims max", "spec_review/review max", "spec_review/review high"]);
   });
 });
 

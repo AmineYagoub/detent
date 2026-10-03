@@ -166,7 +166,13 @@ A role that runs several tasks can have one of them routed apart under a
 `role/task` key of `effort_routing`, such as `audit/verify_claims` for AUDIT's
 claim checks; its other tasks keep the role's level. A first `init` names the
 keys. The defaults route a task below its role's level only after it meets the
-bar on Detent's evaluation sets, and no task has yet.
+bar on Detent's evaluation sets, and one has: a VALIDATE reviewer's first-round
+review (`spec_review/review`) runs at `high`, which found every blocker of the
+review set for less than half of what `max` spent. A verification stays at
+`max`. A config written by an earlier Detent keeps its first-round reviews at
+`max` until `"spec_review/review": "high"` is added to its `effort_routing`.
+AUDIT's claim checks stay at `max` too, since no cheaper setup found every wrong
+claim, and nor did `max` itself on a second run.
 
 In `run`, a ticket's risk and Detent's own checks raise these levels, and never
 lower them. A ticket the plan labels risky, or whose surface meets a glob of the

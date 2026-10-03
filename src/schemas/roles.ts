@@ -279,13 +279,22 @@ export function effortFor(routing: Readonly<Partial<Record<string, string>>>, ro
 /**
  * S-5⁷: the tasks whose level a passing measurement on N-8's sets moved apart
  * from their role's, each named with the measurement that moved it. A new
- * config is written with these beside the roles' levels.
+ * config is written with these beside the roles' levels. A task moves only to
+ * the cheapest arm that passed D-35's bar, and an arm is held to that bar only
+ * where today's setup, re-run, meets it too.
  *
- * Empty: no task has moved. A task moves only to the cheapest arm that passed
- * D-35's bar, and an arm is held to that bar only where today's setup, re-run,
- * meets it too.
+ * `spec_review/review`, a first round's review, runs at `high`. On N-8's
+ * review set, PRDR-327's arm of Opus 5.5 at `high` reported 18 of the 18
+ * blockers at their place on 2026-10-02, for $44.61 against $106.81 for
+ * today's `max`, re-run, which reported 18 too. The arm at `medium` reported
+ * 14 on 2026-10-03, so `high` is the cheapest that passed. A verification,
+ * `spec_review/verify`, keeps the role's `max`: the set holds none.
+ *
+ * AUDIT's claim checks keep `max`. On the claims set, `high` found 8 of the 14
+ * wrong claims and Sonnet 5.5 at `max` found 7. Today's setup, re-run, found
+ * 11, so the bar for a check is the user's to decide before one can move.
  */
-export const DEFAULT_TASK_EFFORT_ROUTING: Readonly<Record<string, string>> = {};
+export const DEFAULT_TASK_EFFORT_ROUTING: Readonly<Record<string, string>> = { "spec_review/review": "high" };
 
 /**
  * S-1's read-only set. Since S-1′ (PRDR-067) these roles run DEFAULT mode

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ensureConfig } from "../../src/init/config.js";
-import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
+import { DEFAULT_EFFORT_ROUTING, DEFAULT_MODEL_ROUTING, DEFAULT_TASK_EFFORT_ROUTING, ROLE_IDS } from "../../src/schemas/roles.js";
 import { removeTree, tmpTree } from "../helpers.js";
 import { loadConfig } from "../../src/kernel/worstcase.js";
 import { SCHEMA_VERSION } from "../../src/schemas/common.js";
@@ -215,6 +215,8 @@ describe("PRDR-197 effort_routing is validated on both axes", () => {
       spec_review: "max",
       /* PRDR-294: the plan's review sits where the planner does (planning decision 9). */
       plan_review: "max",
+      /* PRDR-327: a first round's review, moved by its passing arm on N-8's review set (S-5⁷). */
+      "spec_review/review": "high",
     });
   });
 });
@@ -241,8 +243,8 @@ describe("PRDR-263 init writes the effort routing", () => {
     const routing = writtenRouting();
     expect(
       Object.keys(routing).sort(),
-      "a role left out of the routing silently runs at the SDK default instead",
-    ).toEqual([...ROLE_IDS].sort());
+      "a role left out of the routing silently runs at the SDK default instead; a task is there only where a measurement moved it (PRDR-327)",
+    ).toEqual([...ROLE_IDS, ...Object.keys(DEFAULT_TASK_EFFORT_ROUTING)].sort());
     expect(routing["planner"], "the planner drafts the whole plan in one session (S-5″)").toBe("max");
     /* PRDR-281: S-5⁵ puts every specification role at max (specification decision 14). */
     expect(routing["audit"], "audit judges the documents every later role builds on (S-5⁵)").toBe("max");
@@ -272,12 +274,14 @@ describe("PRDR-263 init writes the effort routing", () => {
       "claude-sonnet-5-5": ["low", "medium", "high", "xhigh", "max"],
     };
     const routing = writtenRouting();
-    expect(Object.keys(routing).length, "an empty routing would make every assertion below vacuous").toBe(ROLE_IDS.length);
-    for (const role of ROLE_IDS) {
+    expect(Object.keys(routing).length, "an empty routing would make every assertion below vacuous").toBe(ROLE_IDS.length + Object.keys(DEFAULT_TASK_EFFORT_ROUTING).length);
+    /* PRDR-327: a task runs on its role's model at its own level. */
+    for (const key of Object.keys(routing)) {
+      const role = (key.split("/")[0] ?? key) as (typeof ROLE_IDS)[number];
       const model = DEFAULT_MODEL_ROUTING[role];
-      const level = routing[role];
+      const level = routing[key];
       expect(servable[model], `${model} is a model whose effort support this test has not verified`).toBeDefined();
-      expect(servable[model], `${role} runs on ${model} at ${level}, which that model cannot serve`).toContain(level);
+      expect(servable[model], `${key} runs on ${model} at ${level}, which that model cannot serve`).toContain(level);
     }
   });
 });
