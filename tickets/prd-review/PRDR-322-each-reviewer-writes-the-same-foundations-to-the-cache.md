@@ -1,13 +1,13 @@
 ---
 id: PRDR-322
 title: "Each of a round's reviewers writes the same foundations to the cache. Every VALIDATE reviewer reads the pack's foundations before its own area: on tabachir, 24 documents and 198 KB of the pack's 571. Each reads them with its own tool calls into a context of its own, so a round of 26 reviewers writes them to the cache 26 times, at $8 a million tokens on Opus 5.5. Handed in one fixed order at the start of every reviewer's first message, byte for byte the same, they would be written by the round's first reviewers and read by the rest at $0.20, about $0.45 a review on tabachir. It changes what a reviewer is handed, so it becomes the default only if the review set of PRDR-326 finds every blocker with it"
-state: OPEN
+state: DONE
 severity: minor
 category: spend
 labels: ["prd-review", "cost-strategy", "S-6‴", "S-6", "S-6′", "C-2¹⁴", "prompt-cache", "validate"]
-surface: ["src/init/validate-foundations.ts", "src/init/validate-round.ts", "src/init/validate-checks.ts", "src/init/validate-kept.ts", "src/init/validate.ts", "src/init/pipeline.ts", "src/init/session.ts", "src/sessions/backend.ts", "src/sessions/sdk.ts", "src/kernel/worstcase.ts", "src/cli/init.ts", "src/eval/run.ts", "src/eval/run-units.ts", "src/eval/results.ts", "src/eval/score.ts", "scripts/eval-run.ts", "prompts/spec_review.md", "prompts/manifest.json", "tests/init/validate-round-prefix.test.ts", "tests/kernel/run.test.ts", "detent-prd-v3.md", "README.md", "docs/plan-cost-strategy.md"]
+surface: ["docs/evaluation.md", "src/init/validate-foundations.ts", "src/init/validate-round.ts", "src/init/validate-checks.ts", "src/init/validate-kept.ts", "src/init/validate.ts", "src/init/pipeline.ts", "src/init/session.ts", "src/sessions/backend.ts", "src/sessions/sdk.ts", "src/kernel/worstcase.ts", "src/cli/init.ts", "src/eval/run.ts", "src/eval/run-units.ts", "src/eval/results.ts", "src/eval/score.ts", "scripts/eval-run.ts", "prompts/spec_review.md", "prompts/manifest.json", "tests/init/validate-round-prefix.test.ts", "tests/kernel/run.test.ts", "detent-prd-v3.md", "README.md", "docs/plan-cost-strategy.md"]
 prd_refs: ["S-6", "S-6′", "C-2¹⁴", "C-2²³", "D-35", "N-8"]
-acceptance_criteria: ["Every reviewer of a round is handed the foundations' text as its system prompt, in one order and byte for byte the same for every reviewer of the round, with nothing in it that differs between reviewers. (Amended 2026-10-02: the first message was measured to share nothing across sessions; see Progress.)", "A reviewer is still told its own documents, and reads them itself. The foundations it was handed count as read for C-2¹⁴'s check of documents_read.", "The prompt says that the foundations are given, and that the reviewer reads its own documents.", "Measured on one round of the review set, the cache writes of each reviewer after the first four fall by at least the foundations' tokens less 10%, and the ticket records the figures. (Amended 2026-10-02: shown per reviewer by its first request reading at least the foundations' tokens less 10% from the cache, with no foundation read again from its file. A whole session's writes vary between runs by more than the foundations' tokens, so they are not compared directly.)", "It is the default only if PRDR-326's review set, reviewed with it on Opus 5.5 at max, reports each of the 18 blockers at its place as a blocker or a major. The ticket records the run and its cost.", "Falsifying test, against HEAD: two reviewers of one round are handed no shared text beyond the role's prompt: neither has a system prompt, and neither's first message holds a foundation's text."]
+acceptance_criteria: ["Every reviewer of a round is handed the foundations' text as its system prompt, in one order and byte for byte the same for every reviewer of the round, with nothing in it that differs between reviewers. (Amended 2026-10-02: the first message was measured to share nothing across sessions; see Progress.)", "A reviewer is still told its own documents, and reads them itself. The foundations it was handed count as read for C-2¹⁴'s check of documents_read.", "The prompt says that the foundations are given, and that the reviewer reads its own documents.", "Measured on one round of the review set, the cache writes of each reviewer after the first four fall by at least the foundations' tokens less 10%, and the ticket records the figures. (Amended 2026-10-02: shown per reviewer by its first request reading at least the foundations' tokens less 10% from the cache, with no foundation read again from its file. A whole session's writes vary between runs by more than the foundations' tokens, so they are not compared directly.)", "It is the default only if PRDR-326's review set, reviewed with it on Opus 5.5 at max, reports each of the 18 blockers at its place as a blocker or a major. The ticket records the run and its cost. (Amended 2026-10-03: at `high`, where PRDR-327 moved a first round's review, as S-6‴ already said: the level the reviewers are routed to. That is the setup the default puts in force, and at `max` the run would have cost about $100 of the $180 left of the measuring budget.)", "Falsifying test, against HEAD: two reviewers of one round are handed no shared text beyond the role's prompt: neither has a system prompt, and neither's first message holds a foundation's text."]
 non_goals: ["Does NOT change which documents a round reviews, what a reviewer reports, or the areas.", "Does NOT give AUDIT's checks or the writer a shared prefix. Their shared part is the role's prompt, a few thousand tokens.", "Does NOT change the order in which a round's reviewers start."]
 attempts: { fix: 0, hypothesis: 0, review: 0 }
 links: ["PRDR-054", "PRDR-205", "PRDR-284", "PRDR-313", "PRDR-316", "PRDR-318", "PRDR-326"]
@@ -122,9 +122,103 @@ does not count the handed foundations as read, survived because every test revie
 anyway. A test was added in which a reviewer relies on the handed text and lists none of it; it
 kills `V4` and `C1`.
 
-### Not yet measured (ACs 4, 5)
+### Measured (ACs 4, 5)
 
-Both need one run of the review set on Opus 5.5 at `max` with `--foundations given`, about $100 at
-the measured $9.64 a review. Until it passes, the default stays `read`. It runs only if the $500
-measuring budget has room once PRDR-327's arms end; otherwise the user decides.
+One run of N-8's review set with `--foundations given`, on Opus 5.5 at `high`, four sessions at
+once on runtime 2.1.285, from a frozen worktree at `047be16`, 2026-10-03 06:20 to 06:36 UTC. It
+ran within the $500 the user approved for measuring, after PRDR-327's arms.
+
+**AC 5, the bar: PASS.** It reported 18 of the 18 blockers at their place as a blocker or a major,
+and spent $17.91 over 10 sessions in 15.7 minutes, against a $100 cap. The level is `high`, not
+the `max` the AC first named: PRDR-327 moved a first round's review to `high` the same morning,
+and S-6‴ already asked for the level the reviewers are routed to. So the run measured the setup
+the default puts in force. AC 5 is amended to match, marked in the frontmatter.
+
+**AC 4, the cache: met.** From the transcripts (scratch `measure322.py`, which reads each
+session's first request and its Read calls):
+
+| Reviewers | First request: written | First request: read from the cache | Foundation files read |
+|---|---|---|---|
+| the four launched together at 06:20:34 | 80,582 to 83,186 | 2,970 | 0 |
+| the six launched after them | 4,798 to 5,550 | 78,759 | 0 |
+| PRDR-327's arm at `high`, reading them (15) | 4,705 to 7,309 | 2,970 | 24 each |
+
+- The handed system prompt is 75,789 tokens: 78,759 less the 2,970 of tools and runtime prompt
+  that every reviewer reads from the cache. Each later reviewer read all of it on its first
+  request, so its first request wrote only its own message. The bar was the foundations' tokens
+  less 10%.
+- One of the first four, the foundations' own reviewer, logged its first reply at 06:24:18, after
+  a first turn of nearly four minutes. It was launched with the others at 06:20:34, so it wrote
+  the prompt as they did.
+- No reviewer read a foundation from its file.
+
+**What else changed, against PRDR-327's arm at `high` reading them:**
+- a review's median cost fell from $2.92 to $1.76, its length from 7.8 to 5.7 minutes, and its
+  turns from 45 to 14;
+- the median session's cache writes fell from 184K tokens to 103K;
+- the reviews reported 148 findings instead of 200. The bar counts blockers, and both runs met
+  it. The drop is recorded, not judged: one run each cannot separate the change from a run's own
+  variance.
+
+### The default (AC 5)
+
+- **`review_foundations` is `given` by default** (`src/kernel/worstcase.ts`), and its doc-block
+  names the run. `read` has each reviewer read them itself.
+- **`init` always passes the config's setting.** A pipeline built without it, as a test builds
+  one, keeps the reviewers reading. `PipelineDeps` says so.
+- **The evaluation runner keeps reading by default,** as the set's reviewers did, so its results
+  stay comparable with every run before. `--foundations given` measures the default.
+  `docs/evaluation.md` now says both.
+- **A config written by an earlier Detent** names no `review_foundations`, so it takes the new
+  default. A run that stopped in a round whose reviewers read the foundations, resumed with them
+  given, reviews that round's areas again, since a review made with them handed is kept under a
+  key of its own. Its config can say `read` to keep them. S-6‴ and the README say so.
+- **The documents:** S-6‴ is "built and measured by PRDR-322" and holds the run. The README's
+  paragraph describes the default. The plan's §4.4 holds the measurement. The two notes S-6‴
+  amended, on S-6′ and C-2¹⁴, now say it is the default.
+
+### Falsification of the default
+
+Three tests of `tests/init/validate-round-prefix.test.ts`, run against HEAD's
+`src/kernel/worstcase.ts`, `detent-prd-v3.md` and `README.md` (`ec145f7`):
+
+```
+× is given by default, takes read, and refuses anything else
+× S-6‴ states the setting, its default and why the system prompt carries it
+× PRDR-322: the config's doc-block, S-6‴ and the README name the run that made given the default
+```
+
+All three fail there and pass on the change.
+
+### Mutation battery of the default (5 mutants)
+
+All killed, on a baseline of 57 passing tests, each restored from a snapshot and checked with
+`cmp`:
+
+| Mutant | Killed by |
+|---|---|
+| F1 the default stays `read` | the default's test |
+| F2 the config refuses `read` | the default's test |
+| F3 a pipeline built without the setting hands them | the reading pipeline's test, the stopped run's, and the runner's |
+| F4 `init` does not pass the config's setting | the config reaches the pipeline |
+| F5 the doc-block names no run | the run is named |
+
+### What changed (closing)
+
+- `src/kernel/worstcase.ts`: `review_foundations` defaults to `given`, and its doc-block names the
+  run.
+- `src/init/pipeline.ts`: `reviewFoundations` says what its absence means.
+- `tests/init/validate-round-prefix.test.ts`: the default's test, the reading pipeline's, and the
+  documents' test.
+- `detent-prd-v3.md`, `README.md`, `docs/plan-cost-strategy.md`, `docs/evaluation.md`: as above.
+
+### Recorded, not fixed
+
+- **The findings dropped** from 200 to 148 against the `high` arm that read the foundations, with
+  every blocker still found. One run each. If the user judges the bar too narrow for a change to
+  what a reviewer is handed, `read` restores the old behaviour per project, and the default can
+  return to it.
+- **Verifications were not measured.** N-8's set holds only a first round's reviews. A
+  verification is handed the foundations too, and runs at `max`.
+- **`ensureConfig` does not write the key,** as it did not before. The README names it.
 

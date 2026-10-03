@@ -164,8 +164,8 @@ Nothing in §4 to §6 is built yet. Each part says what its ticket will do.
 ### 4.4 A round's reviewers share one cached prefix (PRDR-322)
 
 - A round's reviewers all read the same foundations first: on tabachir, 24 documents and 198 KB of
-  the 571. Today each reviewer reads them into its own context and writes them to the cache.
-- **Built, off by default.** With `review_foundations: given`, each reviewer of a round gets the
+  the 571. Each reviewer read them into its own context and wrote them to the cache.
+- **Built, and the default.** With `review_foundations: given`, each reviewer of a round gets the
   foundations as its system prompt, in one fixed order and byte for byte the same. It then reads
   its own documents. After the first reviewers of a round, the others read the foundations from
   the cache at $0.20 a million tokens instead of writing them at $8.
@@ -174,9 +174,18 @@ Nothing in §4 to §6 is built yet. Each part says what its ticket will do.
   its cache breakpoint at the end of the message, and a second session opening with the same 30K
   tokens read none of them from the cache. Given as the system prompt, the same tokens were read
   from the cache: 29,281 of 29,920.
-- Expected: about $0.45 a review on tabachir, and more on a larger pack. It changes what a
-  reviewer is handed, so it becomes the default only if the review set of §5 finds every blocker
-  with it. That run has not been made yet (PRDR-322).
+- **Measured (PRDR-322, 2026-10-03).** It changes what a reviewer is handed, so it could become the
+  default only if the review set of §5 found every blocker with it. On Opus 5.5 at `high`, where a
+  first round's review now runs (§6.1), it reported 18 of the 18 blockers, for $17.91 over 10
+  sessions in 15.7 min, so `given` is the default.
+  - The four reviewers launched together each wrote the system prompt to the cache. The six
+    launched after them each read 78,759 tokens of their first request from the cache: the whole
+    system prompt, and the 2,970 tokens of tools and runtime prompt that a reviewer reading the
+    foundations itself reads too. None of the 10 read a foundation from its file, where each
+    reviewer of the `high` arm that read them made 24 reads.
+  - Against that arm, a review's median cost fell from $2.92 to $1.76, its length from 7.8 to 5.7
+    min and its turns from 45 to 14. The reviews reported 148 findings instead of 200. The bar
+    counts blockers, so the drop in findings is recorded, not judged.
 
 ### 4.5 The writer takes a place's findings together, most severe first (PRDR-323)
 

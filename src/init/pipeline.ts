@@ -60,7 +60,12 @@ export interface PipelineDeps {
   readonly symbols?: SymbolsConfig;
   /** C-2⁵′ (PRDR-125): the ticket band one slice should hold. */
   readonly sliceSize?: { readonly min: number; readonly max: number };
-  /** S-6‴: how a VALIDATE reviewer gets the foundations, the config's `review_foundations`. */
+  /**
+   * S-6‴: how a VALIDATE reviewer gets the foundations, the config's
+   * `review_foundations`, `given` unless the config says `read`. `init` always
+   * passes it. A pipeline built without it, as a test builds one, has each
+   * reviewer read them.
+   */
   readonly reviewFoundations?: "read" | "given";
   readonly note?: (text: string) => void;
   /**

@@ -55,8 +55,12 @@ An evaluation runs a set on one model and effort level:
 - For the reviews set, it reviews every area the way VALIDATE's first round
   does, through `reviewArea` on the task the kept review was given.
 
-The sessions use the same backend, prompts and session setup as `init`. Only
-the evaluated role's routing changes.
+The sessions use the same backend, prompts and session setup as `init`, but
+for two things. The evaluated role's routing is the one you name. And a reviews
+set's reviewers read the foundations themselves, as the set's reviewers did,
+unless `--foundations given` hands them over as their system prompt, as `init`
+does by default (S-6‴). A run's results say when they were given, and so does
+their file's name.
 
 ```bash
 npx tsx scripts/eval-run.ts --set ~/detent-evals/tabachir/claims --copy ~/tabachir-detent-ab2 \
