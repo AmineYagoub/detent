@@ -3402,6 +3402,8 @@ the code does what the rules it amends describe, and each of those rules points 
   at the next `detent init`, which the amendment asks the operator to run.*
   *Amended by S-6‴ (PRDR-318): once the review set passes with it, each reviewer is handed the
   foundations' text as its system prompt, and they count as read.*
+  *Amended by C-2²⁸ (PRDR-333): a first round's finding that leaves out `previous` reads as null,
+  and a verification's keeps the field required.*
 
 - **S-1⁗ (3.1.1, PRDR-285).** S-1‴'s sandbox is built, on macOS: VALIDATE's reviewers may run
   throwaway scripts in a scratch directory their round makes, and nothing a script does reaches past
@@ -3882,6 +3884,18 @@ they need a real second round first.
   many batches hold only minors at places no blocker or major shares, and a note after any round's
   writer that ran such a batch says what they cost, summed from the ledger rows their sessions
   wrote. The checker's findings still go to one session.*
+
+- **C-2²⁸ (3.1.1, PRDR-333).** A first round's finding with no `previous` reads as null.
+  `previous` names the finding of the round before that a finding is what remains of, and a first
+  round's reviewer is given none, so null is the only value the field can hold there. One left out
+  cost a whole review: the artifact was unusable, the reviewer ran again from the start (C-4⁗′),
+  and a second omission failed the round. On N-8's review set at Opus 5.5 `high`, 5 of the 10
+  reviewers left it out of every finding, and the round ran 15 sessions for its 10 reviews; at
+  `max`, none did. In a `review` task a finding with no `previous` reads as null at the first
+  attempt, and nothing is said. A verification's keeps the field required: there it names the
+  finding a new one is what remains of, and reading a missing one as null would count a finding
+  that remains as fixed and report it again as new. A first round's finding that names a
+  `previous` is still refused (C-2¹⁴).
 
 - **X-1⁸ (3.1.1, PRDR-318).** How many sessions `init` runs at once is a budget,
   `budgets.init_sessions_at_once`: four by default, a whole number from one to sixteen, and a config

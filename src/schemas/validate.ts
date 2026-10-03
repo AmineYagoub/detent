@@ -48,6 +48,19 @@ export const reviewArtifactSchema = z.strictObject({
 export type ReviewArtifact = z.infer<typeof reviewArtifactSchema>;
 
 /**
+ * C-2²⁸ (PRDR-333): a first round's review. Its reviewer is given no findings
+ * of a round before, so a finding's `previous` can only be null there, and one
+ * it leaves out reads as null. On N-8's review set at Opus 5.5 `high`, 5 of the
+ * 10 reviewers left it out of every finding, and each was relaunched for a
+ * second whole review (C-4⁗′); at `max`, none did. A verification's review
+ * keeps the field required: there it names the finding a new one is what
+ * remains of, and a missing one is a link left unsaid.
+ */
+export const firstReviewArtifactSchema = reviewArtifactSchema.extend({
+  findings: z.array(reviewFindingSchema.extend({ previous: nonEmptyString.nullable().default(null) })),
+});
+
+/**
  * The writer's account: each finding it was given, by id, applied or declined
  * with its reason. A declined finding is left open, and the next round judges
  * the reason; the pack itself is what code checks.

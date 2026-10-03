@@ -4,7 +4,15 @@ import type { z } from "zod";
 import { stateDir } from "../fs/layout.js";
 import { SCHEMA_VERSION, parseArtifact } from "../schemas/common.js";
 import { DECISION_LOG_PATH, PACK_PATHS, PACK_PRECEDENCE, type OPEN_REASONS, type PackFinding } from "../schemas/pack.js";
-import { fixArtifactSchema, reviewArtifactSchema, type FindingPlace, type FixArtifact, type ReviewFinding } from "../schemas/validate.js";
+import {
+  firstReviewArtifactSchema,
+  fixArtifactSchema,
+  reviewArtifactSchema,
+  type FindingPlace,
+  type FixArtifact,
+  type ReviewArtifact,
+  type ReviewFinding,
+} from "../schemas/validate.js";
 import type { ScratchGrant } from "../sessions/sandbox.js";
 import { decisionLogFile, nextId, readDecisionLog, type LogView } from "./decide-log.js";
 import { movedNote } from "./audit-passages.js";
@@ -129,7 +137,9 @@ function readArtifact<T>(file: string, schema: z.ZodType<T>): { readonly value: 
  * One reviewer: refused on any issue the first time; the second time, the
  * findings that stand, the rest dropped aloud, and any document it did not
  * read named. With the round's scratch directory it may simulate (S-1⁗), and
- * a simulation's findings are checked as every other is.
+ * a simulation's findings are checked as every other is. A first round's
+ * finding with no `previous` reads as null, the only value it can hold there
+ * (C-2²⁸, PRDR-333).
  */
 export async function reviewArea(
   deps: RoundDeps,
@@ -161,7 +171,7 @@ export async function reviewArea(
   const result = await withOneRelaunch<ReviewFinding[]>({ stage, note: deps.note }, async (previous) => {
     rmSync(out, { force: true });
     await deps.review({ ...inputs, ...refusedAttemptInput(previous, "review") }, out, scratch, handed);
-    const read = readArtifact(out, reviewArtifactSchema);
+    const read = readArtifact<ReviewArtifact>(out, verify ? reviewArtifactSchema : firstReviewArtifactSchema);
     if (read.value === null) return { value: null, issue: read.issue };
     const checked = checkReview(deps.root, read.value, {
       pack,
